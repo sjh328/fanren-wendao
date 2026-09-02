@@ -1339,6 +1339,50 @@ const GameData = {
     { id: 'dy_wangchen', name: '绝尘飞仙', need: ['gf_wangchen', 'gf_feixian'], fx: { dodge: 3 }, desc: '问尘与飞仙相合：身法轻灵，闪避 +3%' },
   ],
 
+  /* ---------- v19 精英词缀（精英怪随机 1~2 条，战斗前可见） ---------- */
+  ELITE_AFFIXES: [
+    { id: 'e_leech',  name: '汲血', desc: '攻击回复自身三成伤害的气血' },
+    { id: 'e_thorns', name: '魔棘', desc: '受击反弹一成五伤害' },
+    { id: 'e_swift',  name: '迅影', desc: '身法 +20%' },
+    { id: 'e_wall',   name: '坚甲', desc: '防御 +25%' },
+    { id: 'e_rage2',  name: '血性', desc: '狂暴后可再度狂暴一次' },
+    { id: 'e_reborn', name: '不灭', desc: '濒死时以三成气血复活一次' },
+  ],
+
+  /* ---------- v19 职业必杀技盘（真元 0~6：普攻命中+1，会心+2，防御+1） ---------- */
+  BATTLE_SKILLS: {
+    sword: [
+      { id: 'us1', name: '剑斩·千山', cost: 3, mult: 3.0, crit: 15, desc: '剑气纵贯，如千山崩裂（3.0×，会心+15%）' },
+      { id: 'us2', name: '剑域·囚杀', cost: 4, mult: 1.5, defdown: 30, rounds: 3, desc: '剑域困锁，敌防 -30% 三回合，再补一剑（1.5×）' },
+      { id: 'us3', name: '万剑朝宗', cost: 6, mult: 4.5, desc: '万剑齐鸣，宗门唯我（4.5×）' },
+    ],
+    pill: [
+      { id: 'up1', name: '丹火·燎原', cost: 3, mult: 2.0, burn: { pct: 6, rounds: 3 }, desc: '丹火泼洒，灼烧三回合（2.0×）' },
+      { id: 'up2', name: '丹心·续命', cost: 4, heal: 0.4, desc: '九转还元，回复四成气血上限' },
+      { id: 'up3', name: '洪炉·炼狱', cost: 6, mult: 3.0, burn: { pct: 9, rounds: 3 }, desc: '身化洪炉，焚尽八荒（3.0×+重灼烧）' },
+    ],
+    talisman: [
+      { id: 'ut1', name: '符阵·雷狱', cost: 3, mult: 2.8, freeze: 25, desc: '雷符成狱，三成冻结（2.8×）' },
+      { id: 'ut2', name: '双符·齐发', cost: 4, mult: 1.8, hits: 2, desc: '双符并出，两段连击（1.8××2）' },
+      { id: 'ut3', name: '天笔·紫雷', cost: 6, mult: 4.2, desc: '一笔开天门，紫雷落九霄（4.2×）' },
+    ],
+    body: [
+      { id: 'ub1', name: '崩山·震', cost: 3, mult: 2.5, stun: 25, desc: '一崩山河震，三成震缚（2.5×）' },
+      { id: 'ub2', name: '金身·不坏', cost: 4, guard: 40, rounds: 3, desc: '金身罩体，减伤四成三回合' },
+      { id: 'ub3', name: '般若·狮吼', cost: 6, mult: 3.5, stun: 40, desc: '狮吼破胆，四成震缚（3.5×）' },
+    ],
+    array: [
+      { id: 'ua1', name: '困阵·锁龙', cost: 3, mult: 1.6, slow: 35, rounds: 3, desc: '困龙锁天，敌速 -35% 三回合（1.6×）' },
+      { id: 'ua2', name: '杀阵·八方', cost: 4, mult: 2.2, hits: 2, desc: '八方杀气，两段绞杀（2.2××2）' },
+      { id: 'ua3', name: '天罗·地网', cost: 6, mult: 3.0, stun: 30, desc: '天罗地网，插翅难逃（3.0×）' },
+    ],
+    demonic: [
+      { id: 'ud1', name: '血遁·噬', cost: 3, mult: 2.6, leech: 0.5, desc: '血光噬敌，五成化为己用（2.6×）' },
+      { id: 'ud2', name: '魔煞·蚀魂', cost: 4, mult: 1.6, weaken: 30, rounds: 3, desc: '魔煞蚀体，敌攻 -30% 三回合（1.6×）' },
+      { id: 'ud3', name: '天魔·解体', cost: 6, mult: 5.0, selfHp: 0.1, desc: '燃血十成中取一，换五倍灭杀（5.0×）' },
+    ],
+  },
+
   /* ---------- 文案池 ---------- */
   NAMES: ['沈青山', '顾长风', '苏云澈', '叶凌天', '陆沉舟', '柳如烟', '洛清寒', '秦无衣', '姜怀远', '白亦尘', '林疏影', '谢惊鸿'],
   FLAVOR: {
@@ -1642,6 +1686,17 @@ const GameData = {
     m_jiaojiao: '怒海蛟龙，蛟中年长者，已具龙形，怒涛覆海，威震龙渊。',
     m_longgui: '玄武龙龟，龙裔异种，甲如玄武，寿逾万年，近乎不死。',
     m_yuanmo: '渊底魔影，龙渊最深处的魔物，无人知晓其来历——只知连蛟龙都绕着它游。',
+    /* ---- v18 灵界妖兽图录 ---- */
+    m_linglu: '灵墟仙鹭，泽上仙禽，翼展丈余，振翅间带起灵雨。性傲，不喜凡俗近泽。',
+    m_xianmo: '仙泽水魅，居于灵雾深处的魅灵，歌声可引人入水。泽上渔歌，十有九是它。',
+    m_lingjiang: '灵墟守将，上古镇守仙泽的兵魂，甲胄犹在，唯令是从——闯泽者，皆敌。',
+    m_leixiao: '雷霄独角兽，雷狱灵兽，独角蓄雷，奔行时蹄下生电。驯之可为坐骑，怒之则为天罚。',
+    m_leimen: '九霄雷灵，雷劫余气所化的精怪，无形无定，触之如遭雷殛。',
+    m_tianlong: '应龙残魄，上古应龙陨落后的残魂，犹存龙威。一声龙吟，山河变色。',
+    m_lingxue: '灵墟雪猿，栖于仙泽雪岭的白猿，臂力千钧，喜掷冰锥戏耍来客。',
+    m_tianle: '九霄雷兽，雷狱深处的凶兽，皮糙如雷砧，吼声滚滚如雷过境。',
+    m_xianzun: '仙尊残念，一位仙尊陨落前的不灭执念，仙威犹存。近之者，神魂如坠冰渊。',
+    m_leishen: '雷狱主宰，九霄雷狱的最深处的主人，雷罚加身而不伤——渡劫者若有幸一见，多半已无幸。',
   },
 
   /* ======================================================================
@@ -3232,8 +3287,9 @@ const PlayerFactory = {
       },
       // v16: 道境经验
       (out) => {
+        // v19 修复：须读【原始存档】的 daoExp（out 上的 daoExp 已被 fresh 模板的零值覆盖，fold 分支此前永不可达）
+        const srcDaoExp = (p.daoExp && typeof p.daoExp === 'object') ? p.daoExp : null;
         out.daoExp = { sword: 0, pill: 0, talisman: 0, body: 0, array: 0, demonic: 0 };
-        const srcDaoExp = (out.daoExp && typeof out.daoExp === 'object') ? out.daoExp : null;
         if (srcDaoExp) {
           for (const k of Object.keys(out.daoExp)) {
             const v = Math.floor(Number(srcDaoExp[k]));
@@ -4098,6 +4154,11 @@ const ForgeSys = {
   MAX_LV: 10,
   /** 强化某 id 的当前等级 */
   lvOf(p, id) {
+    // v19 修复：id 可为字符串或装备实例（v18 实例化后 equipBonus 传入实例对象）
+    if (id && typeof id === 'object') {
+      const v = Math.floor(Number(id.enhance)) || 0;
+      return v > 0 ? v : ((p.enhanced || {})[id.id] || 0);
+    }
     // v18：先检查装备槽位（新格式 {id, enhance}），再检查 p.enhanced（旧格式）
     if (p && p.equipped) {
       for (const slot of ['weapon', 'armor', 'accessory']) {
@@ -7881,6 +7942,24 @@ const Battle = {
       this.log('【杀阵】你袖袍一振，杀阵先成——四方阵光封锁天地，敌方攻守尽堕四成！', 'log-crit');
     }
     this.render();
+    // v19 真元与战斗统计、精英词缀掷取
+    const B = this.active;
+    B.zhenyuan = 0;
+    B.stats = { out: 0, in: 0, maxCombo: 0 };
+    if (B.enemy && B.enemy.elite) {
+      const pool = GameData.ELITE_AFFIXES.slice();
+      const n = Utils.chance(30) ? 2 : 1;
+      B.enemyFxIds = [];
+      for (let i = 0; i < n && pool.length; i++) {
+        const a = pool.splice(Utils.rand(0, pool.length - 1), 1)[0];
+        B.enemyFxIds.push(a.id);
+        if (a.id === 'e_swift') B.enemy._fxSwift = true;
+        if (a.id === 'e_wall') B.enemy._fxWall = true;
+        if (a.id === 'e_reborn') B.enemy._rebornUsed = false;
+        if (a.id === 'e_rage2') B.enemy._canRage2 = true;
+      }
+      if (B.enemyFxIds.length) this.log(`【${B.enemy.name}】词缀：${B.enemyFxIds.map(fid => { const d = GameData.ELITE_AFFIXES.find(x => x.id === fid); return d ? `◆${d.name}` : ''; }).join('')}——点其名旁 🔍 可查情报。`, 'log-warn');
+    }
     // v19 词缀·护盾：战斗开场金光护体
     const startFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(Game.player) : {};
     if (startFx.shield > 0) {
@@ -8013,16 +8092,105 @@ const Battle = {
   /** v13：敌方有效攻防（计入狂暴/铁壁/玩家施加的破防迟滞） */
   enAtk(e) {
     let atk = e.atk * (e.raged ? 1.3 : 1);
+    if (e._phase2) atk *= 1.25;   // v19 Boss 二阶段：血线过半，杀意暴涨
+    if (e._raged2) atk *= 1.3;    // v19 精英词缀·血性（二度狂暴）
     return Math.round(atk);
   },
   enDef(e) {
     let def = e.def * (1 - StatusFx.pctOf(e.fx, 'defdown') / 100);
     if (e.guardRounds > 0) def *= 1 + (e.guardPower || 0) / 100;
+    if (e._fxWall) def *= 1.25;   // v19 精英词缀·坚甲
     return Math.round(def);
   },
   enSpd(e) {
-    return Math.max(1, Math.round(e.spd * (1 - StatusFx.pctOf(e.fx, 'slow') / 100)));
+    let spd = e.spd * (1 - StatusFx.pctOf(e.fx, 'slow') / 100);
+    if (e._fxSwift) spd *= 1.2;   // v19 精英词缀·迅影
+    return Math.max(1, Math.round(spd));
   },
+  /** v19 敌方精英词缀判定 */
+  eFx(B, id) { return !!(B.enemyFxIds && B.enemyFxIds.includes(id)); },
+  /* ---------- v19 敌方情报卡 ---------- */
+  infoCard() {
+    const B = this.active;
+    if (!B || !B.enemy) return;
+    const e = B.enemy;
+    const rel = GameData.speciesRelation(e.species, 'human');
+    const relTxt = rel > 0 ? '<span class="neg">克制你（你对其伤害 -15%，其对你 +15%）</span>'
+      : rel < 0 ? '<span style="color:var(--ok)">你克制它（伤害 +15%）</span>' : '无克制';
+    const skillTxt = (e.skills || []).map(sk => `· <b>${sk.name}</b>（${StatusFx.DEFS[sk.kind] ? StatusFx.DEFS[sk.kind].name : sk.kind}）`).join('<br>') || '· 普攻与重击';
+    const affTxt = (B.enemyFxIds || []).map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `◆<b>${d.name}</b>：${d.desc}` : ''; }).filter(Boolean).join('<br>') || '无';
+    const drops = e.dropTier ? `材料品阶：${['', '凡', '灵', '玄', '地'][e.dropTier] || e.dropTier}级${e.rareDrop ? `；稀有掉落：<b>${(GameData.ITEMS[e.rareDrop] || {}).name || '?'}</b>` : ''}` : '来历不明之物';
+    UI.popup({
+      title: `情报 · ${e.name}`,
+      html: `<div class="tip-line">${e.realmLabel}${e.elite ? ' · 精英' : ''} · 战力 ${e.power}</div>
+        <div class="stat-line"><span>种族克制</span><b>${relTxt}</b></div>
+        <div class="stat-line"><span>攻/防/速</span><b>${this.enAtk(e)} / ${this.enDef(e)} / ${this.enSpd(e)}</b></div>
+        <div class="tip-line" style="margin-top:4px">技能池：<br>${skillTxt}</div>
+        <div class="tip-line" style="margin-top:4px">词缀：<br>${affTxt}</div>
+        <div class="tip-line" style="margin-top:4px">${drops}</div>`,
+      options: [{ text: '收 起', value: true, primary: true }],
+    });
+  },
+
+  /* ---------- v19 职业必杀技 ---------- */
+  ultList() {
+    const p = Game.player;
+    return p.dao ? (GameData.BATTLE_SKILLS[p.dao] || []) : [];
+  },
+  async actUlt(id) {
+    const B = this.active;
+    const p = Game.player;
+    const st = Stat.compute(p);
+    if (!B || B.over || B.busy) return;
+    const sk = this.ultList().find(x => x.id === id);
+    if (!sk) return;
+    if ((B.zhenyuan || 0) < sk.cost) { UI.toast('真元不足'); return; }
+    B.busy = true;
+    B.zhenyuan -= sk.cost;
+    B.menu = null;
+    this.log(`【必杀 · ${sk.name}】${sk.desc}`, 'log-crit');
+    Ambience.sfx('crit');
+    await this.wait(500);
+    const hits = sk.hits || 1;
+    if (sk.selfHp) { p.hp = Math.max(1, Math.round(p.hp * (1 - sk.selfHp))); this.log(`你燃血催招，气血降至 ${p.hp}！`, 'log-warn'); }
+    for (let h = 0; h < hits && B.enemy.hp > 0; h++) {
+      let dmg = Stat.afterDef(this.myAtk(st) * (sk.mult || 1), this.enDef(B.enemy)) * Utils.randF(0.95, 1.2) * this.moraleMul();
+      const crit = Utils.chance(this.myCrit(st) + (sk.crit || 0));
+      if (crit) dmg *= 1.7;
+      dmg = Math.max(1, Math.round(dmg));
+      B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
+      B.stats.out += dmg;
+      this.pushFloat('enemy', `-${dmg}`, crit ? 'crit' : 'dmg');
+      B.hitShake = true;
+      this.addMorale(10);
+      if (sk.leech && p.hp < st.maxHp) {
+        const heal = Math.max(1, Math.round(dmg * sk.leech));
+        p.hp = Math.min(st.maxHp, p.hp + heal);
+        this.log(`血气倒灌——回复 <b>${heal}</b> 点气血。`, 'log-gain');
+      }
+      await this.wait(360);
+      if (hits > 1) this.log(`第二段杀招接踵而至！再造成 <b>${Math.max(0, dmg)}</b> 点伤害。`, 'log-crit');
+    }
+    if (sk.heal) {
+      const heal = Math.round(st.maxHp * sk.heal);
+      p.hp = Math.min(st.maxHp, p.hp + heal);
+      this.log(`丹香入腹——回复 <b>${heal}</b> 点气血。`, 'log-gain');
+    }
+    if (sk.burn && B.enemy.hp > 0) { StatusFx.add(B.enemy.fx, { kind: 'burn', pct: sk.burn.pct, rounds: sk.burn.rounds }); this.log(`${B.enemy.name} 被丹火缠身！`, 'log-gain'); }
+    if (sk.defdown && B.enemy.hp > 0) { StatusFx.add(B.enemy.fx, { kind: 'defdown', pct: sk.defdown, rounds: sk.rounds || 2 }); this.log(`${B.enemy.name} 防御大破！`, 'log-gain'); }
+    if (sk.weaken && B.enemy.hp > 0) { StatusFx.add(B.enemy.fx, { kind: 'weaken', pct: sk.weaken, rounds: sk.rounds || 2 }); this.log(`${B.enemy.name} 力量被蚀！`, 'log-gain'); }
+    if (sk.slow && B.enemy.hp > 0) { StatusFx.add(B.enemy.fx, { kind: 'slow', pct: sk.slow, rounds: sk.rounds || 2 }); this.log(`${B.enemy.name} 身形迟滞！`, 'log-gain'); }
+    if (sk.guard) { StatusFx.add(B.myFx, { kind: 'shield', pct: sk.guard, rounds: sk.rounds || 3 }); this.log('金身罩体，水火难侵！', 'log-gain'); }
+    if (sk.stun && B.enemy.hp > 0 && Utils.chance(sk.stun)) { StatusFx.add(B.enemy.fx, { kind: 'stun', rounds: 1 }); this.log(`${B.enemy.name} 被震得神魂摇晃，下回合难以行动！`, 'log-gain'); }
+    if (sk.freeze && B.enemy.hp > 0 && Utils.chance(sk.freeze)) { StatusFx.add(B.enemy.fx, { kind: 'freeze', rounds: 1 }); this.log(`紫雷封形——${B.enemy.name} 被冻结一回合！`, 'log-gain'); }
+    if (B.enemy.hp <= 0) { await this.victory(); return; }
+    await this.enemyTurn(st);
+    if (!B.over) { if (await this.afterEnemyPhase(st)) return; }
+    this.render();
+    B.busy = false;
+    this.autoNext();
+  },
+
   /** v13：给敌方施加状态（符箓/破煞法诀） */
   applyEnemyFx(e, st, logFmt) {
     StatusFx.add(e.fx, st);
@@ -8124,6 +8292,8 @@ const Battle = {
           B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
           const comboCap = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? 5 + (ForgeSys.suffixFx(p).comboUp || 0) : 5;   // v19 词缀·连击上限
           B.combo = Math.min(comboCap, (B.combo || 0) + 1);   // v13 连击累积
+          B.stats.out += dmg; if (B.combo > B.stats.maxCombo) B.stats.maxCombo = B.combo;   // v19 统计
+          B.zhenyuan = Math.min(6, (B.zhenyuan || 0) + (crit || jianxin ? 2 : 1));   // v19 真元
           if (p.dao === 'sword') DaoSys.gain(p, (crit || jianxin) ? 20 : 12);   // v16 剑意
           this.pushFloat('enemy', `-${dmg}`, (crit || jianxin) ? 'crit' : 'dmg');
           B.hitShake = true;
@@ -8166,6 +8336,20 @@ const Battle = {
             const heal3 = Math.max(1, Math.round(dmg * eqFx.leech));
             p.hp = Math.min(st.maxHp, p.hp + heal3);
             this.log(`【词缀·吸血】血气倒流——回复 <b>${heal3}</b> 点气血。`, 'log-gain');
+          }
+          // v19 精英词缀·魔棘：敌受击反弹一成五
+          if (this.eFx(B, 'e_thorns') && p.hp > 0) {
+            const back = Math.max(1, Math.round(dmg * 0.15));
+            p.hp = Math.max(0, p.hp - back);
+            this.pushFloat('me', `-${back}`, 'dmg');
+            this.log(`【魔棘】${B.enemy.name} 周身魔刺反卷——你受 <b>${back}</b> 点伤害！`, 'log-warn');
+          }
+          // v19 精英词缀·不灭：濒死复活一次
+          if (B.enemy.hp <= 0 && this.eFx(B, 'e_reborn') && !B.enemy._rebornUsed) {
+            B.enemy._rebornUsed = true;
+            B.enemy.hp = Math.round(B.enemy.hpMax * 0.3);
+            this.log(`【不灭】${B.enemy.name} 气息骤然暴涨——它以三成气血自死境爬了回来！`, 'log-warn');
+            UI.toast(`${B.enemy.name} 触发【不灭】！`, true);
           }
         }
         break;
@@ -8286,6 +8470,7 @@ const Battle = {
         B.defending = true;
         if (p.dao === 'body') DaoSys.gain(p, 6);   // v16 体魄
         this.addMorale(6);
+        B.zhenyuan = Math.min(6, (B.zhenyuan || 0) + 1);   // v19 真元
         p.mp = Math.min(st.maxMp, p.mp + Math.round(st.maxMp * 0.15));
         this.log('你凝神戒备，摆出防御姿态，灵力缓缓回复，战意亦在蓄积。', 'log-gain');
         break;
@@ -8413,6 +8598,17 @@ const Battle = {
     const p = Game.player;
     const st = Stat.compute(p);
     const e = B.enemy;
+    // v19 Boss 二阶段：血线过半，杀意暴涨
+    if (!e._phase2 && e.hp > 0 && e.hp < e.hpMax * 0.5) {
+      e._phase2 = true;
+      this.log(`<b>${e.name} 血线过半，杀意暴涨——它的气息陡然凌厉了数分！</b>`, 'log-warn');
+      UI.toast(`${e.name} 进入狂乱状态！`, true);
+    }
+    // v19 精英词缀·血性：狂暴后可再度狂暴
+    if (e.raged && e._canRage2 && !e._raged2 && e.hp > 0 && e.hp < e.hpMax * 0.4) {
+      e._raged2 = true;
+      this.log(`【血性】${e.name} 目眦欲裂，狂暴之上再燃狂暴——攻 +30%！`, 'log-warn');
+    }
     await this.wait(420);
     // v13 敌方 DOT 结算（毒/焰/血）与控制判定（被缚/冰封则跳过本回合）
     const dotTxt = this.tickDots('enemy');
@@ -8615,8 +8811,16 @@ const Battle = {
     if (p.realmIdx >= 2 && dmg > st.maxHp * 0.3) { dmg *= 0.8; guarded = true; }
     dmg = Math.max(1, Math.round(dmg));
     p.hp = Math.max(0, p.hp - dmg);
+    B.stats.in += dmg;   // v19 统计
     B.combo = 0;   // v13 受击中断连击
     B.playerHit = true; // v18：玩家受击标记
+    // v19 精英词缀·汲血
+    if (this.eFx(B, 'e_leech') && e.hp > 0) {
+      const leech = Math.max(1, Math.round(dmg * 0.3));
+      e.hp = Math.min(e.hpMax, e.hp + leech);
+      this.pushFloat('enemy', `+${leech}`, 'heal');
+      this.log(`【汲血】${e.name} 吮吸血气，回复 <b>${leech}</b> 点气血。`, 'log-warn');
+    }
     if (blocked) Ambience.sfx('block');
     else if (crit) Ambience.sfx('crit');
     else Ambience.sfx('hit');
@@ -8747,6 +8951,20 @@ const Battle = {
     this.end(false);
     UI.announce('战 斗 胜 利', 'ok');   // v4
     Ambience.sfx('victory');   // v5
+    // v19 结算卡
+    if (B.stats) {
+      const el = document.getElementById('battle-box');
+      if (el && !document.getElementById('battle-modal').className.includes('hidden')) {
+        const box = document.createElement('div');
+        box.className = 'bt-summary';
+        box.innerHTML = `<div class="bt-sum-title">✦ 战 斗 结 算 ✦</div>
+          <div class="tip-line">· 历时 <b>${B.turn || 1}</b> 回合 ｜ 最高连击 <b>×${B.stats.maxCombo}</b></div>
+          <div class="tip-line">· 共造成 <b>${Utils.fmtNum(B.stats.out)}</b> 伤害，承受 <b>${Utils.fmtNum(B.stats.in)}</b> 伤害</div>
+          <div class="tip-line">· 终局真元 ${B.zhenyuan || 0}/6</div>`;
+        el.appendChild(box);
+        setTimeout(() => { box.remove(); }, 2600);
+      }
+    }
     Log.add(`你击败了 <b>${B.enemy.name}</b>，获得修为 ${Utils.fmtNum(expGain)}、灵石 ${Utils.fmtNum(stoneGain)}${drops.length ? `、${drops.join('、')}` : ''}${p.dao === 'demonic' ? `，并吞噬其精元（修为额外 +${Utils.fmtNum(Math.round(expGain * (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 1 ? 0.3 : 0.2)))}）` : ''}。`, 'gain');
   },
 
@@ -8882,6 +9100,11 @@ const Battle = {
         : `<div class="bt-sub"><button class="btn btn-sm" data-action="bt-back">囊中空空如也，返回</button></div>`;
     }
 
+    // v19 必杀按钮行
+    const ults = this.ultList();
+    const ultBtns = ults.length ? ults.map(sk =>
+      `<button class="btn btn-sm ult-btn" data-action="bt-ult" data-ult="${sk.id}" ${(B.busy || (B.zhenyuan || 0) < sk.cost) ? 'disabled' : ''} title="${sk.desc}">${sk.name}<span style="color:var(--text-faint)">（真元${sk.cost}）</span></button>`).join('') : '';
+    const ultRow = ultBtns ? `<div class="bt-sub ult-row">${ultBtns}</div>` : '';
     const speedLabels = { 1: '×1', 2: '×2', 3: '极速' };
     const btns = [
       `<button class="btn" data-action="bt-attack" ${B.busy ? 'disabled' : ''}>普 攻</button>`,
@@ -8904,7 +9127,7 @@ const Battle = {
     document.getElementById('battle-box').innerHTML = `
       <div class="battle-head">— 修 罗 场 —</div>
       <div class="bt-side side-enemy ${e.raged ? 'raged' : ''}" data-species="${e.species || 'beast'}">
-        <div class="bt-name-row"><span class="bt-name enemy">${e.name}${e.elite ? ' <span class="tag danger">精英</span>' : ''}${e.raged ? ' <span class="tag danger">狂暴</span>' : ''}${e.charging ? ' <span class="tag danger">蓄力杀招</span>' : ''}${StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze') ? ' <span class="tag">被缚</span>' : ''}</span><span class="bt-realm">${e.realmLabel} · 攻${this.enAtk(e)} 防${this.enDef(e)}</span></div>
+        <div class="bt-name-row"><span class="bt-name enemy"><button class="bt-info-btn" data-action="bt-info" title="查看情报">🔍</button>${e.name}${e.elite ? ' <span class="tag danger">精英</span>' : ''}${(B.enemyFxIds || []).length ? ' ' + B.enemyFxIds.map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `<span class="tag danger" title="${d.desc}">◆${d.name}</span>` : ''; }).join('') : ''}${e.raged ? ' <span class="tag danger">狂暴</span>' : ''}${e._raged2 ? ' <span class="tag danger">血性</span>' : ''}${e._phase2 ? ' <span class="tag danger">狂乱</span>' : ''}${e.charging ? ' <span class="tag danger">蓄力杀招</span>' : ''}${StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze') ? ' <span class="tag">被缚</span>' : ''}</span><span class="bt-realm">${e.realmLabel} · 攻${this.enAtk(e)} 防${this.enDef(e)}</span></div>
         <div class="bt-figure enemy-fig" aria-hidden="true"></div>
         <div class="fx-tags">${StatusFx.tagsHtml(e.fx)}</div>
         <div class="bar"><div class="bar-fill hp${e.raged ? ' rage' : ''}" style="width:${ePct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-ehp" data-nv="${e.hp}">${e.hp}</span> / ${e.hpMax}</span></div>
@@ -8916,10 +9139,12 @@ const Battle = {
         <div class="bar" title="气血 ${p.hp} / ${st.maxHp}"><div class="bar-fill hp${hpPct <= 30 ? ' low' : ''}" style="width:${hpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-hp" data-nv="${p.hp}">${p.hp}</span> / ${st.maxHp}</span></div>
         <div class="bar" title="灵力 ${p.mp} / ${st.maxMp}"><div class="bar-fill mp" style="width:${mpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-mp" data-nv="${p.mp}">${p.mp}</span> / ${st.maxMp}</span></div>
         <div class="bar morale-bar" title="战意：连击提升，受挫回落（每点 +0.4% 伤害）"><div class="bar-fill morale" style="width:${B.morale || 0}%"></div><span class="bar-text">战意 ${B.morale || 0}${(B.morale || 0) >= 100 ? '（伤害 +40%）' : ''}</span></div>
+        <div class="bar morale-bar" title="真元：普攻命中+1，会心+2，防御+1（用于职业必杀）"><div class="bar-fill" style="width:${(B.zhenyuan || 0) / 6 * 100}%;background:linear-gradient(90deg,#5a6ac7,#a04ab0)"></div><span class="bar-text">真元 ${B.zhenyuan || 0}/6</span></div>
         <div class="fx-tags">${StatusFx.tagsHtml(B.myFx)}</div>
       </div>
       <div id="bt-log"></div>
       ${sub}
+      ${ultRow}
       ${tameBtn}
       <div class="bt-actions" style="margin-top:8px">${btns}</div>
       <div class="bt-ctl">${ctlBtns}</div>
@@ -9284,6 +9509,8 @@ const Story = {
     box.querySelectorAll('.story-p').forEach((el, i) => { el.style.animationDelay = (i * 0.18) + 's'; });
   },
 };
+
+window.Story = Story;   // v19：暴露全局以便调试与自动化测试
 
 /* ======================================================================
  * §15.5 v11 剧情 · 问道九章 QuestSys（主线 + 奇遇录支线）
@@ -11588,6 +11815,8 @@ const Game = {
     },
     /* --- 战斗 --- */
     'bt-attack': () => Battle.active && Battle.act('attack'),
+    'bt-ult': (d) => Battle.active && Battle.actUlt(d.ult),
+    'bt-info': () => Battle.infoCard(),
     'bt-skill': (d) => Battle.active && Battle.act('skill', d.gf),
     'bt-item': (d) => Battle.active && Battle.act('item', d.item),
     'bt-defend': () => Battle.active && Battle.act('defend'),

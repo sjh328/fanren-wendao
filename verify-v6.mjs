@@ -52,6 +52,47 @@ await page.setViewport({ width: 1280, height: 720 });
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 200)); });
 page.on('pageerror', e => consoleErrors.push('PAGEERROR: ' + String(e).slice(0, 200)));
 
+// v19：剧情静默器——Story.play 立即结算（记首选项/旗标/回调），老测试不被演出打断
+await page.evaluateOnNewDocument(() => {
+  const t = setInterval(() => {
+    if (!window.Story || window.Story.__silenced) return;
+    clearInterval(t);
+    window.Story.__silenced = true;
+    window.Story.play = function (script, onEnd) {
+      try {
+        if (script && script.id && window.Game && Game.player && Game.player.story) {
+          Game.player.story.seen[script.id] = Math.floor(Game.player.day || 0) + 1;
+          const ch = (script.scenes || []).find(s => s.t === 'choice');
+          if (ch && ch.options && ch.options[0]) {
+            Story.recordChoice(script.id, ch.options[0].value);
+            if (ch.options[0].flag) Story.setFlag(ch.options[0].flag);
+          }
+        }
+      } catch (e) {}
+      if (onEnd) onEnd();
+    };
+  }, 40);
+});
+
+// v19：老测试对剧情演出盲视——注入剧情自动推进器（战斗场自动判胜，抉择取首项）
+await page.evaluateOnNewDocument(() => {
+  setInterval(() => {
+    if (!window.Story || !window.Battle) return;
+    const modal = document.getElementById('story-modal');
+    if (!modal || modal.className.includes('hidden') || !Story.cur) return;
+    const sc = Story.cur.scenes[Story.cur.idx];
+    if (!sc) return;
+    if (sc.t === 'battle') {
+      if (!Battle.active) { const b = document.querySelector('[data-action="story-battle"]'); if (b) b.click(); }
+      else if (!Battle.active.over) { const B = Battle.active; B.busy = false; B.over = false; B.enemy.hp = 0; Battle.victory(); }
+    } else if (sc.t === 'choice') {
+      const o = document.querySelector('.story-opt'); if (o) o.click();
+    } else {
+      const n = document.querySelector('[data-action="story-next"]'); if (n) n.click();
+    }
+  }, 420);
+});
+
 try {
   /* ---------- 开局 ---------- */
   await page.goto(URL, { waitUntil: 'domcontentloaded' });
@@ -149,7 +190,7 @@ try {
   await page.click('[data-action="act-codex"]');
   await sleep(300);
   const a2 = await text(page, '#popup-body');
-  /成就 \d+\/30/.test(a2) && a2.includes('初试锋芒') && a2.includes('已达成') && a2.includes('气运')
+  /成就 \d+\/35/.test(a2) && a2.includes('初试锋芒') && a2.includes('已达成') && a2.includes('气运')
     ? pass('A1 成就列表弹窗（进度/奖励/达成态）')
     : fail('A1 成就列表', a2.slice(0, 80));
   await shot(page, 'achv_list');

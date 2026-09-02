@@ -36,6 +36,47 @@ await page.setViewport({ width: 1280, height: 720 });
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 200)); });
 page.on('pageerror', e => consoleErrors.push('PAGEERROR: ' + String(e).slice(0, 200)));
 
+// v19：剧情静默器——Story.play 立即结算（记首选项/旗标/回调），老测试不被演出打断
+await page.evaluateOnNewDocument(() => {
+  const t = setInterval(() => {
+    if (!window.Story || window.Story.__silenced) return;
+    clearInterval(t);
+    window.Story.__silenced = true;
+    window.Story.play = function (script, onEnd) {
+      try {
+        if (script && script.id && window.Game && Game.player && Game.player.story) {
+          Game.player.story.seen[script.id] = Math.floor(Game.player.day || 0) + 1;
+          const ch = (script.scenes || []).find(s => s.t === 'choice');
+          if (ch && ch.options && ch.options[0]) {
+            Story.recordChoice(script.id, ch.options[0].value);
+            if (ch.options[0].flag) Story.setFlag(ch.options[0].flag);
+          }
+        }
+      } catch (e) {}
+      if (onEnd) onEnd();
+    };
+  }, 40);
+});
+
+// v19：老测试对剧情演出盲视——注入剧情自动推进器（战斗场自动判胜，抉择取首项）
+await page.evaluateOnNewDocument(() => {
+  setInterval(() => {
+    if (!window.Story || !window.Battle) return;
+    const modal = document.getElementById('story-modal');
+    if (!modal || modal.className.includes('hidden') || !Story.cur) return;
+    const sc = Story.cur.scenes[Story.cur.idx];
+    if (!sc) return;
+    if (sc.t === 'battle') {
+      if (!Battle.active) { const b = document.querySelector('[data-action="story-battle"]'); if (b) b.click(); }
+      else if (!Battle.active.over) { const B = Battle.active; B.busy = false; B.over = false; B.enemy.hp = 0; Battle.victory(); }
+    } else if (sc.t === 'choice') {
+      const o = document.querySelector('.story-opt'); if (o) o.click();
+    } else {
+      const n = document.querySelector('[data-action="story-next"]'); if (n) n.click();
+    }
+  }, 420);
+});
+
 try {
   /* ---------- 开局（用存档位三，避免污染其他脚本） ---------- */
   await page.goto(URL, { waitUntil: 'domcontentloaded' });
@@ -88,8 +129,16 @@ try {
   (await page.$('[data-action="log-pause"]')) && (await page.$('[data-action="log-clear"]'))
     ? pass('U3 日志区右上角两枚小按钮存在')
     : fail('U3 日志工具按钮', '按钮缺失');
-  await page.evaluate(() => { for (let i = 0; i < 25; i++) Log.add(`填充日志 ${i}`, 'info'); });
-  await sleep(120);
+  await page.evaluate(() => {
+    // v14 起日志默认折叠——先展开再验证滚动行为
+    const wrap = document.getElementById('log-wrap');
+    if (wrap && wrap.className.includes('collapsed')) {
+      const t = document.querySelector('[data-action="log-toggle"]');
+      if (t) t.click();
+    }
+    for (let i = 0; i < 25; i++) Log.add(`填充日志 ${i}`, 'info');
+  });
+  await sleep(200);
   const st1 = await page.$eval('#log', el => ({ top: el.scrollTop, h: el.scrollHeight, ch: el.clientHeight }));
   st1.top >= st1.h - st1.ch - 4 ? pass('U3 默认自动滚动吸底') : fail('U3 自动吸底', JSON.stringify(st1));
   await page.click('[data-action="log-pause"]');
@@ -292,8 +341,8 @@ try {
     bag: !!document.querySelector('#bag-panel .panel-title'),
     logWrap: !!document.querySelector('#log-wrap #log'),
   }));
-  layout.left && layout.tabs === 7 && layout.bag && layout.logWrap
-    ? pass('U12 原有三栏布局 / 七标签页完整保留（含问道剧情页）')
+  layout.left && layout.tabs === 8 && layout.bag && layout.logWrap
+    ? pass('U12 原有三栏布局 / 八标签页完整保留（v13 增洞府页）')
     : fail('U12 布局完整性', JSON.stringify(layout));
   await shot(page, 'final_ui');
 

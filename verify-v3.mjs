@@ -30,7 +30,12 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const text = (page, sel) => page.$eval(sel, el => el.innerText).catch(() => '');
 const clickSel = async (page, sel, timeout = 6000) => {
   await page.waitForSelector(sel, { timeout });
-  await page.click(sel);
+  // v19：重渲染竞态防御——重试后仍失败则 DOM 直点兜底
+  for (let i = 0; i < 3; i++) {
+    try { await page.click(sel); return; } catch (e) { await sleep(200); }
+  }
+  await page.evaluate(s => { const b = document.querySelector(s); if (b) b.click(); }, sel);
+  await sleep(150);
 };
 const clickPopupBtn = async (idx) => {
   const open = await page.$eval('#popup-modal', el => !el.className.includes('hidden')).catch(() => false);
@@ -75,6 +80,47 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 720 });
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 200)); });
 page.on('pageerror', e => consoleErrors.push('PAGEERROR: ' + String(e).slice(0, 200)));
+
+// v19：剧情静默器——Story.play 立即结算（记首选项/旗标/回调），老测试不被演出打断
+await page.evaluateOnNewDocument(() => {
+  const t = setInterval(() => {
+    if (!window.Story || window.Story.__silenced) return;
+    clearInterval(t);
+    window.Story.__silenced = true;
+    window.Story.play = function (script, onEnd) {
+      try {
+        if (script && script.id && window.Game && Game.player && Game.player.story) {
+          Game.player.story.seen[script.id] = Math.floor(Game.player.day || 0) + 1;
+          const ch = (script.scenes || []).find(s => s.t === 'choice');
+          if (ch && ch.options && ch.options[0]) {
+            Story.recordChoice(script.id, ch.options[0].value);
+            if (ch.options[0].flag) Story.setFlag(ch.options[0].flag);
+          }
+        }
+      } catch (e) {}
+      if (onEnd) onEnd();
+    };
+  }, 40);
+});
+
+// v19：老测试对剧情演出盲视——注入剧情自动推进器（战斗场自动判胜，抉择取首项）
+await page.evaluateOnNewDocument(() => {
+  setInterval(() => {
+    if (!window.Story || !window.Battle) return;
+    const modal = document.getElementById('story-modal');
+    if (!modal || modal.className.includes('hidden') || !Story.cur) return;
+    const sc = Story.cur.scenes[Story.cur.idx];
+    if (!sc) return;
+    if (sc.t === 'battle') {
+      if (!Battle.active) { const b = document.querySelector('[data-action="story-battle"]'); if (b) b.click(); }
+      else if (!Battle.active.over) { const B = Battle.active; B.busy = false; B.over = false; B.enemy.hp = 0; Battle.victory(); }
+    } else if (sc.t === 'choice') {
+      const o = document.querySelector('.story-opt'); if (o) o.click();
+    } else {
+      const n = document.querySelector('[data-action="story-next"]'); if (n) n.click();
+    }
+  }, 420);
+});
 
 try {
   await page.goto(URL, { waitUntil: 'domcontentloaded' });
@@ -170,7 +216,7 @@ try {
   await sleep(700);
   {
     const p = await player(page);
-    (p.npcs && Object.keys(p.npcs).length === 15) ? pass('V1 老档迁移：15位NPC自动补齐') : fail('V1 NPC迁移', JSON.stringify(p.npcs).slice(0, 60));
+    (p.npcs && Object.keys(p.npcs).length === 24) ? pass('V1 老档迁移：24位NPC自动补齐（v13 扩至24）') : fail('V1 NPC迁移', JSON.stringify(p.npcs).slice(0, 60));
     (p.world && typeof p.world.nextEventYear === 'number') ? pass('V1 老档迁移：世界状态自动补齐') : fail('V1 world迁移', JSON.stringify(p.world).slice(0, 60));
     p.dungeon === null ? pass('V1 老档迁移：秘境字段补齐') : fail('V1 dungeon迁移', String(p.dungeon));
     const tabs = await page.$$eval('#tabs .tab-btn', els => els.map(e => e.innerText));
@@ -178,7 +224,7 @@ try {
     await clickSel(page, '[data-action="act-tab"][data-tab="jianghu"]');
     await sleep(300);
     const npcRows = await page.$$('[data-action="npc-befriend"]');
-    npcRows.length === 15 ? pass('V1 江湖页15位常驻修士') : fail('V1 NPC数量', String(npcRows.length));
+    npcRows.length === 24 ? pass('V1 江湖页24位常驻修士（v13 扩至24）') : fail('V1 NPC数量', String(npcRows.length));
     await shot(page, 'legacy_load');
   }
 
@@ -215,6 +261,8 @@ try {
     await sleep(450);
     const p = await player(page);
     p.dungeon && p.dungeon.depth === 2 ? pass('V2 陷阱节点结算，深入第3层') : fail('V2 陷阱节点', String(p.dungeon && p.dungeon.depth));
+    await page.evaluate(() => UI.closePopup());   // v17 节点结算卡须先关闭
+    await sleep(250);
     await clickSel(page, '[data-action="act-realm-retreat"]');
     await sleep(300);
     await clickPopupBtn(0);

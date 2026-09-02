@@ -30,10 +30,22 @@ const clickPopupBtn = async (idx) => {
   await sleep(350);
 };
 
-const finishStory = async (max = 24) => {
+const finishStory = async (max = 40) => {
   for (let i = 0; i < max; i++) {
     const open = await page.$eval('#story-modal', el => !el.className.includes('hidden')).catch(() => false);
     if (!open) return true;
+    // v19 剧情战场次：迎战并直接判胜，故事继续
+    const isBattle = await page.evaluate(() => Story.cur && Story.cur.scenes[Story.cur.idx] && Story.cur.scenes[Story.cur.idx].t === 'battle').catch(() => false);
+    if (isBattle) {
+      await page.evaluate(() => { const b = document.querySelector('[data-action="story-battle"]'); if (b) b.click(); });
+      await sleep(500);
+      await page.evaluate(async () => {
+        const B = Battle.active;
+        if (B) { B.busy = false; B.over = false; B.enemy.hp = 0; await Battle.victory(); }
+      });
+      await sleep(600);
+      continue;
+    }
     const choice = await page.$('[data-story-choice]');
     if (choice) { await choice.click(); await sleep(450); continue; }
     await page.click('[data-action="story-next"]').catch(() => {});
@@ -562,7 +574,7 @@ try {
     scenes: document.querySelectorAll('.map-scene svg').length,
     mapCards: document.querySelectorAll('.map-card').length,
   }));
-  v1.scenes === 9 && v1.mapCards === 9 ? pass('V1 九张地图皆渲染山水插画') : fail('V1 场景插画', JSON.stringify(v1));
+  v1.scenes === 11 && v1.mapCards === 11 ? pass('V1 十一张地图皆渲染山水插画') : fail('V1 场景插画', JSON.stringify(v1));
   const v1b = await page.evaluate(async () => {
     await Battle.start('m_dushe', { mapName: '测试' });
     return { fig: !!document.querySelector('#battle-box .enemy-fig svg') };
@@ -635,16 +647,32 @@ try {
   await sleep(900);
   // 推进到抉择场（跳过开篇旁白）
   let choiceSeen = false;
-  for (let i = 0; i < 6; i++) {
-    const sc = await page.evaluate(() => {
-      const open = !document.getElementById('story-modal').className.includes('hidden');
-      if (!open) return { open: false, text: '' };
-      return { open: true, text: (document.getElementById('story-box') || {}).innerText || '', isChoice: !!document.querySelector('[data-story-choice]') };
-    });
-    if (!sc.open) break;
-    if (sc.isChoice) { choiceSeen = sc.text.includes('带着什么入世'); break; }
-    await page.click('[data-action="story-next"]').catch(() => {});
-    await sleep(320);
+  for (let round = 0; round < 5 && !choiceSeen; round++) {
+    // v19：暗线插章（mid2）会先于章末弹出——每次行动后再查，直至抵达抉择场
+    for (let i = 0; i < 8; i++) {
+      const sc = await page.evaluate(() => {
+        const open = !document.getElementById('story-modal').className.includes('hidden');
+        if (!open) return { open: false, text: '' };
+        return { open: true, text: (document.getElementById('story-box') || {}).innerText || '', isChoice: !!document.querySelector('[data-story-choice]') };
+      });
+      if (!sc.open) break;
+      if (sc.isChoice) { choiceSeen = sc.text.includes('带着什么入世'); break; }
+      const isBattle = await page.evaluate(() => Story.cur && Story.cur.scenes[Story.cur.idx] && Story.cur.scenes[Story.cur.idx].t === 'battle').catch(() => false);
+      if (isBattle) {
+        // v19：战斗场就地判胜，继续走场（好让循环亲眼见到抉择场）
+        await page.evaluate(() => { const b = document.querySelector('[data-action="story-battle"]'); if (b) b.click(); });
+        await sleep(500);
+        await page.evaluate(async () => { const B = Battle.active; if (B) { B.busy = false; B.over = false; B.enemy.hp = 0; await Battle.victory(); } });
+        await sleep(600);
+        continue;
+      }
+      await page.click('[data-action="story-next"]').catch(() => {});
+      await sleep(320);
+    }
+    if (!choiceSeen) {
+      await page.evaluate(() => Cultivate.normal()).catch(() => {});
+      await sleep(700);
+    }
   }
   choiceSeen ? pass('ST3 完章播放章末演出（含抉择）') : fail('ST3 章末', 'choice scene not reached');
   // 选择第一个抉择并推进至结算 + 衔接
@@ -767,6 +795,7 @@ try {
     p.dao = 'pill';
     p.daoExp = { pill: 0 };
     p.bag.m_lingcao = 10;
+    p.stones.low = 100000;   // v19 修复：炼丹需药钱，先备足
     CraftSys.alchemy('r1');
     const pillExp = p.daoExp.pill || 0;
     // 符修：画符
