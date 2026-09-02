@@ -475,6 +475,12 @@ const Achieve = {
     { id: 's4', cat: 'reinc', name: '三生三世', desc: '历经三世轮回', reward: { fortune: 15 }, test: p => p.reinc && (p.reinc.lives || 0) >= 3 },
     { id: 's5', cat: 'reinc', name: '印记斑驳', desc: '累计三枚轮回印记', reward: { fortune: 12 }, prog: p => `${Math.min(3, p.reinc ? (p.reinc.marks || 0) : 0)}/3`, test: p => p.reinc && (p.reinc.marks || 0) >= 3 },
     { id: 's6', cat: 'reinc', name: '宿慧渐开', desc: '转世之身历练十次', reward: { stones: 800 }, prog: p => `${Math.min(10, p.counters.explores || 0)}/10`, test: p => p.reinc && (p.counters.explores || 0) >= 10 },
+    /* ---- v18 挑战成就 ---- */
+    { id: 'c1', cat: 'battle', name: '无伤之道', desc: '在一场战斗中毫发无伤地获胜', reward: { fortune: 5 }, test: p => (p.counters.hitlessWins || 0) >= 1 },
+    { id: 'c2', cat: 'battle', name: '雷霆之速', desc: '三回合内结束一场战斗', reward: { fortune: 8 }, test: p => (p.counters.quickWins || 0) >= 1 },
+    { id: 'c3', cat: 'battle', name: '越境斩敌', desc: '以低于敌方的境界取胜', reward: { fortune: 12 }, test: p => (p.counters.upsetWins || 0) >= 1 },
+    { id: 'c4', cat: 'exp', name: '驯兽大师', desc: '驯服五种不同种族的灵兽', reward: { stones: 1500 }, test: p => (p.counters.tameSpecies || 0) >= 5 },
+    { id: 'c5', cat: 'exp', name: '秘境征服者', desc: '通关全部十座秘境', reward: { fortune: 15 }, test: p => (p.counters.dungeonClears || 0) >= 10 },
   ],
   /** 每次行动收尾时检查：解锁则发奖并播报 */
   check() {
