@@ -2172,3 +2172,15 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   .chip-row { flex-wrap: wrap; }
   .chip { font-size: 11px; padding: 4px 8px; }
 }
+
+/* v18：新手引导聚光高亮 */
+.tut-highlight {
+  outline: 2px solid var(--gold) !important;
+  outline-offset: 2px;
+  border-radius: 8px;
+  animation: tutPulse 1.6s ease-in-out infinite;
+}
+@keyframes tutPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(122, 92, 36, 0.35); }
+  50% { box-shadow: 0 0 0 6px rgba(122, 92, 36, 0.15); }
+}
