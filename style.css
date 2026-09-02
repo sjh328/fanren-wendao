@@ -33,8 +33,8 @@
   --grade-4: #c04b4b;  --grade-4-bd: rgba(192, 75, 75, 0.6);
   --grade-5: #a8862a;  --grade-5-bd: rgba(168, 134, 42, 0.65);
   --radius: 8px;
-  --font-kai: "STKaiti", "KaiTi", "楷体", "Noto Serif SC", serif;
-  --font-body: "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", "宋体", serif;
+  --font-kai: "LXGW WenKai", "STKaiti", "KaiTi", "楷体", "Noto Serif SC", serif;
+  --font-body: "Noto Serif SC", "LXGW WenKai", "Source Han Serif SC", "STSong", "SimSun", "宋体", serif;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
