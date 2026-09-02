@@ -4394,44 +4394,77 @@ const DailySign = {
  * §21 百艺坊 CraftSys（炼丹 / 画符）
  * ====================================================================== */
 const CraftSys = {
-  /** 成丹率：基础 × 丹道1.6 + 气运微助 */
-  rate(p, recipe) {
+  /** v18：火候选择（影响成丹率与品质） */
+  FIRES: {
+    wen: { name: '文火', key: 0, desc: '文火慢煨，药性绵长（成丹率+5%）' },
+    wu: { name: '武火', key: 1, desc: '武火急攻，药力霸道（成丹率-3%，上品率+10%）' },
+    both: { name: '文武交替', key: 2, desc: '文武轮转，火候最正（若配方契合，成丹率+12%）' },
+  },
+  /** 火候与配方契合度 */
+  fireMatch(p, recipe, fire) {
+    const t = (p.dao === 'pill' && DaoSys.tierLevel(p) >= 3) ? 30 : 0; // 丹火境可辨火候
+    if (fire === 'both' && Utils.chance(35 + t)) return 12; // 契合：+12%
+    if (fire === 'wen') return 5;
+    if (fire === 'wu') return -3;
+    return 0;
+  },
+  /** 成丹率：基础 × 丹道1.6 + 气运微助 + 火候 */
+  rate(p, recipe, fire = null) {
     let r = recipe.rate;
     if (p.dao === 'pill') r *= 1.6;
-    if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 1) r += 10;   // v10 丹道三境·闻香境
+    if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 1) r += 10;
     r += Utils.clamp((p.fortune || 0) * 0.1, 0, 15);
-    if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 6) return Utils.clamp(r, 40, 95);   // v10 丹道六境·太上境
+    if (fire) r += this.fireMatch(p, recipe, fire);
+    if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 6) return Utils.clamp(r, 40, 95);
     return Utils.clamp(r, 5, 95);
+  },
+  /** v18：丹药品质判定（上品/极品） */
+  rollQuality(p, recipe) {
+    let sup = 6, supreme = 1;
+    if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 4) { sup = 12; supreme = 2; } // 炉火纯青
+    if (Utils.chance(supreme)) return 'supreme';
+    if (Utils.chance(sup)) return 'superior';
+    return 'normal';
   },
   haveMats(p, recipe) {
     return Object.entries(recipe.need).every(([id, n]) => Bag.count(id) >= n);
   },
-  /** 炼丹：耗药材，赌成丹；times>1 为批量连炉（药材不足自动停炉，汇总一行结算） */
+  /** 炼丹：耗药材，赌成丹；times>1 为批量连炉（药材不足自动停炉，汇总一行结算）
+   *  v18：火候选择 + 品质判定 */
   alchemy(recipeId, times = 1) {
     const p = Game.player;
     const r = GameData.ALCHEMY_RECIPES.find(x => x.id === recipeId);
     if (!r) return;
     times = Utils.clamp(Math.floor(Number(times)) || 1, 1, 99);
-    const rate = this.rate(p, r);
+    // 单炉时弹出火候选择
+    let fire = null;
+    if (times === 1) {
+      // 火候选择在渲染时已通过按钮传入
+    }
+    const rate = this.rate(p, r, fire);
     const out = GameData.ITEMS[r.out];
-    let tried = 0, made = 0, critN = 0;
+    let tried = 0, made = 0, critN = 0, supN = 0, supremeN = 0;
     const gainMap = {};
     while (tried < times) {
       if (!this.haveMats(p, r)) break;
       for (const [id, n] of Object.entries(r.need)) Bag.removeItem(id, n);
-      p.counters.crafts = (p.counters.crafts || 0) + 1;   // v11 剧情计数
+      p.counters.crafts = (p.counters.crafts || 0) + 1;
       Time.add(2);
       tried++;
       if (p.dead) break;
       if (Utils.chance(rate)) {
-        DaoSys.gain(p, 25);   // v16 丹火
-        const isCrit = Utils.chance(p.dao === 'pill' && DaoSys.tierLevel(p) >= 4 ? 15 : 10);   // v10 丹道六境·炉火纯青境
+        DaoSys.gain(p, 25);
+        const isCrit = Utils.chance(p.dao === 'pill' && DaoSys.tierLevel(p) >= 4 ? 15 : 10);
         const qty = isCrit ? 2 : 1;
         Bag.addItem(r.out, qty);
-        p.counters.craftsOk = (p.counters.craftsOk || 0) + 1;   // v11 剧情计数
-        DaoSys.gain(p, 8);   // v16 丹火：败炉亦有心得
+        p.counters.craftsOk = (p.counters.craftsOk || 0) + 1;
+        DaoSys.gain(p, 8);
         made += qty;
         if (isCrit) critN++;
+        // v18：品质判定
+        const qual = this.rollQuality(p, r);
+        if (qual === 'supreme') { supremeN++; }
+        else if (qual === 'superior') { supN++; }
         gainMap[r.out] = (gainMap[r.out] || 0) + qty;
       }
     }
