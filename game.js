@@ -6836,13 +6836,22 @@ const Battle = {
     const efig = document.querySelector('#battle-box .enemy-fig');
     if (efig) efig.innerHTML = Art.monster(e.species || 'beast', !!e.elite);
     if (B.floats.length) {
+      const usedPositions = [];
       for (const f of B.floats) {
         const host = f.side === 'enemy' ? eside : mside;
         if (!host) continue;
         const d = document.createElement('div');
         d.className = 'float-num ' + f.kind;
         d.textContent = f.text;
-        d.style.left = (26 + Math.random() * 44) + '%';
+        // v18：浮动数字排队，避免重叠
+        let left;
+        for (let attempt = 0; attempt < 10; attempt++) {
+          left = 20 + Math.floor(Math.random() * 50);
+          if (!usedPositions.some(p => Math.abs(p - left) < 12)) break;
+        }
+        usedPositions.push(left);
+        d.style.left = left + '%';
+        d.style.top = (10 + usedPositions.length * 18) + '%';
         host.appendChild(d);
         setTimeout(() => d.remove(), 1100);
       }
@@ -6853,6 +6862,13 @@ const Battle = {
       void eside.offsetWidth;
       eside.classList.add('enemy-shake');
       B.hitShake = false;
+    }
+    // v18：玩家受击震动反馈
+    if (B.playerHit && mside) {
+      mside.classList.remove('player-hit');
+      void mside.offsetWidth;
+      mside.classList.add('player-hit');
+      B.playerHit = false;
     }
     // render 会整体重建战斗 DOM，这里回放历史战斗日志
     const logBox = document.getElementById('bt-log');
