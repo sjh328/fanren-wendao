@@ -324,6 +324,22 @@ const Ambience = {
     if (sfx) { sfx.checked = this.sfxOn; sfx.addEventListener('click', e => Ambience.setSfx(e.target.checked)); }
     if (music) { music.checked = this.musicOn; music.addEventListener('click', e => Ambience.setMusic(e.target.checked)); }
     if (vol) { vol.value = Math.round(this.vol * 100); vol.addEventListener('input', e => Ambience.setVolume(Number(e.target.value) / 100)); }
+    // v19 设置中心：界面字号
+    const font = document.getElementById('amb-font');
+    if (font) {
+      const saved = Save.read('amb') || {};
+      const fs = saved.fontScale || 100;
+      this.applyFontScale(fs);
+      font.value = String(fs);
+      font.addEventListener('change', e => {
+        const v = Number(e.target.value) || 100;
+        this.applyFontScale(v);
+        const pref = Save.read('amb') || {};
+        pref.fontScale = v;
+        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        UI.toast(`界面字号：${{ 100: '标准', 110: '大', 122: '特大' }[v] || v + '%'}`);
+      });
+    }
     // v13 设置中心：战斗速度
     const spd = document.getElementById('amb-speed');
     if (spd) {
@@ -343,6 +359,10 @@ const Ambience = {
       };
       document.addEventListener('pointerdown', kick);
     }
+  },
+  /** v19 字号档位 */
+  applyFontScale(v) {
+    document.documentElement.style.fontSize = (v === 110 ? 17 : v === 122 ? 19 : 15.5) + 'px';
   },
   persist() {
     const raw = JSON.stringify({ sfx: this.sfxOn, music: this.musicOn, vol: this.vol });
@@ -586,7 +606,22 @@ const Achieve = {
 const Guide = {
   /** 功能解锁阶段：0 = 初入练气；1 = 练气中期；2 = 筑基 */
   stage(p) { return p.realmIdx >= 1 ? 2 : (p.layer >= 1 ? 1 : 0); },
-  LOCKS: {
+    /** v19 分阶段教学：大境界首次抵达时给一段要诀提示 */
+  REALM_TIPS: {
+    1: '【筑基要诀】可拜入宗门、开辟洞府、择定大道——江湖页可结交修士，坊市可置办法宝。',
+    2: '【金丹要诀】自此突破需渡天劫：硬抗/法宝/借地三策各有所得，劫前记得备份存档！',
+    3: '【元婴要诀】秘境碎片可铸本命法宝——集齐九枚，魔魂可克。交情深者可结拜、结侣。',
+  },
+  realmTip(p) {
+    if (!p || !this.REALM_TIPS[p.realmIdx]) return;
+    const key = 'tut_r' + p.realmIdx;
+    p.flags = p.flags || {};
+    if (p.flags[key]) return;
+    p.flags[key] = true;
+    Log.add(this.REALM_TIPS[p.realmIdx], 'system');
+    UI.announce(`✦ ${GameData.REALM_NAMES[p.realmIdx]}期 · 要诀 ✦`, 'gold');
+  },
+LOCKS: {
     map: { stage: 1, hint: '游历 · 练气中期解锁' },
     shop: { stage: 1, hint: '坊市 · 练气中期解锁' },
     jianghu: { stage: 2, hint: '江湖 · 筑基期解锁' },
@@ -3831,6 +3866,7 @@ const Cultivate = {
       Log.add(`恭喜！你静修冲关功成，晋入 <b>筑基</b> 期——从此踏入修士之列！寿元上限提升至 ${st.lifespan} 岁。`, 'realm');
       const gr = NpcSys.realmGreeting(p);   // v19 突破贺语
       if (gr) { Log.add(`${gr.name}（${gr.title}）登门道贺——${gr.line}`, 'event'); Story.chron(`${gr.name} 登门道贺，贺你晋入筑基期`); }
+      Guide.realmTip(p);   // v19 分阶段教学
       UI.announce('筑基功成 · 步入修士之列', 'gold');
       UI.toast('筑基成功！');
     } else {
@@ -4044,12 +4080,29 @@ const Bag = {
     if (poisonBlocked) Log.add('只是丹毒积累将满，不宜再多服——再服恐有反噬之危。', 'warn');
     Game.afterAction();
   },
-  equip(itemId) {
+  async equip(itemId) {
     const p = Game.player;
     const def = GameData.ITEMS[itemId];
     if (!def || def.type !== 'artifact' || !this.count(itemId)) return;
-    this.removeItem(itemId, 1);
     const slot = def.slot;
+    // v19 装备对比：槽位已有装备时，先看属性差再决定
+    const cur = p.equipped[slot];
+    const curId = cur ? Utils.eqId(cur) : null;
+    if (curId) {
+      const curDef = GameData.ITEMS[curId];
+      const fmt = b => Object.entries(b || {}).map(([k, v]) => `${({ atk: '攻击', def: '防御', hp: '气血', mp: '灵力', spd: '身法', atkPct: '攻击%', defPct: '防御%', hpPct: '气血%', mpPct: '灵力%', spdPct: '身法%', crit: '暴击', dodge: '闪避', block: '格挡', cult: '修炼%' }[k] || k)  }+${v}`).join('，') || '无';
+      const enh = cur && typeof cur === 'object' ? (cur.enhance || 0) : ((p.enhanced || {})[curId] || 0);
+      const ok = await UI.popup({
+        title: '装备对比',
+        html: `<div class="stat-line"><span>当前</span><b>${curDef.name}${enh ? ' +' + enh : ''}</b></div>
+          <div class="tip-line">· ${fmt(curDef.bonus)}</div>
+          <div class="stat-line" style="margin-top:4px"><span>换上</span><b>${def.name}</b></div>
+          <div class="tip-line">· ${fmt(def.bonus)}</div>`,
+        options: [{ text: '换 上', value: true, primary: true }, { text: '作罢', value: false }],
+      });
+      if (!ok) return;
+    }
+    this.removeItem(itemId, 1);
     // v18：装备槽存 {id, enhance} 对象，强化等级随实例走
     const oldEnhance = p.equipped[slot] ? (p.equipped[slot].enhance || 0) : 0;
     if (p.equipped[slot]) Bag.addItem(p.equipped[slot].id, 1); // 旧装备回包
@@ -6482,6 +6535,7 @@ const Tribulation = {
       Story.chron(`渡劫功成，晋入${GameData.REALM_NAMES[p.realmIdx]}期`);   // v19 年表
       const gr = NpcSys.realmGreeting(p);   // v19 突破贺语
       if (gr) { Log.add(`${gr.name}（${gr.title}）登门道贺——${gr.line}`, 'event'); Story.chron(`${gr.name} 登门道贺，贺你晋入${GameData.REALM_NAMES[p.realmIdx]}期`); }
+      Guide.realmTip(p);   // v19 分阶段教学
       if (strategy === 'endure') {
         p.rootDeep = true; p.rootWeak = false;
         Log.add('雷火淬体，道基如金——得永久厚赐【根基深厚】：全属性 +20%，此后历劫难度皆降一成。', 'gain');
