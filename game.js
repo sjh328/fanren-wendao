@@ -7158,7 +7158,13 @@ const NpcSys = {
     { min: 70,   id: 'bosom',  name: '知己' },
     { min: 90,   id: 'sworn',  name: '生死之交' },
   ],
-  tierOf(rel) { return this.TIERS.find(t => rel >= t.min) || this.TIERS[0]; },
+  tierOf(rel) {
+    // v19 修复：档位按 min 升序存放，须自高向低匹配（此前永远命中最低档「宿敌」）
+    for (let i = this.TIERS.length - 1; i >= 0; i--) {
+      if (rel >= this.TIERS[i].min) return this.TIERS[i];
+    }
+    return this.TIERS[0];
+  },
   MEM_TYPE: { story: '剧情', spar: '切磋', gift: '赠礼', chat: '论道', save: '相救', betray: '背刺', kill: '杀戮', peace: '化解', line: '个人线' },
   /** v19 记忆：共同经历写入记忆条目（上限 8 条，同类同文去重） */
   mem(p, id, type, txt) {
