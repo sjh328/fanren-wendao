@@ -2147,6 +2147,7 @@ const PlayerFactory = {
       topTitle: null,
       story: { seen: {}, mid: {}, choices: {} },   // v15 剧情播放记录 / 中段标记 / 抉择
       daoExp: {},   // v16 职业道境经验（六大职业独立积累，不随修为境界绑定）
+      jade: 0,      // v18 残玉共鸣（0-9 重，主线每完结一章 +1）
     };
     const st = Stat.compute(p);
     p.hp = st.maxHp; p.mp = st.maxMp;
@@ -2240,6 +2241,11 @@ const PlayerFactory = {
             out.equipped[slot] = { id: eq, enhance: (out.enhanced && out.enhanced[eq]) || 0 };
           }
         }
+      },
+      // v18.1: 残玉共鸣追认（老档按已完成章数补共鸣重数）
+      (out) => {
+        const done = (out.quest && out.quest.ch) || 0;
+        if (done > 0) out.jade = Math.max(out.jade || 0, Math.min(DaoxinSys.MAX_ATTUNE, done));
       },
     ];
     // 基础：fresh 模板 + 展开合并
@@ -2388,27 +2394,31 @@ const Stat = {
     const rootPct = p.rootDeep ? 20 : 0;    // §22 根基深厚：全属性 +20%
     const lossPct = Math.min(50, p.statLossPct || 0); // §20 斩三尸：全属性永久折损（上限50%）
     const marks = p.reinc ? (p.reinc.marks || 0) : 0; // §26 轮回印记：每枚 +1% 全属性
+    // v18 残玉共鸣 + 道心烙印
+    const dx = (typeof DaoxinSys !== 'undefined' && DaoxinSys.bonusOf) ? DaoxinSys.bonusOf(p) : {};
+    const jadePct = (typeof DaoxinSys !== 'undefined' && DaoxinSys.attunePct) ? DaoxinSys.attunePct(p) : 0;
     const A = p.attrs;
     const compEff = this.compOf(p);
     const finalScale = (1 + rootPct / 100) * (1 - lossPct / 100) * (1 + marks * 0.01)
+      * (1 + jadePct / 100)
       * ((typeof RankSys !== 'undefined' && RankSys.isTop && RankSys.isTop(p)) ? 1.02 : 1);   // v13 天下第一：全属性 +2%
 
     const maxHp = Math.round((90 + A.body * 15 + Math.pow(rp, 1.6) * 6 + (eq.hp || 0))
-      * (1 + ((gf.hpPct || 0) + (eq.hpPct || 0) + (dao.hpPct || 0) + (beastPass.hpPct || 0)) / 100) * finalScale);
+      * (1 + ((gf.hpPct || 0) + (eq.hpPct || 0) + (dao.hpPct || 0) + (beastPass.hpPct || 0) + (dx.hpPct || 0)) / 100) * finalScale);
     const maxMp = Math.round((40 + compEff * 8 + rp * 4 + (eq.mp || 0))
       * (1 + ((gf.mpPct || 0) + (dao.mpPct || 0)) / 100) * finalScale);
     const atk = Math.round((8 + A.gen * 2 + rp * 3 + (eq.atk || 0))
-      * (1 + ((gf.atkPct || 0) + (eq.atkPct || 0) + (sb.atkPct || 0) + (dao.atkPct || 0) + (beastPass.atkPct || 0)) / 100) * finalScale);
+      * (1 + ((gf.atkPct || 0) + (eq.atkPct || 0) + (sb.atkPct || 0) + (dao.atkPct || 0) + (beastPass.atkPct || 0) + (dx.atkPct || 0)) / 100) * finalScale);
     const def = Math.round((4 + A.body * 1.2 + rp * 1.8 + (eq.def || 0))
-      * (1 + ((gf.defPct || 0) + (eq.defPct || 0) + (dao.defPct || 0)) / 100) * finalScale);
+      * (1 + ((gf.defPct || 0) + (eq.defPct || 0) + (dao.defPct || 0) + (dx.defPct || 0)) / 100) * finalScale);
     const speed = Math.round((8 + (A.gen + A.body) / 2 + rp * 0.8 + (eq.spd || 0))
       * (1 + (gf.spdPct || 0) / 100) * finalScale);
     return {
       maxHp, maxMp, atk, def, speed,
-      crit: Utils.clamp(5 + (A.luck + (eq.luck || 0)) * 0.6 + (gf.crit || 0) + (eq.crit || 0) + (beastPass.crit || 0), 0, 75),
-      dodge: Utils.clamp((gf.dodge || 0) + (eq.dodge || 0) + (sb.dodge || 0) + (beastPass.dodge || 0) + (p.dao === 'array' && DaoSys.tierLevel(p) >= 4 ? 8 : 0), 0, 35),   // v10 阵道六境·迷踪境 · v13 宗门/灵兽
+      crit: Utils.clamp(5 + (A.luck + (eq.luck || 0)) * 0.6 + (gf.crit || 0) + (eq.crit || 0) + (beastPass.crit || 0) + (dx.crit || 0), 0, 75),
+      dodge: Utils.clamp((gf.dodge || 0) + (eq.dodge || 0) + (sb.dodge || 0) + (beastPass.dodge || 0) + (dx.dodge || 0) + (p.dao === 'array' && DaoSys.tierLevel(p) >= 4 ? 8 : 0), 0, 35),   // v10 阵道六境·迷踪境 · v13 宗门/灵兽
       block: Utils.clamp(8 + (gf.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0), 0, 60),   // v10 般若六境·铁骨境
-      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0),
+      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0),
       stonePct: (sb.stonePct || 0) + (eq.stonePct || 0),
       luck: A.luck + (eq.luck || 0),
       pillPct: sb.pillPct || 0,
@@ -2649,6 +2659,8 @@ const Cultivate = {
   /** 突破成算（大境界渡劫基准）：感悟/悟性/气运/孽障/大道/根基/挫而愈坚 皆计入 */
   breakthroughChance(p, bonus = 0) {
     let chance = 40 + Stat.compOf(p) * 2 + p.insight + bonus;
+    // v18 残玉共鸣九重 · 两世归一：两世道韵归一，突破成算 +3%
+    if ((p.jade || 0) >= 9) chance += 3;
     chance += (p.fortune || 0) * 0.2;   // 气运：每10点 +2%
     chance -= (p.karma || 0) * 0.2;     // 孽障：每10点 -2%
     chance += Math.min(15, (p.breakStreak || 0) * 5);   // v8 挫而愈坚：连败保底，每次失利 +5%（上限 +15%）
@@ -2823,6 +2835,8 @@ const Bag = {
   count(itemId) { return Game.player.bag[itemId] || 0; },
   addStones(amount) {
     const p = Game.player;
+    // v18 道心烙印【霸/谋/借】：灵石获取加成
+    if (amount > 0 && typeof DaoxinSys !== 'undefined') amount *= DaoxinSys.stoneMult(p);
     p.stones.low += Math.round(amount * (1 + Stat.compute(p).stonePct / 100));
     // 自动向上归并，便于展示
     while (p.stones.low >= 100) { const n = Math.floor(p.stones.low / 100); p.stones.mid += n; p.stones.low -= n * 100; }
@@ -4352,11 +4366,15 @@ const DaoSys = {
 const KarmaSys = {
   addFortune(n, silent = false) {
     const p = Game.player;
+    // v18 道心烙印【慎/敛/正/渡】：气运获取加成（仅正向）
+    if (n > 0 && typeof DaoxinSys !== 'undefined') n = Math.max(1, Math.round(n * DaoxinSys.gainMult(p, 'fortuneMult')));
     p.fortune = (p.fortune || 0) + n;
     if (!silent) Log.add(`冥冥之中似有天意垂青——气运 +${n}。`, 'gain');
   },
   addKarma(n, silent = false) {
     const p = Game.player;
+    // v18 道心烙印【戾/杀/厉/慈/容】：孽障增减（仅正向放大，负向/减免取整不低于1）
+    if (n > 0 && typeof DaoxinSys !== 'undefined') n = Math.max(1, Math.round(n * DaoxinSys.gainMult(p, 'karmaMult')));
     p.karma = (p.karma || 0) + n;
     if (!silent) Log.add(`因果簿上又添一笔血墨——孽障 +${n}。`, 'loss');
   },
@@ -4428,6 +4446,158 @@ const RepSys = {
   },
 };
 window.RepSys = RepSys;
+
+/* ======================================================================
+ * §20.6 v18 残玉共鸣 + 道心烙印 DaoxinSys
+ * 设计原则：剧情与角色互相成就，但不互相锁死——
+ *   · 主线每完结一章 → 残玉共鸣 +1 重（+1.5% 全属性），三/六/九重解锁战斗异能；
+ *     不做主线不会卡进度，只会错失这层羁绊。
+ *   · 每次章末抉择 → 铸一枚永久「道心烙印」，你的选择就是你的人格面板；
+ *     烙印只给收益型加成，无惩罚项。
+ *   · 境界远超主线进度时，玄影客的窥伺渐紧（小额滋扰，90 日一次，不阻塞）。
+ * ====================================================================== */
+const DaoxinSys = {
+  MAX_ATTUNE: 9,
+  BONUS_PER_ATTUNE: 1.5,   // 每重共鸣全属性 +1.5%
+
+  /** 道心烙印表：key = `章末场景id:抉择value` */
+  IMPRINTS: {
+    /* 第一章 · 尘缘 */
+    'c1_end:vengeance': { name: '戾', desc: '以仇为薪，其火愈烈——攻击 +3%，孽障获取 +15%。', fx: { atkPct: 3, karmaMult: 0.15 } },
+    'c1_end:caution':   { name: '慎', desc: '人心最靠不住——闪避 +2，气运获取 +15%。', fx: { dodge: 2, fortuneMult: 0.15 } },
+    'c1_end:clarity':   { name: '明', desc: '查清真相，好好活着——暴击 +2，修炼效率 +3%。', fx: { crit: 2, cultPct: 3 } },
+    /* 第二章 · 青峰疑云 */
+    'c2_end:copy':      { name: '匠', desc: '拓印求知，不动根本——修炼效率 +4%。', fx: { cultPct: 4 } },
+    'c2_end:take':      { name: '霸', desc: '实物在手，胜过记忆——灵石获取 +10%。', fx: { stoneMult: 0.10 } },
+    'c2_end:memorize':  { name: '敛', desc: '藏锋守拙，多一分气运——气运获取 +10%。', fx: { fortuneMult: 0.10 } },
+    /* 第三章 · 筑基风云 */
+    'c3_end:defy':      { name: '锋', desc: '想要玉，自己来拿——暴击 +3%。', fx: { crit: 3 } },
+    'c3_end:feign':     { name: '韧', desc: '与虎谋皮，曲则全——防御 +3%。', fx: { defPct: 3 } },
+    'c3_end:silent':    { name: '渊', desc: '渊默而雷声——闪避 +3%。', fx: { dodge: 3 } },
+    /* 第四章 · 红尘炼心 */
+    'c4_end:blade':     { name: '杀', desc: '以杀止杀，最诚实的公道——攻击 +4%，孽障获取 +10%。', fx: { atkPct: 4, karmaMult: 0.10 } },
+    'c4_end:justice':   { name: '正', desc: '罪孽当暴露于天日——气运获取 +10%。', fx: { fortuneMult: 0.10 } },
+    'c4_end:mercy':     { name: '慈', desc: '谨慎即是慈悲——孽障获取 -10%，防御 +2%。', fx: { karmaMult: -0.10, defPct: 2 } },
+    /* 第五章 · 金丹之秘 */
+    'c5_end:accept':    { name: '承', desc: '前世之债，今生来偿——气血 +4%。', fx: { hpPct: 4 } },
+    'c5_end:sever':     { name: '断', desc: '我是我，他是他——闪避 +2，暴击 +1。', fx: { dodge: 2, crit: 1 } },
+    'c5_end:leverage':  { name: '谋', desc: '以执念为刃，反制于人——灵石获取 +10%。', fx: { stoneMult: 0.10 } },
+    /* 第六章 · 元婴杀局 */
+    'c6_end:slay':      { name: '厉', desc: '杀伐果断，道心愈厉——暴击 +2，孽障获取 +10%。', fx: { crit: 2, karmaMult: 0.10 } },
+    'c6_end:interrogate': { name: '察', desc: '问渡船人，察而后动——修炼效率 +4%。', fx: { cultPct: 4 } },
+    'c6_end:spare':     { name: '容', desc: '不为已甚，直取要害——孽障获取 -15%，气血 +2%。', fx: { karmaMult: -0.15, hpPct: 2 } },
+    /* 第七章 · 血河旧账 */
+    'c7_end:open':      { name: '堂', desc: '堂堂之阵，正气在胸——攻击 +3%。', fx: { atkPct: 3 } },
+    'c7_end:dark':      { name: '隐', desc: '先断其爪，再扼其喉——闪避 +3%。', fx: { dodge: 3 } },
+    'c7_end:blade':     { name: '借', desc: '坐山观虎斗，收渔翁利——灵石获取 +15%。', fx: { stoneMult: 0.15 } },
+    /* 第八章 · 大乘问道 */
+    'c8_end:together':  { name: '同', desc: '道途最贵，有人同担——防御 +3%。', fx: { defPct: 3 } },
+    'c8_end:entrust':   { name: '托', desc: '道心因托付而愈定——气血 +3%。', fx: { hpPct: 3 } },
+    'c8_end:alone':     { name: '孤', desc: '独行者，道心至坚——攻击 +5%。', fx: { atkPct: 5 } },
+    /* 第九章 · 天劫决战 */
+    'c9_end:redeem':    { name: '渡', desc: '杀伐止于慈悲——气运获取 +15%。', fx: { fortuneMult: 0.15 } },
+    'c9_end:execute':   { name: '决', desc: '恩怨两清，一剑了断——攻击 +5%。', fx: { atkPct: 5 } },
+    'c9_end:walk':      { name: '忘', desc: '劫火焚尽，恩怨随灭——防御 +4%。', fx: { defPct: 4 } },
+  },
+
+  /** 主线完结一章 → 残玉共鸣 +1 */
+  attune(p, chaptersDone) {
+    const before = p.jade || 0;
+    p.jade = Math.max(before, Math.min(this.MAX_ATTUNE, chaptersDone));
+    if (p.jade > before) {
+      const abl = { 3: '玉灵护体', 6: '血河噬敌', 9: '两世归一' }[p.jade];
+      Log.add(`【残玉共鸣 · 第${this.CN[p.jade]}重】怀中残玉嗡鸣一声，与你道韵相合——全属性 +1.5%。${abl ? `并觉醒异能：<b>${abl}</b>。` : ''}`, 'realm');
+      UI.announce(`✦ 残玉共鸣 · ${p.jade}/9 ✦`, 'gold');
+      Ambience.sfx('rare');
+    }
+  },
+  CN: ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'],
+
+  /** 共鸣全属性加成（百分比） */
+  attunePct(p) { return (p.jade || 0) * this.BONUS_PER_ATTUNE; },
+
+  /** 已铸烙印列表 */
+  listOf(p) {
+    const out = [];
+    const ch = (p && p.story && p.story.choices) || {};
+    for (const [key, val] of Object.entries(ch)) {
+      const def = this.IMPRINTS[`${key}:${val}`];
+      if (def) out.push(def);
+    }
+    return out;
+  },
+  /** 烙印效果聚合（Stat.compute 调用） */
+  bonusOf(p) {
+    const agg = { atkPct: 0, defPct: 0, hpPct: 0, crit: 0, dodge: 0, cultPct: 0 };
+    for (const im of this.listOf(p)) {
+      for (const [k, v] of Object.entries(im.fx)) {
+        if (k in agg) agg[k] += v;
+      }
+    }
+    return agg;
+  },
+  stoneMult(p) {
+    let m = 1;
+    for (const im of this.listOf(p)) if (im.fx.stoneMult) m += im.fx.stoneMult;
+    return m;
+  },
+  /** 气运/孽障获取倍率（只作用于正向增量） */
+  gainMult(p, kind) {
+    let m = 1;
+    for (const im of this.listOf(p)) {
+      const v = im.fx[kind];
+      if (v) m += v;
+    }
+    return Math.max(0.3, m);
+  },
+
+  /** 玄影窥伺：境界领先主线两大境界 → 每 90 游戏日一次小额滋扰（软约束，不阻塞） */
+  shadowNudge(p) {
+    if (!p || p.dead || p.flags.ascended) return;
+    const q = p.quest || { ch: 0 };
+    if (q.ch >= 9) return;
+    if (p.realmIdx < q.ch + 2) return;   // 领先不足两大境界，不滋扰
+    const today = Math.floor(p.day);
+    if (p.shadowDay != null && today - p.shadowDay < 90) return;
+    p.shadowDay = today;
+    const lose = Math.round(8 * GameData.stoneEco(Math.min(5, p.realmIdx)));
+    let txt = '【玄影客的视线】夜半窗外一闪而过的黑影，晨起时储物袋瘪了几分——';
+    if (Bag.spendStones(lose)) txt += `灵石 -${Utils.fmtNum(lose)}，`;
+    p.fortune = Math.max(0, (p.fortune || 0) - 1);
+    txt += '气运 -1。主线荒废太久，暗处的目光愈发迫近……（推进问道主线可斩断窥伺）';
+    Log.add(txt, 'warn');
+    UI.toast('玄影客的视线迫近了', true);
+  },
+
+  /** 左栏展示 */
+  statusHtml(p) {
+    if (!p) return '';
+    const parts = [];
+    if (p.jade) parts.push(`<span class="chip lucky" title="残玉共鸣：每重全属性+1.5%。三重【玉灵护体】每战一次替你挡下致命伤；六重【血河噬敌】普攻按孽障汲取修为；九重【两世归一】突破成算+3%。">残玉 <b>${p.jade}/9</b></span>`);
+    for (const im of this.listOf(p)) {
+      parts.push(`<span class="chip" title="道心烙印 · ${im.desc}">【${im.name}】</span>`);
+    }
+    return parts.length ? `<div class="chip-row">${parts.join('')}</div>` : '';
+  },
+
+  /** v18 开篇卷轴的角色注脚：残玉随行低语；第八章决战前夜道侣客串。返回场景数组（可能为空） */
+  openEcho(p, chapter) {
+    const scenes = [];
+    // 道侣客串（第八章 · 决战前夜）
+    if (chapter === 8 && p.partner) {
+      const pd = (typeof NpcSys !== 'undefined' && NpcSys.def) ? NpcSys.def(p.partner) : null;
+      if (pd) {
+        scenes.push({ t: 'dialog', who: pd.name, title: pd.title, text: `「这一战，我陪你走到底。\n你若不归——我便把你的道，接着走下去。」\n\n${pd.name} 递来一枚护身符，针脚细密，是你从未见过的手工。` });
+      }
+    }
+    // 残玉低语（共鸣 > 0 时随行）
+    if (p.jade > 0) {
+      scenes.push({ t: 'narr', text: `怀中残玉微微发烫——它已随你共历 ${DaoxinSys.CN[p.jade]}章因果，玉身深处隐有星河流转。\n此番启程，玉中似有低语相送：「道途尚远，吾与君同。」` });
+    }
+    return scenes;
+  },
+};
+window.DaoxinSys = DaoxinSys;
 
 /* ======================================================================
  * §21.5 v8 黄历 · 每日一签 DailySign（每日仪式：游戏内每日一支签，立即生效）
@@ -6109,6 +6279,7 @@ const Battle = {
       hitShake: false, // v7：敌方受击震动标记
       morale: 0,       // v8：战意（0~100，攻防博弈资源，最高 +40% 伤害）
       infantSaved: false, // v10：元婴代死每场一次
+      jadeSaved: false,   // v18：残玉玉灵护体每场一次（共鸣三重解锁）
       myFx: [],        // v13：玩家身上状态（增益 + 敌方施加的负面）
       combo: 0,        // v13：连击层数（普攻命中累积，受击中断）
       auto: false,     // v13：自动战斗开关
@@ -6159,17 +6330,30 @@ const Battle = {
     }
   },
 
-  /** v10 境界特性 · 元婴代死（元婴起）：每场战斗首次致命伤由元婴代受，保留两成五气血 */
+  /** v10 境界特性 · 元婴代死（元婴起）：每场战斗首次致命伤由元婴代受，保留两成五气血；
+   *  v18 残玉共鸣三重 · 玉灵护体：元婴未成亦可由残玉代挡一次（保留一成五气血），每战一次 */
   infantSave() {
     const B = this.active;
     const p = Game.player;
-    if (!B || !p || p.realmIdx < 3 || B.infantSaved) return false;
-    B.infantSaved = true;
-    const st = Stat.compute(p);
-    p.hp = Math.max(1, Math.round(st.maxHp * 0.25));
-    this.log('【元婴代死】千钧一发，元婴破窍而出替你受下这一击！你喷出一口精血，强行稳住道基。', 'log-crit');
-    this.pushFloat('me', '元婴代死', 'heal');
-    return true;
+    if (B && p && p.realmIdx >= 3 && !B.infantSaved) {
+      B.infantSaved = true;
+      const st = Stat.compute(p);
+      p.hp = Math.max(1, Math.round(st.maxHp * 0.25));
+      this.log('【元婴代死】千钧一发，元婴破窍而出替你受下这一击！你喷出一口精血，强行稳住道基。', 'log-crit');
+      this.pushFloat('me', '元婴代死', 'heal');
+      return true;
+    }
+    // v18 玉灵护体
+    if (B && p && (p.jade || 0) >= 3 && !B.jadeSaved) {
+      B.jadeSaved = true;
+      const st = Stat.compute(p);
+      p.hp = Math.max(1, Math.round(st.maxHp * 0.15));
+      this.log('【玉灵护体】千钧一发，怀中残玉迸发温润光华，替你挡下这一击！玉面浮现一道细纹——它与你，共担此劫。', 'log-crit');
+      this.pushFloat('me', '玉灵护体', 'heal');
+      Ambience.sfx('rare');
+      return true;
+    }
+    return false;
   },
 
   log(html, cls = 'log-battle') {
@@ -6375,6 +6559,11 @@ const Battle = {
           const comboTxt = B.combo >= 2 ? `<span style="color:var(--gold)">连击×${B.combo}</span>` : '';
           const tags = [crit ? '会心一击！' : '', jianxin ? '【剑心通明】！' : '', comboTxt].filter(Boolean).join('');
           this.log(`${tags}${Narrative.attack()}，对 ${B.enemy.name} 造成 <b>${dmg}</b> 点伤害。`, (crit || jianxin) ? 'log-crit' : 'log-battle');   // v5：招式语气随道途
+          // v18 残玉共鸣六重 · 血河噬敌：普攻命中，按自身孽障汲取对方精元为修为（每10点孽障+1%伤害转化，上限三成）
+          if ((p.jade || 0) >= 6 && (p.karma || 0) > 0) {
+            const drain = Math.round(dmg * Math.min(0.3, (p.karma || 0) * 0.001));
+            if (drain > 0) { Cultivate.addExp(p, drain, true); this.pushFloat('me', `+${drain}修为`, 'heal'); }
+          }
           // v10 剑心六境·剑气境「剑意初鸣」：一成五几率剑气余韵，追加三成伤害
           if (p.dao === 'sword' && daoTier >= 1 && B.enemy.hp > 0 && Utils.chance(15)) {
             const echo = Math.max(1, Math.round(dmg * 0.3));
@@ -7636,6 +7825,7 @@ const QuestSys = {
       q.ch += 1;
       UI.announce(`主线 · ${def.title} · 完结`, 'gold');
       Log.add(`✦ 主线推进 · 第${this.CN9[q.ch - 1]}章「${def.title}」完成！`, 'realm');
+      DaoxinSys.attune(p, q.ch);   // v18 残玉共鸣 +1 重
       this.grant(def.reward);
       const rewardLine = `【章末奖励】${this.rewardText(def.reward)}`;
       const next = this.CHAPTERS[q.ch];
@@ -7662,7 +7852,13 @@ const QuestSys = {
           UI.announce(`主线 · ${next.title}`, 'gold');
           after();
         } else {
-          Story.play(GameData.STORIES[`c${q.ch + 1}_open`], after);
+          // v18 角色注脚：开篇卷轴末尾追加残玉低语 / 道侣客串，让剧情看见"你是谁"
+          const openScript = GameData.STORIES[`c${q.ch + 1}_open`];
+          if (openScript) {
+            const scenes = openScript.scenes.slice();
+            scenes.push(...DaoxinSys.openEcho(p, q.ch + 1));
+            Story.play({ id: openScript.id, title: openScript.title, scenes }, after);
+          } else { after(); }
         }
       } else {
         Log.add('✦ 问道九章 · 全部完结！残玉化砂，仙路已成。', 'realm');
@@ -7959,6 +8155,7 @@ const UI = {
       ${p.stones.high ? `<div class="stone-row"><span>上品灵石</span><b><span class="num-anim" data-nk="stones.high" data-fmt="fmt" data-nv="${p.stones.high}">${Utils.fmtNum(p.stones.high)}</span></b></div>` : ''}
       <div class="sec-title">道行状态</div>
       ${chipsHtml}
+      ${DaoxinSys.statusHtml(p)}
       ${GameData.REALM_TRAITS[p.realmIdx] ? `<div class="stat-line"><span>境界特性</span><b class="hl" title="${GameData.REALM_TRAITS[p.realmIdx].desc}">${GameData.REALM_TRAITS[p.realmIdx].name}</b></div>
       <div class="tip-line" style="margin:0 0 4px">· ${GameData.REALM_TRAITS[p.realmIdx].desc}</div>` : ''}
       ${p.dao ? DaoSys.statusHtml(p) : ''}
@@ -9267,6 +9464,7 @@ const Game = {
     Save.autoSave();
     Achieve.check();   // v6：成就检查（解锁即发奖播报）
     try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
+    try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
     if (p.pendingDao && !p.dao && !p.dead && !Battle.active
       && (p.realmIdx >= 1 || p.reinc)) {
