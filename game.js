@@ -3054,7 +3054,25 @@ const ForgeSys = {
  * ====================================================================== */
 const CaveSys = {
   MAX_LV: 5,
-  /** v18：浇水减寿（每日一次，-10% 剩余时长） */
+  /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级 */
+  cultBonus(p) { return p.cave ? p.cave.lv * 4 : 0; },
+  /** v18：炼丹房加成（每级+5%成丹率） */
+  pillBonus(p) { return p.cave ? p.cave.lv * 5 : 0; },
+  /** v18：访客事件（每日第一次进入洞府时触发） */
+  visitorEvent(p) {
+    if (!p.cave || p.cave._visitorDay === Math.floor(p.day)) return;
+    p.cave._visitorDay = Math.floor(p.day);
+    if (!Utils.chance(15)) return;
+    const events = [
+      { text: '一位散修前来拜访，与你论道半日，颇有收获。', fn: () => { p.insight = Math.min(100, (p.insight || 0) + 2); } },
+      { text: '一只灵鹤衔来一枚灵果，落在你的洞府门前。', fn: () => { Bag.addItem('m_lingzhi', 1); } },
+      { text: '一位同门前来切磋，点到为止，助你精进。', fn: () => { Cultivate.addExp(p, Math.round(20 * GameData.eco(p.realmIdx))); } },
+    ];
+    const ev = Utils.pick(events);
+    ev.fn();
+    Log.add(`【洞府访客】${ev.text}`, 'info');
+    Game.afterAction();
+  },
   async water(idx) {
     const p = Game.player;
     const plots = this.plotsOf(p);
