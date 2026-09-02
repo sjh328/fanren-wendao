@@ -11,14 +11,14 @@
   --panel-2: #efe7d0;
   --border: #cfc2a0;
   --border-light: #ab9b74;
-  --gold: #96702e;        /* 赭金（点缀用，浅底上清晰） */
-  --gold-dim: #a98e55;
-  --gold-bright: #6b4e18;
-  --gold-soft: rgba(150, 112, 46, 0.12);
+  --gold: #7a5c24;        /* 赭金（v18 对比度修复） */
+  --gold-dim: #8a7a55;
+  --gold-bright: #5a4218;
+  --gold-soft: rgba(122, 92, 36, 0.12);
   --ink: #2e2a22;
   --text: #3a3428;
-  --text-dim: #6f6751;
-  --text-faint: #968b70;
+  --text-dim: #5a5540;
+  --text-faint: #7a6e58;
   --hp: #b8433e;
   --mp: #3a6ea8;
   --exp: #5e8a4a;
@@ -1788,7 +1788,7 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   border-radius: 12px;
   flex: 0 0 auto;
 }
-.focus-alert .focus-title { font-size: 13.5px; color: #7c2a22; letter-spacing: 0.5px; }
+.focus-alert .focus-title { font-size: 13.5px; color: #fce8e0; letter-spacing: 0.5px; }
 .focus-alert .focus-go { min-height: 30px; padding: 4px 14px; font-size: 12.5px; letter-spacing: 1px; flex: 0 0 auto; }
 
 /* ---------- v12 左栏战斗属性双列 ---------- */
