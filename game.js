@@ -5500,6 +5500,20 @@ const NpcSys = {
 const DungeonSys = {
   /** 深度收益倍率 */
   dm(depth) { return 1 + depth * 0.25; },
+  /** v18：侦查符预览节点风险（消耗一张符箓） */
+  scout() {
+    const p = Game.player;
+    const D = p.dungeon;
+    if (!D || D.stuck) return;
+    const hasTal = Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman');
+    if (!hasTal) { UI.toast('需消耗一张符箓以施展窥探秘术'); return; }
+    const talId = Object.keys(p.bag).find(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman');
+    Bag.removeItem(talId, 1);
+    const nodeNames = { battle: '⚔ 战斗', treasure: '🎁 宝箱', fortune: '✨ 奇遇', trap: '⚠ 陷阱', npc: '🗣 遭遇', boss: '☠ 守关' };
+    const info = D.choices.map((t, i) => `${i === 0 ? '左' : '右'}路：${nodeNames[t] || t}`).join(' | ');
+    UI.toast(`窥探结果：${info}`);
+    Log.add(`你以符箓为媒，灵光一闪窥得前路——${info}。`, 'info');
+  },
   enter(idx) {
     const p = Game.player;
     if (Battle.active || p.dead) return;
