@@ -739,6 +739,21 @@ const GameData = {
     return Math.round(this.EXP_BASE[realmIdx] * this.LAYER_MULT[layer]);
   },
 
+  /** v18：种族克制系数（1=克制，0=被克，-1=中立） */
+  speciesRelation(attackerSpecies, defenderSpecies) {
+    const order = this.BALANCE.SPECIES_COUNTER.order;
+    const idx = order.indexOf(attackerSpecies);
+    const defIdx = order.indexOf(defenderSpecies);
+    if (idx < 0 || defIdx < 0) return 0;
+    // 克制：攻击方克制防御方（idx 的下一个是 defIdx）
+    const next = (idx + 1) % order.length;
+    if (next === defIdx) return 1;
+    // 被克：防御方克制攻击方（defIdx 的下一个是 idx）
+    const nextDef = (defIdx + 1) % order.length;
+    if (nextDef === idx) return -1;
+    return 0;
+  },
+
   /* ---------- v18 数值常量集中配置 ---------- */
   BALANCE: {
     // 战斗
@@ -824,6 +839,11 @@ const GameData = {
       BLACK_MARKET_INTERVAL: 30,  // 黑市间隔
       BLACK_MARKET_DURATION: 3,   // 黑市持续天数
       BLACK_MARKET_PRICE: 1.6,    // 黑市价格倍率
+    },
+    // v18 种族克制：七族循环克制，克制时 +15%伤害
+    SPECIES_COUNTER: {
+      order: ['beast', 'plant', 'element', 'ghost', 'human', 'construct', 'swarm', 'snake'],
+      bonus: 0.15,  // 克制时伤害加成
     },
     // 强化
     ENHANCE: {
@@ -6036,6 +6056,10 @@ const Battle = {
           B.combo = 0;
         } else {
           let dmg = Stat.afterDef(this.myAtk(st), this.enDef(B.enemy)) * Utils.randF(0.85, 1.15) * this.moraleMul() * this.comboMul();
+          // v18 种族克制
+          const speciesRel = GameData.speciesRelation(p.dao ? 'human' : 'human', B.enemy.species);
+          if (speciesRel > 0) dmg *= 1.15;
+          else if (speciesRel < 0) dmg *= 0.85;
           const crit = Utils.chance(this.myCrit(st));
           // v10 剑心六境·剑芒境：暴击伤害 +20%
           if (crit) dmg *= (p.dao === 'sword' && daoTier >= 2 ? 1.9 : 1.7);
@@ -6500,6 +6524,10 @@ const Battle = {
       return;
     }
     let dmg = Stat.afterDef(this.enAtk(e) * mult, this.myDef(st)) * Utils.randF(0.85, 1.15);
+    // v18 种族克制：敌方攻击时计算种族关系
+    const speciesRel = GameData.speciesRelation(e.species, 'human');
+    if (speciesRel > 0) dmg *= 1.15;
+    else if (speciesRel < 0) dmg *= 0.85;
     const crit = Utils.chance(e.crit);
     if (crit) dmg *= 1.6;
     const blocked = Utils.chance(st.block);
