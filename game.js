@@ -3329,6 +3329,16 @@ const PlayerFactory = {
           }
         }
       },
+      // v19-3: 拍卖行 / 宗门令
+      (out) => {
+        if (out.auction && typeof out.auction !== 'object') out.auction = null;
+        if (out.sect && typeof out.sect === 'object') {
+          const c = out.sect.command;
+          if (c && typeof c === 'object' && ['drill', 'market', 'teach'].includes(c.kind) && isFinite(Number(c.until))) {
+            out.sect.command = { kind: c.kind, day: Math.max(0, Math.floor(Number(c.day)) || 0), until: Math.floor(Number(c.until)) };
+          } else out.sect.command = null;
+        }
+      },
       // v19-2: 心魔 / 本命法宝 / 洞府建筑 / 灵兽亲昵与副战
       (out) => {
         out.xinmo = Math.max(0, Math.min(160, Math.floor(Number(out.xinmo)) || 0));
@@ -3610,6 +3620,7 @@ const Cultivate = {
   /** 一次普通修炼的基础修为（3 日）；邪修吞噬灵气，效率+80%；悟性取有效值（转世/讲道加成） */
   baseGain(p) {
     let g = (12 + Stat.compOf(p) * 2) * GameData.eco(p.realmIdx) * (1 + p.layer * 0.15);
+    if (typeof SectSys !== 'undefined' && SectSys.commandActive && SectSys.commandActive(p, 'teach')) g *= 1.2;   // v19 长老令·传功
     if (p.dao === 'demonic') g *= 1.8;
     if (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 3) g *= 1.2;   // v10 魔道六境·化功境
     if (p.dao === 'array' && DaoSys.tierLevel(p) >= 2) g *= 1.1;   // v10 阵道六境·聚灵境
@@ -4843,7 +4854,7 @@ const ShopSys = {
   price(itemId) {
     const def = GameData.ITEMS[itemId];
     const p = Game.player;
-    const disc = Stat.compute(p).shopDiscount;
+    const disc = Stat.compute(p).shopDiscount + (typeof SectSys !== 'undefined' && SectSys.commandActive && SectSys.commandActive(p, 'market') ? 5 : 0);   // v19 长老令·开市
     // v5：叠加坊市行情（每 30 日一茬，±20% 内波动），宗门折扣与战时涨价照旧
     return Math.max(1, Math.round((def.price || 0) * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId)));
   },
@@ -4954,6 +4965,34 @@ const SectSys = {
     return Object.entries(GameData.MONSTERS)
       .filter(([, m]) => m && !m.elite && m.power >= rp - 4 && m.power <= rp + 2)
       .map(([id]) => id);
+  },
+  /* ---------- v19 长老实权：每日下令（演武/开市/传功），次日更张 ---------- */
+  COMMANDS: [
+    { id: 'drill',  name: '开炉演武', desc: '门派任务与悬赏酬劳 +50%（至明日）' },
+    { id: 'market', name: '传令开市', desc: '坊市购物额外九五折（至明日）' },
+    { id: 'teach',  name: '长老传功', desc: '修炼效率 +20%（至明日）' },
+  ],
+  isElder(p) { const r = this.rank(p); return r && r.id === 'elder'; },
+  commandActive(p, kind) {
+    return !!(p.sect && p.sect.command && p.sect.command.kind === kind && Math.floor(p.day || 0) < p.sect.command.until);
+  },
+  async command() {
+    const p = Game.player;
+    if (!p.sect) { UI.toast('尚未拜入宗门'); return; }
+    if (!this.isElder(p)) { UI.toast('需长老之位方可号令门中'); return; }
+    const today = Math.floor(p.day || 0);
+    if (p.sect.command && p.sect.command.day === today) { UI.toast('今日已下令，明日再议'); return; }
+    const pickCmd = await UI.popup({
+      title: '长老令 · 号令门中',
+      html: `以长老之权下令，次日更张。<br>${this.COMMANDS.map((c, i) => `${i + 1}. <b>${c.name}</b>——${c.desc}`).join('<br>')}`,
+      options: this.COMMANDS.map((c, i) => ({ text: c.name, value: c.id, primary: i === 0 })).concat([{ text: '再议', value: null }]),
+    });
+    if (!pickCmd) return;
+    p.sect.command = { kind: pickCmd, day: today, until: today + 2 };
+    const c = this.COMMANDS.find(x => x.id === pickCmd);
+    Log.add(`【长老令】<b>${c.name}</b>——${c.desc}`, 'system');
+    Story.chron(`宗门下令「${c.name}」`);
+    Game.afterAction();
   },
   genTask(p) {
     const realm = p.realmIdx;
@@ -5955,6 +5994,93 @@ const DaoxinSys = {
 window.DaoxinSys = DaoxinSys;
 
 /* ======================================================================
+ * §11.9 v19 拍卖行 AuctionSys（每六十日一件稀有拍品，三档出价博弈）
+ * ====================================================================== */
+const AuctionSys = {
+  LOT_POOL: [
+    { item: 'gf_zhoutian', base: 6000 }, { item: 'gf_leishen', base: 9000 },
+    { item: 'gf_hunyuan', base: 9000 }, { item: 'gf_niepan', base: 9000 },
+    { item: 'w_sanqing', base: 12000 }, { item: 'pill_zaohua', base: 15000 },
+    { item: 'gf_dayan', base: 12000 }, { item: 'm_gupian', base: 10000 },
+    { item: 'gf_wangchen', base: 15000 }, { item: 'gf_feixian', base: 15000 },
+  ],
+  PERIOD: 60,
+  state(p) {
+    const day = Math.floor(p.day || 0);
+    if (!p.auction || p.auction.until < day) {
+      const lot = this.LOT_POOL[Utils.hashStr('auction@' + day) % this.LOT_POOL.length];
+      p.auction = { item: lot.item, base: Math.round(lot.base * GameData.stoneEco(Math.min(4, p.realmIdx)) / GameData.stoneEco(2)), until: day + this.PERIOD };
+    }
+    return p.auction;
+  },
+  async bid(mode) {
+    const p = Game.player;
+    const a = this.state(p);
+    const def = GameData.ITEMS[a.item];
+    // 三档：稳健 ×1.15 必成九成五 / 激进 ×0.9 六成 / 天价 ×1.6 必成
+    const opts = {
+      steady: { mul: 1.15, rate: 95, label: '稳健出价' },
+      bold: { mul: 0.9, rate: 60, label: '激进出价' },
+      dump: { mul: 1.6, rate: 100, label: '天价收购' },
+    }[mode];
+    if (!opts) return;
+    const price = Math.round(a.base * opts.mul);
+    const ok = await UI.popup({
+      title: `竞拍 · ${def.name}`,
+      html: `${def.desc}<br>底价 <span class="hl">${Utils.fmtNum(a.base)}</span> 灵石。<br>
+        【${opts.label}】出价 <b>${Utils.fmtNum(price)}</b> 灵石，成算约 <b>${opts.rate}%</b>${opts.rate < 100 ? '；落标则灵石原路退回' : ''}。<br>
+        拍期还剩 ${a.until - Math.floor(p.day)} 日。`,
+      options: [{ text: '落 槌', value: true, primary: true }, { text: '再看看', value: false }],
+    });
+    if (!ok) return;
+    if (!Bag.spendStones(price)) { UI.toast('灵石不足'); return; }
+    const win = Utils.chance(opts.rate);
+    if (win) {
+      Bag.addItem(a.item, 1);
+      Log.add(`拍卖行落槌——【<b>${def.name}</b>】归你所有！（出价 ${Utils.fmtNum(price)} 灵石）`, 'gain');
+      UI.announce('✦ 竞拍得手 · ' + def.name + ' ✦', 'gold');
+      Story.chron(`拍卖行竞得「${def.name}」`);
+      p.auction.until = 0;   // 本期拍品易主，刷新下一件
+      Ambience.sfx('rare');
+    } else {
+      Bag.addStones(price);
+      Log.add(`竞价失利——有人以更高价截胡。灵石已原路退回。`, 'warn');
+    }
+    Game.afterAction();
+  },
+};
+
+/* ======================================================================
+ * §11.10 v19 布施 Donate（散财消业：声望↑ 气运↑ 孽障↓）
+ * ====================================================================== */
+const DonateSys = {
+  TIERS: [
+    { id: 'small',  name: '施粥舍药', stones: 500,    rep: 2,  fortune: 1, karma: -1 },
+    { id: 'mid',    name: '修桥筑观', stones: 5000,   rep: 6,  fortune: 3, karma: -3 },
+    { id: 'large',  name: '广建义庄', stones: 50000,  rep: 15, fortune: 8, karma: -8 },
+  ],
+  async donate(id) {
+    const p = Game.player;
+    const t = this.TIERS.find(x => x.id === id);
+    if (!t) return;
+    const stones = Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(5, p.realmIdx) - 1) / 1));
+    const ok = await UI.popup({
+      title: `布施 · ${t.name}`,
+      html: `散财于世间疾苦——声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。<br>需灵石 <span class="hl">${Utils.fmtNum(stones)}</span>。`,
+      options: [{ text: '行 善', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (!Bag.spendStones(stones)) { UI.toast('灵石不足'); return; }
+    if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, t.rep, '布施行善');
+    KarmaSys.addFortune(t.fortune);
+    if (t.karma < 0) KarmaSys.addKarma(t.karma, true);
+    Log.add(`你散财行【${t.name}】之善——声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。`, 'gain');
+    Story.chron(`布施行善「${t.name}」`);
+    Game.afterAction();
+  },
+};
+
+/* ======================================================================
  * §21.4 v19 心魔劫 XinmoSys（心魔值 0~100：丹毒反噬/渡劫失利/玄影窥伺累积）
  * 心魔满百必劫：幻境自战心魔化身。胜则道心凝练（全属性+1%/次，永久叠加），
  * 败则心魔暂伏（心魔值回落四成五），修为受挫。
@@ -6633,13 +6759,25 @@ const BountySys = {
     const B = this.stateOf(p);
     const t = B.list[idx];
     if (!t || t.progress < t.need) return;
-    const r = this.rewards(p);
-    Bag.addStones(r.stones);
-    if (p.sect) p.sect.contrib += r.contrib;
+    let r = this.rewards(p);
+    if (typeof SectSys !== 'undefined' && SectSys.commandActive && SectSys.commandActive(p, 'drill')) r = { stones: Math.round(r.stones * 1.5), contrib: Math.round(r.contrib * 1.5) };   // v19 长老令·演武
     if (Utils.chance(25)) KarmaSys.addFortune(2);
     Ambience.sfx('bounty');
-    Log.add(`悬赏【${t.name}】交付！赏得灵石 ${Utils.fmtNum(r.stones)}${p.sect ? `、宗门贡献 +${r.contrib}` : ''}。`, 'gain');
-    B.list[idx] = null;
+    let chainTxt = '';
+    // v19 连锁悬赏：赏格 ×1.6、目标 +2，代代加码
+    const mul = (t.chain || 0) > 0 ? 1 + t.chain * 0.6 : 1;
+    const gainStones = Math.round(r.stones * mul);
+    Bag.addStones(gainStones);
+    if (p.sect) p.sect.contrib += Math.round(r.contrib * mul);
+    Log.add(`悬赏【${t.name}】交付！赏得灵石 ${Utils.fmtNum(gainStones)}${p.sect ? `、宗门贡献 +${Math.round(r.contrib * mul)}` : ''}。`, 'gain');
+    if (!t.chain && Utils.chance(25) && (t.type === 'kill' || t.type === 'collect')) {
+      const nt = { ...t, need: t.need + 2, progress: 0, chain: 1, name: `连锁 · ${t.name.replace(/^连锁 · /, '')}`, desc: `${t.desc.replace(/×\d+/, `×${t.need + 2}`)}（连锁 · 赏格 ×1.6）` };
+      B.list[idx] = nt;
+      chainTxt = '行商追加了一张<b>连锁悬赏</b>——目标更多，赏格更厚！';
+    } else {
+      B.list[idx] = null;
+    }
+    if (chainTxt) Log.add(chainTxt, 'event');
     Game.afterAction();
   },
   /** 战斗胜利钩子（Battle.victory 调用） */
@@ -6712,10 +6850,31 @@ const BlackSys = {
   async buyAsync(id, cost) {
     const p = Game.player;
     const def = GameData.ITEMS[id];
+    const first = await UI.popup({
+      title: '黑市 · 暗巷交易',
+      html: `「识货的道友——」蒙面商贾掀开布角：<br><b>${def.name}</b><br>${def.desc}<br>索价 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石（坊市价高六成）。<br><span class="tip-line">· 亦可试着还价——成算视悟性与福缘而定，触怒了商人可是要涨价的。</span>`,
+      options: [
+        { text: '买 下', value: 'buy', primary: true },
+        { text: '讨价还价', value: 'haggle' },
+        { text: '摇头离去', value: 'leave' },
+      ],
+    });
+    if (!first || first === 'leave') return;
+    if (first === 'haggle') {
+      // v19 讨价还价：悟性/福缘判定
+      const rate = Utils.clamp(20 + p.attrs.comp * 4 + p.attrs.luck * 4, 10, 75);
+      if (Utils.chance(rate)) {
+        cost = Math.round(cost * 0.75);
+        Log.add(`你巧舌如簧，蒙面商贾咬牙认了——索价降至 <b>${Utils.fmtNum(cost)}</b> 灵石。`, 'gain');
+      } else {
+        cost = Math.round(cost * 1.15);
+        Log.add(`还价触怒了商贾——「不识抬举！」索价涨至 <b>${Utils.fmtNum(cost)}</b> 灵石。`, 'warn');
+      }
+    }
     const ok = await UI.popup({
       title: '黑市 · 暗巷交易',
-      html: `「识货的道友——」蒙面商贾掀开布角：<br><b>${def.name}</b><br>${def.desc}<br>索价 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石（坊市价高六成）。`,
-      options: [{ text: '买 下', value: true, primary: true }, { text: '摇头离去', value: false }],
+      html: `【${def.name}】最终索价 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石。`,
+      options: [{ text: '成交', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
@@ -10969,6 +11128,35 @@ const UI = {
     const forgeSection = `
       <div class="shop-section-title">◈ 炼器坊（消耗材料锻造神兵；天级神兵与套装件唯此处可出）</div>
       ${forgeRows}`;
+    // v19 拍卖行
+    const lot = AuctionSys.state(p);
+    const lotDef = GameData.ITEMS[lot.item];
+    const auctionSection = `
+      <div class="shop-section-title">◈ 拍卖行（每六十日一件稀有拍品）<span class="tag warn">拍期余 ${lot.until - Math.floor(p.day)} 日</span></div>
+      <div class="shop-row">
+        <div class="gf-info">
+          <div class="gf-name">${this.gradeSpan(lotDef.name, lotDef.grade)} <span class="tag">底价 ${Utils.fmtNum(lot.base)} 灵石</span></div>
+          <div class="gf-desc">${lotDef.desc}</div>
+        </div>
+        <div class="gf-actions">
+          <button class="btn btn-sm" data-action="act-bid" data-mode="steady">稳健 ×1.15</button>
+          <button class="btn btn-sm" data-action="act-bid" data-mode="bold">激进 ×0.9</button>
+          <button class="btn btn-sm btn-primary" data-action="act-bid" data-mode="dump">天价 ×1.6</button>
+        </div>
+      </div>`;
+    // v19 布施
+    const donateRows = DonateSys.TIERS.map(t => {
+      const stones = Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(5, p.realmIdx) - 1) / 1));
+      return `
+      <div class="shop-row">
+        <div class="gf-info"><div class="gf-name">${t.name}</div>
+        <div class="gf-desc">声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。需灵石 ${Utils.fmtNum(stones)}。</div></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-donate" data-d="${t.id}">行 善</button></div>
+      </div>`;
+    }).join('');
+    const donateSection = `
+      <div class="shop-section-title">◈ 布施（散财消业，声望与气运双收）</div>
+      ${donateRows}`;
     return `
       <div class="card">
         <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
@@ -10992,11 +11180,16 @@ const UI = {
         ${talismanSection}
         ${enhanceSection}
         ${forgeSection}
+        ${auctionSection}
+        ${donateSection}
       </div>`;
   },
 
   renderSectTab() {
     const p = Game.player;
+    const cmdBtn = typeof SectSys !== 'undefined' && SectSys.isElder && SectSys.isElder(p)
+      ? `<button class="btn btn-sm btn-primary" data-action="act-sect-command">⚡ 长老令</button>` : '';
+    void cmdBtn;
     if (p.realmIdx < 1 && !p.sect) {
       return `<div class="card"><div class="card-title">✦ 宗门</div>
         <div class="card-desc">修仙界宗门林立，然非筑基不得其门而入。<br>你如今尚在练气，还请先专心修行。</div></div>`;
@@ -11048,7 +11241,7 @@ const UI = {
     if (!p.sect.faction) {
       facSection = `
       <div class="card">
-        <div class="card-title">✦ 长老派系 · 站队</div>
+        <div class="card-title">✦ 长老派系 · 站队 ${typeof SectSys !== 'undefined' && SectSys.isElder && SectSys.isElder(p) ? '<button class="btn btn-sm btn-primary" data-action="act-sect-command" style="margin-left:auto">⚡ 长老令</button>' : ''}</div>
         <div class="card-desc">宗门之内，三位长老各成一派。站队可领专属资源与功法，但会被敌对派系派发高危任务。</div>
         ${GameData.SECT_FACTIONS.map(f => `
         <div class="shop-row">
@@ -11868,6 +12061,9 @@ const Game = {
     'act-bounty-claim': (d) => BountySys.claim(Number(d.i)),
     'act-black-buy': (d) => BlackSys.buy(d.item),
     'act-black-mystery': () => BlackSys.buyMystery(),
+    'act-bid': (d) => AuctionSys.bid(d.mode),
+    'act-donate': (d) => DonateSys.donate(d.d),
+    'act-sect-command': () => SectSys.command(),
     /* --- v3 秘境 --- */
     'act-realm-enter': (d) => DungeonSys.enter(Number(d.realm)),
     'act-realm-node': (d) => DungeonSys.resolve(Number(d.node)),
