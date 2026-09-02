@@ -8764,6 +8764,9 @@ const UI = {
       this.el['popup-btns'].innerHTML = this._popupOptions.map((o, i) =>
         `<button class="btn ${o.primary ? 'btn-primary' : ''}" data-action="pop-choice" data-i="${i}">${o.text}</button>`).join('');
       this.el['popup-modal'].classList.remove('hidden');
+      this.el['popup-modal'].setAttribute('role', 'dialog');
+      this.el['popup-modal'].setAttribute('aria-modal', 'true');
+      this.el['popup-modal'].setAttribute('aria-label', title || '提示');
     });
   },
   popupChoose(i) {
