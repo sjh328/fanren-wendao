@@ -208,6 +208,25 @@ const Art = {
     const glow = elite ? '<circle cx="44" cy="40" r="34" fill="none" stroke="#a04ab0" stroke-width="1.4" opacity="0.4" stroke-dasharray="5 4"/>' : '';
     return `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="${color}" stroke="${color}">${P[species] || P.beast}</g>${glow}</svg>`;
   },
+  /** v18：主角剪影立绘（按大道区分持物） */
+  player(dao) {
+    const items = {
+      sword: '<path d="M50 40 L70 20" stroke-width="3.5" fill="none"/>',
+      pill: '<ellipse cx="66" cy="30" rx="7" ry="5" fill="#7c5cb0" stroke="#7c5cb0"/>',
+      talisman: '<rect x="62" y="18" width="9" height="14" rx="1.5" fill="#c04b4b" stroke="#c04b4b"/>',
+      body: '<circle cx="62" cy="26" r="6" fill="#a8862a" stroke="#a8862a"/>',
+      array: '<polygon points="60,32 68,26 72,34 66,40" fill="none" stroke-width="2"/>',
+      demonic: '<path d="M52 44 Q60 34 70 40 Q66 46 58 48 Z" fill="#7c2a22" stroke="#7c2a22"/>',
+    };
+    const item = items[dao] || '<path d="M50 40 L68 24" stroke-width="3" fill="none"/>';
+    const color = '#4a5568';
+    return `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="${color}" stroke="${color}">
+      <circle cx="40" cy="22" r="8"/>
+      <path d="M26 62 L28 36 Q40 28 52 36 L54 62 Z"/>
+      <path d="M50 36 ${item.startsWith('<path') ? '' : ''}" />
+      ${item}
+    </g></svg>`;
+  },
 };
 
 /* ======================================================================
@@ -7090,6 +7109,7 @@ const Battle = {
       <div class="bt-vs">—— ✦ ——</div>
       <div class="bt-side side-me">
         <div class="bt-name-row"><span class="bt-name me">${Utils.esc(p.name)}${B.combo >= 2 ? ` <span class="tag combo">连击×${B.combo}</span>` : ''}${B.auto ? ' <span class="tag safe">自动</span>' : ''}</span><span class="bt-realm">攻${this.myAtk(st)} 防${this.myDef(st)} · 暴击${this.myCrit(st).toFixed(0)}%</span></div>
+        <div class="bt-figure me-fig" aria-hidden="true"></div>
         <div class="bar" title="气血 ${p.hp} / ${st.maxHp}"><div class="bar-fill hp${hpPct <= 30 ? ' low' : ''}" style="width:${hpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-hp" data-nv="${p.hp}">${p.hp}</span> / ${st.maxHp}</span></div>
         <div class="bar" title="灵力 ${p.mp} / ${st.maxMp}"><div class="bar-fill mp" style="width:${mpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-mp" data-nv="${p.mp}">${p.mp}</span> / ${st.maxMp}</span></div>
         <div class="bar morale-bar" title="战意：连击提升，受挫回落（每点 +0.4% 伤害）"><div class="bar-fill morale" style="width:${B.morale || 0}%"></div><span class="bar-text">战意 ${B.morale || 0}${(B.morale || 0) >= 100 ? '（伤害 +40%）' : ''}</span></div>
@@ -7108,6 +7128,9 @@ const Battle = {
     // v13：敌方剪影立绘
     const efig = document.querySelector('#battle-box .enemy-fig');
     if (efig) efig.innerHTML = Art.monster(e.species || 'beast', !!e.elite);
+    // v18：主角剪影立绘
+    const mfig = document.querySelector('#battle-box .me-fig');
+    if (mfig) mfig.innerHTML = Art.player(p.dao);
     if (B.floats.length) {
       const usedPositions = [];
       for (const f of B.floats) {
