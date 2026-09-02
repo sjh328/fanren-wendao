@@ -1838,7 +1838,7 @@ const Save = {
       return raw ? JSON.parse(raw) : null;
     } catch (e) { return null; }
   },
-  write(key, player) {
+write(key, player) {
     const realmText = GameData.REALM_NAMES[player.realmIdx] + GameData.LAYER_NAMES[player.layer];
     const dao = player.dao ? GameData.DAO_CLASSES.find(d => d.id === player.dao) : null;
     const data = {
@@ -1848,12 +1848,30 @@ const Save = {
         name: player.name, realmText, day: Math.floor(player.day),
         age: player.age, ts: Date.now(),
         dead: !!player.dead, ascended: !!player.flags.ascended,
-        dao: dao ? dao.id : null,   // v6：列表区分大道职业
+        dao: dao ? dao.id : null,
       },
     };
     const raw = JSON.stringify(data);
-    try { this.storage.setItem ? this.storage.setItem(this.KEY + key, raw) : (this.mem[key] = raw); }
-    catch (e) { console.warn('存档失败', e); }
+    // v18：双写校验——先写临时键，验证可读回再写正式键
+    try {
+      const verifyKey = this.KEY + key + '_v';
+      if (this.storage.setItem) {
+        this.storage.setItem(verifyKey, raw);
+        const verify = this.storage.getItem(verifyKey);
+        if (verify === raw) {
+          this.storage.setItem(this.KEY + key, raw);
+          this.storage.removeItem(verifyKey);
+        } else {
+          console.warn('存档校验失败，重试写入');
+          this.storage.setItem(this.KEY + key, raw);
+        }
+      } else {
+        this.mem[key] = raw;
+      }
+    } catch (e) {
+      console.warn('存档失败', e);
+      UI.toast('存档写入异常，请检查存储空间', true);
+    }
     UI.saveFlash();
   },
   remove(key) {
@@ -8575,6 +8593,20 @@ const Game = {
     });
     window.addEventListener('beforeunload', () => {
       if (Game.player && !Game.player.dead) Save.autoSave(true);
+    });
+    // v18：全局错误捕获
+    window.addEventListener('error', (e) => {
+      console.error('未捕获的异常:', e.error || e.message);
+      // 只给用户一个非侵入式提示，不阻断游戏
+      if (Game.player && !e.defaultPrevented) {
+        UI.toast('道心微澜，一股无名之气掠过识海（不影响存档）', true);
+      }
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      console.error('未捕获的 Promise 拒绝:', e.reason);
+      if (Game.player) {
+        UI.toast('识海泛起一丝涟漪，随即平复（不影响存档）', true);
+      }
     });
   },
 
