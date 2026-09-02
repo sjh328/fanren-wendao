@@ -739,6 +739,105 @@ const GameData = {
     return Math.round(this.EXP_BASE[realmIdx] * this.LAYER_MULT[layer]);
   },
 
+  /* ---------- v18 数值常量集中配置 ---------- */
+  BALANCE: {
+    // 战斗
+    COMBAT: {
+      AFTER_DEF_DENOM: 140,       // 防御减伤常数：atk * (1 - def/(def + 140))
+      DMG_RAND_MIN: 0.85,         // 伤害随机下限
+      DMG_RAND_MAX: 1.15,         // 伤害随机上限
+      CRIT_MULT: 1.7,             // 暴击倍率
+      ENEMY_CRIT_MULT: 1.6,       // 敌方暴击倍率
+      HIT_CHANCE_CLAMP: [2, 35],  // 命中率钳制
+      PLAYER_MISS_MAX: 35,        // 玩家失手上限
+      ENEMY_DODGE_MAX: 65,        // 敌方闪避上限
+      BLOCK_REDUCTION: 0.45,      // 格挡后伤害系数
+      DEFEND_REDUCTION: 0.4,      // 防御姿态伤害系数
+      MORALE_PER_POINT: 0.004,    // 每点战意伤害加成
+      MORALE_MAX: 100,            // 战意上限
+      COMBO_PER_LAYER: 0.04,      // 每层连击伤害加成
+      COMBO_MAX: 5,               // 连击上限
+      GUARD_DEF_BASE: 40,         // 铁壁基础防御加成%
+      FLEE_BASE: 45,              // 遁走基础成功率
+    },
+    // 突破
+    BREAKTHROUGH: {
+      BASE_CHANCE: 40,            // 基准成算
+      COMP_FACTOR: 2,             // 悟性系数
+      FORTUNE_FACTOR: 0.2,        // 气运系数
+      KARMA_FACTOR: 0.2,          // 孽障系数
+      BODY_MULT: 1.4,             // 体修渡劫加成
+      SWORD_MULT: 0.77,           // 剑修渡劫惩罚
+      STREAK_BONUS_MAX: 15,       // 连败保底上限
+      QUIET_CULT_BONUS: 15,       // 静修冲关加成
+      REALM_PENALTY_PER: 0.035,   // 每境界劫难折损
+      REALM_PENALTY_MIN: 0.5,     // 劫难折损下限
+      REALM_PENALTY_MAX: 1.0,     // 劫难折损上限
+      FAIL_HP_RETAIN: 0.1,        // 失败保留气血比例
+      FAIL_EXP_RETAIN: 0.6,       // 失败保留修为比例
+      FAIL_INSIGHT_GAIN: 15,      // 失败获得感悟
+      HARD_MULT: 0.82,            // 硬抗系数
+      ARTIFACT_MULT: 1.3,         // 法宝系数
+      HIDE_MULT: 1.0,             // 借地系数
+    },
+    // 属性上限
+    STATS: {
+      ATTR_MAX: 10,               // 先天属性上限
+      CRIT_MAX: 75,               // 暴击率上限
+      DODGE_MAX: 35,              // 闪避率上限
+      BLOCK_MAX: 60,              // 格挡率上限
+      POISON_BASE: 60,            // 丹毒基础上限
+      POISON_BODY_FACTOR: 8,      // 体魄丹毒系数
+      POISON_REALM_BONUS: 20,     // 合道丹毒上限加成
+    },
+    // 驯服
+    TAME: {
+      BASE_RATE: 45,              // 驯服基准成功率
+      LUCK_FACTOR: 2,             // 福缘系数
+      RATE_MIN: 8,                // 成功率下限
+      RATE_MAX: 90,               // 成功率上限
+      SKILL_FACTOR: 10,           // 驯熟练度每多少点+1%
+      HP_THRESHOLD: 0.2,          // 可驯服血量阈值
+      TAMEABLE: ['beast', 'snake', 'swarm', 'plant', 'element'],
+    },
+    // 修炼
+    CULTIVATE: {
+      BASE_GAIN_FACTOR: 12,       // 基础修为：12 + 悟性*2
+      COMP_FACTOR: 2,
+      REALM_GROWTH: 4.6,          // 每境界修为放大系数
+      LAYER_GROWTH: 0.15,         // 每小层修为加成
+      SECLUDE_MULT: 1.6,          // 闭关倍率
+      SECLUDE_MAX_ROUNDS: 120,    // 最大闭关轮数
+      AUTO_CULT_SPEED: 280,       // 自动修炼间隔 ms
+      EVENT_CHANCE: 8,            // 灵机事件触发概率%
+      EVENT_SURGE_MULT: 2.5,      // 灵气潮涌倍率
+      EVENT_EPIPHANY_MULT: 1.5,   // 醍醐灌顶倍率
+      EVENT_HEART_MULT: 0.55,     // 心魔滋扰倍率
+    },
+    // 经济
+    ECONOMY: {
+      ECO_BASE: 4.6,              // 修为经济基数
+      STONE_ECO_BASE: 3.8,        // 灵石经济基数
+      SELL_RATIO: 0.4,            // 出售价比例
+      SHOP_FLUCTUATION: 0.2,      // 坊市行情波动±
+      BOUNTY_DAYS: 2,             // 悬赏保留天数
+      BLACK_MARKET_INTERVAL: 30,  // 黑市间隔
+      BLACK_MARKET_DURATION: 3,   // 黑市持续天数
+      BLACK_MARKET_PRICE: 1.6,    // 黑市价格倍率
+    },
+    // 强化
+    ENHANCE: {
+      MAX_LV: 10,                 // 强化上限
+      PER_LV_BONUS: 0.1,          // 每级属性加成
+      DROP_LV_THRESHOLD: 7,       // +7起失败掉级
+      DROP_LV: 1,                 // 失败掉级数
+      BASE_COST: 120,             // 强化基础灵石
+      COST_PER_LV: 90,            // 每级灵石增量
+      COST_GRADE_FACTOR: 0.8,     // 品质系数
+      COST_REALM_FACTOR: 2.4,     // 境界系数
+    },
+  },
+
   /* ---------- 物品注册表（丹药 / 功法 / 法宝 / 材料） ----------
    * use: 丹药效果；bonus: 功法加成 [基础值, 每级增量]；
    * slot: 法宝槽位 weapon/armor/accessory；tier: 材料档次
@@ -1949,6 +2048,95 @@ const PlayerFactory = {
   },
   /** 读档兼容：补齐新增字段；并清洗旧档/损坏档——剔除未知物品、钳制数值边界，避免异常档导致渲染或结算崩溃 */
   migrate(p) {
+    // v18 版本链：逐级迁移，每步只处理新增/变更的字段
+    const MIGRATE_STEPS = [
+      // v3: 世界 / NPC / 秘境 / 转世
+      (out) => {
+        out.world = Object.assign(WorldSys.freshWorld(), out.world || {});
+        out.world.magicMaps = Array.isArray(out.world.magicMaps) ? out.world.magicMaps : [];
+        out.world.history = Array.isArray(out.world.history) ? out.world.history : [];
+        out.npcs = Object.assign(NpcSys.freshNpcs(), out.npcs || {});
+        out.dungeon = out.dungeon || null;
+        out.canReincarnate = !!out.canReincarnate;
+        out.reinc = out.reinc || null;
+        out.origin = out.origin || null;
+        out.partner = out.partner || null;
+        out.sworn = Array.isArray(out.sworn) ? out.sworn : [];
+        out.pendingDao = !!out.pendingDao;
+      },
+      // v11: 剧情进度
+      (out) => {
+        out.quest = { ch: Math.max(0, Math.floor(Number((out.quest || {}).ch)) || 0), side: Object.assign({}, (out.quest || {}).side) };
+      },
+      // v13: 强化/洞府/灵兽/悬赏/天骄榜
+      (out) => {
+        out.enhanced = {};
+        const srcEnh = (out.enhanced && typeof out.enhanced === 'object') ? out.enhanced : {};
+        for (const [id, lv] of Object.entries(srcEnh)) {
+          if (!GameData.ITEMS[id] || GameData.ITEMS[id].type !== 'artifact') continue;
+          const n = Math.floor(Number(lv));
+          if (isFinite(n) && n > 0) out.enhanced[id] = Utils.clamp(n, 1, ForgeSys.MAX_LV);
+        }
+        if (out.cave && typeof out.cave === 'object') {
+          const plots = Array.isArray(out.cave.plots) ? out.cave.plots.slice(0, 8).map(x => x && typeof x === 'object' ? x : null) : null;
+          out.cave = { lv: Utils.clamp(Math.floor(Number(out.cave.lv)) || 1, 1, CaveSys.MAX_LV), plots: plots || CaveSys.freshCave().plots };
+        } else out.cave = null;
+        const srcBeasts = (out.beasts && typeof out.beasts === 'object') ? out.beasts : {};
+        out.beasts = {
+          active: isFinite(Number(srcBeasts.active)) ? Number(srcBeasts.active) : null,
+          list: Array.isArray(srcBeasts.list) ? srcBeasts.list.filter(b => b && GameData.MONSTERS[b.id]).map((b, i) => ({
+            uid: Math.floor(Number(b.uid)) || i + 1,
+            id: b.id, name: GameData.MONSTERS[b.id].name, species: GameData.MONSTERS[b.id].species || 'beast',
+            power: Utils.clamp(Math.floor(Number(b.power)) || 0, 0, 60),
+            level: Utils.clamp(Math.floor(Number(b.level)) || 1, 1, 10),
+            exp: Math.max(0, Math.floor(Number(b.exp)) || 0),
+            skills: Array.isArray(b.skills) ? b.skills.slice(0, 1) : [],
+          })) : [],
+          nextId: Math.max(1, Math.floor(Number(srcBeasts.nextId)) || 1),
+        };
+        if (out.beasts.active != null && !out.beasts.list.some(b => b.uid === out.beasts.active)) out.beasts.active = null;
+        if (out.bounties && typeof out.bounties === 'object' && Array.isArray(out.bounties.list)) {
+          out.bounties = { day: Math.max(0, Math.floor(Number(out.bounties.day)) || 0), list: out.bounties.list };
+        } else out.bounties = null;
+        out.topTitle = (out.topTitle && typeof out.topTitle === 'object') ? { day: Math.max(0, Math.floor(Number(out.topTitle.day)) || 0) } : null;
+        out.mysteryDay = isFinite(Number(out.mysteryDay)) ? Number(out.mysteryDay) : -1;
+      },
+      // v15: 剧情记录
+      (out) => {
+        const srcStory = (out.story && typeof out.story === 'object') ? out.story : {};
+        out.story = {
+          seen: (srcStory.seen && typeof srcStory.seen === 'object') ? srcStory.seen : {},
+          mid: (srcStory.mid && typeof srcStory.mid === 'object') ? srcStory.mid : {},
+          choices: (srcStory.choices && typeof srcStory.choices === 'object') ? srcStory.choices : {},
+        };
+      },
+      // v16: 道境经验
+      (out) => {
+        out.daoExp = { sword: 0, pill: 0, talisman: 0, body: 0, array: 0, demonic: 0 };
+        const srcDaoExp = (out.daoExp && typeof out.daoExp === 'object') ? out.daoExp : null;
+        if (srcDaoExp) {
+          for (const k of Object.keys(out.daoExp)) {
+            const v = Math.floor(Number(srcDaoExp[k]));
+            if (isFinite(v) && v > 0) out.daoExp[k] = Math.min(v, 2000000);
+          }
+        } else if (out.dao && GameData.DAO_TIERS[out.dao]) {
+          const def = GameData.DAO_TIERS[out.dao];
+          let lv = 0;
+          for (const t of def.tiers) if ((out.realmIdx || 0) >= t.realm) lv++;
+          if (lv > 0 && def.tiers[lv - 1]) out.daoExp[out.dao] = def.tiers[lv - 1].need;
+        }
+      },
+      // v18: 装备实例化（string→{id, enhance}）
+      (out) => {
+        for (const slot of ['weapon', 'armor', 'accessory']) {
+          const eq = out.equipped[slot];
+          if (typeof eq === 'string') {
+            out.equipped[slot] = { id: eq, enhance: (out.enhanced && out.enhanced[eq]) || 0 };
+          }
+        }
+      },
+    ];
+    // 基础：fresh 模板 + 展开合并
     const fresh = this.create(p.name || '无名散修', p.attrs || { gen: 5, comp: 5, luck: 5, body: 5 });
     const out = { ...fresh, ...p };
     out.attrs = { ...fresh.attrs, ...(p.attrs || {}) };
@@ -1956,13 +2144,12 @@ const PlayerFactory = {
       const v = Math.round(Number(out.attrs[k]));
       out.attrs[k] = isFinite(v) ? Utils.clamp(v, 0, 10) : fresh.attrs[k];
     }
-    /* 灵石：仅保留有限非负数 */
     out.stones = { ...fresh.stones, ...(p.stones || {}) };
     for (const k of Object.keys(out.stones)) {
       const v = Math.floor(Number(out.stones[k]));
       out.stones[k] = isFinite(v) && v > 0 ? Math.min(v, 1e12) : 0;
     }
-    /* 背包：剔除未注册/数量异常的物品 */
+    // 背包清洗
     const bag = {};
     const srcBag = (p.bag && typeof p.bag === 'object') ? p.bag : {};
     for (const [id, n] of Object.entries(srcBag)) {
@@ -1971,7 +2158,7 @@ const PlayerFactory = {
       if (def && isFinite(qty) && qty > 0) bag[id] = Math.min(qty, 9999);
     }
     out.bag = bag;
-    /* 功法：剔除未注册条目，等级/感悟钳制在合法区间 */
+    // 功法清洗
     const gf = {};
     const srcGf = (p.gongfa && typeof p.gongfa === 'object') ? p.gongfa : {};
     for (const [id, g] of Object.entries(srcGf)) {
@@ -1985,89 +2172,20 @@ const PlayerFactory = {
       };
     }
     out.gongfa = gf;
-    /* 装备：槽位与物品必须匹配且真实存在 */
     out.equipped = { ...fresh.equipped, ...(p.equipped || {}) };
-    for (const slot of Object.keys(out.equipped)) {
-      const eq = out.equipped[slot];
-      const eqId = eq ? (typeof eq === 'string' ? eq : eq.id) : null;
-      const def = eqId ? GameData.ITEMS[eqId] : null;
-      if (!def || def.type !== 'artifact' || def.slot !== slot) out.equipped[slot] = null;
-      else if (typeof eq === 'string') out.equipped[slot] = { id: eq, enhance: 0 };
-    }
     out.counters = { ...fresh.counters, ...(p.counters || {}) };
     out.flags = { ...fresh.flags, ...(p.flags || {}) };
-    /* v3：世界 / NPC / 秘境 / 转世（老档补齐，逐键合并保留进度） */
-    out.world = Object.assign(WorldSys.freshWorld(), p.world || {});
-    out.world.magicMaps = Array.isArray(out.world.magicMaps) ? out.world.magicMaps : [];
-    out.world.history = Array.isArray(out.world.history) ? out.world.history : [];
-    out.npcs = Object.assign(NpcSys.freshNpcs(), p.npcs || {});
-    out.dungeon = p.dungeon || null;
-    out.canReincarnate = !!p.canReincarnate;
-    out.reinc = p.reinc || null;
-    out.origin = p.origin || null;
-    out.partner = p.partner || null;
-    out.sworn = Array.isArray(p.sworn) ? p.sworn : [];
-    out.pendingDao = !!p.pendingDao;
-    out.quest = { ch: Math.max(0, Math.floor(Number((p.quest || {}).ch)) || 0), side: Object.assign({}, (p.quest || {}).side) };   // v11 剧情进度
-    /* v13：强化心得 / 洞府 / 灵兽 / 悬赏 / 天骄榜（老档补默认值并清洗） */
-    out.enhanced = {};
-    const srcEnh = (p.enhanced && typeof p.enhanced === 'object') ? p.enhanced : {};
-    for (const [id, lv] of Object.entries(srcEnh)) {
-      if (!GameData.ITEMS[id] || GameData.ITEMS[id].type !== 'artifact') continue;
-      const n = Math.floor(Number(lv));
-      if (isFinite(n) && n > 0) out.enhanced[id] = Utils.clamp(n, 1, ForgeSys.MAX_LV);
+    // 逐级运行迁移步骤
+    const startStep = out._migratedVersion || 0;
+    for (let i = startStep; i < MIGRATE_STEPS.length; i++) {
+      MIGRATE_STEPS[i](out);
     }
-    if (p.cave && typeof p.cave === 'object') {
-      const plots = Array.isArray(p.cave.plots) ? p.cave.plots.slice(0, 8).map(x => x && typeof x === 'object' ? x : null) : null;
-      out.cave = { lv: Utils.clamp(Math.floor(Number(p.cave.lv)) || 1, 1, CaveSys.MAX_LV), plots: plots || CaveSys.freshCave().plots };
-    } else out.cave = null;
-    const srcBeasts = (p.beasts && typeof p.beasts === 'object') ? p.beasts : {};
-    out.beasts = {
-      active: isFinite(Number(srcBeasts.active)) ? Number(srcBeasts.active) : null,
-      list: Array.isArray(srcBeasts.list) ? srcBeasts.list.filter(b => b && GameData.MONSTERS[b.id]).map((b, i) => ({
-        uid: Math.floor(Number(b.uid)) || i + 1,
-        id: b.id, name: GameData.MONSTERS[b.id].name, species: GameData.MONSTERS[b.id].species || 'beast',
-        power: Utils.clamp(Math.floor(Number(b.power)) || 0, 0, 60),
-        level: Utils.clamp(Math.floor(Number(b.level)) || 1, 1, 10),
-        exp: Math.max(0, Math.floor(Number(b.exp)) || 0),
-        skills: Array.isArray(b.skills) ? b.skills.slice(0, 1) : [],
-      })) : [],
-      nextId: Math.max(1, Math.floor(Number(srcBeasts.nextId)) || 1),
-    };
-    if (out.beasts.active != null && !out.beasts.list.some(b => b.uid === out.beasts.active)) out.beasts.active = null;
-    if (p.bounties && typeof p.bounties === 'object' && Array.isArray(p.bounties.list)) {
-      out.bounties = { day: Math.max(0, Math.floor(Number(p.bounties.day)) || 0), list: p.bounties.list };
-    } else out.bounties = null;
-    out.topTitle = (p.topTitle && typeof p.topTitle === 'object') ? { day: Math.max(0, Math.floor(Number(p.topTitle.day)) || 0) } : null;
-    out.mysteryDay = isFinite(Number(p.mysteryDay)) ? Number(p.mysteryDay) : -1;
-    /* v15 剧情记录（老档补空值） */
-    const srcStory = (p.story && typeof p.story === 'object') ? p.story : {};
-    out.story = {
-      seen: (srcStory.seen && typeof srcStory.seen === 'object') ? srcStory.seen : {},
-      mid: (srcStory.mid && typeof srcStory.mid === 'object') ? srcStory.mid : {},
-      choices: (srcStory.choices && typeof srcStory.choices === 'object') ? srcStory.choices : {},
-    };
-    /* v16 道境经验：老档按旧 realm 规则折算（realm 字段保留于数据中作折算参考），进度无缝过渡 */
-    out.daoExp = { sword: 0, pill: 0, talisman: 0, body: 0, array: 0, demonic: 0 };
-    const srcDaoExp = (p.daoExp && typeof p.daoExp === 'object') ? p.daoExp : null;
-    if (srcDaoExp) {
-      for (const k of Object.keys(out.daoExp)) {
-        const v = Math.floor(Number(srcDaoExp[k]));
-        if (isFinite(v) && v > 0) out.daoExp[k] = Math.min(v, 2000000);
-      }
-    } else if (p.dao && GameData.DAO_TIERS[p.dao]) {
-      // 旧档：按旧规则「realmIdx >= t.realm」推出的层数，折算为恰好达标该层的经验
-      const def = GameData.DAO_TIERS[p.dao];
-      let lv = 0;
-      for (const t of def.tiers) if ((p.realmIdx || 0) >= t.realm) lv++;
-      if (lv > 0 && def.tiers[lv - 1]) out.daoExp[p.dao] = def.tiers[lv - 1].need;
-    }
-    /* 境界 / 资源 / 状态数值兜底 */
+    out._migratedVersion = MIGRATE_STEPS.length;
+    // 最终钳制
     out.realmIdx = Utils.clamp(Math.floor(Number(out.realmIdx)) || 0, 0, 9);
     out.layer = Utils.clamp(Math.floor(Number(out.layer)) || 0, 0, 3);
     const expN = Number(out.exp);
     out.exp = isFinite(expN) && expN > 0 ? Math.min(expN, GameData.layerNeed(out.realmIdx, 3)) : 0;
-    /* 修为归一化：越层溢出按小境界进层静默结算（合法档不受影响） */
     while (out.layer < 3) {
       const need0 = GameData.layerNeed(out.realmIdx, out.layer);
       if (out.exp < need0) break;
@@ -2186,7 +2304,8 @@ const Stat = {
     };
   },
   /** 防御减伤后的伤害期望值 */
-  afterDef(atk, def) { return atk * (1 - def / (def + 140)); },
+  /** 防御减伤后的伤害期望值 */
+  afterDef(atk, def) { return atk * (1 - def / (def + (GameData.BALANCE.COMBAT.AFTER_DEF_DENOM || 140))); },
 };
 
 /* ======================================================================
