@@ -2661,8 +2661,14 @@ const Cultivate = {
     Log.add('天道降下仙缘：获赠【太极玉】与巨额灵石！你已飞升证道，仍可留在人界继续游历。', 'gain');
     await UI.popup({
       title: '✦ 位列仙班 ✦',
-      html: `恭喜道友 <span class="hl">${Utils.esc(p.name)}</span> 白日飞升，证道成仙！<br><br>凡人之躯，逆天而行，此为大道之始。`,
-      options: [{ text: '继续游历', value: true, primary: true }],
+      html: `恭喜道友 <span class="hl">${Utils.esc(p.name)}</span> 白日飞升，证道成仙！<br><br>凡人之躯，逆天而行，此为大道之始。<br><br>你也可以选择<b>兵解转世</b>，携带仙缘重开一世。`,
+      options: [{ text: '继续游历', value: 'stay', primary: true }, { text: '兵解转世', value: 'reinc' }],
+    }).then(choice => {
+      if (choice === 'reinc') {
+        p.canReincarnate = true;
+        Log.add('你于仙门之前驻足回望，选择兵解转世——携一缕仙缘，重入轮回。', 'system');
+        UI.toast('兵解转世之机已现（修炼页可用）');
+      }
     });
     Game.afterAction();
   },
@@ -5879,6 +5885,7 @@ const ReincarnationSys = {
         · 转世继承 <b>10% 悟性加成</b>与<b>前世记忆</b>（游历中偶得前世洞府机缘）<br>
         · 可携<b>一件法宝</b>入轮回<br>
         · 得 1 枚<b>轮回印记</b>：永久 +1% 全属性上限，可叠加（现累计 ${legacy.marks || 0} 枚）<br>
+        · 传承树已解锁 ${Math.floor((legacy.marks || 0) / 3)} 层：每3枚印记解锁一层天赋<br>
         · 来世重择<b>出身与大道</b>；前世仇怨，亦会随记忆寻来<br>
         <span class="neg">此世修为、境界、灵石、宗门尽付东流。</span>`,
       options: [{ text: '兵 解', value: true, primary: true }, { text: '再苟一时', value: false }],
@@ -5925,6 +5932,13 @@ const ReincarnationSys = {
       for (const [id, n] of Object.entries(origin.start.bag || {})) p2.bag[id] = (p2.bag[id] || 0) + n;
     }
     p2.reinc = { lives: legacy.lives, marks: legacy.marks, compPct: 10, grudges: grudges };
+    // v18 传承树：每3枚印记解锁一层天赋
+    const treeTier = Math.floor((legacy.marks || 0) / 3);
+    if (treeTier >= 1) p2.stones.low += Math.round(origin ? origin.start.stones || 0 : 0); // 初始灵石翻倍
+    if (treeTier >= 2) p2.attrs.comp = Math.min(10, p2.attrs.comp + 2); // 悟性+2
+    if (treeTier >= 3 && kept) p2.bag[kept] = (p2.bag[kept] || 0) + 1; // 多带一件法宝
+    if (treeTier >= 4) p2.attrs.luck = Math.min(10, p2.attrs.luck + 2); // 福缘+2
+    if (treeTier >= 5) { for (const k of ['gen', 'comp', 'luck', 'body']) p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } // 全属性+1
     if (kept) p2.bag[kept] = 1;
     for (const gid of grudges) {
       const s = p2.npcs[gid];
