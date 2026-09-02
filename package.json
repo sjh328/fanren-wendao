@@ -11,7 +11,8 @@
     "test:v5": "node verify-v5.mjs",
     "test:v6": "node verify-v6.mjs",
     "test:v7": "node verify-v7.mjs",
-    "test:all": "node verify-game.mjs && node verify-v3.mjs && node verify-v4.mjs && node verify-v5.mjs && node verify-v6.mjs && node verify-v7.mjs"
+    "test:v8": "node verify-v8.mjs",
+    "test:all": "node verify-game.mjs && node verify-v3.mjs && node verify-v4.mjs && node verify-v5.mjs && node verify-v6.mjs && node verify-v7.mjs && node verify-v8.mjs"
   },
   "keywords": [],
   "author": "",
