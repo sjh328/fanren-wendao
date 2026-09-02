@@ -355,6 +355,21 @@ const Ambience = {
       // v13：悬赏完成——双清音
       this.tone(659.25, t, 0.22, { type: 'triangle', gain: 0.22 });
       this.tone(987.77, t + 0.15, 0.5, { type: 'triangle', gain: 0.26 });
+    } else if (kind === 'hit') {
+      // v18：打击命中——短促冲击
+      this.tone(440, t, 0.08, { type: 'square', gain: 0.12 });
+      this.tone(220, t + 0.02, 0.1, { type: 'sawtooth', gain: 0.06 });
+    } else if (kind === 'miss') {
+      // v18：落空——气流声
+      this.tone(300, t, 0.12, { type: 'triangle', gain: 0.04 });
+    } else if (kind === 'crit') {
+      // v18：暴击——清脆金属音
+      this.tone(880, t, 0.15, { type: 'square', gain: 0.10 });
+      this.tone(1320, t + 0.05, 0.12, { type: 'sine', gain: 0.08 });
+    } else if (kind === 'block') {
+      // v18：格挡——沉闷撞击
+      this.tone(160, t, 0.15, { type: 'square', gain: 0.10 });
+      this.tone(80, t + 0.03, 0.2, { type: 'sawtooth', gain: 0.06 });
     }
   },
   /** 生成式古琴背景乐：五声音阶随机游走 + 弦底长音，疏落淡远 */
@@ -6313,6 +6328,7 @@ const Battle = {
         if (Utils.chance(miss)) {
           this.log(`你奋力一击，却被 ${B.enemy.name} 敏捷地避开了！`);
           this.pushFloat('enemy', '闪避', 'miss');
+          Ambience.sfx('miss');
           this.addMorale(-4);
           B.combo = 0;
         } else {
@@ -6335,6 +6351,7 @@ const Battle = {
           if (p.dao === 'sword') DaoSys.gain(p, (crit || jianxin) ? 20 : 12);   // v16 剑意
           this.pushFloat('enemy', `-${dmg}`, (crit || jianxin) ? 'crit' : 'dmg');
           B.hitShake = true;
+          if (crit) Ambience.sfx('crit');
           this.addMorale((crit || jianxin) ? 18 : 12);
           const comboTxt = B.combo >= 2 ? `<span style="color:var(--gold)">连击×${B.combo}</span>` : '';
           const tags = [crit ? '会心一击！' : '', jianxin ? '【剑心通明】！' : '', comboTxt].filter(Boolean).join('');
@@ -6805,7 +6822,10 @@ const Battle = {
     dmg = Math.max(1, Math.round(dmg));
     p.hp = Math.max(0, p.hp - dmg);
     B.combo = 0;   // v13 受击中断连击
-    B.playerHit = true; // v18：玩家受击标记，渲染时触发震动反馈
+    B.playerHit = true; // v18：玩家受击标记
+    if (blocked) Ambience.sfx('block');
+    else if (crit) Ambience.sfx('crit');
+    else Ambience.sfx('hit');
     if (p.dao === 'body') DaoSys.gain(p, blocked ? 8 : 4);   // v16 体魄
     this.pushFloat('me', `-${dmg}`, crit || heavy ? 'crit' : 'dmg');
     this.addMorale(blocked ? 4 : -8);
