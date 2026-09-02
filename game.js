@@ -3264,8 +3264,16 @@ const BeastSys = {
     B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
     B.hitShake = true;
     B.pushFloat('enemy', `-${dmg}`, 'dmg');
-    const skName = b.skills.length ? `【${b.skills[0].name}】` : '';
-    B.log(`${skName || ''}你的灵兽 <b>${b.name}</b> 亦张牙舞爪扑上助战——造成 <b>${dmg}</b> 点伤害！`, 'log-gain');
+    // v18：灵兽技能实效化——施加真实技能效果（毒/流血/减益等）
+    let skillNote = '';
+    if (b.skills && b.skills.length > 0) {
+      const sk = b.skills[0];
+      if (sk.kind && ['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken', 'stun'].includes(sk.kind)) {
+        Battle.applyEnemyFx(B.enemy, { kind: sk.kind, pct: (sk.pct || 2) * 0.6, rounds: sk.rounds || 2 });
+        skillNote = `【${sk.name}】`;
+      }
+    }
+    B.log(`${skillNote}你的灵兽 <b>${b.name}</b> 亦张牙舞爪扑上助战——造成 <b>${dmg}</b> 点伤害！`, 'log-gain');
     Battle.render();
     await Battle.wait(360);
     return B.enemy.hp <= 0;
