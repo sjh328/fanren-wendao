@@ -1022,6 +1022,14 @@ const GameData = {
     z_tianshu:  { name: '天枢战纹',   type: 'artifact', slot: 'accessory', grade: 2, price: 0, desc: '天枢殿长老亲手炼制的战纹玉符，勇猛精进。', bonus: { atkPct: 8, crit: 3 } },
     z_danxin:   { name: '丹心玉佩',   type: 'artifact', slot: 'accessory', grade: 2, price: 0, desc: '丹鼎阁信物，温养气脉，绵长持久。', bonus: { hpPct: 10, mpPct: 10 } },
     z_cangjing: { name: '藏经阁印',   type: 'artifact', slot: 'accessory', grade: 2, price: 0, desc: '藏经楼信物，执此印者阅典有先，修行事半功倍。', bonus: { cult: 6, luck: 1 } },
+    /* ---- v18 灵界篇：仙阶装备（grade 6） ---- */
+    w_lingjie:  { name: '灵墟仙剑',   type: 'artifact', slot: 'weapon',    grade: 5, price: 0, desc: '灵墟仙泽深处出土的仙剑，剑光如霜，可斩虚无。', bonus: { atk: 400, atkPct: 18, crit: 6 } },
+    a_xianpao:  { name: '九天仙袍',   type: 'artifact', slot: 'armor',     grade: 5, price: 0, desc: '以九天霓虹织就的仙袍，万法不沾。', bonus: { def: 280, hp: 1200, hpPct: 12 } },
+    z_xianyao:  { name: '仙曜石',     type: 'artifact', slot: 'accessory', grade: 5, price: 0, desc: '仙王陨落后留下的本命灵石，蕴含一缕仙道真意。', bonus: { atkPct: 12, defPct: 12, hpPct: 12, cult: 12, luck: 3 } },
+    gf_leishen: { name: '九天雷神经', type: 'gongfa', gtype: 'attack',  grade: 5, price: 0, desc: '雷狱主宰所修的上古雷法，一雷出而万法寂。', bonus: { atkPct: 22, crit: 4, mpPct: 12 }, skill: { name: '九天雷罚', kind: 'damage', power: 4.2, mp: 35, desc: '引九天雷罚轰落，万钧之势' } },
+    m_xiancui:  { name: '仙灵翠',     type: 'material', tier: 4, price: 120000, desc: '灵墟仙泽灵气凝结的翡翠，内蕴仙道法则。' },
+    m_leijing:  { name: '雷晶核',     type: 'material', tier: 4, price: 150000, desc: '九霄雷狱中雷兽体内凝结的雷晶，雷法至宝。' },
+    seed_xianling: { name: '仙灵种',   type: 'seed', grade: 5, price: 80000, crop: 'm_xiancui', days: 80, desc: '播入灵田，八十日可收【仙灵翠】。' },
   },
 
   /** 按档次取材料列表 */
@@ -1089,6 +1097,17 @@ const GameData = {
     m_jiaojiao:  { name: '怒海蛟龙',     power: 31, hp: 1.25, atk: 1.3, species: 'snake', skills: [{ name: '龙尾断浪', w: 30, kind: 'stun', rounds: 1 }, { name: '怒涛覆压', w: 30, kind: 'defdown', pct: 35, rounds: 2 }] },
     m_longgui:   { name: '玄武龙龟',     power: 32, hp: 1.45, def: 1.5, spd: 0.6, species: 'beast', skills: [{ name: '龟甲震波', w: 35, kind: 'guard', def: 55, rounds: 2 }, { name: '吞吐灵潮', w: 25, kind: 'heal', pct: 15 }] },
     m_yuanmo:    { name: '渊底魔影',     power: 34, hp: 1.25, atk: 1.35, elite: true, rareDrop: 'gf_taiyin', species: 'ghost', skills: [{ name: '万渊噬心', w: 30, kind: 'drain', mult: 1.3, leech: 0.5 }, { name: '魔渊低语', w: 30, kind: 'weaken', pct: 30, rounds: 2 }] },
+    /* ---- v18 灵界篇：灵墟仙泽（飞升~真仙） ---- */
+    m_linglu:    { name: '灵墟仙鹭',     power: 35, hp: 1.05, atk: 1.2, spd: 1.35, species: 'element', skills: [{ name: '仙翎斩', w: 30, kind: 'bleed', pct: 4, rounds: 2 }, { name: '羽化灵光', w: 25, kind: 'heal', pct: 18 }] },
+    m_xianmo:    { name: '仙泽水魅',     power: 36, hp: 1.1,  atk: 1.25, spd: 1.3, species: 'ghost', skills: [{ name: '幻雾困身', w: 30, kind: 'slow', pct: 40, rounds: 2 }, { name: '魅影夺魄', w: 25, kind: 'drain', mult: 1.3, leech: 0.5 }] },
+    m_lingjiang: { name: '灵墟守将',     power: 37, hp: 1.4,  def: 1.4,  spd: 0.7, species: 'construct', skills: [{ name: '仙光壁垒', w: 30, kind: 'guard', def: 60, rounds: 2 }, { name: '镇墟锤', w: 25, kind: 'stun', rounds: 1 }] },
+    m_leixiao:   { name: '雷霄独角兽',   power: 38, hp: 1.2,  atk: 1.3,  species: 'beast', skills: [{ name: '雷角冲撞', w: 30, kind: 'burn', pct: 5, rounds: 2 }, { name: '雷网缠身', w: 25, kind: 'stun', rounds: 1 }] },
+    m_leimen:    { name: '九霄雷灵',     power: 40, hp: 1.15, atk: 1.35, spd: 1.35, species: 'element', skills: [{ name: '紫霄雷落', w: 35, kind: 'burn', pct: 6, rounds: 3 }, { name: '雷劫临身', w: 25, kind: 'weaken', pct: 35, rounds: 2 }] },
+    m_tianlong:  { name: '应龙残魄',     power: 42, hp: 1.35, atk: 1.4,  elite: true, rareDrop: 'w_lingjie', species: 'snake', skills: [{ name: '龙息焚天', w: 30, kind: 'burn', pct: 6, rounds: 3 }, { name: '龙威震荡', w: 25, kind: 'stun', rounds: 1 }, { name: '逆鳞反噬', w: 20, kind: 'defdown', pct: 40, rounds: 2 }] },
+    m_lingxue:   { name: '灵墟雪猿',     power: 39, hp: 1.3,  atk: 1.2,  species: 'beast', skills: [{ name: '寒冰拳', w: 30, kind: 'slow', pct: 35, rounds: 2 }, { name: '咆哮', w: 25, kind: 'roar', atk: 35, rounds: 2 }] },
+    m_tianle:    { name: '九霄雷兽',     power: 41, hp: 1.25, atk: 1.35, species: 'beast', skills: [{ name: '雷牙撕裂', w: 30, kind: 'bleed', pct: 5, rounds: 2 }, { name: '雷暴', w: 25, kind: 'burn', pct: 5, rounds: 2 }] },
+    m_xianzun:   { name: '仙尊残念',     power: 44, hp: 1.3,  atk: 1.45, elite: true, rareDrop: 'z_xianyao', species: 'ghost', skills: [{ name: '一念断生', w: 30, kind: 'weaken', pct: 40, rounds: 2 }, { name: '夺魄', w: 25, kind: 'drain', mult: 1.4, leech: 0.6 }] },
+    m_leishen:   { name: '雷狱主宰',     power: 46, hp: 1.5,  atk: 1.5,  elite: true, rareDrop: 'gf_leishen', species: 'construct', skills: [{ name: '灭世雷罚', w: 30, kind: 'cursed', pct: 8, rounds: 3 }, { name: '雷狱封锁', w: 25, kind: 'stun', rounds: 1 }] },
   },
 
   /* ---------- 地图区域 ---------- */
@@ -1121,6 +1140,13 @@ const GameData = {
     { id: 'longyuan', name: '龙渊海眼', recRealm: 6, recText: '炼虚期及以上', desc: '大海中央的万丈漩涡，渊底隐约可见沉睡的巨大轮廓。龙裔盘踞、海兽横行，渊底魔影幢幢——此为化外绝地。',
       pool: [{ id: 'm_haiyi', weight: 30 }, { id: 'm_jiaojiao', weight: 25 }, { id: 'm_longgui', weight: 25 }, { id: 'm_shuiling', weight: 20 }],
       elite: 'm_yuanmo', weights: { battle: 55, treasure: 14, fortune: 11, npc: 6, trap: 9, nothing: 5 } },
+    /* ---- v18 灵界篇：飞升后新地图 ---- */
+    { id: 'lingxu', name: '灵墟仙泽', recRealm: 9, recText: '真仙期', desc: '飞升之后的第一站——灵墟仙泽，灵气成雾、仙禽翔集。泽水深处，有上古仙门遗留下的禁制与守卫。',
+      pool: [{ id: 'm_linglu', weight: 30 }, { id: 'm_xianmo', weight: 25 }, { id: 'm_lingjiang', weight: 25 }, { id: 'm_lingxue', weight: 20 }],
+      elite: 'm_tianlong', weights: { battle: 52, treasure: 16, fortune: 14, npc: 6, trap: 8, nothing: 4 } },
+    { id: 'leiyu', name: '九霄雷狱', recRealm: 9, recText: '真仙后期', desc: '九天之上的雷霆炼狱，终年雷云不散。传说中藏有仙王陨落前的传承，然雷威之盛，足以灭仙。',
+      pool: [{ id: 'm_leixiao', weight: 30 }, { id: 'm_leimen', weight: 25 }, { id: 'm_tianle', weight: 25 }, { id: 'm_lingxue', weight: 20 }],
+      elite: 'm_leishen', weights: { battle: 55, treasure: 14, fortune: 12, npc: 4, trap: 10, nothing: 5 } },
   ],
 
   /* ---------- 宗门 ---------- */
