@@ -4253,6 +4253,50 @@ const KarmaSys = {
 };
 
 /* ======================================================================
+ * §20.5 v18 江湖声望 RepSys
+ * 声望影响：悬赏品质 / 黑市价格 / NPC 初始关系 / 江湖称号
+ * ====================================================================== */
+const RepSys = {
+  LEVELS: [
+    { min: -100, name: '声名狼藉', color: 'neg' },
+    { min: -30,  name: '籍籍无名', color: 'dim' },
+    { min: 0,    name: '初露头角', color: '' },
+    { min: 30,   name: '小有名气', color: 'hl' },
+    { min: 80,   name: '名动一方', color: 'gold' },
+    { min: 150,  name: '威震天下', color: 'grade-5' },
+  ],
+  level(p) {
+    const rep = p.reputation || 0;
+    for (let i = this.LEVELS.length - 1; i >= 0; i--) {
+      if (rep >= this.LEVELS[i].min) return this.LEVELS[i];
+    }
+    return this.LEVELS[0];
+  },
+  add(p, amount, reason = '') {
+    p.reputation = Utils.clamp((p.reputation || 0) + amount, -100, 200);
+    if (reason) Log.add(`声望 ${amount > 0 ? '+' : ''}${amount}（${reason}）`, amount > 0 ? 'gain' : 'loss');
+  },
+  /** 声望对商店价格的折扣/溢价 */
+  priceMul(p) {
+    const rep = p.reputation || 0;
+    if (rep >= 80) return 0.85;
+    if (rep >= 30) return 0.92;
+    if (rep >= 0) return 1.0;
+    if (rep >= -30) return 1.05;
+    return 1.15;
+  },
+  /** 声望对悬赏品质的加成 */
+  bountyBonus(p) {
+    const rep = p.reputation || 0;
+    if (rep >= 150) return 1.5;
+    if (rep >= 80) return 1.3;
+    if (rep >= 30) return 1.15;
+    return 1.0;
+  },
+};
+window.RepSys = RepSys;
+
+/* ======================================================================
  * §21.5 v8 黄历 · 每日一签 DailySign（每日仪式：游戏内每日一支签，立即生效）
  * ====================================================================== */
 const DailySign = {
