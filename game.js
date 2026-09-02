@@ -7799,6 +7799,25 @@ const UI = {
 
   /* ---------- 开始界面 ---------- */
   renderStart() {
+    // v18：开始界面背景装饰
+    const bgScene = document.getElementById('start-screen');
+    if (bgScene && !bgScene.querySelector('.start-bg')) {
+      const bg = document.createElement('div');
+      bg.className = 'start-bg';
+      bg.innerHTML = `<svg viewBox="0 0 800 600" preserveAspectRatio="xMidYMid slice" style="position:absolute;top:0;left:0;width:100%;height:100%;opacity:0.08;pointer-events:none">
+        <defs>
+          <linearGradient id="bgSky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d4c9a8"/><stop offset="1" stop-color="#f6f0df"/></linearGradient>
+          <linearGradient id="bgMtn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8fa878"/><stop offset="1" stop-color="#4d6b44"/></linearGradient>
+        </defs>
+        <rect width="800" height="600" fill="url(#bgSky)"/>
+        <circle cx="650" cy="80" r="50" fill="#fdf8ea" opacity="0.6"/>
+        <polygon points="0,450 100,300 200,420 300,260 400,380 500,220 600,350 700,200 800,320 800,600 0,600" fill="url(#bgMtn)" opacity="0.3"/>
+        <polygon points="0,500 150,380 300,470 450,350 550,430 700,320 800,420 800,600 0,600" fill="#5e8a54" opacity="0.2"/>
+        <path d="M200 520 q50 -60 120 -20 q80 40 180 -30 q60 -40 120 10 q80 50 180 -20 v50 z" fill="#cfe6ee" opacity="0.15"/>
+        <g opacity="0.08" transform="translate(60,100)"><circle cx="0" cy="0" r="2"/><circle cx="100" cy="20" r="1.5"/><circle cx="200" cy="-10" r="1.8"/><circle cx="50" cy="-30" r="1.2"/><circle cx="150" cy="15" r="1"/></g>
+      </svg>`;
+      bgScene.insertBefore(bg, bgScene.firstChild);
+    }
     const slots = ['auto', 1, 2, 3].map(key => {
       const data = Save.read(key);
       const label = key === 'auto' ? '自动存档' : `存档位 · ${['一', '二', '三'][key - 1]}`;
