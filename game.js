@@ -1316,6 +1316,86 @@ const GameData = {
       '山风过隙，你在风中参悟功法，若有所得。',
       '你闭目内视，引导灵气冲刷经脉，隐有脆响。',
     ],
+    /** v19 氛围见闻：探索途中偶见的山水人情（每图五则以上，纯叙事） */
+    ambience: {
+      village: [
+        '村口的老槐树又落了一层叶。孩童们围着碾药的石臼追逐，笑声惊起一树麻雀。',
+        '田埂上，农人直起腰擦汗，朝你憨憨一笑：「仙长又进山啦？」',
+        '溪水绕村而过，捣衣声与炊烟一同升起来——这里安静得不像话，安静得让人想守着。',
+        '村塾里传来稚嫩的读书声。你驻足片刻，想起许多年前，也有人这样念书给你听。',
+        '夜里有犬吠。更夫的梆子敲了三下，声音传得很远，像替谁数着更漏。',
+      ],
+      qingfeng: [
+        '青峰山的雾总是散得很慢。雾里有鸟鸣，一声近，一声远。',
+        '半山腰的道观香火不旺，老道人扫着石阶，扫帚划过青石，沙沙如雨。',
+        '崖畔一株歪脖子松探出云海。有胆大的修士在松下打坐，衣袂纹丝不动。',
+        '山涧里卵石青白。你蹲下掬水，水凉得让人清醒——传说此山通着上古地脉，不知真假。',
+        '暮色四合时，山影层层叠叠，最远的那一重，像一道凝固的墨痕。',
+      ],
+      heifeng: [
+        '黑风寨的旗子歪在寨门上，风一吹，哗啦啦地响，像在数着什么旧账。',
+        '寨墙根下有半截断箭，锈得发黑。不知是哪一任寨主，没能等到收尸的人。',
+        '聚义厅的地砖有火烧的痕迹，一幅残破的舆图钉在墙上，被风撕去了一角。',
+        '寨后山道狰狞。据说夜里有黑袍人从此经过，从不停留，也从不回头。',
+        '一只乌鸦落在旗杆顶上，居高临下地看你。你忽然觉得，它像是替谁在盯梢。',
+      ],
+      forest: [
+        '林深不知处。腐叶下有萤火明灭，像大地未阖上的眼睛。',
+        '一株老藤缠着一具白骨，骨上苔痕斑斑——森林从不为谁收殓。',
+        '头顶枝叶忽然一静。你按住剑柄，等了十息，鸟鸣才重新响起。',
+        '兽径分岔处插着半截木牌，字迹被啃噬得只剩一个「危」字。',
+        '夜行至此，林子深处有绿莹莹的光尾随。它不靠近，也不离开。',
+      ],
+      ruins: [
+        '断柱倾颓如折剑。基石上的刻痕早已风化，只有纹路深处还蓄着微光。',
+        '一尊无头石像跪在尘埃里，双手捧着一柄早已朽烂的剑。',
+        '风穿过残垣，呜呜作响，像极远的年代里有人在诵读经文。',
+        '荒草没膝处有一块平整的祭台。台面干干净净——有人比你先到，且不止一次。',
+        '你拾起一枚碎瓦，釉色温润。三百年前的匠人不会想到，它此刻正握在一个寻仇人手里。',
+      ],
+      wanyao: [
+        '万妖山脉的月色泛着紫。远处山脊上，有巨兽的剪影缓缓移过，像一座会走的山。',
+        '妖市开在背风的谷地。妖修们讨价还价的声音，混着鳞片摩擦的沙沙声。',
+        '一株千年树妖的枝干上挂着风铃——是哪个胆大的散修挂上去祈福的？',
+        '山风里有腥气。老猎妖人说，闻到这股味，要么绕路，要么拔刀。',
+        '岩壁上有巨大的爪痕，五指深嵌石中，爪痕里积着雨水，映着天上两只月亮似的眼。',
+      ],
+      youming: [
+        '鬼泽的水是墨色的。水面上浮着白雾，雾下偶尔翻起一串气泡，无声地破掉。',
+        '枯树上挂着引魂灯，灯焰是绿的，照见灯下歇脚的旅人——已不知歇了多久。',
+        '泽心传来隐约的橹声。你循声望去，只有雾。老人们说，那是渡船人还在找没等到的人。',
+        '白骨在浅滩上排成一列，头颅齐齐朝着泽心，像在朝拜什么。',
+        '阴气入骨的寒。你点燃一张暖阳符，火光外三尺，黑暗纹丝不动。',
+      ],
+      feizhou: [
+        '天外飞舟的残骸斜插在山脊，舟身符文明灭，像一颗不肯熄灭的心脏。',
+        '舟骸投下的影子凉而硬。你在影子里捡到一枚星屑，指尖传来极轻的嗡鸣。',
+        '残舱的舷窗内壁有抓痕，深深浅浅——坠落那一刻，舟里的人经历了什么？',
+        '星辉从破口漏进来，在地上淌成一小片银泊。你忽然觉得，人间很小。',
+        '舟首的雕像断了一只手臂，剩下的那只，仍指着天的方向。',
+      ],
+      longyuan: [
+        '海眼的风带着咸腥。漩涡声昼夜不歇，像一头巨兽在均匀地呼吸。',
+        '龙渊的水面下有鳞光一闪。渔人说那是老蛟在换鳞，鳞落之处，生三年海市。',
+        '礁石上系着一截锈缆，缆头断口平整——不是磨断的，是斩断的。',
+        '潮退时，滩涂上露出一座半淹的石碑。碑文被藻类啃噬，只剩「河」字可辨。',
+        '夜里的龙渊会发光。海底深处，一点幽蓝，不增不减，像谁留下的一盏灯。',
+      ],
+      lingxu: [
+        '灵墟仙泽的雾是甜的。仙鹤掠过水面，翅尖点碎一片云影。',
+        '泽畔仙草结着露，一颗露珠里，倒映着一整片流云。',
+        '远山有仙宫的檐角隐现，飞铃在风里响，声音干净得没有一丝杂念。',
+        '此地的流水会唱歌。你侧耳听了半晌，竟听出一丝旧曲的味道——像是很久以前，有人哼过。',
+        '仙泽的夜太亮，亮得看不见凡间的星。你忽然想念起青溪村那盏昏黄的灯。',
+      ],
+      leiyu: [
+        '九霄雷狱的云层压得极低。雷光在云腹里游走，像巨龙睁眼前的痒。',
+        '雷柱烧焦的地面呈蛛网状，焦痕里嵌着未化的兵刃残片——历代渡劫者的遗物。',
+        '风里有铁锈味。雷狱的空气是涩的，吸一口，肺腑里像擦过火镰。',
+        '你踩过一段焦土，鞋底还沾着前人的道韵残温。他没能走完这段路。',
+        '雷云最深处，偶尔传下极轻的一声笑。守狱人说，那是雷在学人笑——学了很多年。',
+      ],
+    },
     seclude: [
       '石室之中，你屏绝外缘，物我两忘。',
       '洞府之内灵氤氤氲，你沉入定境，不知岁月。',
@@ -4845,6 +4925,11 @@ const Explore = {
         }
       }
     }
+    // v19 氛围见闻：探索途中偶见的山水人情（三成概率）
+    if (!Battle.active && Utils.chance(30)) {
+      const ambPool = GameData.FLAVOR.ambience[map.id];
+      if (ambPool && ambPool.length) Log.add(Utils.pick(ambPool), 'info');
+    }
     // 孽障：仇家循迹寻仇 / §24 恩怨：宿敌趁你历练偷袭
     if (!Battle.active) {
       const ambId = NpcSys.pickAmbusher(p);
@@ -5839,6 +5924,7 @@ const Tribulation = {
       Ambience.sfx('breakthrough');
       Log.add(`${Utils.pick(GameData.FLAVOR.breakSuccess)}`, 'realm');
       Log.add(`恭喜！你渡劫功成，晋入 <b>${GameData.REALM_NAMES[p.realmIdx]}</b> 期！寿元上限提升至 ${st.lifespan} 岁。`, 'realm');
+      Story.chron(`渡劫功成，晋入${GameData.REALM_NAMES[p.realmIdx]}期`);   // v19 年表
       const gr = NpcSys.realmGreeting(p);   // v19 突破贺语
       if (gr) { Log.add(`${gr.name}（${gr.title}）登门道贺——${gr.line}`, 'event'); Story.chron(`${gr.name} 登门道贺，贺你晋入${GameData.REALM_NAMES[p.realmIdx]}期`); }
       if (strategy === 'endure') {
@@ -8970,6 +9056,77 @@ const QuestSys = {
       ending: '遗诏结尾写着：「吾宗堕魔，非吾本意。持此诏者，代吾清门户。」你将遗诏折好收入怀中——原来三百年前的因，早为今日的果埋好了线。',
       reward: { fortune: 15, items: { pill_xisui: 2 } },
     },
+    /* ---- v19 支线扩充（NPC 绑定 + 任务链；npc：结案时关系 +8 并写入记忆） ---- */
+    {
+      id: 's6', title: '顽石之托', minRealm: 1, npc: 'n20',
+      story: '磐岩谷长老石破天在坊市拦住你，一双铁掌捧着半块碎裂的阵盘：「谷中演武场地脉塌了，这是从底下挖出来的老物件——认得这纹路的人，方圆千里只有你一个。」',
+      steps: [
+        { desc: '力证实力（累计击败精英妖兽两头）', done: p => (p.counters.killsElite || 0) >= 2 },
+        { desc: '踏勘地脉（妖兽森林探索三次）', done: p => ((p.counters.mapExplores || {}).forest || 0) >= 3 },
+      ],
+      ending: '你认出阵盘纹路出自上古困杀大阵的一角——与秘境碎片同源。石破天瞪大眼睛，半晌憋出一句：「俺就说没找错人！」',
+      reward: { stones: 3000, items: { pill_tiegu: 2 } },
+    },
+    {
+      id: 's7', title: '裂山失约', minRealm: 2, npc: 'n16', prev: 's6',
+      story: '磐岩谷大弟子楚天阔失约了——约好同去勘矿的日子，他在矿洞口留下血书：谷中暗河之下，有「活物」咬断了锁链。石破天请你入谷一探。',
+      steps: [
+        { desc: '以武会友（与江湖修士切磋两次）', done: p => (p.counters.spars || 0) >= 2 },
+        { desc: '备下盘缠（灵石积蓄两万）', done: p => QuestSys.stonesTotal(p) >= 20000 },
+      ],
+      ending: '暗河底的「活物」是一头失控的岩甲兽——当年困杀大阵崩了一角，镇在谷下的东西醒了。你与楚天阔联手将其重新镇回。他抱拳：「这条命，算你一半。」',
+      reward: { stones: 8000, fortune: 4 },
+    },
+    {
+      id: 's8', title: '磐岩之心', minRealm: 3, npc: 'n20', prev: 's7',
+      story: '石破天破天荒地设了一桌酒席，请你坐上首：「谷中长老会决议——磐岩谷欠你一份大因果。谷库里有件老祖宗传下的东西，掌谷说，给能镇得住它的人。」',
+      steps: [
+        { desc: '深入秘境（秘境推进至第三层）', done: p => (p.counters.maxDepth || 0) >= 3 },
+        { desc: '百战之资（累计获胜四十场）', done: p => (p.counters.wins || 0) >= 40 },
+      ],
+      ending: '谷库深处，一块温润的磐石在灵光中沉浮——「磐岩之心」，谷派开山时镇谷之物。石破天亲手为你系上：「往后磐岩谷的山门，永远为你开。」',
+      reward: { stones: 15000, items: { m_gupian: 1 } },
+    },
+    {
+      id: 's9', title: '烟雨追账', minRealm: 2, npc: 'n5',
+      story: '烟雨楼主柳含烟隔着珠帘打量你：「黑风寨背后那本账，你也想知道吧？巧了——我也是。各出一半力，账查清了，五五分。」',
+      steps: [
+        { desc: '广布眼线（结交三位修士）', done: p => (p.counters.befriends || 0) >= 3 },
+        { desc: '夜探匪巢（黑风寨探索五次）', done: p => ((p.counters.mapExplores || {}).heifeng || 0) >= 5 },
+      ],
+      ending: '账册合拢——黑风寨历年掘获，三成流向同一个匿名暗桩。柳含烟指尖敲着账册：「这条线，你捏着一半，我捏着一半。往后江湖上，你我算一伙的。」',
+      reward: { stones: 12000, insight: 5 },
+    },
+    {
+      id: 's10', title: '血罗刹的委托', minRealm: 3, npc: 'n22',
+      story: '月下，红绡的身影从檐角落下来，红衣胜血：「听说你在查血河。巧了——我也有笔账要算。帮我把这批货截下来，你查你的，我拿我的。」',
+      steps: [
+        { desc: '斩草除根（累计击败精英妖兽六头）', done: p => (p.counters.killsElite || 0) >= 6 },
+        { desc: '截获暗货（妖兽森林探索五次）', done: p => ((p.counters.mapExplores || {}).forest || 0) >= 5 },
+      ],
+      ending: '货箱开启——里面不是灵材，是一箱引魂玉的仿品。红绡眸光冷了下来：「有人在做假玉。做假玉的人……知道真玉的炼法。」她把仿品收进袖中，「这份情，红绡记下了。」',
+      reward: { fortune: 6, items: { m_gupian: 1 } },
+    },
+    {
+      id: 's11', title: '醉后真言', minRealm: 4, npc: 'n23',
+      story: '老酒鬼堵在坊市酒肆门口，葫芦晃荡：「小娃娃，陪老头子喝一场。酒钱你出——好酒，最烈的那种。老头子有句话，酒到了才能说。」',
+      steps: [
+        { desc: '以酒会友（与江湖修士切磋三次）', done: p => (p.counters.spars || 0) >= 3 },
+        { desc: '酒资不菲（灵石积蓄八万）', done: p => QuestSys.stonesTotal(p) >= 80000 },
+      ],
+      ending: '三坛烈酒下肚，老酒鬼伏在桌上，声音忽然清醒得可怕：「水底下那位……的三百年，老头子一天一天看着。你想下水，先学会——别信水面上的倒影。」',
+      reward: { fortune: 8, insight: 6 },
+    },
+    {
+      id: 's12', title: '星轨残图', minRealm: 5, npc: 'n17',
+      story: '周天阁首席姬冰颜的传讯玉符落在你案头，只有一行清冷小字：「观星塔藏图残了三分之一。补全它，需要一枚你手里的东西——碎片拓影。」',
+      steps: [
+        { desc: '力破守关（击败秘境守关者一位）', done: p => (p.counters.bossKills || 0) >= 1 },
+        { desc: '参悟至理（修习三部功法）', done: p => (p.counters.learns || 0) >= 3 },
+      ],
+      ending: '拓影合入残图，星轨亮起一线——血河故道上空，那颗三百年未曾移动的星，微微颤了一下。姬冰颜难得地侧过头：「多谢。这一颤，我等了十年。」',
+      reward: { insight: 8, items: { m_gupian: 1 } },
+    },
   ],
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
   /** v12 每章各目标对应的功能页签（供焦点条「前往」直达） */
@@ -9070,6 +9227,7 @@ const QuestSys = {
     this.checking = true;
     try {
       q.ch += 1;
+      Story.chron(`主线 · 第${this.CN9[q.ch - 1]}章「${def.title}」完结`);   // v19 年表
       UI.announce(`主线 · ${def.title} · 完结`, 'gold');
       Log.add(`✦ 主线推进 · 第${this.CN9[q.ch - 1]}章「${def.title}」完成！`, 'realm');
       DaoxinSys.attune(p, q.ch);   // v18 残玉共鸣 +1 重
@@ -9127,12 +9285,26 @@ const QuestSys = {
     const sd = this.SIDES.find(x => x.id === id);
     if (!sd || q.side[id]) return;
     if (p.realmIdx < sd.minRealm) { UI.toast(`需 ${GameData.REALM_NAMES[sd.minRealm]}期方可了结此事`); return; }
+    // v19 任务链：前置支线须先结案
+    if (sd.prev && !q.side[sd.prev]) { UI.toast('前置事件尚未了结'); return; }
     if (!sd.steps.every(st => this.stepDone(st, p))) { UI.toast('结案条件尚未达成'); return; }
     q.side[id] = true;
     UI.announce(`支线 · ${sd.title} · 了结`, 'gold');
     this.storyLog(`【支线结案 · ${sd.title}】`, sd.ending);
     this.grant(sd.reward);
     Log.add(`【酬谢】${this.rewardText(sd.reward)}`, 'gain');
+    // v19 NPC 绑定：结案增进交情、写入记忆与年表
+    if (sd.npc) {
+      const s = NpcSys.state(p, sd.npc);
+      if (s) {
+        s.met = true;
+        s.rel = Utils.clamp(s.rel + 8, -100, 100);
+        NpcSys.mem(p, sd.npc, 'story', `支线·${sd.title}`);
+      }
+      const nd = NpcSys.def(sd.npc);
+      if (nd) Log.add(`${nd.name} 对你刮目相看——此事之后，你们的关系更进了一步。（交情 +8）`, 'gain');
+    }
+    Story.chron(`支线「${sd.title}」结案`);
     UI.renderAll();
     Save.autoSave(true);
   },
@@ -9181,11 +9353,15 @@ const QuestSys = {
     }
     const sideRows = this.SIDES.map(sd => {
       const done = !!q.side[sd.id];
-      const locked = p.realmIdx < sd.minRealm;
+      const prevDone = !sd.prev || !!q.side[sd.prev];
+      const npcName = sd.npc ? ((NpcSys.def(sd.npc) || {}).name || '') : '';
+      const npcTag = npcName ? ` <span class="tag magic" title="${npcName}：结案增进交情，写入共同记忆">◈ ${npcName}</span>` : '';
+      const locked = p.realmIdx < sd.minRealm || !prevDone;
       const allDone = sd.steps.every(st => this.stepDone(st, p));
       let state = '<span class="tag">进行中</span>';
       let action = '';
       if (done) state = '<span class="tag safe">已了结</span>';
+      else if (!prevDone) { const prevSd = this.SIDES.find(x => x.id === sd.prev); state = `<span class="tag">前置 · ${prevSd ? prevSd.title : sd.prev}</span>`; }
       else if (locked) state = `<span class="tag">${GameData.REALM_NAMES[sd.minRealm]}期解锁</span>`;
       else if (allDone) { state = '<span class="tag warn">可结案</span>'; action = `<button class="btn btn-sm btn-primary" data-action="quest-side" data-side="${sd.id}">结 案</button>`; }
       const stepTxt = sd.steps.map(st => {
@@ -9195,7 +9371,7 @@ const QuestSys = {
       }).join('');
       return `
       <div class="card side-card ${done ? 'side-done' : ''}">
-        <div class="card-title">支线 · ${sd.title} ${state}</div>
+        <div class="card-title">支线 · ${sd.title} ${state}${npcTag}</div>
         <div class="card-desc">${done ? sd.ending : sd.story}</div>
         ${done ? '' : `<div class="q-steps">${stepTxt}</div><div class="tip-line">酬谢：${this.rewardText(sd.reward)}</div>${action ? `<div class="action-row">${action}</div>` : ''}`}
       </div>`;
@@ -9215,20 +9391,33 @@ const QuestSys = {
     c8_end: { together: '立誓同生共死', entrust: '托付后事于至交', alone: '独自承担因果' },
     c9_end: { redeem: '渡宗主残魂往生', execute: '一剑斩尽，恩怨两清', walk: '转身不问，随劫火而灭' },
   },
-  openArchive() {
+  /** v19 问道录 2.0：剧情回顾 / 人物志 / 大事年表 / 抉择树（四页签） */
+  openArchive(tab = 'story') {
     const p = Game.player;
+    const tabs = [['story', '📜 剧情回顾'], ['figures', '👤 人物志'], ['chron', '🗓 大事年表'], ['choices', '⚖ 抉择树']];
+    const tabHtml = `<div class="action-row" style="margin:0 0 8px">${tabs.map(([k, label]) =>
+      `<button class="btn btn-sm ${k === tab ? 'btn-primary' : ''}" data-action="quest-archive-tab" data-tab="${k}">${label}</button>`).join('')}</div>`;
+    let body = '';
+    if (tab === 'figures') body = this.archiveFigures(p);
+    else if (tab === 'chron') body = this.archiveChron(p);
+    else if (tab === 'choices') body = this.archiveChoices(p);
+    else body = this.archiveStory(p);
+    UI.popup({ title: '📜 问道录', html: tabHtml + body, options: [{ text: '合 上', value: true, primary: true }] });
+  },
+  /** 页签：剧情回顾 */
+  archiveStory(p) {
     const seen = (p.story && p.story.seen) || {};
     let body = '';
     for (let i = 0; i < this.CHAPTERS.length; i++) {
       const def = this.CHAPTERS[i];
       const cn = this.CN9[i];
       const rows = [];
-      for (const [suffix, label] of [['open', '开篇'], ['mid', '中段'], ['end', '章末']]) {
+      for (const [suffix, label] of [['open', '开篇'], ['mid', '中段'], ['mid2', '暗线'], ['end', '章末']]) {
         const sid = `c${i + 1}_${suffix}`;
         if (!seen[sid]) continue;
         const story = GameData.STORIES[sid];
         if (!story) continue;
-        rows.push(`<button class="btn btn-sm" data-action="quest-reread" data-sid="${sid}">${label} · ${story.title.replace(/^第.+章 · /, '') || label}</button>`);
+        rows.push(`<button class="btn btn-sm" data-action="quest-reread" data-sid="${sid}">${label} · ${story.title.replace(/^第.+章 · /, '').replace(/^终章 · /, '') || label}</button>`);
       }
       if (!rows.length) continue;
       let choiceLine = '';
@@ -9238,8 +9427,75 @@ const QuestSys = {
       }
       body += `<div class="shop-section-title">◈ 第${cn}章 · ${def.title}</div><div class="action-row" style="margin:0 0 4px">${rows.join('')}</div>${choiceLine}`;
     }
+    // 个人线回顾
+    const plRows = Object.entries(GameData.PERSONAL).map(([nid, def]) => {
+      const done = (p.personal || {})[nid] || 0;
+      if (!done) return '';
+      const acts = def.acts.slice(0, done).map(a => `<button class="btn btn-sm" data-action="quest-reread" data-sid="${a.key}">${a.title}</button>`).join('');
+      return `<div class="tip-line">◈ ${def.arc}（${done}/${def.acts.length}）</div><div class="action-row" style="margin:0 0 4px">${acts}</div>`;
+    }).filter(Boolean).join('');
+    if (plRows) body += `<div class="shop-section-title">◈ 个人线</div>${plRows}`;
     if (!body) body = '<div class="tip-line">问道录尚是白卷——随着主线推进，你看过的每一段剧情都会收录在此，可随时重读。</div>';
-    UI.popup({ title: '📜 问道录 · 剧情回顾', html: body, options: [{ text: '合 上', value: true, primary: true }] });
+    return body;
+  },
+  /** 页签：人物志（主线角色 + 江湖修士的相逢与记忆） */
+  archiveFigures(p) {
+    const seen = (p.story && p.story.seen) || {};
+    const APPEAR = { c_laoren: null, c_ling: 'c1_mid', c_xuanying: 'c2_open', c_zongzhu: 'c5_open', c_zhenling: 'c5_open', c_shanggu: 'c6_mid', c_zhangmen: 'c7_open', c_xuanji: 'c7_mid' };
+    const rows = [];
+    for (const [id, c] of Object.entries(GameData.CHARACTERS)) {
+      const appearKey = APPEAR[id];
+      if (appearKey && !seen[appearKey]) continue;
+      let sub = `${c.title} · 立场：${c.stance}`;
+      let memHtml = '';
+      if (c.npc) {
+        const s = NpcSys.state(p, c.npc);
+        const srole = (GameData.STORY_ROLES || {})[c.npc];
+        if (s && s.met) {
+          sub = `${c.title} · 关系：<b>${NpcSys.tierOf(Math.max(0, s.rel)).name}</b>（${s.rel > 0 ? '+' : ''}${s.rel}）`;
+          const pl = GameData.PERSONAL[c.npc];
+          if (pl) sub += ` · 个人线【${pl.arc}】 ${(p.personal || {})[c.npc] || 0}/${pl.acts.length}`;
+          const mems = (s.mem || []).map(m => `${NpcSys.MEM_TYPE[m.t] || '旧事'}：${m.x}`).slice(-4);
+          if (mems.length) memHtml = `<div class="figure-mem">共同回忆 —— ${mems.join('；')}</div>`;
+        } else if (srole) {
+          sub += ` · 尚未相逢`;
+        } else {
+          continue;
+        }
+        if (srole) sub += `<br><span style="color:var(--text-faint)">主线定位：${srole.role}</span>`;
+      }
+      rows.push(`
+      <div class="figure-card">
+        <div class="figure-portrait">${Art.portrait(c.look)}</div>
+        <div class="figure-info">
+          <div class="figure-name">${c.name} <span class="tag ${c.stance === '敌' ? 'danger' : c.stance === '友' ? 'safe' : ''}">${c.role}</span></div>
+          <div class="figure-sub">${sub}</div>
+          <div class="figure-mem">${c.desc}</div>
+          ${memHtml}
+        </div>
+      </div>`);
+    }
+    if (!rows.length) rows.push('<div class="tip-line">尚未与任何人物结缘。</div>');
+    return rows.join('');
+  },
+  /** 页签：大事年表 */
+  archiveChron(p) {
+    const list = (p.chronicle || []).slice();
+    if (!list.length) return '<div class="tip-line">年表尚无着墨——主线推进、境界突破、支线结案与个人线落幕，都会记入此册。</div>';
+    return list.map(e => `<div class="chron-line"><span class="chron-day">第${Math.floor(e.d / 365) + 1}年</span><span>${e.txt}</span></div>`).join('');
+  },
+  /** 页签：抉择树 */
+  archiveChoices(p) {
+    const choices = (p.story && p.story.choices) || {};
+    let body = '';
+    for (let i = 0; i < this.CHAPTERS.length; i++) {
+      const key = `c${i + 1}_end`;
+      const val = choices[key];
+      const label = val && this.CHOICE_LABELS[key] && this.CHOICE_LABELS[key][val];
+      body += `<div class="chron-line"><span class="chron-day">第${this.CN9[i]}章</span><span>${label ? `⚖ ${label}` : '<span style="color:var(--text-faint)">尚未抉择</span>'}</span></div>`;
+    }
+    body += '<div class="tip-line" style="margin-top:6px">· 每一次章末抉择都已化作道心烙印，并悄然改写着此后的因果。</div>';
+    return body;
   },
   /** 重读某段剧情（只读模式，✕ 可关闭） */
   reread(sid) {
@@ -10937,6 +11193,7 @@ const Game = {
     'story-battle': () => Story.startBattle(),
     'story-close': () => Story.close(),
     'quest-review': () => QuestSys.openArchive(),
+    'quest-archive-tab': (d) => { UI.closePopup(); QuestSys.openArchive(d.tab); },
     'quest-reread': (d) => QuestSys.reread(d.sid),
     'quest-goto': (d) => { Game.actions['act-tab']({ tab: d.tab }); },
   },
