@@ -2,3 +2,7 @@ node_modules/
 gui-test-screenshots/
 dist/
 .DS_Store
+
+# v19 阶段〇 归档：半成品模块化与构建脚本（阶段十复活）
+attic/
+*.bak
