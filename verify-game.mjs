@@ -229,6 +229,8 @@ try {
     /战利品|击败|遁走|重伤/.test(logTxt) ? pass('T7 战斗结算日志') : fail('T7 战斗结算日志', '');
   }
 
+  await drainStory(page);   // v19：T7 探索可能完成章节目标，先清掉剧情链
+
   /* ---------- T8 坊市 ---------- */
   await clickSel(page, '[data-action="act-tab"][data-tab="shop"]');
   await sleep(300);
