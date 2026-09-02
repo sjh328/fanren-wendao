@@ -77,9 +77,10 @@ const Utils = {
     return (n / 100000000).toFixed(2).replace(/\.?0+$/, '') + '亿';
   },
   esc(s) {
-    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
-    ));
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   },
+  /** 获取装备槽中的物品ID（兼容旧版 string 与新版 {id, enhance}） */
+  eqId(eq) { return eq ? (typeof eq === 'string' ? eq : eq.id) : null; },
   sleep(ms) { return new Promise(r => setTimeout(r, ms)); },
   now() { return new Date().toLocaleString('zh-CN', { hour12: false }); },
   /** 稳定字符串哈希（v5：坊市行情 / NPC 行游轮换用，同输入同输出） */
@@ -1969,8 +1970,11 @@ const PlayerFactory = {
     /* 装备：槽位与物品必须匹配且真实存在 */
     out.equipped = { ...fresh.equipped, ...(p.equipped || {}) };
     for (const slot of Object.keys(out.equipped)) {
-      const def = out.equipped[slot] ? GameData.ITEMS[out.equipped[slot]] : null;
+      const eq = out.equipped[slot];
+      const eqId = eq ? (typeof eq === 'string' ? eq : eq.id) : null;
+      const def = eqId ? GameData.ITEMS[eqId] : null;
       if (!def || def.type !== 'artifact' || def.slot !== slot) out.equipped[slot] = null;
+      else if (typeof eq === 'string') out.equipped[slot] = { id: eq, enhance: 0 };
     }
     out.counters = { ...fresh.counters, ...(p.counters || {}) };
     out.flags = { ...fresh.flags, ...(p.flags || {}) };
@@ -2087,9 +2091,11 @@ const Stat = {
   /** 汇总已穿戴法宝的加成（v13：数值属性受强化等级 +10%/级 加成；套装加成并入） */
   equipBonus(p) {
     const total = {};
+    // v18: 装备槽位存 {id, enhance}，使用 Utils.eqId 兼容
     for (const slotId of Object.values(p.equipped)) {
-      if (!slotId) continue;
-      const def = GameData.ITEMS[slotId];
+      const id = Utils.eqId(slotId);
+      if (!id) continue;
+      const def = GameData.ITEMS[id];
       if (!def || !def.bonus) continue;
       const enhLv = (typeof ForgeSys !== 'undefined' && ForgeSys.lvOf) ? ForgeSys.lvOf(p, slotId) : 0;
       const enhMul = 1 + enhLv * 0.1;
@@ -2255,7 +2261,11 @@ const Cultivate = {
     }
     if (p.layer === 3) {
       const need = GameData.layerNeed(p.realmIdx, 3);
-      if (p.exp > need) p.exp = need;
+      // v18：溢出修为保留，突破后自动计入
+      if (p.exp > need) {
+        p.expOverflow = (p.expOverflow || 0) + (p.exp - need);
+        p.exp = need;
+      }
     }
     return leveled;
   },
@@ -2418,7 +2428,7 @@ const Cultivate = {
     Log.add('你收敛心神，向 <b>筑基</b> 瓶颈发起最后的冲击——气海翻涌，道基将成！', 'system');
     await Utils.sleep(700);
     if (Utils.chance(chance)) {
-      p.realmIdx = 1; p.layer = 0; p.exp = 0; p.insight = 0;
+      p.realmIdx = 1; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(1, 0) - 1); p.insight = 0; p.expOverflow = 0;
       p.breakStreak = 0;
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;
@@ -2638,16 +2648,27 @@ const Bag = {
     if (!def || def.type !== 'artifact' || !this.count(itemId)) return;
     this.removeItem(itemId, 1);
     const slot = def.slot;
-    if (p.equipped[slot]) Bag.addItem(p.equipped[slot], 1); // 旧装备回包
-    p.equipped[slot] = itemId;
+    // v18：装备槽存 {id, enhance} 对象，强化等级随实例走
+    const oldEnhance = p.equipped[slot] ? (p.equipped[slot].enhance || 0) : 0;
+    if (p.equipped[slot]) Bag.addItem(p.equipped[slot].id, 1); // 旧装备回包
+    const newEnhance = p.enhanced && p.enhanced[itemId] ? p.enhanced[itemId] : oldEnhance;
+    p.equipped[slot] = { id: itemId, enhance: newEnhance };
+    // 从 p.enhanced 中清除（现由槽位实例持有）
+    if (p.enhanced && p.enhanced[itemId]) delete p.enhanced[itemId];
     Log.add(`你装备了 <b>${def.name}</b>。`, 'gain');
     Game.afterAction();
   },
   unequip(slot) {
     const p = Game.player;
     if (!p.equipped[slot]) return;
-    Bag.addItem(p.equipped[slot], 1);
-    Log.add(`你卸下了 ${GameData.ITEMS[p.equipped[slot]].name}。`, 'info');
+    const eq = p.equipped[slot];
+    // v18：卸下时保留强化等级到 p.enhanced（回包后仍可追溯）
+    if (eq.enhance) {
+      if (!p.enhanced) p.enhanced = {};
+      p.enhanced[eq.id] = Math.min(eq.enhance, ForgeSys.MAX_LV);
+    }
+    Bag.addItem(eq.id, 1);
+    Log.add(`你卸下了 ${GameData.ITEMS[eq.id].name}。`, 'info');
     p.equipped[slot] = null;
     Game.afterAction();
   },
@@ -2740,7 +2761,16 @@ const Pill = {
 const ForgeSys = {
   MAX_LV: 10,
   /** 强化某 id 的当前等级 */
-  lvOf(p, id) { return (p.enhanced || {})[id] || 0; },
+  lvOf(p, id) {
+    // v18：先检查装备槽位（新格式 {id, enhance}），再检查 p.enhanced（旧格式）
+    if (p && p.equipped) {
+      for (const slot of ['weapon', 'armor', 'accessory']) {
+        const eq = p.equipped[slot];
+        if (eq && typeof eq === 'object' && eq.id === id && eq.enhance) return eq.enhance;
+      }
+    }
+    return (p.enhanced || {})[id] || 0;
+  },
   /** 强化成功率（%）：1~3 必成，之后逐级递减 */
   rate(lv) {
     if (lv <= 3) return 100;
@@ -2754,7 +2784,7 @@ const ForgeSys = {
   /** 执行强化 */
   async enhance(slot) {
     const p = Game.player;
-    const itemId = p.equipped[slot];
+    const itemId = p.equipped[slot] ? Utils.eqId(p.equipped[slot]) : null;
     if (!itemId) { UI.toast('该槽位尚未装备法宝'); return; }
     const def = GameData.ITEMS[itemId];
     const lv = this.lvOf(p, itemId);
@@ -2831,7 +2861,7 @@ const ForgeSys = {
   setBonus(p) {
     const total = {};
     if (!p.equipped) return total;
-    const worn = Object.values(p.equipped).filter(Boolean);
+    const worn = Object.values(p.equipped).filter(Boolean).map(e => (typeof e === 'string' ? e : e.id));
     for (const [sid, sdef] of Object.entries(GameData.SETS || {})) {
       const n = sdef.pieces.filter(id => worn.includes(id)).length;
       if (n >= sdef.pieces.length) {
@@ -2843,7 +2873,7 @@ const ForgeSys = {
   /** 已穿戴的套装名（UI 显示） */
   activeSets(p) {
     if (!p.equipped) return [];
-    const worn = Object.values(p.equipped).filter(Boolean);
+    const worn = Object.values(p.equipped).filter(Boolean).map(e => (typeof e === 'string' ? e : e.id));
     return Object.entries(GameData.SETS || {})
       .filter(([, sdef]) => sdef.pieces.every(id => worn.includes(id)))
       .map(([sid, sdef]) => sdef);
@@ -4176,7 +4206,8 @@ const Tribulation = {
       if (d && d.type === 'artifact' && d.slot === 'armor' && d.grade === grade) return { from: 'bag', id };
     }
     const eq = p.equipped.armor;
-    if (eq && GameData.ITEMS[eq].grade === grade) return { from: 'equipped', id: eq };
+    const eqId = eq ? Utils.eqId(eq) : null;
+    if (eqId && GameData.ITEMS[eqId].grade === grade) return { from: 'equipped', id: eqId };
     return null;
   },
   chances() {
@@ -4299,7 +4330,7 @@ const Tribulation = {
     await Utils.sleep(800);
     // 渡劫结果
     if (Utils.chance(chance)) {
-      p.realmIdx++; p.layer = 0; p.exp = 0; p.insight = 0;
+      p.realmIdx++; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(p.realmIdx, 0) - 1); p.insight = 0; p.expOverflow = 0;
       p.breakStreak = 0;   // v8 挫而愈坚：成功即清零
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;
@@ -4906,6 +4937,32 @@ const NpcSys = {
     const rp = Utils.clamp(s.realmIdx * 4 + s.layer, 0, 60);
     const mod = 0.92 + d.talent * 0.04;
     const realmIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
+    // v18：NPC 按性情配专属技能（切磋/恩怨不再退化为普攻对轰）
+    const temperSkills = {
+      '孤傲': [{ name: '傲剑诀', w: 40, kind: 'bleed', pct: 3, rounds: 2 }],
+      '温婉': [{ name: '杏林春风', w: 30, kind: 'heal', pct: 18 }, { name: '银针渡穴', w: 30, kind: 'weaken', pct: 20, rounds: 2 }],
+      '温润': [{ name: '水墨困阵', w: 35, kind: 'slow', pct: 25, rounds: 2 }],
+      '冷厉': [{ name: '寒刃破甲', w: 40, kind: 'defdown', pct: 25, rounds: 2 }],
+      '玲珑': [{ name: '穿心算盘', w: 35, kind: 'drain', mult: 1.1, leech: 0.4 }],
+      '豪爽': [{ name: '铁拳撼山', w: 40, kind: 'stun', rounds: 1 }],
+      '清冷': [{ name: '冰弦裂魂', w: 35, kind: 'freeze', rounds: 1 }],
+      '精明': [{ name: '金蝉脱壳', w: 30, kind: 'heal', pct: 15 }, { name: '算尽机关', w: 30, kind: 'defdown', pct: 20, rounds: 2 }],
+      '古怪': [{ name: '符火乱舞', w: 40, kind: 'burn', pct: 3.5, rounds: 2 }],
+      '淡泊': [{ name: '太极柔劲', w: 35, kind: 'weaken', pct: 25, rounds: 2 }, { name: '抱元守一', w: 25, kind: 'guard', def: 35, rounds: 2 }],
+      '慈悲': [{ name: '佛光普照', w: 35, kind: 'heal', pct: 20 }],
+      '狡黠': [{ name: '暗影刺', w: 40, kind: 'poison', pct: 3, rounds: 3 }],
+      '危险': [{ name: '魔煞噬魂', w: 35, kind: 'drain', mult: 1.2, leech: 0.5 }, { name: '血影咒', w: 30, kind: 'poison', pct: 4, rounds: 3 }],
+      '娇憨': [{ name: '剑花缭乱', w: 35, kind: 'bleed', pct: 2, rounds: 2 }],
+      '市侩': [{ name: '钱能通神', w: 30, kind: 'slow', pct: 20, rounds: 2 }],
+      '豪迈': [{ name: '裂石拳', w: 40, kind: 'stun', rounds: 1 }],
+      '儒雅': [{ name: '青萍剑诀', w: 35, kind: 'bleed', pct: 2.5, rounds: 2 }],
+      '圆滑': [{ name: '和气生财', w: 30, kind: 'heal', pct: 12 }, { name: '袖里乾坤', w: 30, kind: 'slow', pct: 20, rounds: 2 }],
+      '憨直': [{ name: '铁山靠', w: 40, kind: 'stun', rounds: 1 }],
+      '飘逸': [{ name: '星罗棋布', w: 35, kind: 'defdown', pct: 25, rounds: 2 }, { name: '天罡护体', w: 25, kind: 'guard', def: 30, rounds: 2 }],
+      '癫狂': [{ name: '醉仙乱舞', w: 40, kind: 'burn', pct: 4, rounds: 2 }],
+      '侠气': [{ name: '侠义剑', w: 40, kind: 'bleed', pct: 3, rounds: 2 }],
+    };
+    const skills = temperSkills[d.temper] || [{ name: '出手一击', w: 40, kind: 'bleed', pct: 2, rounds: 2 }];
     return {
       id: null, npcId: id, name: d.name, elite: false, power: rp,
       realmLabel: GameData.REALM_NAMES[realmIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
@@ -4914,6 +4971,7 @@ const NpcSys = {
       def: Math.round((4 + rp * 1.7) * mod),
       spd: Math.round((7 + rp * 0.9) * mod),
       dodge: 5, crit: 8,
+      skills, // v18：NPC 专属技能
       expGain: Math.round(30 * GameData.eco(realmIdx)),
       stoneGain: Math.round(Utils.rand(30, 55) * GameData.stoneEco(realmIdx)),
       dropTier: Math.min(4, Math.floor(realmIdx / 2) + 1),
@@ -7282,7 +7340,7 @@ const UI = {
     const eqNames = { weapon: '兵器', armor: '护甲', accessory: '饰品' };
     const eqHtml = Object.keys(eqNames).map(slot => {
       const it = p.equipped[slot];
-      const def = it ? GameData.ITEMS[it] : null;
+      const def = it ? GameData.ITEMS[Utils.eqId(it)] : null;
       return `<div class="equip-slot"><span>${eqNames[slot]}</span>
         <span>${def ? `${this.gradeSpan(def.name, def.grade)}${ForgeSys.enhText(p, it)} <button class="btn btn-sm" data-action="act-unequip" data-slot="${slot}">卸下</button>` : '<span style="color:var(--text-faint)">无</span>'}</span></div>`;
     }).join('');
@@ -7367,7 +7425,7 @@ const UI = {
     if (p.layer === 3 && p.exp >= need && p.realmIdx < 9) alert = { text: '修为圆满，可冲击瓶颈', go: 'cultivate', major: true };
     else if (p.realmIdx === 9 && p.layer === 3 && p.exp >= need && !p.flags.ascended) alert = { text: '真仙圆满，可白日飞升', go: 'cultivate', major: true };
     else if (p.realmIdx >= 1 && !p.dao) alert = { text: '大道未定，宜叩问大道', go: 'cultivate', major: true };
-    else if ((p.counters.gupianGot || 0) >= 9 && !p.bag.z_benming && !Object.values(p.equipped).includes('z_benming')) alert = { text: '九枚碎片集齐，可合成本命法宝', go: 'map', major: true };
+    else if ((p.counters.gupianGot || 0) >= 9 && !p.bag.z_benming && !Object.values(p.equipped).some(e => e && Utils.eqId(e) === 'z_benming')) alert = { text: '九枚碎片集齐，可合成本命法宝', go: 'map', major: true };
     else if ((p.karma || 0) >= 100) alert = { text: '孽障缠身，可斩三尸', go: 'cultivate', major: true };
     else if (QuestSys.SIDES.some(sd => !(p.quest || {}).side[sd.id] && p.realmIdx >= sd.minRealm && sd.steps.every(x => QuestSys.stepDone(x, p)))) alert = { text: '有支线奇遇可结案领赏', go: 'quest' };
     else if (p.poison > cap * 0.75) alert = { text: '丹毒将满，宜服解毒丹', go: 'cultivate' };
@@ -7912,7 +7970,7 @@ const UI = {
       <div class="tip-line" style="margin:0 0 6px">· 每月初三开市三日——如今巷口空空，唯有野猫。</div>`;
     // v13 祭炼强化（对已穿戴装备）
     const enhSlots = ['weapon', 'armor', 'accessory'].map(slot => {
-      const id = p.equipped[slot];
+      const id = p.equipped[slot] ? Utils.eqId(p.equipped[slot]) : null;
       if (!id) return '';
       const def = GameData.ITEMS[id];
       const lv = ForgeSys.lvOf(p, id);
@@ -8142,7 +8200,7 @@ const UI = {
       if (def.type === 'pill') btns = `<button class="btn btn-sm" data-action="act-use" data-item="${id}">服用</button>`;
       if (def.type === 'gongfa') btns = `<button class="btn btn-sm" data-action="act-learn" data-item="${id}">学习</button>`;
       if (def.type === 'artifact') {
-        const isOn = Object.values(p.equipped).includes(id);
+        const isOn = Object.values(p.equipped).some(e => e && Utils.eqId(e) === id);
         btns = isOn ? '' : `<button class="btn btn-sm" data-action="act-equip" data-item="${id}">装备</button>`;
       }
       btns += `<button class="btn btn-sm btn-danger" data-action="act-drop" data-item="${id}">丢弃</button>`;
