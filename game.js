@@ -153,8 +153,8 @@ const Art = {
     feizhou:  { sky: ['#dfe3ee', '#c3cbdd'], hills: ['#6a7898', '#4d5b7c', '#344064'], landmark: 'ship', mist: '#e2e7f2' },
     longyuan: { sky: ['#d6e2e6', '#b2c8cf'], hills: ['#3e6e80', '#2a5264', '#1a3a4a'], landmark: 'whirl', mist: '#cfdfe4' },
   },
-  /** 生成地图场景插画 SVG（viewBox 600x150） */
-  scene(mapId) {
+  /** 生成地图场景插画 SVG（viewBox 600x150）；season 0~3 叠加季节薄色 */
+  scene(mapId, season = -1) {
     const S = this.SCENES[mapId] || this.SCENES.village;
     const gid = 'sg' + mapId;
     // 三层山峦（折线剪影）
@@ -190,6 +190,7 @@ const Art = {
       ${hill(8, 34, S.hills[2], 0.95)}
       <ellipse cx="180" cy="132" rx="200" ry="26" fill="${S.mist}" opacity="0.65"/>
       <ellipse cx="470" cy="140" rx="220" ry="24" fill="${S.mist}" opacity="0.5"/>
+      ${season >= 0 ? `<rect width="600" height="150" fill="${this.SEASON_TINT[season] || 'none'}" opacity="0.07"/>` : ''}
     </svg>`;
   },
   /** 战斗敌方剪影立绘（species 形象；elite 加妖光角标） */
@@ -227,6 +228,33 @@ const Art = {
       ${item}
     </g></svg>`;
   },
+  /** v19：常驻修士的程序化肖像参数（宗门定袍色，性情定持物与发色——二十四人全覆盖） */
+  SECT_ROBE: { qingyun: '#5a7a9a', danxia: '#6a9a7a', wanbao: '#9a8a5a', panyan: '#8a6a4a', zhoutian: '#4a6a9a' },
+  TEMPER_LOOK: {
+    '孤傲': { item: 'sword', hair: '#3a4a5a' }, '温婉': { item: 'herb', hair: '#8a6a4a' },
+    '温润': { item: 'scroll', hair: '#4a4038' }, '冷厉': { item: 'blade', hair: '#2a2620' },
+    '玲珑': { item: 'fan', hair: '#4a3a42' }, '豪爽': { item: 'none', hair: '#3a2e22' },
+    '清冷': { item: 'qin', hair: '#d8dce2' }, '精明': { item: 'fan', hair: '#3a3028' },
+    '古怪': { item: 'talisman', hair: '#c8c2b2' }, '淡泊': { item: 'scroll', hair: '#e0dccf' },
+    '慈悲': { item: 'herb', hair: '#b8b2a2' }, '狡黠': { item: 'shadow', hair: '#2a2620' },
+    '危险': { item: 'shadow', hair: '#1e1a24' }, '娇憨': { item: 'flute', hair: '#6a4a3a' },
+    '市侩': { item: 'fan', hair: '#4a4038' }, '豪迈': { item: 'none', hair: '#3a2e22' },
+    '儒雅': { item: 'scroll', hair: '#4a4038' }, '圆滑': { item: 'fan', hair: '#5a4a3a' },
+    '憨直': { item: 'none', hair: '#3a3028' }, '飘逸': { item: 'flute', hair: '#c8d2da' },
+    '癫狂': { item: 'wine', hair: '#c8c2b2' }, '侠气': { item: 'blade', hair: '#3a3226' },
+  },
+  npcLook(d) {
+    if (!d) return null;
+    const t = this.TEMPER_LOOK[d.temper] || { item: 'none', hair: '#4a4038' };
+    return { robe: this.SECT_ROBE[d.sect] || '#7a7a6a', hair: t.hair, item: t.item, aura: this.SECT_ROBE[d.sect] || '#8a8a7a' };
+  },
+  /** v19：季节色调（孟春嫩/仲夏翠/季秋赭/隆冬灰，按游戏月叠加一层薄色） */
+  SEASON_TINT: ['#a8c89a', '#8ab89a', '#c8a878', '#a8b0b8'],
+  seasonOf(p) {
+    const month = p ? Math.floor((p.day || 0) / 30) % 12 : 0;
+    return month <= 2 ? 0 : month <= 5 ? 1 : month <= 8 ? 2 : 3;
+  },
+
   /** v19：人物半身像（CHARACTERS.look 参数化渲染；剧情演出与人物志共用）
    *  look = { robe 袍色, hair 发色, item 标志物, aura 灵光色 } */
   portrait(look) {
@@ -306,6 +334,7 @@ const Narrative = {
  * 事件音效默认关；古琴背景乐单独开关、基础音量 20%；总音量滑条统一调节。
  * ====================================================================== */
 const Ambience = {
+  mood: 'calm',   // v19 情境配乐
   ctx: null, master: null, musicBus: null,
   sfxOn: false, musicOn: false, vol: 0.8,
   MUSIC_BASE: 0.2,
@@ -452,19 +481,26 @@ const Ambience = {
   startMusic() {
     if (!this.ensureCtx() || this.musicTimer) return;
     this.musicStep = 0;
+    const mood = this.mood || 'calm';
     const tick = () => {
       const t = this.ctx.currentTime + 0.02;
       this.musicStep++;
       const P = this.PENTA;
-      if (this.musicStep % 8 === 1) this.tone(P[0] / 2, t, 3.2, { type: 'sine', gain: 0.20, dest: this.musicBus });
-      if (Utils.chance(62)) {
-        const f = P[Math.floor(Math.random() * P.length)];
-        this.tone(f, t, 1.6, { type: 'triangle', gain: 0.30, dest: this.musicBus });
+      if (this.musicStep % 8 === 1) this.tone(P[0] / (mood === 'battle' ? 2 : 2), t, mood === 'battle' ? 2.2 : 3.2, { type: 'sine', gain: 0.20, dest: this.musicBus });
+      if (Utils.chance(mood === 'battle' ? 78 : 62)) {
+        const f = P[Math.floor(Math.random() * P.length)] * (mood === 'battle' && Utils.chance(40) ? 2 : 1);
+        this.tone(f, t, mood === 'battle' ? 1.1 : 1.6, { type: 'triangle', gain: 0.30, dest: this.musicBus });
         if (Utils.chance(30)) this.tone(f * 2, t + 0.03, 0.8, { type: 'sine', gain: 0.10, dest: this.musicBus });
       }
     };
     tick();
-    this.musicTimer = setInterval(tick, 640);
+    this.musicTimer = setInterval(tick, this.mood === 'battle' ? 460 : 640);
+  },
+  /** v19 情境配乐：战斗急促（短音阶+高八度倾向），平静舒缓 */
+  setMood(m) {
+    if (this.mood === m) return;
+    this.mood = m;
+    if (this.musicOn && this.musicTimer) { this.stopMusic(); this.startMusic(); }
   },
   stopMusic() { if (this.musicTimer) { clearInterval(this.musicTimer); this.musicTimer = null; } },
   setSfx(on) { this.sfxOn = !!on; if (on && this.ctx === null) this.ensureCtx(); if (on) this.sfx('rare'); this.persist(); this.render(); },
@@ -8123,6 +8159,7 @@ const Battle = {
     this.speed = this.speed || this.loadSpeed();
     p.counters.battles++;
     document.getElementById('battle-modal').classList.remove('hidden');
+    if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('battle');   // v19 情境配乐
     this.log(`⚔ 于${ctx.mapName || '荒野'}遭遇 <b class="grade-0">${enemy.name}</b>（${enemy.realmLabel}${enemy.elite ? ' · 精英' : ''}）！`, 'warn');
     if (enemy._storyBark) this.log(enemy._storyBark, 'log-event');   // v19 剧情战入场台词
     if (ctx.spar) this.log('此为切磋较技，点到为止，不伤性命。', 'log-system');
@@ -9236,6 +9273,7 @@ const Battle = {
 
   /** 结束战斗（统一收尾） */
   end() {
+    if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 情境配乐
     const B = this.active;
     const p = Game.player;
     // 邪修：杀伐之气萦绕，每场战斗孽障 +1
@@ -10819,7 +10857,7 @@ const UI = {
         const magic = WorldSys.isMagic(p, m.id) ? '<span class="tag magic">魔域</span>' : '';
         return `
       <div class="card map-card">
-        <div class="map-scene">${Art.scene(m.id)}</div>
+        <div class="map-scene">${Art.scene(m.id, Art.seasonOf(Game.player))}</div>
         <div class="card-title">${m.name}${magic}<span class="tag ${diff.cls}">${diff.text}</span></div>
         <div class="card-desc">${m.desc}${magic ? '<br><span class="neg">魔气狂化：妖魔更强，所获亦丰。</span>' : ''}</div>
         <div class="action-row"><button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button></div>
@@ -10962,7 +11000,7 @@ const UI = {
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${d.name} <span style="color:var(--text-faint);font-size:12px">${d.title} · ${d.temper}</span> <span class="tag ${relCls}">${lbl} ${s.rel > 0 ? '+' : ''}${s.rel}</span> ${tags.join('')}</div>
+          <div class="gf-name"><span style="display:inline-block;vertical-align:middle;width:34px;height:34px;border-radius:6px;overflow:hidden;margin-right:6px">${Art.portrait(Art.npcLook(d))}</span>${d.name} <span style="color:var(--text-faint);font-size:12px">${d.title} · ${d.temper}</span> <span class="tag ${relCls}">${lbl} ${s.rel > 0 ? '+' : ''}${s.rel}</span> ${tags.join('')}</div>
           <div class="gf-desc">${d.desc}<br><span style="color:var(--text-faint)">${GameData.REALM_NAMES[s.realmIdx]}${GameData.LAYER_NAMES[s.layer]} · 现于${s.alive ? mapName(s.map) : '殒身之地'} · 战力${powerText}</span></div>
         </div>
         <div class="gf-actions">${btns}</div>
