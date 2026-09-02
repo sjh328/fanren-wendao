@@ -302,6 +302,7 @@ try {
     await page.evaluate(() => {
       const p = Game.player;
       if (!p.bag.w_qinggang) Bag.addItem('w_qinggang', 1);
+      p.equipped.weapon = null;   // v19：先卸下旧兵器，避开装备对比弹窗
       Bag.equip('w_qinggang');
       p.enhanced = { w_qinggang: 2 };
       ForgeSys.enhance('weapon');

@@ -1024,6 +1024,17 @@ const GameData = {
         { id: 'lianshan', name: '连山', slot: 'weapon', desc: '连击上限+3', onHit: { comboUp: 3 } },
       ],
     },
+    /* ---------- v19 数值说明书（平衡设计意图） ----------
+     * · 修为曲线：EXP_BASE 每境 ×4.6 左右，产出端 eco=4.6^r 同步放大——单位时间进度与境界无关，
+     *   实际节奏由行动频率决定；溢出修为折半带入新境，杜绝刷层浪费。
+     * · 灵石曲线：stoneEco=3.8^r 略慢于修为——后期灵石相对紧俏，消费端（拍卖/布施/喂养/营造）
+     *   按 2.2^r 定价吸收通胀。
+     * · 战斗：afterDef 分母 140 使防御收益在 def≈atk 时约五成减伤；闪避钳 35%、暴击钳 75%
+     *   防极端构筑；精英词缀与 Boss 二阶段补偿后期数值碾压。
+     * · 渡劫：基准 40+悟×2，气运/孽障 ±0.2/点，静修+15%；三策期望拉平（硬抗低方差/法宝高成本/
+     *   借地孽障代价），劫威随境界 ×0.965^r 软化，连败保底 +5%/次（上限 15%）。
+     * · 剧情/养成联动：残玉共鸣 +1.5%全属性/章、心魔凝练 +1%/次、本命喂养 +1%/阶、个人线 2~5%——
+     *   合计上限约 +25%，与装备强化（+10%/级×三件）并行不重叠。 */
     // 强化
     ENHANCE: {
       MAX_LV: 10,                 // 强化上限
@@ -1614,6 +1625,10 @@ const GameData = {
     { id: 'f4', out: 'z_xingpan',   need: { m_xuantie: 1, m_lingzhi: 1 },            rate: 60 },
     { id: 'f5', out: 'z_hunpo',     need: { m_lianhun: 2, m_bingpo: 1 },             rate: 55 },
     { id: 'f6', out: 'w_tianwen',   need: { m_shentie: 1, m_xingchen: 2, m_jiaojin: 1 }, rate: 50 },
+    /* ---- v19 血河套装（炼器唯一产出） ---- */
+    { id: 'f9', out: 's_hj_sha',   need: { m_shentie: 2, m_jiaojin: 2, m_haixin: 1 },  rate: 45 },
+    { id: 'f10', out: 's_hj_pao',  need: { m_shentie: 1, m_haixin: 2, m_shenmu: 1 },   rate: 45 },
+    { id: 'f11', out: 's_hj_ling', need: { m_lianhun: 2, m_jiaojin: 2 },                rate: 45 },
     { id: 'f7', out: 'a_taiyi',     need: { m_xuecan: 2, m_shenmu: 1, m_xianjing: 1 },   rate: 45 },
     { id: 'f8', out: 'z_longyu',    need: { m_longxue: 1, m_jiaojin: 1, m_haixin: 1 },   rate: 45 },
     { id: 'f9', out: 's_xt_jian',   need: { m_xuantie: 4, m_bingpo: 2 },             rate: 55 },
@@ -1697,6 +1712,12 @@ const GameData = {
     { id: 'hunter',  name: '山村猎户', desc: '自幼打猎熬筋骨，根骨体魄过人，悟性稍逊。', mods: { gen: 2, body: 2, comp: -1, luck: -1 }, start: { stones: 220, bag: { w_tiejian: 1, pill_liaoshang: 3 } } },
     { id: 'noble',   name: '世家子弟', desc: '家学渊源，悟性福缘俱佳，根骨体魄平平。', mods: { comp: 2, luck: 1, gen: -1, body: -1 }, start: { stones: 1200, bag: { gf_tuna: 1, pill_juqi: 5 } } },
     { id: 'scholar', name: '书院书生', desc: '读书养气，触类旁通，唯体魄孱弱。', mods: { comp: 2, luck: 2, body: -2, gen: -1 }, start: { stones: 400, bag: { pill_zhuji: 1, pill_juqi: 2 } } },
+    /* ---- v19 出身扩充 ---- */
+    { id: 'heritor', name: '血河遗孤', desc: '血脉里刻着三百年前的血债——孽障缠身，残玉先鸣。', mods: { gen: 1, luck: -1 }, start: { stones: 100, bag: { pill_juqi: 2 }, karma: 30, jade: 1 } },
+    { id: 'herbal', name: '荒野药农', desc: '识百草知药性，起步便有满囊灵材。', mods: { luck: 2, comp: 1, gen: -1 }, start: { stones: 300, bag: { m_lingcao: 8, m_lingzhi: 2, seed_lingcao: 2 } } },
+    { id: 'escort', name: '镖局护院', desc: '刀口舔血练出的硬功夫，家底殷实。', mods: { body: 2, gen: 1, comp: -1 }, start: { stones: 1500, bag: { w_qinggang: 1, pill_liaoshang: 4 } } },
+    { id: 'tamer', name: '妖谷驯手', desc: '自幼与妖兽为伴，深谙驯服之道。', mods: { luck: 2, body: 1, comp: -1 }, start: { stones: 600, bag: { m_neidan: 2 } }, tameSkill: 30 },
+    { id: 'merchant', name: '商会学徒', desc: '算盘打得比剑快——财路通仙路。', mods: { comp: 1, luck: 1, gen: -1 }, start: { stones: 3000, bag: {} } },
   ],
 
   /* ---------- §23 世界大事件（每 100 游戏年一次，永久改变格局） ---------- */
@@ -5410,6 +5431,20 @@ const Explore = {
       const ambPool = GameData.FLAVOR.ambience[map.id];
       if (ambPool && ambPool.length) Log.add(Utils.pick(ambPool), 'info');
     }
+    // v19 仙界轶闻：飞升之后，人间偶有传闻上达仙听
+    if (!Battle.active && p.flags.ascended && Utils.chance(12)) {
+      const today = Math.floor(p.day || 0);
+      if (p._anecDay !== today) {
+        p._anecDay = today;
+        Log.add('【仙界轶闻】' + Utils.pick([
+          '下界传来消息：某小宗门开山收徒，千里排队——听说掌门曾与你有一面之缘。',
+          '有凡人在你当年渡劫的雷台旧址立了庙，香火竟意外鼎盛。',
+          '血河故道上空的云，今年是百年难得一见的澄澈——故道成了游历圣地。',
+          '一位散修无名无姓，却把你当年随手留下的半张符纸供在家中，说是救过全村。',
+          '天外的星图又变了一分——守星人说，那是你飞升那日踏出的痕迹。',
+        ]), 'event');
+      }
+    }
     // 孽障：仇家循迹寻仇 / §24 恩怨：宿敌趁你历练偷袭
     if (!Battle.active) {
       const ambId = NpcSys.pickAmbusher(p);
@@ -6087,6 +6122,8 @@ window.DaoxinSys = DaoxinSys;
  * ====================================================================== */
 const AuctionSys = {
   LOT_POOL: [
+    { item: 's_hj_sha', base: 16000 }, { item: 's_hj_pao', base: 15000 }, { item: 's_hj_ling', base: 14000 },
+    { item: 's_xy_jian', base: 30000 }, { item: 's_xy_ling', base: 28000 },
     { item: 'gf_zhoutian', base: 6000 }, { item: 'gf_leishen', base: 9000 },
     { item: 'gf_hunyuan', base: 9000 }, { item: 'gf_niepan', base: 9000 },
     { item: 'w_sanqing', base: 12000 }, { item: 'pill_zaohua', base: 15000 },
@@ -7567,6 +7604,12 @@ const NpcSys = {
     if (!d || !s || !s.alive) return;
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴
+    // v19 前世闪回：转世者初逢前世恩怨者，旧忆翻涌
+    if (s.pastLife && !s._flashback) {
+      s._flashback = true;
+      Log.add(`<b>前尘如潮——</b>你盯着 ${d.name} 的眉眼，一段不属于此生的记忆轰然翻涌：前世，你与TA之间，横着一笔血债。`, 'warn');
+      Story.chron(`前世闪回：与 ${d.name} 的旧债翻涌`);
+    }
     const greet = Narrative.greet();   // v5：道途礼数
     const recall = this.recallLine(p, id);   // v19 回忆杀
     Log.add(`途中遇上了 ${GameData.SECTS.find(x => x.id === d.sect) ? GameData.SECTS.find(x => x.id === d.sect).name + '的' : ''}<b>${d.name}</b>（${d.title}）。${greet ? `<span style="color:var(--text-faint)">（${greet}）</span>` : ''}`, 'event');
@@ -8084,6 +8127,9 @@ const ReincarnationSys = {
     if (origin) {
       p2.stones.low += origin.start.stones || 0;
       for (const [id, n] of Object.entries(origin.start.bag || {})) p2.bag[id] = (p2.bag[id] || 0) + n;
+      if (origin.start.karma) p2.karma = (p2.karma || 0) + origin.start.karma;   // v19 血河遗孤：孽障随行
+      if (origin.start.jade) p2.jade = Math.max(p2.jade || 0, origin.start.jade);   // v19：残玉先鸣
+      if (origin.tameSkill) p2.tameSkill = Math.max(p2.tameSkill || 0, origin.tameSkill);   // v19：驯手心得
     }
     p2.reinc = { lives: legacy.lives, marks: legacy.marks, compPct: 10, grudges: grudges };
     // v18 传承树：每3枚印记解锁一层天赋
@@ -8093,6 +8139,10 @@ const ReincarnationSys = {
     if (treeTier >= 3 && kept) p2.bag[kept] = (p2.bag[kept] || 0) + 1; // 多带一件法宝
     if (treeTier >= 4) p2.attrs.luck = Math.min(10, p2.attrs.luck + 2); // 福缘+2
     if (treeTier >= 5) { for (const k of ['gen', 'comp', 'luck', 'body']) p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } // 全属性+1
+    // v19 传承树扩至八层
+    if (treeTier >= 6) p2.reputation = (p2.reputation || 0) + 30;   // 名门之后：初始声望
+    if (treeTier >= 7) p2.fortune = (p2.fortune || 0) + 10;   // 福泽绵长：初始气运
+    if (treeTier >= 8) p2.bag['m_gupian'] = (p2.bag['m_gupian'] || 0) + 1;   // 骨血传玉：自带一枚上古碎片
     if (kept) p2.bag[kept] = 1;
     for (const gid of grudges) {
       const s = p2.npcs[gid];

@@ -172,7 +172,10 @@ try {
   await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
   await sleep(300);
   let battleFound = false;
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 25; i++) {
+    // v19：剧情链（插章/暗线）可能在探索间隙弹出——每次探索前排空
+    const storyOpen = await page.$eval('#story-modal', el => !el.className.includes('hidden')).catch(() => false);
+    if (storyOpen) await drainStory(page);
     await clickSel(page, '[data-action="act-explore"][data-map="village"]');
     await sleep(600);
     // NPC 弹窗直接关闭
@@ -262,6 +265,7 @@ try {
     jiedu >= 1 ? pass('T8 坊市购买解毒丹') : fail('T8 坊市购买', 'bag无解毒丹');
     // 功法购买+学习
     if ((await wealth()) >= 300) {
+      await page.evaluate(() => { Game.player.stones.low = 100000; });   // v19：行情有涨跌（±20%），垫足灵石消除随机性
       await clickSel(page, '[data-action="act-buy"][data-item="gf_canghai"]');
       await sleep(400);
       let has = await page.evaluate(() => !!JSON.parse(localStorage.getItem('fanren_wd_auto')).player.bag.gf_canghai);
