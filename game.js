@@ -227,6 +227,43 @@ const Art = {
       ${item}
     </g></svg>`;
   },
+  /** v19：人物半身像（CHARACTERS.look 参数化渲染；剧情演出与人物志共用）
+   *  look = { robe 袍色, hair 发色, item 标志物, aura 灵光色 } */
+  portrait(look) {
+    const L = look || {};
+    const robe = L.robe || '#6a7a8a', hair = L.hair || '#4a4038', aura = L.aura || robe;
+    const ITEMS = {
+      herb:    '<path d="M64 40 q4 -8 10 -9 q-1 8 -6 11 q6 1 8 5 q-8 2 -12 -2 Z" fill="#5a8a4a" stroke="#3e6b34" stroke-width="1"/>',
+      shadow:  '<path d="M56 22 q10 4 8 14 q8 2 6 10 q-10 2 -14 -4 q-6 -10 0 -20 Z" fill="#241c30" stroke="#241c30" stroke-width="1" opacity="0.9"/>',
+      furnace: '<path d="M60 34 h12 l-2 14 q-4 3 -8 0 Z" fill="#7c2a22" stroke="#4a1812" stroke-width="1"/><circle cx="66" cy="30" r="2.4" fill="#e8a04a" stroke="none"/>',
+      sword:   '<path d="M58 44 L74 18" stroke-width="2.6" fill="none"/><path d="M56 46 l4 -2" stroke-width="3" fill="none"/>',
+      scroll:  '<rect x="58" y="30" width="14" height="10" rx="1.5" fill="#e8e2d0" stroke="#8a7a5a" stroke-width="1"/><path d="M61 33 h8 M61 36 h8" stroke="#8a7a5a" stroke-width="1" fill="none"/>',
+      seal:    '<rect x="60" y="32" width="10" height="10" rx="1" fill="#8a7ab0" stroke="#5a4a7a" stroke-width="1"/><circle cx="65" cy="37" r="2.2" fill="#e8e2f4" stroke="none"/>',
+      orb:     '<circle cx="66" cy="36" r="5.5" fill="#4a9aaa" stroke="#2a6a7a" stroke-width="1.2"/><circle cx="64" cy="34" r="1.6" fill="#d0f0f6" stroke="none"/>',
+      jade:    '<circle cx="66" cy="36" r="5" fill="none" stroke="#5aa06a" stroke-width="2.4"/><circle cx="66" cy="36" r="1.8" fill="#8ac89a" stroke="none"/>',
+      flute:   '<path d="M56 42 L74 34" stroke-width="2.2" fill="none"/>',
+      wine:    '<path d="M58 32 q6 -4 12 0 l-2 12 q-4 2 -8 0 Z" fill="#8a5a2a" stroke="#5a3a1a" stroke-width="1"/>',
+      fan:     '<path d="M58 40 q10 -12 16 -6 q-4 8 -12 10 Z" fill="#c9b68a" stroke="#8a7a5a" stroke-width="1"/>',
+      blade:   '<path d="M58 42 Q68 34 76 22" stroke-width="3" fill="none"/>',
+      qin:     '<rect x="56" y="34" width="18" height="7" rx="2" fill="#5a4432" stroke="#3a2c20" stroke-width="1"/><path d="M59 37 h12" stroke="#c9b68a" stroke-width="0.8" fill="none"/>',
+      none:    '',
+    };
+    const item = ITEMS[L.item] || ITEMS.none;
+    return `<svg viewBox="0 0 88 66" class="fig-svg portrait-svg" aria-hidden="true">
+      <circle cx="44" cy="34" r="30" fill="${aura}" opacity="0.10"/>
+      <circle cx="44" cy="34" r="30" fill="none" stroke="${aura}" stroke-width="0.8" opacity="0.28"/>
+      <g stroke="${robe}" fill="${robe}">
+        <path d="M18 66 L21 42 Q30 34 40 35 L52 36 Q62 35 68 44 L70 66 Z"/>
+        <circle cx="40" cy="24" r="8.4" fill="#efe6d4"/>
+        <path d="M31.5 22 Q33 12 40 12 Q47 12 48.5 22 Q46 17 40 17 Q34 17 31.5 22 Z" fill="${hair}" stroke="${hair}"/>
+      </g>
+      <g stroke="${hair}" stroke-width="1" fill="none" opacity="0.9">
+        <circle cx="37" cy="24" r="0.9" fill="#3a3028" stroke="none"/><circle cx="43.5" cy="24" r="0.9" fill="#3a3028" stroke="none"/>
+        <path d="M37.5 29 q2.5 1.6 5 0"/>
+      </g>
+      ${item}
+    </svg>`;
+  },
 };
 
 /* ======================================================================
@@ -1494,6 +1531,111 @@ const GameData = {
   },
 
   /* ======================================================================
+   * v19 世界观圣经 LORE（单一事实源：所有剧情文本取材于此，杜绝设定漂移）
+   * ====================================================================== */
+  LORE: {
+    intro: '三百年前，以魔入道的血河宗立于血河故道之上，宗中三百七十一口。一夜之间，九宗联手围杀，满门覆灭——世人皆以为血案已了，唯有半枚残玉知道真相。',
+    bloodRiver: {
+      name: '血河宗',
+      fall: '三百年前九宗联手围杀，焚功法一十七部、丹炉九座。然缴获名录载：万魂丹炉下不见尸骨，唯余锁魂链九十九条——炼丹之魂，尽随炉主遁走。',
+      truth: '血河宗主帝渊为破化神瓶颈炼「万魂丹」，需九千九百九十九道生魂，再以一味「主魂」引之。首席（前世的我）不忍婴啼入炉，打翻丹炉，被打碎金身、真灵封入半枚引魂玉。帝渊随即伪造黑玉令挑动九宗围杀自家宗门——一石二鸟：借正道之刀清洗知情者，又以「血河覆灭」的假象遁入故道水底，沉潜三百年温养魔身。万魂丹炉连同炉中未散的三千魂魄，皆随他遁走。',
+    },
+    jade: {
+      origin: '残玉本为一对「引魂玉」，帝渊亲手所炼。叛徒真灵的一半由药堂执事陈拾带出；另一半，帝渊自留——这正是他能追踪残玉、感知携带者修为的原因。',
+      whisper: '玉中不止真灵。当年炉中渗入的一缕缕亡魂低语，三百年未曾散去。',
+      abilities: { 3: '玉灵护体', 6: '血河噬敌', 9: '两世归一' },
+    },
+    xuanying: '玄影客，无面无名，腕刺河纹——是帝渊以自身影魂裁出的「影身」。三百年间代主行走人间：掘龙脉以寻上古炼魂石的封印方位，盯梢每一代残玉携带者。所谓「宗主分身」，即此身。',
+    tally: '黑玉令：无落款的围杀密令，九宗各执一词——实为帝渊伪造。当年九位执行人之一、太衍宗太上长老玄玑真人隐约察觉不对，私留一份名单，朱笔圈出「最先起疑之人」。',
+    gupian: '上古炼魂石：克魔魂的古宝，陨落古修拼死封存九枚于十大秘境。九碎片合成本命法宝，以本命精血认主——它认的是「护」字，持之害人，必遭反噬。',
+    ferryman: '血河故道入水三千丈，唯渡船人知水路。当年血河宗的渡船人装疯三百年，抱着一坛酒守着入口，也守着愧疚——江湖人称「醉道人」。',
+    timeline: [
+      { y: '三百年前 · 春', t: '血河宗主开炉炼万魂丹，九千九百九十八道生魂入炉。' },
+      { y: '三百年前 · 夏', t: '首席打翻丹炉，金身碎，真灵封入半枚引魂玉。' },
+      { y: '三百年前 · 秋', t: '黑玉令出，九宗围杀血河故道。满门三百七十一口，药堂执事陈拾携玉突围。' },
+      { y: '三百年前 · 冬', t: '帝渊携万魂丹炉遁入故道水底；玄影客 begin 代主追缉。上古残魂封九枚炼魂石于诸秘境。' },
+      { y: '此后 · 每一代', t: '残玉择主而栖。历代携带者皆在飞升雷台前夜「暴毙」——无人知道那是收魂。' },
+      { y: '本代 · 序', t: '青溪村药翁陈拾油尽灯枯，半枚残玉传入你手。问道九章，自此始。' },
+    ],
+    factions: [
+      { name: '青云剑宗', stance: '愧', desc: '当年围杀主力之一。掌门一脉讳莫如深，唯白鹤真人欲补此过。' },
+      { name: '丹霞谷', stance: '污', desc: '当年曾为血河供过一半丹材——这段黑料，是垂死散修临终的笑语，也是谷中永远的把柄。' },
+      { name: '万宝商会', stance: '利', desc: '乱世发财，两头下注。商会的旧账房里，或许还押着血河的质押物。' },
+      { name: '磐岩谷', stance: '直', desc: '当年拒签黑玉令的正直小宗，因此被正道疏远三百年。' },
+      { name: '周天阁', stance: '知', desc: '观星者。三百年前夜观血河故道星轨未灭者，正是阁中先辈——档案锁在观星塔顶层。' },
+      { name: '血河余孽', stance: '敌', desc: '玄影客与散落暗处的旧部。他们不藏在宗门里，藏在人心的缝里。' },
+    ],
+    places: {
+      village: '青溪村 · 后山——陈拾隐居终老之地，坟头朝东。',
+      qingfeng: '青峰山——山坳藏着上古遗迹，石壁血图标注炼魂石的方位之一。',
+      heifeng: '黑风寨——明为劫道泼皮，实为玄影客雇来的掘脉苦力。',
+      forest: '妖兽森林——万蛊密林深处有血河旧部的销赃暗市。',
+      ruins: '秘境遗迹——上古剑冢与残魂封石之地。',
+      wanyao: '万妖山脉——妖族大酋的领地，与血河有着以物易物的旧约。',
+      youming: '幽冥鬼泽——阴气直通地底血河，泽底隐有渡船的缆痕。',
+      feizhou: '天外飞舟残骸——星图残页记载着「雷台收魂」的旧例。',
+      longyuan: '龙渊海眼——海眼之下水脉暗通血河故道。',
+      lingxu: '灵墟仙泽——真仙之境，血河余孽最后的藏身处。',
+      leiyu: '九霄雷狱——历代残玉携带者「暴毙」之地，雷台的真相。',
+    },
+  },
+
+  /* ======================================================================
+   * v19 角色注册表 CHARACTERS（主线人物单一事实源）
+   * 剧情引擎以 who:'@id' 引用，人物志按此渲染。look 为程序化肖像参数。
+   * ====================================================================== */
+  CHARACTERS: {
+    c_laoren:   { name: '采药老人', title: '青溪村药翁 · 血河遗民', color: '#7a6a4a', stance: '善', role: '引路人',
+      desc: '本名陈拾，血河宗药堂执事。围杀之夜携半枚残玉突围，隐姓埋名三百年，把仇埋进了一畦畦药田。',
+      look: { robe: '#8a7a5a', hair: '#d8d2c2', item: 'herb', aura: '#a8862a' } },
+    c_xuanying: { name: '玄影客', title: '血河影身', color: '#4a3a52', stance: '敌', role: '主要反派',
+      desc: '帝渊以自身影魂裁出的无面影卫。掘龙脉、觅钥匙、盯梢历代残玉携带者——他从不亲自动怒，因为他没有心。',
+      look: { robe: '#3a3040', hair: '#1e1a24', item: 'shadow', aura: '#7c5cb0' } },
+    c_zongzhu:  { name: '血河宗主', title: '帝渊 · 万魂丹炉之主', color: '#7c2a22', stance: '敌', role: '最终反派',
+      desc: '三百年前毁宗灭门的执棋人。算尽了天时地利人心，只没算到两世之人同想他死。',
+      look: { robe: '#5a1f1a', hair: '#2a1210', item: 'furnace', aura: '#a03a2a' } },
+    c_zhenling: { name: '前世真灵', title: '血河首席 · 叛炉者', color: '#8a742e', stance: '友', role: '双世之魂',
+      desc: '三百年前打翻万魂丹炉的人。不求你认下血河宗，只求你认下这笔执念——借刀是为了止杀。',
+      look: { robe: '#b0a060', hair: '#e8e2d0', item: 'sword', aura: '#c9b660' } },
+    c_zhangmen: { name: '白须掌门', title: '太衍宗掌门 · 白鹤真人', color: '#5a6a6a', stance: '友', role: '补过者',
+      desc: '当年围杀时师尊被黑玉令牵着走。时日无多，有些账再烂在土里就没人记得了。',
+      look: { robe: '#e8e4d8', hair: '#f0ede4', item: 'scroll', aura: '#8fa8a8' } },
+    c_xuanji:   { name: '玄玑真人', title: '太衍宗太上长老', color: '#6a5a8a', stance: '灰', role: '当年的刀',
+      desc: '当年九位执行人之一。朱笔圈名单的人，丹会设鸿门的人——也是唯一活着知道黑玉令味道不对的人。',
+      look: { robe: '#8a7ab0', hair: '#c8c2d8', item: 'seal', aura: '#7c5cb0' } },
+    c_shanggu:  { name: '上古残魂', title: '炼魂石封印者', color: '#2a6a7a', stance: '友', role: '授法者',
+      desc: '陨落已久的古修残影。拼死封存九枚炼魂石，等一个持玉者——等了三百年。',
+      look: { robe: '#4a8a9a', hair: '#a8d8e0', item: 'orb', aura: '#22808a' } },
+    c_ling:     { name: '玉灵', title: '残玉内里 · 亡魂低语', color: '#a04a5a', stance: '灰', role: '随身之秘',
+      desc: '玉中万千低语的集合意志。它记得每一盏河灯，也记得每一个戴着玉死去的活人。',
+      look: { robe: '#a04a5a', hair: '#e8c8cc', item: 'jade', aura: '#c05a6a' } },
+  },
+  /** 剧情引擎 who 解析：'@id' → CHARACTERS */
+  char(who) {
+    if (typeof who === 'string' && who[0] === '@') return this.CHARACTERS[who.slice(1)] || null;
+    return null;
+  },
+  /** 江湖二十四修士的主线定位（人物志 + 剧情调度用） */
+  STORY_ROLES: {
+    n1:  { arc: '同行者', chapter: '三~九', role: '剑宗首席，第三章入宗后的同门师兄；第八章借剑，决战盟友。' },
+    n5:  { arc: '情报线', chapter: '七', role: '烟雨楼楼主，暗访黑玉令时唯一的耳目。' },
+    n9:  { arc: '鉴纹人', chapter: '二', role: '隐市符师，唯一认出玄影令牌河纹出处的人。' },
+    n13: { arc: '魔道暗线', chapter: '四~七', role: '月下魔姝，知晓血河余孽的销赃路与避祸规矩。' },
+    n22: { arc: '双面间谍', chapter: '七~九', role: '血罗刹，血河旧部出身——借刀之局中通往敌营的门。' },
+    n23: { arc: '渡船人', chapter: '六~九', role: '醉道人，血河故道唯二的知路者之一，决战引路人。' },
+    n2:  { arc: '药脉渊源', chapter: '五', role: '丹谷仙子，陈拾遗方的传人，认得残玉渗透的血渍药性。' },
+    n11: { arc: '医者仁心', chapter: '四', role: '游方医仙，红尘炼心一章的见证者。' },
+    n10: { arc: '阵法助力', chapter: '六~九', role: '阵道大家，六璃困杀大阵残图的补全者。' },
+    n17: { arc: '星阵仙子', chapter: '九', role: '周天阁首席，雷台护阵的布防人。' },
+    n12: { arc: '暗线妙手', chapter: '七', role: '盗修散人，玄玑真人密室信物的「借阅者」。' },
+    n3:  { arc: '故纸研究者', chapter: '三', role: '落魄书生，藏经阁无名残卷最初的主人。' },
+    n21: { arc: '观星示警', chapter: '八', role: '周天阁阁主，从星轨推演出决战之日。' },
+    n14: { arc: '同门之谊', chapter: '三~八', role: '沈青崖幼妹，同门线里的暖色。' },
+    n6:  { arc: '江湖义气', chapter: '四', role: '行脚体修，红尘路上背你走过最难的一段路。' },
+    n24: { arc: '游侠', chapter: '二', role: '归雁剑侠，青峰山剿贼时的并肩者。' },
+  },
+
+  /* ======================================================================
    * v15 剧情脚本库 STORIES（问道九章 · 每章三段：开篇卷轴 / 中段插章 / 章末演出）
    * 场景格式见 Story 引擎注释。pick(value) 返回结算旁白行数组。
    * ====================================================================== */
@@ -2145,7 +2287,9 @@ const PlayerFactory = {
       beasts: { active: null, list: [], nextId: 1 },
       bounties: null,
       topTitle: null,
-      story: { seen: {}, mid: {}, choices: {} },   // v15 剧情播放记录 / 中段标记 / 抉择
+      story: { seen: {}, mid: {}, choices: {}, flags: {} },   // v15 剧情记录 / 中段标记 / 抉择 / v19 后果旗标
+      chronicle: [],  // v19 大事年表 [{d,txt}]
+      personal: {},   // v19 个人线进度 {npcId: 已完成幕数}
       daoExp: {},   // v16 职业道境经验（六大职业独立积累，不随修为境界绑定）
       jade: 0,      // v18 残玉共鸣（0-9 重，主线每完结一章 +1）
     };
@@ -2246,6 +2390,19 @@ const PlayerFactory = {
       (out) => {
         const done = (out.quest && out.quest.ch) || 0;
         if (done > 0) out.jade = Math.max(out.jade || 0, Math.min(DaoxinSys.MAX_ATTUNE, done));
+      },
+      // v19: 剧情旗标 / 大事年表 / 个人线 / NPC 记忆
+      (out) => {
+        out.chronicle = Array.isArray(out.chronicle) ? out.chronicle.slice(-80) : [];
+        out.personal = (out.personal && typeof out.personal === 'object') ? out.personal : {};
+        if (!out.story || typeof out.story !== 'object') out.story = { seen: {}, mid: {}, choices: {} };
+        if (!out.story.flags || typeof out.story.flags !== 'object') out.story.flags = {};
+        if (out.npcs && typeof out.npcs === 'object') {
+          for (const s of Object.values(out.npcs)) {
+            if (!s || typeof s !== 'object') continue;
+            if (!Array.isArray(s.mem)) s.mem = [];
+          }
+        }
       },
     ];
     // 基础：fresh 模板 + 展开合并
@@ -2702,6 +2859,8 @@ const Cultivate = {
       Ambience.sfx('breakthrough');
       Log.add(`${Utils.pick(GameData.FLAVOR.breakSuccess)}`, 'realm');
       Log.add(`恭喜！你静修冲关功成，晋入 <b>筑基</b> 期——从此踏入修士之列！寿元上限提升至 ${st.lifespan} 岁。`, 'realm');
+      const gr = NpcSys.realmGreeting(p);   // v19 突破贺语
+      if (gr) { Log.add(`${gr.name}（${gr.title}）登门道贺——${gr.line}`, 'event'); Story.chron(`${gr.name} 登门道贺，贺你晋入筑基期`); }
       UI.announce('筑基功成 · 步入修士之列', 'gold');
       UI.toast('筑基成功！');
     } else {
@@ -4922,6 +5081,8 @@ const Tribulation = {
       Ambience.sfx('breakthrough');
       Log.add(`${Utils.pick(GameData.FLAVOR.breakSuccess)}`, 'realm');
       Log.add(`恭喜！你渡劫功成，晋入 <b>${GameData.REALM_NAMES[p.realmIdx]}</b> 期！寿元上限提升至 ${st.lifespan} 岁。`, 'realm');
+      const gr = NpcSys.realmGreeting(p);   // v19 突破贺语
+      if (gr) { Log.add(`${gr.name}（${gr.title}）登门道贺——${gr.line}`, 'event'); Story.chron(`${gr.name} 登门道贺，贺你晋入${GameData.REALM_NAMES[p.realmIdx]}期`); }
       if (strategy === 'endure') {
         p.rootDeep = true; p.rootWeak = false;
         Log.add('雷火淬体，道基如金——得永久厚赐【根基深厚】：全属性 +20%，此后历劫难度皆降一成。', 'gain');
@@ -5389,6 +5550,7 @@ const NpcSys = {
         met: false,        // 是否打过照面
         grudge: false,     // 恩怨（连坐血亲）
         pastLife: false,   // 前世恩怨（转世专属剧情）
+        mem: [],           // v19 记忆条目 [{d,t,x}]
       };
     }
     return o;
@@ -5426,6 +5588,56 @@ const NpcSys = {
     if (s.rel > -15) return '萍水';
     if (s.rel > -40) return '敌视';
     return '宿敌';
+  },
+  /* ---------- v19：关系五档（机制层） ---------- */
+  TIERS: [
+    { min: -999, id: 'foe',    name: '宿敌' },
+    { min: -40,  id: 'cold',   name: '冷漠' },
+    { min: 0,    id: 'known',  name: '相识' },
+    { min: 30,   id: 'friend', name: '友好' },
+    { min: 70,   id: 'bosom',  name: '知己' },
+    { min: 90,   id: 'sworn',  name: '生死之交' },
+  ],
+  tierOf(rel) { return this.TIERS.find(t => rel >= t.min) || this.TIERS[0]; },
+  MEM_TYPE: { story: '剧情', spar: '切磋', gift: '赠礼', chat: '论道', save: '相救', betray: '背刺', kill: '杀戮', peace: '化解', line: '个人线' },
+  /** v19 记忆：共同经历写入记忆条目（上限 8 条，同类同文去重） */
+  mem(p, id, type, txt) {
+    const s = this.state(p, id);
+    if (!s) return;
+    if (!Array.isArray(s.mem)) s.mem = [];
+    if (s.mem.some(m => m.t === type && m.x === txt)) return;
+    s.mem.push({ d: Math.floor(p.day || 0), t: type, x: txt });
+    if (s.mem.length > 8) s.mem.splice(0, s.mem.length - 8);
+  },
+  /** v19 回忆杀：依据最近一条记忆生成寒暄台词 */
+  recallLine(p, id) {
+    const s = this.state(p, id);
+    if (!s || !s.mem || !s.mem.length) return null;
+    const m = s.mem[s.mem.length - 1];
+    const tpl = {
+      spar: '「上次与你切磋，我回去想了三日。」',
+      gift: '「你上回所赠之物，我还留着。」',
+      chat: '「上回论道，你那一问，我至今还在参。」',
+      save: '「当日若非你出手，我早已不在了。」',
+      betray: '「……你还有脸来见我？」',
+      kill: '「此仇未雪，别来无恙。」',
+      peace: '「旧事已了，今日只叙旧情。」',
+      story: '「那一日的光景，我至今记得。」',
+      line: '「你我之间，已不必多说了。」',
+    };
+    return tpl[m.t] || null;
+  },
+  /** v19 突破贺语：交情最好的一位修士登门道贺（六成几率触发） */
+  realmGreeting(p) {
+    if (!p || !p.npcs) return null;
+    const ids = Object.keys(p.npcs).filter(id => p.npcs[id].alive && p.npcs[id].met && p.npcs[id].rel >= 30);
+    if (!ids.length || !Utils.chance(60)) return null;
+    ids.sort((a, b) => p.npcs[b].rel - p.npcs[a].rel);
+    const id = ids[0];
+    const d = this.def(id);
+    this.mem(p, id, 'story', '突破贺喜');
+    return { id, name: d.name, title: d.title,
+      line: '「恭喜道友更上层楼。他日你登高之处，莫忘了今日同辈之人。」' };
   },
   /** 岁月推进：NPC 自主修炼 / 游历 / 争夺机缘 */
   yearTick(p, y) {
@@ -5521,6 +5733,7 @@ const NpcSys = {
     if (!s || !s.alive) return null;
     if (!Utils.chance(Utils.clamp(25 + Math.max(0, s.rel) * 0.3, 0, 70))) return null;
     s.rel = Utils.clamp(s.rel + 4, -100, 100);
+    this.mem(p, cand, 'save', '危难相救');   // v19 记忆
     return { id: cand, name: this.def(cand).name };
   },
   afterSpar(p, id, won) {
@@ -5528,6 +5741,7 @@ const NpcSys = {
     if (!s) return;
     s.met = true;
     s.rel = Utils.clamp(s.rel + (won ? 5 : 2), -100, 100);
+    this.mem(p, id, 'spar', won ? '切磋获胜' : '切磋落败');   // v19 记忆
   },
   /** NPC 之敌（战斗用） */
   buildEnemy(p, id) {
@@ -5586,6 +5800,7 @@ const NpcSys = {
     if (!s || !d) return;
     s.rel = Utils.clamp(s.rel - 45, -100, 100);
     this.addGrudge(p, id);
+    this.mem(p, id, 'kill', '刀兵相向');   // v19 记忆
     KarmaSys.addKarma(10, true);
     if (Utils.chance(25)) {
       s.alive = false;
@@ -5602,6 +5817,7 @@ const NpcSys = {
     s.grudge = false;
     s.pastLife = false;
     s.rel = Utils.clamp(s.rel + 15, -100, 100);
+    this.mem(p, id, 'peace', '一战了断');   // v19 记忆
     KarmaSys.addKarma(8, true);
     Log.add(`一战之后，恩怨两清。${(this.def(id) || {}).name || ''} 收起敌意，与你相顾无言。（孽障 +8）`, 'system');
   },
@@ -5627,6 +5843,7 @@ const NpcSys = {
     s.met = true;
     s.rel = Utils.clamp(s.rel + Utils.rand(8, 14), -100, 100);
     p.counters.befriends = (p.counters.befriends || 0) + 1;   // v11 剧情计数
+    this.mem(p, id, 'chat', '结交之谊');   // v19 记忆
     Log.add(`你以礼相待，与 ${d.name} 相谈甚欢。（交情 ${s.rel > 0 ? '+' : ''}${s.rel}）`, 'gain');
     Game.afterAction();
   },
@@ -5660,6 +5877,7 @@ const NpcSys = {
       Log.add(`${d.name} 早有防备，反手一击——你偷鸡不成蚀把米！`, 'warn');
       s.rel = Utils.clamp(s.rel - 30, -100, 100);
       this.addGrudge(p, id);
+      this.mem(p, id, 'betray', '背刺未遂');   // v19 记忆
       Game.afterAction();
       Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, mode: 'hunt', ambush: true, mapName: '背刺之地' });
       return;
@@ -5676,6 +5894,7 @@ const NpcSys = {
     s.rel = Utils.clamp(s.rel - 70, -100, 100);
     s.met = true;
     this.addGrudge(p, id);
+    this.mem(p, id, 'betray', '背刺夺宝');   // v19 记忆
     KarmaSys.addKarma(15, true);
     p.fortune = Math.max(0, (p.fortune || 0) - 15);
     Log.add(`你趁 ${d.name} 不备痛下杀手，夺其储物袋——灵石 ${Utils.fmtNum(loot)}${extra}！收益翻倍，然气运 -15、孽障 +15。`, 'gain');
@@ -5700,6 +5919,7 @@ const NpcSys = {
     p.sworn = p.sworn || [];
     p.sworn.push(id);
     s.rel = Utils.clamp(s.rel + 8, -100, 100);
+    this.mem(p, id, 'story', '义结金兰');   // v19 记忆
     Log.add(`你与 <b>${d.name}</b> 撮土为香，结为异姓道侣兄妹！此生共进退。`, 'system');
     Game.afterAction();
   },
@@ -5718,6 +5938,7 @@ const NpcSys = {
     if (!ok) return;
     p.partner = id;
     s.rel = 100;
+    this.mem(p, id, 'story', '结为道侣');   // v19 记忆
     Log.add(`红烛映照，道音为证——你与 <b>${d.name}</b> 正式结为道侣！仙途多一知己，死劫多一臂之助。`, 'system');
     Game.afterAction();
   },
@@ -5766,6 +5987,56 @@ const NpcSys = {
     }
     Game.afterAction();
   },
+  /** v19 赠礼：备礼相赠增进交情（关系愈深，增益愈小——相交贵在知心） */
+  async gift(id) {
+    const p = Game.player;
+    const d = this.def(id);
+    const s = this.state(p, id);
+    if (!d || !s || !s.alive) return;
+    if (!s.met) { UI.toast('素未谋面，何谈赠礼'); return; }
+    if (Battle.active) return;
+    const cost = Math.round(30 * GameData.stoneEco(s.realmIdx));
+    const tier = this.tierOf(Math.max(0, s.rel));
+    const gain = { known: Utils.rand(3, 6), friend: Utils.rand(2, 4), bosom: Utils.rand(1, 3), sworn: 1 }[tier.id] || 2;
+    const ok = await UI.popup({
+      title: `赠礼 · ${d.name}`,
+      html: `${this.dialogText(d.temper, 'greeting')}<br>备一份投其所好的礼，可增进交情。需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">关系愈深，礼愈难打动人——相交贵在知心。</span>`,
+      options: [{ text: '奉上礼物', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    const before = this.tierOf(Math.max(0, s.rel)).name;
+    s.rel = Utils.clamp(s.rel + gain, -100, 100);
+    this.mem(p, id, 'gift', '赠礼之谊');
+    const after = this.tierOf(Math.max(0, s.rel)).name;
+    Log.add(`你向 ${d.name} 奉上礼物。${this.dialogText(d.temper, 'gift')}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
+    if (after !== before) Ambience.sfx('rare');
+    Game.afterAction();
+  },
+  /** v19 论道：以时间为束，换修为与感悟（关系愈深，倾囊相授） */
+  async discuss(id) {
+    const p = Game.player;
+    const d = this.def(id);
+    const s = this.state(p, id);
+    if (!d || !s || !s.alive) return;
+    if (!s.met) { UI.toast('素未谋面，何谈论道'); return; }
+    if (Battle.active) return;
+    const tier = this.tierOf(Math.max(0, s.rel));
+    if (tier.id === 'known' || tier.id === 'cold' || tier.id === 'foe') {
+      UI.toast('交情尚浅，对方只肯泛泛而谈');
+      return;
+    }
+    const insight = tier.id === 'sworn' ? 4 : tier.id === 'bosom' ? 3 : 2;
+    const gain = Math.round((40 + insight * 30) * GameData.eco(p.realmIdx) * (0.8 + d.talent * 0.08));
+    Cultivate.addExp(p, gain);
+    p.insight = Math.min(100, (p.insight || 0) + insight);
+    if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 4);
+    s.rel = Utils.clamp(s.rel + 1, -100, 100);
+    this.mem(p, id, 'chat', '席地论道');
+    Time.add(2);
+    Log.add(`你与 ${d.name} 席地论道，一言一语皆有进益。（修为 +${Utils.fmtNum(gain)}，感悟 +${insight}）`, 'gain');
+    Game.afterAction();
+  },
   /** 游历途中的常驻 NPC 遭遇 */
   async encounter(p, id) {
     const d = this.def(id);
@@ -5774,11 +6045,13 @@ const NpcSys = {
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴
     const greet = Narrative.greet();   // v5：道途礼数
+    const recall = this.recallLine(p, id);   // v19 回忆杀
     Log.add(`途中遇上了 ${GameData.SECTS.find(x => x.id === d.sect) ? GameData.SECTS.find(x => x.id === d.sect).name + '的' : ''}<b>${d.name}</b>（${d.title}）。${greet ? `<span style="color:var(--text-faint)">（${greet}）</span>` : ''}`, 'event');
     if (s.grudge) { await this.peacemake(id); return; }
+    const tier = this.tierOf(Math.max(0, s.rel));
     const choice = await UI.popup({
       title: `偶遇 · ${d.name}`,
-      html: `${d.desc}<br>你们在 ${Utils.esc((GameData.MAPS.find(m => m.id === s.map) || {}).name || '山野')} 间打了个照面。`,
+      html: `${d.desc}<br>你们在 ${Utils.esc((GameData.MAPS.find(m => m.id === s.map) || {}).name || '山野')} 间打了个照面。${s.rel >= 8 ? `<br><span class="tip-line">关系：<b>${tier.name}</b>${recall ? '　' + d.name + '先开了口：' + recall : ''}</span>` : ''}`,
       options: [
         { text: '叙话论道', value: 'chat', primary: true },
         { text: '请教一二', value: 'ask' },
@@ -5787,6 +6060,7 @@ const NpcSys = {
     });
     if (choice === 'chat') {
       s.rel = Utils.clamp(s.rel + Utils.rand(2, 5), -100, 100);
+      this.mem(p, id, 'chat', '途中叙话');   // v19 记忆
       Log.add(`你们席地论道，相谈甚欢。（交情 ${s.rel > 0 ? '+' : ''}${s.rel}）`, 'gain');
     } else if (choice === 'ask') {
       if (Utils.chance(45 + Math.max(0, s.rel))) {
@@ -6289,6 +6563,7 @@ const Battle = {
     p.counters.battles++;
     document.getElementById('battle-modal').classList.remove('hidden');
     this.log(`⚔ 于${ctx.mapName || '荒野'}遭遇 <b class="grade-0">${enemy.name}</b>（${enemy.realmLabel}${enemy.elite ? ' · 精英' : ''}）！`, 'warn');
+    if (enemy._storyBark) this.log(enemy._storyBark, 'log-event');   // v19 剧情战入场台词
     if (ctx.spar) this.log('此为切磋较技，点到为止，不伤性命。', 'log-system');
     else if (ctx.mode === 'hunt') this.log('来者与你恩怨纠葛，今番不死不休！', 'log-warn');
     // v10 境界特性 · 灵压（筑基起）：先声夺人，敌方攻防被压制一成
@@ -7096,6 +7371,15 @@ const Battle = {
     this.log(`${B.enemy.name} 轰然倒地！你获得了胜利！`, 'log-system');
     p.counters.wins++;
     if (B.enemy.elite) p.counters.killsElite = (p.counters.killsElite || 0) + 1;   // v6 成就计数
+    // v19 剧情战：轻奖励、必入戏（主线战不受普通掉落与败绩规则影响）
+    if (B.ctx.story) {
+      Cultivate.addExp(p, Math.round(B.enemy.expGain * 0.5));
+      await this.wait(650);
+      this.end(false);
+      const cb = B.ctx.story.onEnd; B.ctx.story.onEnd = null;
+      if (cb) cb(true);
+      return;
+    }
     if (p.dao === 'demonic') DaoSys.gain(p, 6);   // v16 魔性：杀戮
     await this.wait(650);
     // 阵道：秘境遗迹收益+20%；邪修：吞噬精元，额外汲取两成修为
@@ -7166,6 +7450,17 @@ const Battle = {
     if (B.ctx.dungeon) {
       await DungeonSys.onDefeat();
       this.end(false);
+      return;
+    }
+    // v19 剧情战落败：胜负皆入戏，不落惩罚
+    if (B.ctx.story) {
+      const st2 = Stat.compute(p);
+      p.hp = Math.max(1, Math.round(st2.maxHp * 0.3));
+      p.mp = Math.round(st2.maxMp * 0.3);
+      this.end(false);
+      Log.add('剧情一战落败……你收拾心情，故事仍要继续。', 'warn');
+      const cb = B.ctx.story.onEnd; B.ctx.story.onEnd = null;
+      if (cb) cb(false);
       return;
     }
     const st = Stat.compute(p);
@@ -7484,10 +7779,45 @@ const Story = {
     const p = Game.player;
     return (p && p.story && p.story.choices[key]) || null;
   },
+  /* ---------- v19：剧情旗标（抉择后果的跨章回收） ---------- */
+  flags() {
+    const p = Game.player;
+    if (!p.story) p.story = { seen: {}, mid: {}, choices: {} };
+    if (!p.story.flags) p.story.flags = {};
+    return p.story.flags;
+  },
+  setFlag(k, v = true) { this.flags()[k] = v; },
+  hasFlag(k) { return !!this.flags()[k]; },
+  /** v19：大事年表（问道录 · 年表用） */
+  chron(txt) {
+    const p = Game.player;
+    if (!p) return;
+    if (!p.chronicle) p.chronicle = [];
+    p.chronicle.push({ d: Math.floor(p.day || 0), txt });
+    if (p.chronicle.length > 80) p.chronicle.splice(0, p.chronicle.length - 80);
+  },
+  /** v19：场景可见性（req：需持有旗标；noFlag：需未持有。可为字符串或数组） */
+  _vis(sc) {
+    if (!sc) return false;
+    const F = this.flags();
+    if (sc.req) {
+      const need = Array.isArray(sc.req) ? sc.req : [sc.req];
+      if (!need.every(f => F[f])) return false;
+    }
+    if (sc.noFlag) {
+      const ban = Array.isArray(sc.noFlag) ? sc.noFlag : [sc.noFlag];
+      if (ban.some(f => F[f])) return false;
+    }
+    return true;
+  },
   next() {
     const c = this.cur;
     if (!c) return;
+    const prev = c.scenes[c.idx];
+    if (prev && prev.t === 'montage' && prev.days) Time.add(prev.days);   // 岁月流逝过场
     c.idx++;
+    if (c.idx >= c.scenes.length) return this.finish();
+    while (c.idx < c.scenes.length && !this._vis(c.scenes[c.idx])) c.idx++;   // 旗标条件跳过
     if (c.idx >= c.scenes.length) return this.finish();
     this.render();
   },
@@ -7497,11 +7827,64 @@ const Story = {
     const sc = c.scenes[c.idx];
     const opt = sc.options[i];
     if (!opt) return;
-    const lines = sc.pick ? await sc.pick(opt.value) : null;
+    let lines = null;
+    if (sc.t === 'investigate') {
+      // v19 线索推理：选对得线索旗标与奖励，选错亦有下文
+      lines = opt.ok ? (sc.win || ['你从蛛丝马迹中，拼出了关键的一环。'])
+                     : (sc.lose || ['线索并不在此——但你并非一无所获。']);
+      if (opt.ok && sc.flag) this.setFlag(sc.flag);
+      if (opt.ok) KarmaSys.addFortune(2);
+    } else {
+      lines = sc.pick ? await sc.pick(opt.value) : null;
+    }
     this.recordChoice(c.id, opt.value);
+    if (opt.flag) this.setFlag(opt.flag);
     // 抉择后插入结果旁白
-    c.scenes.splice(c.idx + 1, 0, { t: 'narr', text: (lines || ['冥冥之中，因果已种。']).join('') });
+    c.scenes.splice(c.idx + 1, 0, { t: 'narr', text: (lines || ['冥冥之中，因果已种。']).join('\n') });
     this.next();
+  },
+  /* ---------- v19：剧情战（胜负皆入戏） ---------- */
+  async startBattle() {
+    const c = this.cur;
+    if (!c || this._battling) return;
+    const sc = c.scenes[c.idx];
+    if (!sc || sc.t !== 'battle') return;
+    const p = Game.player;
+    let enemy = null;
+    if (sc.foe && sc.foe.npc) {
+      enemy = NpcSys.buildEnemy(p, sc.foe.npc);
+    } else if (sc.foe && sc.foe.m) {
+      enemy = buildMonster(sc.foe.m);
+    } else {
+      const f = sc.foe || {};
+      const pw = Utils.clamp(f.power != null ? f.power : p.realmIdx * 4 + 2, 0, 60);
+      const rIdx = Utils.clamp(Math.floor(pw / 4), 0, 9);
+      const scale = f.scale || 1;
+      enemy = {
+        id: null, name: f.name || '神秘敌人', elite: !!f.elite, power: pw,
+        realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(pw % 4, 0, 3)],
+        hpMax: Math.round((55 + Math.pow(pw, 1.6) * 5) * (f.elite ? 1.7 : 1) * scale),
+        atk: Math.round((6 + pw * 2.6) * (f.elite ? 1.35 : 1) * scale),
+        def: Math.round((4 + pw * 2.2) * scale), spd: Math.round(7 + pw * 0.9),
+        dodge: 5, crit: 8, skills: f.skills || [],
+        expGain: Math.round(30 * GameData.eco(rIdx)), stoneGain: 0, dropTier: 2, rareDrop: null, hp: 0,
+      };
+    }
+    if (sc.bark) enemy._storyBark = sc.bark;
+    this._battling = true;
+    Battle.start(null, { enemy, mapName: sc.label || '剧情之地', story: {
+      onEnd: (win) => {
+        this._battling = false;
+        const cc = this.cur;
+        if (!cc) return;
+        const lines = win ? (sc.win || ['尘埃落定，你立于不败之地。'])
+                          : (sc.lose || ['你力竭倒地——但故事，还未到终章。']);
+        cc.scenes.splice(cc.idx + 1, 0, { t: 'narr', text: lines.join('\n') });
+        if (win && sc.flagWin) this.setFlag(sc.flagWin);
+        if (!win && sc.flagLose) this.setFlag(sc.flagLose);
+        this.next();
+      },
+    } });
   },
   finish() {
     const c = this.cur;
@@ -7525,20 +7908,36 @@ const Story = {
     const sc = c.scenes[c.idx];
     let body = '';
     if (sc.t === 'dialog') {
-      const color = sc.color || '#6a5a3e';
+      const chr = GameData.char(sc.who);
+      const who = chr ? chr.name : (sc.who || '？');
+      const color = chr ? chr.color : (sc.color || '#6a5a3e');
+      const title = chr ? (sc.title || chr.title) : sc.title;
+      const fig = chr ? Art.portrait(chr.look) : Utils.esc((sc.who || '？')[0]);
       body = `
       <div class="story-dialog">
-        <div class="story-figure" style="--fig-c:${color}">${(sc.who || '？')[0]}</div>
+        <div class="story-figure" style="--fig-c:${color}">${fig}</div>
         <div class="story-dialog-main">
-          <div class="story-who" style="color:${color}">${Utils.esc(sc.who)}<span class="story-who-title">${Utils.esc(sc.title || '')}</span></div>
+          <div class="story-who" style="color:${color}">${Utils.esc(who)}<span class="story-who-title">${Utils.esc(title || '')}</span></div>
           <div class="story-text">${sc.text}</div>
         </div>
       </div>`;
-    } else if (sc.t === 'choice') {
+    } else if (sc.t === 'choice' || sc.t === 'investigate') {
       body = `
-      <div class="story-text story-choice-lead">${sc.text}</div>
+      <div class="story-text story-choice-lead">${sc.t === 'investigate' ? '「细察」' : ''}${sc.text}</div>
       <div class="story-choices">${sc.options.map((o, i) =>
         `<button class="story-opt" data-action="story-choice" data-story-choice="${i}">${o.text}</button>`).join('')}</div>`;
+    } else if (sc.t === 'battle') {
+      const foeName = sc.foe && sc.foe.npc ? ((NpcSys.def(sc.foe.npc) || {}).name)
+        : sc.foe && sc.foe.m ? ((GameData.MONSTERS[sc.foe.m] || {}).name)
+        : (sc.foe && sc.foe.name);
+      body = `
+      <div class="story-battle-card">
+        <div class="story-battle-name">⚔ ${Utils.esc(sc.label || '剧情战')}${foeName ? ' · ' + Utils.esc(foeName) : ''}</div>
+        <div class="story-text">${sc.text || ''}</div>
+        <button class="btn btn-primary" data-action="story-battle">迎 战 ▸</button>
+      </div>`;
+    } else if (sc.t === 'montage') {
+      body = `<div class="story-montage">${(sc.text || '').split('\n').map(t => `<p class="story-p">${t}</p>`).join('')}</div>`;
     } else if (sc.t === 'reward') {
       body = `
       <div class="story-reward">
@@ -7552,7 +7951,7 @@ const Story = {
     box.innerHTML = `
       ${c.title ? `<div class="story-chapter">${Utils.esc(c.title)}</div>` : ''}
       <div class="story-body">${body}</div>
-      ${sc.t === 'choice' ? '' : `<div class="story-foot">
+      ${sc.t === 'choice' || sc.t === 'battle' ? '' : `<div class="story-foot">
         <span class="story-page">${c.idx + 1} / ${c.scenes.length}</span>
         <button class="btn btn-primary" data-action="story-next">${c.readonly ? '合 上' : (last ? '终 ✦' : '继 续 ▸')}</button>
       </div>`}
@@ -8561,6 +8960,8 @@ const UI = {
       const tags = [];
       if (s.grudge) tags.push('<span class="tag danger">宿怨</span>');
       if (s.pastLife) tags.push('<span class="tag magic">前世恩怨</span>');
+      const srole = (GameData.STORY_ROLES || {})[d.id];
+      if (srole) tags.push(`<span class="tag magic" title="${Utils.esc(srole.role)}">主线 · ${Utils.esc(srole.arc)}</span>`);
       if (d.kin && d.kin.length) tags.push(`<span class="tag">血亲：${d.kin.map(k => (NpcSys.def(k) || {}).name).filter(Boolean).join('、')}</span>`);
       const his = s.realmIdx * 4 + s.layer;
       const powerText = !s.alive ? '已殒身'
@@ -8568,6 +8969,8 @@ const UI = {
       const btns = !s.alive ? '<span class="tag danger">已身故</span>' : [
         `<button class="btn btn-sm" data-action="npc-befriend" data-npc="${d.id}">结交（${Utils.fmtNum(NpcSys.befriendCost(p, d.id))}灵石）</button>`,
         `<button class="btn btn-sm" data-action="npc-spar" data-npc="${d.id}">切磋</button>`,
+        s.met ? `<button class="btn btn-sm" data-action="npc-gift" data-npc="${d.id}">赠礼（${Utils.fmtNum(Math.round(30 * GameData.stoneEco(s.realmIdx)))}灵石）</button>` : '',
+        s.met && s.rel >= 30 ? `<button class="btn btn-sm" data-action="npc-discuss" data-npc="${d.id}">论道</button>` : '',
         s.rel >= 15 && p.partner !== d.id ? `<button class="btn btn-sm btn-danger" data-action="npc-betray" data-npc="${d.id}">背刺夺宝</button>` : '',
         s.rel >= 70 && !(p.sworn || []).includes(d.id) ? `<button class="btn btn-sm" data-action="npc-swear" data-npc="${d.id}">结拜</button>` : '',
         s.rel >= 90 && !p.partner ? `<button class="btn btn-sm btn-primary" data-action="npc-dao" data-npc="${d.id}">结为道侣</button>` : '',
@@ -9657,6 +10060,8 @@ const Game = {
     'act-realm-synth': () => DungeonSys.synth(),
     /* --- v3 江湖 --- */
     'npc-befriend': (d) => NpcSys.befriend(d.npc),
+    'npc-gift': (d) => NpcSys.gift(d.npc),
+    'npc-discuss': (d) => NpcSys.discuss(d.npc),
     'npc-spar': (d) => NpcSys.spar(d.npc),
     'npc-betray': (d) => NpcSys.betray(d.npc),
     'npc-swear': (d) => NpcSys.swear(d.npc),
@@ -9679,6 +10084,7 @@ const Game = {
     /* --- v15 剧情 --- */
     'story-next': () => Story.next(),
     'story-choice': (d) => Story.choose(Number(d.storyChoice)),
+    'story-battle': () => Story.startBattle(),
     'story-close': () => Story.close(),
     'quest-review': () => QuestSys.openArchive(),
     'quest-reread': (d) => QuestSys.reread(d.sid),

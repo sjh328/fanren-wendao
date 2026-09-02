@@ -51,7 +51,24 @@ const dismissRollback = async () => {
 };
 const clickSel = async (page, sel, timeout = 4000) => {
   await page.waitForSelector(sel, { timeout });
-  await page.click(sel);
+  // v19：界面重渲染会在等待与点击之间替换节点（stale handle），带重试；仍失败则 DOM 直点兜底
+  for (let i = 0; i < 3; i++) {
+    try { await page.click(sel); return; } catch (e) { await sleep(200); }
+  }
+  await page.evaluate(s => { const b = document.querySelector(s); if (b) b.click(); }, sel);
+  await sleep(150);
+};
+/** v11+ 剧情卷轴会遮罩主界面：清空当前剧情演出（含抉择），保证后续点击可达 */
+const drainStory = async (page, rounds = 60) => {
+  const modalOpen = () => page.$eval('#story-modal', el => !el.className.includes('hidden')).catch(() => false);
+  for (let i = 0; i < rounds && await modalOpen(); i++) {
+    const opt = await page.$('.story-opt');
+    if (opt) { await opt.click().catch(() => {}); await sleep(180); continue; }
+    const nxt = await page.$('[data-action="story-next"]');
+    if (nxt) { await nxt.click().catch(() => {}); await sleep(180); continue; }
+    await sleep(200);
+  }
+  await sleep(200);
 };
 const text = (page, sel) => page.$eval(sel, el => el.innerText).catch(() => '');
 const texts = (page, sel) => page.$$eval(sel, els => els.map(e => e.innerText));
@@ -97,6 +114,7 @@ try {
     await btn.click(); await sleep(150);
   }
   (await page.$eval('#tutorial', el => el.className)).includes('hidden') ? pass('T3 引导可走完关闭') : fail('T3 引导关闭', '');
+  await drainStory(page);   // v11+ 新档自动播放第一章开篇，须清掉卷轴
   await shot(page, 'main_ui');
 
   /* ---------- T4 修炼 ---------- */
@@ -121,12 +139,18 @@ try {
   const poisonText = await text(page, '#panel-left');
   /丹毒[1-9]/.test(poisonText.replace('丹毒0', '')) || !/丹毒\s*0\s*\//.test(poisonText) ? pass('T5 丹毒开始累积') : fail('T5 丹毒累积', poisonText.match(/丹毒.*/)?.[0] || '');
 
+  await drainStory(page);   // v19：服药可能升层完成主线目标，触发插章剧情须先清掉
   await clickSel(page, '[data-action="act-equip"][data-item="w_tiejian"]');
-  await sleep(400);
-  const eqText = await text(page, '#panel-left');
-  eqText.includes('铁剑') ? pass('T5 装备铁剑') : fail('T5 装备铁剑', eqText.slice(0, 80));
+  await sleep(500);
+  // v19：改断言装备槽状态（innerText 受渲染时序影响，偶发读取半帧内容）
+  const eqState = await page.evaluate(() => {
+    const it = Game.player.equipped.weapon;
+    return { id: it ? (typeof it === 'string' ? it : it.id) : null, panel: document.getElementById('panel-left').innerText.includes('铁剑') };
+  });
+  eqState.id === 'w_tiejian' && eqState.panel ? pass('T5 装备铁剑') : fail('T5 装备铁剑', JSON.stringify(eqState));
   await shot(page, 'equipped');
 
+  await drainStory(page);
   /* ---------- T6 功法参悟 ---------- */
   await clickSel(page, '[data-action="act-tab"][data-tab="gongfa"]');
   await sleep(300);
@@ -136,6 +160,7 @@ try {
   const gfAfter = await text(page, '#tab-content');
   gfBefore !== gfAfter ? pass('T6 参悟功法生效') : fail('T6 参悟功法', 'no change');
 
+  await drainStory(page);
   /* ---------- T7 游历 + 战斗 ---------- */
   // v6 分步解锁：游历需练气中期，先修炼至进阶
   for (let i = 0; i < 6; i++) {
@@ -236,8 +261,13 @@ try {
     // 功法购买+学习
     if ((await wealth()) >= 300) {
       await clickSel(page, '[data-action="act-buy"][data-item="gf_canghai"]');
-      await sleep(300);
-      const has = await page.evaluate(() => !!JSON.parse(localStorage.getItem('fanren_wd_auto')).player.bag.gf_canghai);
+      await sleep(400);
+      let has = await page.evaluate(() => !!JSON.parse(localStorage.getItem('fanren_wd_auto')).player.bag.gf_canghai);
+      if (!has) {  // v19：重试一次（点击竞态兜底）
+        await page.evaluate(() => { const b = document.querySelector('[data-action="act-buy"][data-item="gf_canghai"]'); if (b) b.click(); });
+        await sleep(400);
+        has = await page.evaluate(() => !!JSON.parse(localStorage.getItem('fanren_wd_auto')).player.bag.gf_canghai);
+      }
       has ? pass('T8 坊市购买功法') : fail('T8 坊市购买功法', '');
     }
   } else {
@@ -253,6 +283,7 @@ try {
   }
   await shot(page, 'shop');
 
+  await drainStory(page);
   /* ---------- T9 闭关（弹窗确认） ---------- */
   await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
   await sleep(300);
@@ -309,10 +340,11 @@ try {
     const inGame = await page.$eval('#game-screen', el => !el.className.includes('hidden')).catch(() => true);
     if (inGame) {
       await page.evaluate(() => {
-        ['popup-modal', 'dao-modal', 'tribulation-modal', 'battle-modal'].forEach(id => {
+        ['popup-modal', 'dao-modal', 'tribulation-modal', 'battle-modal', 'story-modal'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.classList.add('hidden');
         });
+        if (typeof Story !== 'undefined') { Story.cur = null; Story.q = []; }
         UI._popupResolve = null;
         if (Game.player) Game.player.pendingDao = false;
         if (Battle.active) Battle.active = null;
@@ -326,7 +358,7 @@ try {
   (await page.$eval('#start-screen', el => !el.className.includes('hidden'))) ? pass('T10 返回开始界面') : fail('T10 返回开始界面', '');
   await clickSel(page, '[data-action="st-load"][data-slot="2"]');
   await sleep(600);
-  const nameLoaded = await text(page, '.char-name');
+  const nameLoaded = await text(page, '.id-name');   // v14 起身份卡类名为 id-name
   nameLoaded.includes('测试道人') ? pass('T10 读取存档位二') : fail('T10 读取', nameLoaded);
   const logLoad = await text(page, '#log');
   logLoad.includes('读档成功') ? pass('T10 读档日志') : fail('T10 读档日志', '');
@@ -418,6 +450,7 @@ try {
   }
 
 
+  await drainStory(page);
   /* ---------- T12 天劫渡劫 + 大道选择（种子：练气圆满满修为·高感悟保成算） ---------- */
   // 种子并载入存档位三：patch 为可序列化对象，页面内深合并（嵌套字段浅合并，标量覆盖）
   const seedAndLoad = async (patch) => {
@@ -442,10 +475,11 @@ try {
     let inGame = await page.$eval('#game-screen', el => !el.className.includes('hidden')).catch(() => true);
     for (let tries = 0; tries < 2 && inGame; tries++) {
       await page.evaluate(() => {
-        ['popup-modal', 'dao-modal', 'tribulation-modal', 'battle-modal'].forEach(id => {
+        ['popup-modal', 'dao-modal', 'tribulation-modal', 'battle-modal', 'story-modal'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.classList.add('hidden');
         });
+        if (typeof Story !== 'undefined') { Story.cur = null; Story.q = []; }
         UI._popupResolve = null;
         if (Game.player) Game.player.pendingDao = false;
         if (Battle.active) Battle.active = null;
@@ -543,6 +577,8 @@ try {
     t12b.realmIdx === 2 && t12b.karma >= 10 ? pass('T12 借地躲劫渡劫成功（孽障+10）') : fail('T12 渡劫结果', JSON.stringify({ r: t12b.realmIdx, k: t12b.karma }));
   }
 
+  await drainStory(page);
+
   /* ---------- T13 渡劫飞升（种子：真仙圆满） ---------- */
   await page.evaluate(() => {
     const d = JSON.parse(localStorage.getItem('fanren_wd_3'));
@@ -559,10 +595,11 @@ try {
     let inGame = await page.$eval('#game-screen', el => !el.className.includes('hidden')).catch(() => true);
     for (let tries = 0; tries < 2 && inGame; tries++) {
       await page.evaluate(() => {
-        ['popup-modal', 'dao-modal', 'tribulation-modal', 'battle-modal'].forEach(id => {
+        ['popup-modal', 'dao-modal', 'tribulation-modal', 'battle-modal', 'story-modal'].forEach(id => {
           const el = document.getElementById(id);
           if (el) el.classList.add('hidden');
         });
+        if (typeof Story !== 'undefined') { Story.cur = null; Story.q = []; }
         UI._popupResolve = null;
         if (Game.player) Game.player.pendingDao = false;
         if (Battle.active) Battle.active = null;
@@ -628,6 +665,7 @@ try {
     await sleep(300);
     const shopText = await text(page, '#tab-content');
     shopText.includes('符坊') ? pass('T16 符修可见符坊') : fail('T16 符坊', '');
+    await drainStory(page);   // v19：清掉可能弹出的剧情卷轴
     const stones0 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_3')).player.stones.low);
     await clickSel(page, '[data-action="act-draw"]');
     await sleep(400);
