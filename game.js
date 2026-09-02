@@ -3046,6 +3046,40 @@ const ForgeSys = {
  * ====================================================================== */
 const CaveSys = {
   MAX_LV: 5,
+  /** v18：浇水减寿（每日一次，-10% 剩余时长） */
+  async water(idx) {
+    const p = Game.player;
+    const plots = this.plotsOf(p);
+    const plot = plots[idx];
+    if (!plot) { UI.toast('此田无作物'); return; }
+    if (plot.wateredDay === Math.floor(p.day)) { UI.toast('今日已浇过水了'); return; }
+    plot.wateredDay = Math.floor(p.day);
+    plot.days = Math.max(1, Math.round(plot.days * 0.9));
+    Log.add(`你以灵泉浇灌第 ${idx + 1} 田，作物生长加快了一分。`, 'info');
+    Game.afterAction();
+  },
+  /** v18：随机虫害检查（进入洞府时触发） */
+  checkPest(p) {
+    const plots = this.plotsOf(p);
+    for (let i = 0; i < plots.length; i++) {
+      const plot = plots[i];
+      if (!plot || plot.pested) continue;
+      if (Utils.chance(3)) {
+        plot.pested = true;
+        Log.add(`第 ${i + 1} 田的【${GameData.ITEMS[plot.crop].name}】遭了虫害——必须除虫，否则收成将大减！`, 'warn');
+      }
+    }
+  },
+  /** v18：除虫 */
+  async removePest(idx) {
+    const p = Game.player;
+    const plots = this.plotsOf(p);
+    const plot = plots[idx];
+    if (!plot || !plot.pested) { UI.toast('此田并无虫害'); return; }
+    plot.pested = false;
+    Log.add(`你以灵药除去了第 ${idx + 1} 田的虫害，作物重焕生机。`, 'gain');
+    Game.afterAction();
+  },
   freshCave() { return { lv: 1, plots: [null, null, null, null] }; },
   unlockText: '洞府 · 筑基期解锁',
   unlocked(p) { return p.realmIdx >= 1; },
@@ -3125,6 +3159,7 @@ const CaveSys = {
     const over = grown - plot.days;
     let qty = 2;
     if (over >= 20) qty = 1;
+    if (plot.pested) qty = Math.max(0, qty - 1); // v18：虫害减产
     Bag.addItem(plot.crop, qty);
     Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}。`, 'gain');
     plots[idx] = null;
@@ -3157,7 +3192,7 @@ const CaveSys = {
           </div>
           <div class="gf-actions">${ripe
             ? `<button class="btn btn-sm btn-primary" data-action="act-cave-harvest" data-i="${i}">收 获</button>`
-            : '<span class="tip-line" style="margin:0">静待成熟</span>'}</div>
+            : `<button class="btn btn-sm" data-action="act-cave-water" data-i="${i}">浇 水</button>${plot.pested ? `<button class="btn btn-sm btn-danger" data-action="act-cave-pest" data-i="${i}">除 虫</button>` : ''}`}</div>
         </div>`);
       }
     }
@@ -9110,6 +9145,8 @@ const Game = {
     'act-cave-up': () => CaveSys.upgrade(),
     'act-cave-plant': (d) => CaveSys.plant(Number(d.i)),
     'act-cave-harvest': (d) => CaveSys.harvest(Number(d.i)),
+    'act-cave-water': (d) => CaveSys.water(Number(d.i)),
+    'act-cave-pest': (d) => CaveSys.removePest(Number(d.i)),
     'act-beast-active': (d) => BeastSys.setActive(Number(d.uid)),
     'act-beast-feed': (d) => BeastSys.feed(Number(d.uid)),
     'act-beast-free': (d) => BeastSys.free(Number(d.uid)),
