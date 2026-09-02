@@ -2269,7 +2269,15 @@ const Stat = {
   sectBonus(p) {
     if (!p.sect) return {};
     const sect = GameData.SECTS.find(s => s.id === p.sect.id);
-    return sect ? sect.bonus : {};
+    const base = sect ? { ...sect.bonus } : {};
+    // v18：宗门职位加成
+    const rank = SectSys.rank(p);
+    if (rank && rank.bonus) {
+      for (const [k, v] of Object.entries(rank.bonus)) {
+        base[k] = (base[k] || 0) + v;
+      }
+    }
+    return base;
   },
   /** 有效悟性：转世传承 +10%／层，圣地讲道限时翻倍（§26 / §23） */
   compOf(p) {
@@ -3454,6 +3462,21 @@ const ShopSys = {
  * §12 宗门系统（加入 / 任务 / 兑换）
  * ====================================================================== */
 const SectSys = {
+  /** v18：宗门职位体系 */
+  RANKS: [
+    { id: 'outer', name: '外门弟子', contribNeed: 0, bonus: {} },
+    { id: 'inner', name: '内门弟子', contribNeed: 500, bonus: { cult: 5, stonePct: 5 } },
+    { id: 'core', name: '亲传弟子', contribNeed: 2000, bonus: { cult: 10, atkPct: 5, defPct: 5 } },
+    { id: 'elder', name: '长老', contribNeed: 8000, bonus: { cult: 15, atkPct: 10, defPct: 10, hpPct: 10 } },
+  ],
+  rank(p) {
+    if (!p.sect) return null;
+    const contrib = p.sect.contrib || 0;
+    for (let i = this.RANKS.length - 1; i >= 0; i--) {
+      if (contrib >= this.RANKS[i].contribNeed) return this.RANKS[i];
+    }
+    return this.RANKS[0];
+  },
   taskMonsters(rp) {
     return Object.entries(GameData.MONSTERS)
       .filter(([, m]) => m && !m.elite && m.power >= rp - 4 && m.power <= rp + 2)
@@ -3506,8 +3529,8 @@ const SectSys = {
     if (p.sect) { UI.toast('你已拜入宗门，不可再改投他门'); return; }
     if (p.realmIdx < 1) { UI.toast('须至筑基期方可拜入宗门'); return; }
     const sect = GameData.SECTS.find(s => s.id === sectId);
-    p.sect = { id: sectId, contrib: 0, faction: null, tasks: [this.newTask(p), this.newTask(p), this.newTask(p)] };
-    Log.add(`你焚香沐浴，正式拜入 <b>${sect.name}</b>！${sect.bonusText}。`, 'system');
+    p.sect = { id: sectId, contrib: 0, faction: null, rank: 'outer', tasks: [this.newTask(p), this.newTask(p), this.newTask(p)] };
+    Log.add(`你焚香沐浴，正式拜入 <b>${sect.name}</b>！${sect.bonusText}。当前职位：<b>外门弟子</b>。`, 'system');
     Game.afterAction();
   },
   submit(taskIdx) {
