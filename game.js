@@ -6276,7 +6276,20 @@ const Battle = {
     if (B.enemy.charging) { this.act('defend'); return; }
     // 3) 被束缚/冰封：行动会被跳过，直接点防御等待
     if (StatusFx.has(B.myFx, 'stun') || StatusFx.has(B.myFx, 'freeze')) { this.act('defend'); return; }
-    // 4) 蓝够：放威力最高的伤害法诀（血量低时优先治疗法诀）
+    // v18 4) 自动祭符：符修优先，伤害符/控制符
+    if (p.dao === 'talisman') {
+      const talList = Object.entries(p.bag).filter(([id]) => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman');
+      if (talList.length) {
+        // 优先伤害符，其次控制符
+        const dmgTal = talList.find(([id]) => GameData.ITEMS[id].fkind === 'damage');
+        const controlTal = talList.find(([id]) => ['slow', 'defdown', 'freeze'].includes(GameData.ITEMS[id].fkind || ''));
+        if (dmgTal) { this.act('item', dmgTal[0]); return; }
+        if (controlTal && !StatusFx.has(B.enemy.fx, 'slow') && !StatusFx.has(B.enemy.fx, 'defdown')) {
+          this.act('item', controlTal[0]); return;
+        }
+      }
+    }
+    // 5) 蓝够：放威力最高的伤害法诀（血量低时优先治疗法诀）
     const skills = Object.entries(p.gongfa)
       .filter(([id]) => {
         const d = GameData.ITEMS[id];
@@ -6294,7 +6307,7 @@ const Battle = {
         return;
       }
     }
-    // 5) 默认普攻
+    // 6) 默认普攻
     this.act('attack');
   },
 
@@ -6308,7 +6321,7 @@ const Battle = {
     // v13 敌方 DOT 结算（毒/焰/血）与控制判定（被缚/冰封则跳过本回合）
     const dotTxt = this.tickDots('enemy');
     if (dotTxt) this.log(dotTxt, 'log-gain');
-    if (e.hp <= 0) return;   // 毒杀：由主流程判定胜利
+    if (e.hp <= 0) return;
     if (StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze')) {
       const frozen = StatusFx.has(e.fx, 'freeze');
       this.log(`${e.name} 被【${frozen ? '冰封' : '束缚'}】困住，这一回合动弹不得！`, 'log-gain');
@@ -6316,7 +6329,7 @@ const Battle = {
       await this.wait(400);
       return;
     }
-    // v13 精英狂暴：血量低于四成触发一次，攻提升三成、杀招更频繁
+    // v13 精英狂暴：血量低于四成触发一次
     if (e.elite && !e.raged && e.hp <= e.hpMax * 0.4) {
       e.raged = true;
       this.log(`<b>【狂暴】</b>${e.name} 目眦欲裂，妖气暴涨如潮——它已入狂暴之态，攻势凌厉了三分！`, 'log-crit');
@@ -6324,23 +6337,58 @@ const Battle = {
       Ambience.sfx('rage');
       await this.wait(500);
     }
-    // v8 蓄力杀招：妖兽偶会蓄力一回合，次回合杀招威力大增——可趁机防御/斩杀/遁走
+    // v18 敌方 AI 状态机：根据血量/状态/技能池做决策
     const rageBonus = e.raged ? 8 : 0;
+    const hpPct = e.hp / e.hpMax;
+    const hasSkill = e.skills && e.skills.length > 0;
+    // 玩家状态检测
+    const playerHasDebuff = StatusFx.has(B.myFx, 'defdown') || StatusFx.has(B.myFx, 'weaken') || StatusFx.has(B.myFx, 'slow');
+    const playerLowHp = p.hp < st.maxHp * 0.4;
+    const playerBuffed = StatusFx.has(B.myFx, 'atkup') || StatusFx.has(B.myFx, 'defup') || StatusFx.has(B.myFx, 'agiup');
+    // 收集可用技能类型
+    const healSkill = hasSkill ? e.skills.find(s => s.kind === 'heal') : null;
+    const guardSkill = hasSkill ? e.skills.find(s => s.kind === 'guard') : null;
+    const debuffSkill = hasSkill ? e.skills.find(s => ['defdown', 'slow', 'weaken', 'poison', 'burn', 'bleed'].includes(s.kind)) : null;
+    const controlSkill = hasSkill ? e.skills.find(s => ['stun', 'freeze'].includes(s.kind)) : null;
+    const drainSkill = hasSkill ? e.skills.find(s => s.kind === 'drain') : null;
+    const roarSkill = hasSkill ? e.skills.find(s => s.kind === 'roar') : null;
+    // 决策树
     if (e.charging) {
+      // 蓄力完成：杀招
       e.charging = false;
       this.log(`${e.name} 蓄势已满，<b>杀招</b>轰然落下！`, 'log-crit');
       this.enemyStrike(st, 2.1, true);
-    } else if (e.skills && e.skills.length && Utils.chance(46 + rageBonus)) {
-      // v13 技能池：按权重施展专属技能（普攻之外的花样）
+    } else if (hpPct < 0.25 && healSkill && Utils.chance(70)) {
+      // 濒死：优先治疗
+      this.enemySkill(st, healSkill);
+    } else if (hpPct < 0.35 && guardSkill && !e.guardRounds && Utils.chance(60)) {
+      // 残血：开防御
+      this.enemySkill(st, guardSkill);
+    } else if (playerBuffed && debuffSkill && Utils.chance(50 + rageBonus)) {
+      // 玩家有增益：驱散/削弱
+      this.enemySkill(st, debuffSkill);
+    } else if (playerLowHp && drainSkill && Utils.chance(50 + rageBonus)) {
+      // 玩家残血：吸血斩杀
+      this.enemySkill(st, drainSkill);
+    } else if (!playerLowHp && controlSkill && !StatusFx.has(B.myFx, 'stun') && Utils.chance(35 + rageBonus)) {
+      // 控制技能
+      this.enemySkill(st, controlSkill);
+    } else if (hpPct < 0.5 && !e.raged && roarSkill && Utils.chance(45 + rageBonus)) {
+      // 半血增伤
+      this.enemySkill(st, roarSkill);
+    } else if (hasSkill && Utils.chance(50 + rageBonus)) {
+      // 技能池随机
       const total = e.skills.reduce((s, x) => s + (x.w || 1), 0);
       let r = Math.random() * total, sk = e.skills[e.skills.length - 1];
       for (const s of e.skills) { r -= (s.w || 1); if (r <= 0) { sk = s; break; } }
       this.enemySkill(st, sk);
-    } else if (Utils.chance((e.elite ? 26 : 18) + rageBonus)) {
+    } else if (Utils.chance((e.elite ? 30 : 20) + rageBonus) && !e.charging) {
+      // 蓄力
       e.charging = true;
       this.log(`${e.name} 妖气翻涌、筋肉隆起——它正在<b>蓄力</b>，下回合将施展杀招！`, 'log-warn');
       this.pushFloat('enemy', '蓄力', 'miss');
     } else {
+      // 普攻
       const heavy = Utils.chance((e.elite ? 35 : 25) + Math.floor(rageBonus / 2));
       this.enemyStrike(st, heavy ? 1.55 : 1, heavy);
     }
@@ -6348,7 +6396,6 @@ const Battle = {
     if (B.buffs.defRounds > 0) { B.buffs.defRounds--; if (B.buffs.defRounds === 0) B.buffs.defPower = 0; }
     if (B.buffs.dodgeRounds > 0) { B.buffs.dodgeRounds--; if (B.buffs.dodgeRounds === 0) B.buffs.dodgeBonus = 0; }
     if (e.guardRounds > 0) { e.guardRounds--; if (e.guardRounds === 0) e.guardPower = 0; }
-    // v13 增减益状态回合衰减（控制状态由各自回合消耗，DOT 由 tickDots 衰减）
     B.myFx = StatusFx.decayKinds(B.myFx, ['defdown', 'slow', 'weaken', 'atkup', 'defup', 'agiup', 'critup']);
     e.fx = StatusFx.decayKinds(e.fx, ['defdown', 'slow']);
     B.defending = false;
@@ -6469,6 +6516,7 @@ const Battle = {
     dmg = Math.max(1, Math.round(dmg));
     p.hp = Math.max(0, p.hp - dmg);
     B.combo = 0;   // v13 受击中断连击
+    B.playerHit = true; // v18：玩家受击标记，渲染时触发震动反馈
     if (p.dao === 'body') DaoSys.gain(p, blocked ? 8 : 4);   // v16 体魄
     this.pushFloat('me', `-${dmg}`, crit || heavy ? 'crit' : 'dmg');
     this.addMorale(blocked ? 4 : -8);
