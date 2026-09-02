@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="description" content="凡人问道 —— 网页版文字修仙游戏">
+<link rel="icon" href="data:,">
+<title>凡人问道 · 文字修仙</title>
+<link rel="stylesheet" href="style.css?v=21">
+</head>
+<body>
+<div id="app">
+
+  <!-- ==================== 开始 / 存档界面 ==================== -->
+  <div id="start-screen" class="screen">
+    <div class="start-inner">
+      <div class="title-wrap">
+        <h1 class="game-title">凡人问道</h1>
+        <div class="title-seal">道</div>
+        <p class="game-subtitle">众生如蝼蚁 · 大道三千 · 我命由我不由天</p>
+      </div>
+
+      <!-- 存档位选择 -->
+      <div id="start-slots" class="start-slots"></div>
+      <p class="start-tip">选择一处存档位，开启你的仙途。</p>
+    </div>
+
+    <!-- 创角界面 -->
+    <div id="create-screen" class="hidden">
+      <div class="create-inner">
+        <h2 class="create-title">初入道途 · 天资注定</h2>
+        <div class="create-row name-row">
+          <label for="create-name">道&nbsp;号</label>
+          <input id="create-name" type="text" maxlength="6" placeholder="请输入道号（至多六字）">
+        </div>
+        <div id="create-attrs" class="create-attrs"></div>
+        <div id="create-rating" class="create-rating"></div>
+        <div class="create-btns">
+          <button class="btn" data-action="st-back">返 回</button>
+          <button class="btn" data-action="st-reroll">✦ 重塑天资</button>
+          <button class="btn btn-primary" data-action="st-start">踏上仙途</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 游戏主界面 ==================== -->
+  <div id="game-screen" class="screen hidden">
+    <header id="top-bar">
+      <div class="top-title">凡人问道</div>
+      <div class="top-right">
+        <div id="amb-ctrl">
+          <button class="amb-btn" id="amb-toggle" data-action="amb-panel" title="设置">⚙ 设置</button>
+          <div id="amb-panel" class="amb-panel hidden">
+            <div class="amb-panel-title">— 设 置 —</div>
+            <label class="opt-line"><input type="checkbox" id="amb-sfx"> 事件音效（突破 / 稀有 / 胜利）</label>
+            <label class="opt-line"><input type="checkbox" id="amb-music"> 古琴背景乐（音量 20%）</label>
+            <div class="amb-vol-row">总音量 <input type="range" id="amb-vol" min="0" max="100" value="80"></div>
+            <div class="amb-vol-row">战斗速度
+              <select id="amb-speed">
+                <option value="1">×1 原速</option>
+                <option value="2">×2 两倍</option>
+                <option value="3">极速</option>
+              </select>
+            </div>
+            <div class="tip-line" style="margin:4px 0 0">· 自动战斗可在战斗中一键开启（残血自动服药、敌蓄力自动防御）。</div>
+          </div>
+        </div>
+        <div id="top-info" class="top-info"></div>
+      </div>
+    </header>
+
+    <main id="layout">
+      <!-- 左：角色状态 -->
+      <aside id="panel-left" class="panel"></aside>
+
+      <!-- 中：操作 + 日志 -->
+      <section id="panel-center" class="panel center-panel">
+        <div id="focus-strip" class="hidden"></div>
+      <nav id="tabs"></nav>
+        <div id="tab-content"></div>
+        <div id="log-wrap" class="collapsed">
+          <div class="log-head">✦ 游历记载<span class="log-badge" style="display:none"></span>
+            <span class="log-tools">
+              <button class="log-toggle" data-action="log-toggle" title="展开 / 收起游历记载">展开</button>
+              <button class="log-tool" id="log-pause-btn" data-action="log-pause">暂停滚动</button>
+              <button class="log-tool" data-action="log-clear">一键清空</button>
+            </span>
+          </div>
+          <div id="log"></div>
+        </div>
+      </section>
+
+      <!-- 右：背包 + 菜单 -->
+      <aside id="panel-right">
+        <div class="panel" id="bag-panel"></div>
+        <div class="panel menu-panel">
+          <div class="panel-title">✦ 菜单</div>
+          <div class="menu-btns">
+            <button class="btn btn-sm" data-action="act-save-open">存档 / 读档</button>
+            <button class="btn btn-sm" data-action="act-codex">成就 · 图鉴</button>
+            <button class="btn btn-sm" data-action="act-help">玩法说明</button>
+            <button class="btn btn-sm btn-danger" data-action="act-newgame">回到开始界面</button>
+          </div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <!-- ==================== 战斗弹窗 ==================== -->
+  <div id="battle-modal" class="modal hidden">
+    <div class="battle-box" id="battle-box"></div>
+  </div>
+
+  <!-- ==================== 通用弹窗 ==================== -->
+  <div id="popup-modal" class="modal hidden">
+    <div class="popup-box">
+      <div class="popup-title" id="popup-title"></div>
+      <div class="popup-body" id="popup-body"></div>
+      <div class="popup-btns" id="popup-btns"></div>
+    </div>
+  </div>
+
+  <!-- ==================== 大道选择（§19） ==================== -->
+  <div id="dao-modal" class="modal hidden">
+    <div class="popup-box dao-box">
+      <div class="popup-title">叩 问 大 道</div>
+      <div class="card-desc" style="text-align:center;margin-bottom:12px;color:var(--text-dim)">道途六条，殊途同归。一念既定，终身不悔。</div>
+      <div class="dao-grid" id="dao-box"></div>
+    </div>
+  </div>
+
+  <!-- ==================== 天劫渡劫（§22） ==================== -->
+  <div id="tribulation-modal" class="modal hidden">
+    <div class="popup-box trib-box" id="trib-box"></div>
+  </div>
+
+  <!-- ==================== 新手引导 ==================== -->
+  <div id="tutorial" class="modal hidden">
+    <div class="tutorial-box">
+      <div class="tutorial-step" id="tutorial-step"></div>
+      <div class="tutorial-dots" id="tutorial-dots"></div>
+      <div class="tutorial-btns">
+        <button class="btn btn-sm" data-action="tut-skip">跳过引导</button>
+        <button class="btn btn-sm" data-action="tut-prev">上一步</button>
+        <button class="btn btn-sm btn-primary" data-action="tut-next">下一步</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <div id="announce"></div>
+</div>
+<script src="game.js?v=22"></script>
+</body>
+</html>

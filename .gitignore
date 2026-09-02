@@ -1,0 +1,4 @@
+node_modules/
+gui-test-screenshots/
+dist/
+.DS_Store

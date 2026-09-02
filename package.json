@@ -1,0 +1,20 @@
+{
+  "name": "game",
+  "version": "1.0.0",
+  "description": "",
+  "main": "game.js",
+  "scripts": {
+    "serve": "node server.mjs",
+    "test": "node verify-game.mjs",
+    "test:v3": "node verify-v3.mjs",
+    "test:v4": "node verify-v4.mjs",
+    "test:v5": "node verify-v5.mjs",
+    "test:v6": "node verify-v6.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "puppeteer-core": "^25.8.0"
+  }
+}
