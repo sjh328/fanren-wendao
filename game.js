@@ -932,14 +932,25 @@ const GameData = {
         { id: 'swift', name: '迅捷', slot: 'accessory', bonus: { spdPct: 8 }, desc: '身法+8%' },
         { id: 'lucky', name: '灵韵', slot: 'accessory', bonus: { dodge: 5 }, desc: '闪避+5%' },
         { id: 'fort', name: '磐石', slot: 'any', bonus: { block: 5 }, desc: '格挡+5%' },
+        /* ---- v19 词缀扩池 ---- */
+        { id: 'pojun', name: '破军', slot: 'weapon', bonus: { atk: 40 }, desc: '攻击+40' },
+        { id: 'yugu', name: '玉骨', slot: 'armor', bonus: { def: 30 }, desc: '防御+30' },
+        { id: 'guixi', name: '龟息', slot: 'armor', bonus: { hp: 300 }, desc: '气血+300' },
+        { id: 'tongming', name: '通明', slot: 'accessory', bonus: { crit: 3, dodge: 3 }, desc: '暴击+3%，闪避+3%' },
+        { id: 'juling', name: '聚灵', slot: 'any', bonus: { cult: 4 }, desc: '修炼效率+4%' },
       ],
       suffix: [
         { id: 'leech', name: '吸血', slot: 'weapon', desc: '攻击时回复10%伤害的气血', onHit: { leech: 0.1 } },
         { id: 'execute', name: '斩杀', slot: 'weapon', desc: '对血量低于20%的敌人伤害+25%', onHit: { execute: 0.25 } },
         { id: 'thorns', name: '反伤', slot: 'armor', desc: '受击时反弹15%伤害', onHurt: { thorns: 0.15 } },
-        { id: 'shield', name: '护盾', slot: 'armor', desc: '战斗开场获得10%气血上限护盾', onStart: { shield: 0.1 } },
+        { id: 'shield', name: '护盾', slot: 'armor', desc: '战斗开场获得金光护体（减伤10%，两回合）', onStart: { shield: 0.1 } },
         { id: 'regen', name: '回灵', slot: 'accessory', desc: '每回合回复5%灵力', onTurn: { mpPct: 5 } },
         { id: 'combo', name: '连击', slot: 'accessory', desc: '连击上限+2', onHit: { comboUp: 2 } },
+        /* ---- v19 词缀扩池 ---- */
+        { id: 'duopo', name: '夺魄', slot: 'weapon', desc: '攻击时回复18%伤害的气血', onHit: { leech: 0.18 } },
+        { id: 'jingji', name: '荆棘', slot: 'armor', desc: '受击时反弹22%伤害', onHurt: { thorns: 0.22 } },
+        { id: 'ningqi', name: '凝气', slot: 'accessory', desc: '每回合回复8%灵力', onTurn: { mpPct: 8 } },
+        { id: 'lianshan', name: '连山', slot: 'weapon', desc: '连击上限+3', onHit: { comboUp: 3 } },
       ],
     },
     // 强化
@@ -1052,6 +1063,14 @@ const GameData = {
     s_cx_jian:  { name: '赤霄神剑',   type: 'artifact', slot: 'weapon',    grade: 3, price: 0, set: 'chixiao', desc: '赤霄套装之一：赤霄贯日，锋芒毕露。', bonus: { atk: 170, crit: 4 } },
     s_cx_pao:   { name: '赤霄战袍',   type: 'artifact', slot: 'armor',     grade: 3, price: 0, set: 'chixiao', desc: '赤霄套装之二：战袍如焰，杀气腾腾。', bonus: { def: 70, atk: 40, hp: 260 } },
     s_cx_gou:   { name: '赤霄战勾',   type: 'artifact', slot: 'accessory', grade: 3, price: 0, set: 'chixiao', desc: '赤霄套装之三：战意灌注，出手狠辣。', bonus: { atk: 60, crit: 5 } },
+    /* ---- v19 血河套装（攻击线·血河旧部遗物，炼器可得） ---- */
+    s_hj_sha:   { name: '血河杀戟',   type: 'artifact', slot: 'weapon',    grade: 4, price: 0, set: 'xuehe', desc: '血河套装之一：戟锋饮血，杀气化河。', bonus: { atk: 220, crit: 5 } },
+    s_hj_pao:   { name: '血河魔袍',   type: 'artifact', slot: 'armor',     grade: 4, price: 0, set: 'xuehe', desc: '血河套装之二：袍染旧血，煞气护身。', bonus: { def: 90, atk: 60, hp: 400 } },
+    s_hj_ling:  { name: '血河魂铃',   type: 'artifact', slot: 'accessory', grade: 4, price: 0, set: 'xuehe', desc: '血河套装之三：铃声所至，魂魄俱寒。', bonus: { atk: 70, crit: 6 } },
+    /* ---- v19 仙缘套装（均衡线·仙阶三件，灵界秘境掉落） ---- */
+    s_xy_jian:  { name: '仙缘灵剑',   type: 'artifact', slot: 'weapon',    grade: 5, price: 0, set: 'xianyuan', desc: '仙缘套装之一：剑心和光，不染尘俗。', bonus: { atk: 340, cult: 5 } },
+    s_xy_ling:  { name: '仙缘羽衣',   type: 'artifact', slot: 'armor',     grade: 5, price: 0, set: 'xianyuan', desc: '仙缘套装之二：羽化而衣，风雷不侵。', bonus: { def: 140, hp: 700 } },
+    s_xy_huan:  { name: '仙缘玉环',   type: 'artifact', slot: 'accessory', grade: 5, price: 0, set: 'xianyuan', desc: '仙缘套装之三：环佩相鸣，仙缘自至。', bonus: { atk: 80, def: 60, block: 6 } },
     /* ---- v13 炼器专属（天级装备，只能炼器获得） ---- */
     w_tianwen:  { name: '天问剑',     type: 'artifact', slot: 'weapon',    grade: 4, price: 0, desc: '以问天之姿铸就的绝世神剑，剑鸣可裂云层。', bonus: { atk: 260, atkPct: 14, crit: 5 } },
     a_taiyi:    { name: '太乙道袍',   type: 'artifact', slot: 'armor',     grade: 4, price: 0, desc: '太乙真人亲织道袍，万法不侵。', bonus: { def: 180, hp: 800, hpPct: 10 } },
@@ -1303,7 +1322,22 @@ const GameData = {
   SETS: {
     xuantian: { name: '玄天套装', pieces: ['s_xt_jian', 's_xt_jia', 's_xt_pei'], bonus: { defPct: 15, hpPct: 10 }, text: '守御之道：防御 +15%，气血 +10%' },
     chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, text: '杀伐之道：攻击 +15%，暴击 +5%' },
+    /* ---- v19 新增套装 ---- */
+    xuehe:    { name: '血河套装', pieces: ['s_hj_sha', 's_hj_pao', 's_hj_ling'], bonus: { atkPct: 12, crit: 4 }, text: '血河遗锋：攻击 +12%，暴击 +4%' },
+    xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, text: '仙缘天成：攻击、防御、气血俱 +10%' },
   },
+
+  /* ---------- v19 道韵协同：功法双双修至三层以上，共鸣生韵 ---------- */
+  DAO_YUN: [
+    { id: 'dy_jian',  name: '万剑归心', need: ['gf_jianxin', 'gf_wanjian'], fx: { atkPct: 4 },  desc: '剑心通明与万剑归宗相合：攻击 +4%' },
+    { id: 'dy_dan',   name: '丹鼎鸿蒙', need: ['gf_danjing', 'gf_hongmeng'], fx: { cult: 4 },   desc: '丹经与鸿蒙相合：修炼效率 +4%' },
+    { id: 'dy_fu',    name: '雷符双绝', need: ['gf_leishen', 'gf_zixiao'], fx: { crit: 4 },    desc: '雷神与紫霄相合：暴击 +4%' },
+    { id: 'dy_ti',    name: '金刚不坏', need: ['gf_tiangang', 'gf_banti'], fx: { hpPct: 4 },   desc: '天罡与般若体相合：气血 +4%' },
+    { id: 'dy_zhen',  name: '周天大衍', need: ['gf_dayan', 'gf_zhoutian'], fx: { dodge: 4 },   desc: '大衍与周天相合：闪避 +4%' },
+    { id: 'dy_mo',    name: '血煞同源', need: ['gf_xuesha', 'gf_hansha'], fx: { atkPct: 3, crit: 2 }, desc: '血煞与寒煞相合：攻击 +3%，暴击 +2%' },
+    { id: 'dy_hunyuan', name: '混元涅槃', need: ['gf_hunyuan', 'gf_niepan'], fx: { hpPct: 3, defPct: 3 }, desc: '混元与涅槃相合：气血、防御 +3%' },
+    { id: 'dy_wangchen', name: '绝尘飞仙', need: ['gf_wangchen', 'gf_feixian'], fx: { dodge: 3 }, desc: '问尘与飞仙相合：身法轻灵，闪避 +3%' },
+  ],
 
   /* ---------- 文案池 ---------- */
   NAMES: ['沈青山', '顾长风', '苏云澈', '叶凌天', '陆沉舟', '柳如烟', '洛清寒', '秦无衣', '姜怀远', '白亦尘', '林疏影', '谢惊鸿'],
@@ -3239,6 +3273,23 @@ const PlayerFactory = {
           }
         }
       },
+      // v19-2: 心魔 / 本命法宝 / 洞府建筑 / 灵兽亲昵与副战
+      (out) => {
+        out.xinmo = Math.max(0, Math.min(160, Math.floor(Number(out.xinmo)) || 0));
+        out.benming = (out.benming && typeof out.benming === 'object') ? { lv: Utils.clamp(Math.floor(Number(out.benming.lv)) || 0, 0, ForgeSys.BENMING_MAX) } : { lv: 0 };
+        if (out.cave && typeof out.cave === 'object') {
+          const b = out.cave.builds && typeof out.cave.builds === 'object' ? out.cave.builds : {};
+          out.cave.builds = { beast: Utils.clamp(Math.floor(Number(b.beast)) || 0, 0, 3), train: Utils.clamp(Math.floor(Number(b.train)) || 0, 0, 3), lib: Utils.clamp(Math.floor(Number(b.lib)) || 0, 0, 3) };
+        }
+        if (out.beasts && typeof out.beasts === 'object') {
+          out.beasts.active2 = isFinite(Number(out.beasts.active2)) ? Number(out.beasts.active2) : null;
+          if (out.beasts.active2 != null && !((out.beasts.list || []).some(x => x.uid === out.beasts.active2))) out.beasts.active2 = null;
+          for (const bst of (out.beasts.list || [])) {
+            if (!bst || typeof bst !== 'object') continue;
+            bst.bond = Utils.clamp(Math.floor(Number(bst.bond)) || 0, 0, 100);
+          }
+        }
+      },
     ];
     // 基础：fresh 模板 + 展开合并
     const fresh = this.create(p.name || '无名散修', p.attrs || { gen: 5, comp: 5, luck: 5, body: 5 });
@@ -3326,7 +3377,16 @@ const Stat = {
         total[k] = (total[k] || 0) + base + per * (g.level - 1);
       }
     }
+    // v19 道韵协同：特定功法组合双双修至三层以上，共鸣生韵
+    for (const dy of (GameData.DAO_YUN || [])) {
+      if (!dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3)) continue;
+      for (const [k, v] of Object.entries(dy.fx)) total[k] = (total[k] || 0) + v;
+    }
     return total;
+  },
+  /** v19 已激活的道韵列表（功法页展示） */
+  activeDaoYun(p) {
+    return (GameData.DAO_YUN || []).filter(dy => dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3));
   },
   /** 汇总已穿戴法宝的加成（v13：数值属性受强化等级 +10%/级 加成；套装加成并入） */
   equipBonus(p) {
@@ -3347,6 +3407,10 @@ const Stat = {
     // v13 套装加成
     if (typeof ForgeSys !== 'undefined' && ForgeSys.setBonus) {
       for (const [k, v] of Object.entries(ForgeSys.setBonus(p))) total[k] = (total[k] || 0) + v;
+    }
+    // v19 词缀前缀加成
+    if (typeof ForgeSys !== 'undefined' && ForgeSys.affixBonus) {
+      for (const [k, v] of Object.entries(ForgeSys.affixBonus(p))) total[k] = (total[k] || 0) + v;
     }
     return total;
   },
@@ -3395,6 +3459,8 @@ const Stat = {
     const compEff = this.compOf(p);
     const finalScale = (1 + rootPct / 100) * (1 - lossPct / 100) * (1 + marks * 0.01)
       * (1 + jadePct / 100)
+      * ((typeof XinmoSys !== 'undefined' && XinmoSys.scale) ? XinmoSys.scale(p) : 1)
+      * (1 + ((p.benming && p.benming.lv) || 0) * 0.01)
       * ((typeof RankSys !== 'undefined' && RankSys.isTop && RankSys.isTop(p)) ? 1.02 : 1);   // v13 天下第一：全属性 +2%
 
     const maxHp = Math.round((90 + A.body * 15 + Math.pow(rp, 1.6) * 6 + (eq.hp || 0))
@@ -3788,6 +3854,7 @@ const GongfaSys = {
     if (g.level >= this.maxLevel(def)) { UI.toast('此功法已修至大成'); return; }
     let gain = 18 + p.attrs.comp * 4 + Utils.rand(0, 12);
     if (p.realmIdx >= 7) gain *= 2;   // v10 境界特性 · 万法归宗（大乘）：参悟所得翻倍
+    if (p.cave && p.cave.builds && p.cave.builds.lib) gain *= 1 + p.cave.builds.lib * 0.2;   // v19 藏经室
     g.exp += gain;
     if (p.dao) DaoSys.gain(p, def.daoLimit === p.dao ? 20 : 8);   // v16 道境经验：参悟
     Time.add(5);
@@ -4009,6 +4076,7 @@ const Pill = {
       const lost = Math.round(p.exp * 0.1);
       p.exp = Math.max(0, p.exp - lost);
       p.poison = Math.round(cap * 0.5);
+      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 6, '丹毒反噬');
       Log.add(`你服下 <b>${def.name}</b>（${effectText.join('，')}），然而丹毒冲破上限，药力反噬，根基受损！`, 'warn');
       Log.add(`气血翻涌，当前层修为 -${Utils.fmtNum(lost)}。切记丹毒将满时莫要强行服丹！`, 'loss');
     } else {
@@ -4126,6 +4194,132 @@ const ForgeSys = {
     Game.afterAction();
   },
   /** 已穿戴装备触发的套装加成（Stat.compute 调用） */
+  /* ---------- v19 词缀系统（v18 数据首次实装：实例词缀 + 洗练 + 战斗特效） ---------- */
+  /** 为装备掷词缀（前缀/后缀各至多一条，品阶越高概率越高） */
+  rollAffixes(def) {
+    const out = {};
+    if (!def || !def.bonus) return out;
+    const pool = GameData.BALANCE.AFFIXES;
+    const grade = def.grade || 0;
+    if (Utils.chance(Utils.clamp(40 + grade * 10, 0, 85))) {
+      const cands = pool.prefix.filter(a => a.slot === 'any' || a.slot === def.slot);
+      if (cands.length) out.prefix = Utils.pick(cands).id;
+    }
+    if (Utils.chance(Utils.clamp(25 + grade * 10, 0, 70))) {
+      const cands = pool.suffix.filter(a => a.slot === 'any' || a.slot === def.slot);
+      if (cands.length) out.suffix = Utils.pick(cands).id;
+    }
+    return out;
+  },
+  affixDef(part, id) { return ((GameData.BALANCE.AFFIXES || {})[part] || []).find(a => a.id === id) || null; },
+  /** 装备实例的词缀（旧档首次读取时补掷并写回，即首次装备后落定） */
+  affixesOf(p, inst) {
+    if (!inst || typeof inst === 'string') return {};
+    const id = Utils.eqId(inst);
+    const def = GameData.ITEMS[id];
+    if (!def) return {};
+    if (!inst.affixes) inst.affixes = this.rollAffixes(def);
+    return inst.affixes;
+  },
+  /** 词缀显示（◆前缀 ◈后缀） */
+  affixText(inst) {
+    const A = (inst && inst.affixes) || {};
+    const parts = [];
+    const pre = A.prefix && this.affixDef('prefix', A.prefix);
+    const suf = A.suffix && this.affixDef('suffix', A.suffix);
+    if (pre) parts.push(`<span class="affix-p" title="${Utils.esc(pre.desc)}">◆${pre.name}</span>`);
+    if (suf) parts.push(`<span class="affix-s" title="${Utils.esc(suf.desc)}">◈${suf.name}</span>`);
+    return parts.join(' ');
+  },
+  /** 词缀前缀加成（equipBonus 并入） */
+  affixBonus(p) {
+    const total = {};
+    if (!p || !p.equipped) return total;
+    for (const inst of Object.values(p.equipped)) {
+      const A = this.affixesOf(p, inst);
+      if (!A.prefix) continue;
+      const d = this.affixDef('prefix', A.prefix);
+      if (d && d.bonus) for (const [k, v] of Object.entries(d.bonus)) total[k] = (total[k] || 0) + v;
+    }
+    return total;
+  },
+  /** 词缀后缀战斗特效聚合（Battle 消费） */
+  suffixFx(p) {
+    const fx = { leech: 0, execute: 0, comboUp: 0, thorns: 0, shield: 0, mpRegen: 0 };
+    if (!p || !p.equipped) return fx;
+    for (const inst of Object.values(p.equipped)) {
+      const A = (inst && inst.affixes) || {};
+      if (!A.suffix) continue;
+      const d = this.affixDef('suffix', A.suffix);
+      if (!d) continue;
+      const o = d.onHit || d.onHurt || d.onStart || d.onTurn || {};
+      for (const [k, v] of Object.entries(o)) if (k in fx) fx[k] += v;
+    }
+    return fx;
+  },
+  /** v19 洗练：消耗灵石与玄铁矿，重掷指定槽位的词缀（前缀/后缀择一） */
+  async reroll(slot) {
+    const p = Game.player;
+    const inst = p.equipped[slot];
+    const id = Utils.eqId(inst);
+    if (!inst || typeof inst === 'string' || !id) { UI.toast('该槽位未穿戴法宝'); return; }
+    const def = GameData.ITEMS[id];
+    const cost = Math.round(300 * Math.pow(2.2, p.realmIdx));
+    const needOre = 2;
+    const part = await UI.popup({
+      title: `词缀洗练 · ${def.name}`,
+      html: `当前词缀：${this.affixText(inst) || '<span style="color:var(--text-faint)">无</span>'}<br>
+        洗练将重掷词缀（前缀/后缀择其一），结果随机，不问因果。<br>
+        需灵石 <span class="hl">${Utils.fmtNum(cost)}</span> 与【玄铁矿】×${needOre}。`,
+      options: [
+        { text: '洗练前缀 ◆', value: 'prefix', primary: true },
+        { text: '洗练后缀 ◈', value: 'suffix' },
+        { text: '作罢', value: null },
+      ],
+    });
+    if (!part) return;
+    if (Bag.count('m_xuantie') < needOre) { UI.toast('玄铁矿不足'); return; }
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    Bag.removeItem('m_xuantie', needOre);
+    const pool = GameData.BALANCE.AFFIXES[part].filter(a => a.slot === 'any' || a.slot === def.slot);
+    if (!pool.length) { UI.toast('此槽位无可用词缀'); Game.afterAction(); return; }
+    inst.affixes = inst.affixes || {};
+    inst.affixes[part] = Utils.pick(pool).id;
+    const d = this.affixDef(part, inst.affixes[part]);
+    Log.add(`你以玄铁重淬【${def.name}】——${part === 'prefix' ? '前缀' : '后缀'}词缀化为【<b>${d.name}</b>】：${d.desc}`, part === 'prefix' ? 'gain' : 'system');
+    Ambience.sfx('forge');
+    Game.afterAction();
+  },
+  /* ---------- v19 本命法宝喂养：吞灵材升阶，每阶全属性 +1%（上限十阶） ---------- */
+  BENMING_MAX: 10,
+  benmingOwn(p) {
+    if (p.benming && p.benming.lv > 0) return true;
+    for (const inst of Object.values(p.equipped || {})) {
+      if (Utils.eqId(inst) === 'z_benming') return true;
+    }
+    return !!p.bag['z_benming'];
+  },
+  async feedBenming() {
+    const p = Game.player;
+    if (!p.benming) p.benming = { lv: 0 };
+    if (p.benming.lv >= this.BENMING_MAX) { UI.toast('本命法宝已达十阶圆满'); return; }
+    const lv = p.benming.lv;
+    const cost = Math.round(3000 * (lv + 1) * Math.pow(2.2, Math.min(6, p.realmIdx)));
+    const ore = 5 + lv * 2;
+    const ok = await UI.popup({
+      title: `本命法宝喂养 · 第${lv + 1}阶`,
+      html: `以本命精血温养法宝，吞灵材而长。每阶全属性 +1%（当前 ${lv} 阶）。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span> 与【玄铁矿】×${ore}。`,
+      options: [{ text: '喂养', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (Bag.count('m_xuantie') < ore) { UI.toast('玄铁矿不足'); return; }
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    Bag.removeItem('m_xuantie', ore);
+    p.benming.lv++;
+    Log.add(`本命法宝嗡鸣长吟，吞灵而长——升至 <b>第${p.benming.lv}阶</b>！道韵滋养，全属性 +1%。`, 'realm');
+    Ambience.sfx('forge');
+    Game.afterAction();
+  },
   setBonus(p) {
     const total = {};
     if (!p.equipped) return total;
@@ -4157,6 +4351,41 @@ const ForgeSys = {
  * ====================================================================== */
 const CaveSys = {
   MAX_LV: 5,
+  /** v19 洞府建筑：灵兽窝（兽栏+2/级）/ 演武场（攻防+2%/级）/ 藏经室（参悟+20%/级），各至三阶 */
+  BUILDS: [
+    { id: 'beast', name: '灵兽窝', icon: '🐾', desc: '兽栏位 +2/阶，灵兽居所愈发宽裕。' },
+    { id: 'train', name: '演武场', icon: '⚔', desc: '演武淬体：攻击、防御 +2%/阶。' },
+    { id: 'lib',   name: '藏经室', icon: '📖', desc: '藏经参悟：功法参悟所得 +20%/阶。' },
+  ],
+  buildLv(p, id) { return (p.cave && p.cave.builds && p.cave.builds[id]) || 0; },
+  buildCost(p, id) {
+    const lv = this.buildLv(p, id);
+    return { stones: Math.round(4000 * Math.pow(3, lv) * Math.pow(2, Math.min(4, p.realmIdx))), ore: 4 + lv * 3 };
+  },
+  async upgradeBuild(id) {
+    const p = Game.player;
+    if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
+    const def = this.BUILDS.find(b => b.id === id);
+    if (!def) return;
+    const lv = this.buildLv(p, id);
+    if (lv >= 3) { UI.toast('此建筑已至三阶圆满'); return; }
+    if (!p.cave.builds) p.cave.builds = { beast: 0, train: 0, lib: 0 };
+    const c = this.buildCost(p, id);
+    const ok = await UI.popup({
+      title: `${def.name} · ${lv ? '升' : '建'}至${['', '一', '二', '三'][lv + 1]}阶`,
+      html: `${def.icon} ${def.desc}<br>需灵石 <span class="hl">${Utils.fmtNum(c.stones)}</span> 与【玄铁矿】×${c.ore}。`,
+      options: [{ text: '兴土木', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (Bag.count('m_xuantie') < c.ore) { UI.toast('玄铁矿不足'); return; }
+    if (!Bag.spendStones(c.stones)) { UI.toast('灵石不足'); return; }
+    Bag.removeItem('m_xuantie', c.ore);
+    p.cave.builds[id] = lv + 1;
+    Log.add(`洞府【<b>${def.name}</b>】${lv ? '扩' : '落'}成${['', '一', '二', '三'][lv + 1]}阶！${def.desc}`, 'gain');
+    Story.chron(`洞府 ${def.name} 成${['', '一', '二', '三'][lv + 1]}阶`);
+    Ambience.sfx('forge');
+    Game.afterAction();
+  },
   /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级 */
   cultBonus(p) { return p.cave ? p.cave.lv * 4 : 0; },
   /** v18：炼丹房加成（每级+5%成丹率） */
@@ -4167,10 +4396,26 @@ const CaveSys = {
     p.cave._visitorDay = Math.floor(p.day);
     if (!Utils.chance(15)) return;
     const events = [
-      { text: '一位散修前来拜访，与你论道半日，颇有收获。', fn: () => { p.insight = Math.min(100, (p.insight || 0) + 2); } },
-      { text: '一只灵鹤衔来一枚灵果，落在你的洞府门前。', fn: () => { Bag.addItem('m_lingzhi', 1); } },
+      { text: '一位散修前来拜访，与你论道半日，颇有收获。（感悟 +2）', fn: () => { p.insight = Math.min(100, (p.insight || 0) + 2); } },
+      { text: '一只灵鹤衔来一枚灵果，落在你的洞府门前。（灵芝 +1）', fn: () => { Bag.addItem('m_lingzhi', 1); } },
       { text: '一位同门前来切磋，点到为止，助你精进。', fn: () => { Cultivate.addExp(p, Math.round(20 * GameData.eco(p.realmIdx))); } },
+      /* ---- v19 访客扩充 ---- */
+      { text: '坊市货郎路过，捎来一袋打折的玄铁矿——半卖半送。（玄铁矿 +2）', fn: () => { Bag.addItem('m_xuantie', 2); } },
+      { text: '一位符师登门讨茶，临走留下一张手绘护身符以谢茶资。（金光符 +1）', fn: () => { Bag.addItem('tal_jinguang', 1); } },
+      { text: '夜半有琴音自山间传来，你听了一夜，晨起神清气爽。（修为 +若干）', fn: () => { Cultivate.addExp(p, Math.round(45 * GameData.eco(p.realmIdx))); } },
+      { text: '一只走失的灵犬赖在你门前不走，你喂了它三日，它衔来一枚妖兽内丹作谢。（妖兽内丹 +1）', fn: () => { Bag.addItem('m_neidan', 1); } },
+      { text: '有人影在你洞府外徘徊——是暗处的眼睛又来了？（心魔 +2，玄影客的视线）', fn: () => { if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 2, '洞府外的视线'); } },
     ];
+    // v19 好友来访：关系最好且相识的修士携礼登门
+    const friendIds = Object.keys(p.npcs || {}).filter(id => p.npcs[id].alive && p.npcs[id].met && p.npcs[id].rel >= 30);
+    if (friendIds.length) {
+      const fid = friendIds.sort((a, b) => p.npcs[b].rel - p.npcs[a].rel)[0];
+      const nd = NpcSys.def(fid);
+      if (nd) events.push({ text: `${nd.name} 云游至此，登门一叙，临别赠礼。（交情微增，共同记忆 +1）`, fn: () => {
+        const st2 = NpcSys.state(p, fid);
+        if (st2) { st2.rel = Utils.clamp(st2.rel + 2, -100, 100); NpcSys.mem(p, fid, 'story', '洞府来访'); }
+      } });
+    }
     const ev = Utils.pick(events);
     ev.fn();
     Log.add(`【洞府访客】${ev.text}`, 'info');
@@ -4340,7 +4585,7 @@ const BeastSys = {
   /** 被动加成映射：物种 → 属性键 */
   PASSIVE: { beast: 'atkPct', snake: 'crit', plant: 'hpPct', swarm: 'dodge', element: 'cult' },
   NAME: { atkPct: '攻击', crit: '暴击', hpPct: '气血', dodge: '闪避', cult: '修炼效率' },
-  maxSlots(p) { return 4 + (p.cave ? p.cave.lv : 1); },
+  maxSlots(p) { return 4 + (p.cave ? p.cave.lv : 1) + (p.cave && p.cave.builds ? (p.cave.builds.beast || 0) * 2 : 0); },   // v19 灵兽窝
   activeBeast(p) { return p.beasts ? p.beasts.list.find(b => b.uid === p.beasts.active) || null : null; },
   /** 战斗面板驯服入口 */
   async tame() {
@@ -4413,17 +4658,33 @@ const BeastSys = {
   /** 出战灵兽的被动加成（Stat.compute 调用） */
   passive(p) {
     const b = this.activeBeast(p);
-    if (!b) return {};
-    const key = this.PASSIVE[b.species] || 'atkPct';
-    const val = Math.round(b.power * 0.6 + b.level * 0.8);
-    return { [key]: val };
+    const b2 = p.beasts ? p.beasts.list.find(x => x.uid === p.beasts.active2) || null : null;   // v19 副战灵兽（仅被动，五成效力）
+    const one = (bb, mul) => {
+      if (!bb) return null;
+      const key = this.PASSIVE[bb.species] || 'atkPct';
+      return [key, Math.round((bb.power * 0.6 + bb.level * 0.8) * mul)];
+    };
+    const entries = [one(b, 1), one(b2, 0.5)].filter(Boolean);
+    const out = {};
+    for (const [k, v] of entries) out[k] = (out[k] || 0) + v;
+    return out;
+  },
+  /** v19 物种天生技能（灵兽五阶习得，九阶精进） */
+  SPECIES_SKILLS: {
+    beast:    { name: '兽王撕咬', kind: 'bleed', pct: 3, rounds: 2 },
+    snake:    { name: '淬毒獠牙', kind: 'poison', pct: 3, rounds: 3 },
+    swarm:    { name: '蚀甲之群', kind: 'defdown', pct: 20, rounds: 2 },
+    plant:    { name: '缠丝藤缚', kind: 'slow', pct: 25, rounds: 2 },
+    element:  { name: '灵焰灼身', kind: 'burn', pct: 3.5, rounds: 2 },
+    ghost:    { name: '摄魂低语', kind: 'drain', mult: 1.15, leech: 0.4 },
+    construct:{ name: '铁壁守护', kind: 'guard', def: 30, rounds: 2 },
   },
   /** 战斗中灵兽协助攻击（Battle.act 开头调用）：40% 几率出手 */
   async assist(st) {
     const B = Battle.active;
     const p = Game.player;
     const b = this.activeBeast(p);
-    if (!B || !b || B.over || !Utils.chance(40)) return false;
+    if (!B || !b || B.over || !Utils.chance(40 + (b.bond || 0) * 0.1)) return false;   // v19 抚摸亲昵加成
     const dmg = Math.max(1, Math.round(st.atk * (0.22 + b.level * 0.03) * (1 + b.power * 0.02) * Utils.randF(0.8, 1.2)));
     B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
     B.hitShake = true;
@@ -4453,7 +4714,16 @@ const BeastSys = {
     let up = false;
     while (b.level < 10 && b.exp >= b.level * 400) { b.exp -= b.level * 400; b.level++; up = true; }
     if (up) {
-      Log.add(`【${b.name}】吞下内丹，周身妖气一涨——灵兽升至 <b>${b.level} 阶</b>！协助作战愈发骁勇。`, 'gain');
+      let extra = '';
+      // v19 五阶习得物种天生技，九阶精进
+      if (b.level === 5 && (!b.skills || !b.skills.length) && this.SPECIES_SKILLS[b.species]) {
+        b.skills = [{ ...this.SPECIES_SKILLS[b.species] }];
+        extra = `，并领悟天生技【${b.skills[0].name}】`;
+      } else if (b.level === 9 && b.skills && b.skills.length && b.skills[0].pct) {
+        b.skills[0].pct = Math.round(b.skills[0].pct * 1.5 * 10) / 10;
+        extra = `，天生技【${b.skills[0].name}】威力精进`;
+      }
+      Log.add(`【${b.name}】吞下内丹，周身妖气一涨——灵兽升至 <b>${b.level} 阶</b>！${extra || '协助作战愈发骁勇。'}`, 'gain');
       UI.toast(`${b.name} 升至 ${b.level} 阶`);
     } else {
       Log.add(`【${b.name}】吞下内丹，妖气渐长（灵兽经验 +500）。`, 'info');
@@ -4465,6 +4735,27 @@ const BeastSys = {
     p.beasts.active = p.beasts.active === uid ? null : uid;
     const b = this.activeBeast(p);
     Log.add(b ? `你放出 <b>${b.name}</b> 随行出战。` : '灵兽归栏歇息。', 'info');
+    Game.afterAction();
+  },
+  /** v19 副战灵兽：不出手协战，但被动以五成效力加身 */
+  setActive2(uid) {
+    const p = Game.player;
+    if (p.beasts.active === uid) p.beasts.active = null;
+    p.beasts.active2 = p.beasts.active2 === uid ? null : uid;
+    const b = p.beasts.list.find(x => x.uid === p.beasts.active2);
+    Log.add(b ? `<b>${b.name}</b> 化作一道灵光护持你身——被动以五成效力相佐。` : '副战灵兽归栏。', 'info');
+    Game.afterAction();
+  },
+  /** v19 抚摸：每日一次，亲昵 +4~8（协战几率 +0.1%/点） */
+  pat(uid) {
+    const p = Game.player;
+    const b = p.beasts.list.find(x => x.uid === uid);
+    if (!b) return;
+    const today = Math.floor(p.day || 0);
+    if (b.patDay === today) { UI.toast('今日已抚摸过它了'); return; }
+    b.patDay = today;
+    b.bond = Math.min(100, (b.bond || 0) + Utils.rand(4, 8));
+    Log.add(`你轻抚 <b>${b.name}</b> 的脊背，它眯起眼，尾巴轻轻扫过你的手腕。（亲昵 ${b.bond}/100，协战几率微增）`, 'gain');
     Game.afterAction();
   },
   async free(uid) {
@@ -5566,6 +5857,7 @@ const DaoxinSys = {
     let txt = '【玄影客的视线】夜半窗外一闪而过的黑影，晨起时储物袋瘪了几分——';
     if (Bag.spendStones(lose)) txt += `灵石 -${Utils.fmtNum(lose)}，`;
     p.fortune = Math.max(0, (p.fortune || 0) - 1);
+    if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 2, '玄影窥伺');
     txt += '气运 -1。主线荒废太久，暗处的目光愈发迫近……（推进问道主线可斩断窥伺）';
     Log.add(txt, 'warn');
     UI.toast('玄影客的视线迫近了', true);
@@ -5600,6 +5892,82 @@ const DaoxinSys = {
   },
 };
 window.DaoxinSys = DaoxinSys;
+
+/* ======================================================================
+ * §21.4 v19 心魔劫 XinmoSys（心魔值 0~100：丹毒反噬/渡劫失利/玄影窥伺累积）
+ * 心魔满百必劫：幻境自战心魔化身。胜则道心凝练（全属性+1%/次，永久叠加），
+ * 败则心魔暂伏（心魔值回落四成五），修为受挫。
+ * ====================================================================== */
+const XinmoSys = {
+  THRESHOLD: 100,
+  /** 心魔值增减（唯一入口） */
+  add(p, n, why) {
+    if (!p || !n) return;
+    const before = p.xinmo || 0;
+    p.xinmo = Math.max(0, Math.min(160, before + n));
+    if (n > 0 && p.xinmo > before) {
+      Log.add(`心魔滋长 +${n}${why ? `（${why}）` : ''}——当前心魔值 <b>${Math.round(p.xinmo)}</b>。`, 'warn');
+      if (before < this.THRESHOLD && p.xinmo >= this.THRESHOLD) {
+        Log.add('<b>心魔已成气候！它在你识海深处叩门——再不降伏，修行必受其乱。</b>', 'loss');
+        UI.toast('心魔值已满，速去修炼页降伏心魔！', true);
+        Ambience.sfx('rage');
+      }
+    }
+  },
+  ready(p) { return (p.xinmo || 0) >= this.THRESHOLD; },
+  cleared(p) { return (p.flags && p.flags.xinmoCleared) || 0; },
+  /** 全属性加成（Stat.finalScale 消费）：每降伏一次 +1% */
+  scale(p) { return 1 + this.cleared(p) * 0.01; },
+  /** 降伏心魔：幻境之战（胜负皆了局） */
+  start() {
+    const p = Game.player;
+    if (!this.ready(p) || Battle.active || Story.active()) return;
+    const rp = Utils.clamp(p.realmIdx * 4 + p.layer + 2, 1, 60);
+    Log.add('你阖目入定，识海深处黑雾翻涌——心魔化身，踏着你自己的模样而来。', 'warn');
+    Story.chron('心魔劫起，识海自战');
+    const pw = rp;
+    const rIdx = Utils.clamp(Math.floor(pw / 4), 0, 9);
+    const enemy = {
+      id: null, name: '心魔化身', elite: true, power: pw, species: 'ghost',
+      realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(pw % 4, 0, 3)],
+      hpMax: Math.round((55 + Math.pow(pw, 1.6) * 5) * 1.7 * 0.9),
+      atk: Math.round((6 + pw * 2.6) * 1.35 * 0.9),
+      def: Math.round((4 + pw * 2.2) * 0.9), spd: Math.round(7 + pw * 0.9),
+      dodge: 8, crit: 12,
+      skills: [
+        { name: '心魔低语', w: 30, kind: 'weaken', pct: 25, rounds: 2 },
+        { name: '旧事重演', w: 30, kind: 'bleed', pct: 3, rounds: 2 },
+        { name: '心渊噬魂', w: 25, kind: 'drain', mult: 1.2, leech: 0.5 },
+      ],
+      expGain: Math.round(30 * GameData.eco(rIdx)), stoneGain: 0, dropTier: 2, rareDrop: null, hp: 0,
+      _storyBark: '心魔化身开口，用的却是你自己的声音：「你不敢看的那一面……就是我。」',
+    };
+    Battle.start(null, { mapName: '识海 · 心魔劫', enemy, story: {
+      onEnd: (win) => {
+        const pp = Game.player;
+        if (win) {
+          pp.xinmo = 0;
+          pp.flags = pp.flags || {};
+          pp.flags.xinmoCleared = (pp.flags.xinmoCleared || 0) + 1;
+          pp.insight = Math.min(100, (pp.insight || 0) + 10);
+          Log.add(`<b>心魔伏诛！</b>你于幻境中直视本心，道心愈发凝练通透——全属性永久 +${pp.flags.xinmoCleared}%。（突破感悟 +10）`, 'realm');
+          UI.announce('✦ 心魔劫 · 降伏 ✦', 'gold');
+          Ambience.sfx('victory');
+          Story.chron('降伏心魔，道心凝练');
+        } else {
+          pp.xinmo = 45;
+          const lost = Math.round(pp.exp * 0.05);
+          pp.exp = Math.max(0, pp.exp - lost);
+          Log.add(`心魔难伏，它化作黑雾散去，临散前留下一声嗤笑。心魔值回落至 45，层修为 -${Utils.fmtNum(lost)}。
+道心之劫，败亦是修行——整理心境，再来。`, 'loss');
+          Story.chron('心魔劫失利，心魔暂伏');
+        }
+        Game.afterAction();
+      },
+    } });
+  },
+};
+window.XinmoSys = XinmoSys;
 
 /* ======================================================================
  * §21.5 v8 黄历 · 每日一签 DailySign（每日仪式：游戏内每日一支签，立即生效）
@@ -5940,6 +6308,7 @@ const Tribulation = {
       UI.announce(`渡劫功成 · 晋入${GameData.REALM_NAMES[p.realmIdx]}期`, 'gold');   // v4
       UI.toast(`渡劫成功！${GameData.REALM_NAMES[p.realmIdx]}期`);
     } else {
+      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 8, '渡劫失利');
       // §24 渡劫虚弱期：道侣/结拜概率护法
       const aid = NpcSys.tryAid(p, 'trib');
       // v10 境界特性 · 劫体（渡劫起）：失利保留九成修为
@@ -7512,6 +7881,12 @@ const Battle = {
       this.log('【杀阵】你袖袍一振，杀阵先成——四方阵光封锁天地，敌方攻守尽堕四成！', 'log-crit');
     }
     this.render();
+    // v19 词缀·护盾：战斗开场金光护体
+    const startFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(Game.player) : {};
+    if (startFx.shield > 0) {
+      StatusFx.add(B.myFx, { kind: 'shield', pct: Math.round(startFx.shield * 100), rounds: 2 });
+      this.log('法宝灵光自发——一层金光罩住周身。', 'log-system');
+    }
     if (ctx.firstStrike || ctx.ambush) {
       this.log(ctx.ambush ? '仇家蓄谋已久，抢先出手！' : '对方修为高深，抢先出手！', 'warn');
       await this.wait(600);
@@ -7581,7 +7956,8 @@ const Battle = {
   /** v13：连击倍率（每层 +4%，上限五层 +20%）；受击中断 */
   comboMul() {
     const B = this.active;
-    return 1 + (B ? Math.min(5, B.combo || 0) * 0.04 : 0);
+    const cap = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? 5 + (ForgeSys.suffixFx(Game.player).comboUp || 0) : 5;   // v19 词缀·连击上限
+    return 1 + (B ? Math.min(cap, B.combo || 0) * 0.04 : 0);
   },
   /** v13：战斗速度（1=原速 2=两倍 3=极速），偏好持久化 */
   SPEED_KEY: 'fanren_wd_bspeed',
@@ -7733,6 +8109,9 @@ const Battle = {
           const speciesRel = GameData.speciesRelation(p.dao ? 'human' : 'human', B.enemy.species);
           if (speciesRel > 0) dmg *= 1.15;
           else if (speciesRel < 0) dmg *= 0.85;
+          const eqFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p) : {};   // v19 词缀特效
+          // v19 词缀·斩杀：对血量低于两成的敌人增伤
+          if (eqFx.execute > 0 && B.enemy.hp < B.enemy.hpMax * 0.2) dmg *= 1 + eqFx.execute;
           const crit = Utils.chance(this.myCrit(st));
           // v10 剑心六境·剑芒境：暴击伤害 +20%
           if (crit) dmg *= (p.dao === 'sword' && daoTier >= 2 ? 1.9 : 1.7);
@@ -7743,7 +8122,8 @@ const Battle = {
           if (p.dao === 'body' && daoTier >= 4) dmg *= 1.1;
           dmg = Math.max(1, Math.round(dmg));
           B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
-          B.combo = Math.min(5, (B.combo || 0) + 1);   // v13 连击累积
+          const comboCap = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? 5 + (ForgeSys.suffixFx(p).comboUp || 0) : 5;   // v19 词缀·连击上限
+          B.combo = Math.min(comboCap, (B.combo || 0) + 1);   // v13 连击累积
           if (p.dao === 'sword') DaoSys.gain(p, (crit || jianxin) ? 20 : 12);   // v16 剑意
           this.pushFloat('enemy', `-${dmg}`, (crit || jianxin) ? 'crit' : 'dmg');
           B.hitShake = true;
@@ -7780,6 +8160,12 @@ const Battle = {
             const heal2 = Math.max(1, Math.round(dmg * 0.1));
             p.hp = Math.min(st.maxHp, p.hp + heal2);
             this.log(`炼髓噬血——回复 <b>${heal2}</b> 点气血。`, 'log-gain');
+          }
+          // v19 词缀·吸血/夺魄：普攻回复伤害的气血
+          if (eqFx.leech > 0 && p.hp < st.maxHp) {
+            const heal3 = Math.max(1, Math.round(dmg * eqFx.leech));
+            p.hp = Math.min(st.maxHp, p.hp + heal3);
+            this.log(`【词缀·吸血】血气倒流——回复 <b>${heal3}</b> 点气血。`, 'log-gain');
           }
         }
         break;
@@ -7950,6 +8336,13 @@ const Battle = {
       const regen = Math.max(1, Math.round(st.maxHp * 0.03));
       Game.player.hp = Math.min(st.maxHp, Game.player.hp + regen);
       this.log(`不灭金身生生不息——气血自续 ${regen} 点。`, 'log-gain');
+    }
+    // v19 词缀·回灵/凝气：每回合回复灵力
+    const turnFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p) : {};
+    if (turnFx.mpRegen > 0 && p.mp > 0 && p.mp < st.maxMp) {
+      const mpReg = Math.max(1, Math.round(st.maxMp * turnFx.mpRegen * 0.01));
+      p.mp = Math.min(st.maxMp, p.mp + mpReg);
+      this.log(`法宝温养灵台——灵力回涌 ${mpReg} 点。`, 'log-gain');
     }
     B.turn = (B.turn || 1) + 1;
     return false;
@@ -8235,6 +8628,14 @@ const Battle = {
     if (blocked) text += '（你举功格挡，卸去大半力道）';
     if (shieldPct > 0) text += '（金光卸力）';
     if (guarded) text += '（金丹护体，震开两成巨力）';
+    // v19 词缀·反伤/荆棘
+    const thorns = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p).thorns : 0;
+    if (thorns > 0 && e.hp > 0 && p.hp > 0) {
+      const back = Math.max(1, Math.round(dmg * thorns));
+      e.hp = Math.max(0, e.hp - back);
+      this.pushFloat('enemy', `-${back}`, 'dmg');
+      text += `<br>【词缀·反伤】荆棘归鞘——${e.name} 反受 <b>${back}</b> 点伤害。`;
+    }
     this.log(text, crit ? 'log-crit' : 'log-battle');
   },
 
@@ -9600,7 +10001,7 @@ const UI = {
       const it = p.equipped[slot];
       const def = it ? GameData.ITEMS[Utils.eqId(it)] : null;
       return `<div class="equip-slot"><span>${eqNames[slot]}</span>
-        <span>${def ? `${this.gradeSpan(def.name, def.grade)}${ForgeSys.enhText(p, it)} <button class="btn btn-sm" data-action="act-unequip" data-slot="${slot}">卸下</button>` : '<span style="color:var(--text-faint)">无</span>'}</span></div>`;
+        <span>${def ? `${this.gradeSpan(def.name, def.grade)}${ForgeSys.enhText(p, it)} ${ForgeSys.affixText(typeof it === 'object' ? it : null)} <button class="btn btn-sm" data-action="act-unequip" data-slot="${slot}">卸下</button>` : '<span style="color:var(--text-faint)">无</span>'}</span></div>`;
     }).join('');
     // v13 已触发套装提示
     const activeSets = ForgeSys.activeSets(p);
@@ -9628,6 +10029,8 @@ const UI = {
     chips.push(`<span class="chip hot${p.poison > poisonCap * 0.75 ? ' risk' : ''}" title="丹毒 ${Math.round(p.poison)}/${poisonCap}：超过上限将反噬损毁修为">丹毒 <b>${Math.round(p.poison)}</b>/${poisonCap}</span>`);
     chips.push(`<span class="chip lucky" title="气运：机缘与好事的眷顾">气运 <b>${p.fortune || 0}</b></span>`);
     chips.push(`<span class="chip sin${(p.karma || 0) >= 60 ? ' risk' : ''}" title="孽障：招致仇家偷袭，达百可斩三尸">孽障 <b>${p.karma || 0}</b>${(p.karma || 0) >= 100 ? '·可斩' : ''}</span>`);
+    if ((p.xinmo || 0) >= 40) chips.push(`<span class="chip hot${(p.xinmo || 0) >= 100 ? ' risk' : ''}" title="心魔：丹毒反噬/渡劫失利/玄影窥伺所积。满百须于识海降伏（胜则全属性+1%/次，永久）">心魔 <b>${Math.round(p.xinmo || 0)}</b>${(p.xinmo || 0) >= 100 ? '·劫至' : ''}</span>`);   // v19
+    if ((p.flags && p.flags.xinmoCleared)) chips.push(`<span class="chip lucky" title="心魔凝练：每降伏心魔一次，全属性永久 +1%">凝练 <b>+${p.flags.xinmoCleared}%</b></span>`);   // v19
     const chipsHtml = `
       <div class="chip-row">${chips.join('')}</div>
       <div class="bar" title="丹毒 ${Math.round(p.poison)} / ${poisonCap}"><div class="bar-fill poison" style="width:${Utils.clamp(p.poison / poisonCap * 100, 0, 100)}%"></div><span class="bar-text">${Math.round(p.poison / poisonCap * 100)}%</span></div>`;
@@ -9785,6 +10188,17 @@ const UI = {
         <div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-dao-open">叩问大道</button></div>
       </div>`;
     }
+    // v19 心魔劫
+    const xinmoVal = p.xinmo || 0;
+    if (xinmoVal >= 40) {
+      const ready = typeof XinmoSys !== 'undefined' && XinmoSys.ready(p);
+      extra += `
+      <div class="card ${ready ? 'card-trib' : ''}">
+        <div class="card-title">✦ 心魔劫 ${ready ? '<span class="tag danger">心魔值已满</span>' : `<span class="tag warn">心魔值 ${Math.round(xinmoVal)}</span>`}</div>
+        <div class="card-desc">丹毒反噬、渡劫失利、暗处窥伺，皆令心魔滋长。心魔满百必劫——于识海中直面它，胜则道心凝练（全属性永久 +1%/次）。${(p.flags && p.flags.xinmoCleared) ? `<br>· 你已降伏心魔 <b>${p.flags.xinmoCleared}</b> 次。` : ''}</div>
+        ${ready ? '<div class="action-row"><button class="btn btn-danger" data-action="act-xinmo">降伏心魔</button></div>' : ''}
+      </div>`;
+    }
     if (canBreak) {
       // v4：预估成功率实时分解——悟性 / 丹药感悟 / 气运 / 孽障 / 大道 / 根基 皆计入
       const target = p.realmIdx + 1;
@@ -9903,30 +10317,54 @@ const UI = {
     const passiveName = BeastSys.NAME;
     const beastRows = beasts.map(b => {
       const isOn = p.beasts.active === b.uid;
+      const isOn2 = p.beasts.active2 === b.uid;
       const pk = BeastSys.PASSIVE[b.species] || 'atkPct';
       const pv = Math.round(b.power * 0.6 + b.level * 0.8);
       const needExp = b.level * 400;
+      const bTag = isOn ? '<span class="tag safe">出战中</span>' : isOn2 ? '<span class="tag warn">护持中</span>' : '<span class="tag">栏中</span>';
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name"><b class="${isOn ? 'hl' : ''}">${b.name}</b> <span class="tag ${isOn ? 'safe' : ''}">${isOn ? '出战中' : '栏中'}</span> <span class="tag">${b.level} 阶</span></div>
+          <div class="gf-name"><b class="${isOn || isOn2 ? 'hl' : ''}">${b.name}</b> ${bTag} <span class="tag">${b.level} 阶</span>${b.bond ? `<span class="tag">亲昵 ${b.bond}/100</span>` : ''}</div>
           <div class="gf-desc">${b.species === 'beast' ? '凶兽' : b.species === 'snake' ? '灵蛇' : b.species === 'swarm' ? '虫群' : b.species === 'plant' ? '草木精' : '灵体'} · 协战与被动随阶成长<br>
-          被动：${passiveName[pk]} +${pv} ｜ 经验 ${Math.floor(b.exp)}/${needExp}${b.skills.length ? ` ｜ 技能：${b.skills[0].name}` : ''}</div>
+          被动：${passiveName[pk]} +${pv}${isOn2 ? '（护持中以五成效力生效）' : ''} ｜ 经验 ${Math.floor(b.exp)}/${needExp}${b.skills.length ? ` ｜ 技能：${b.skills[0].name}` : ` ｜ 五阶习得天生技`}</div>
         </div>
         <div class="gf-actions">
           <button class="btn btn-sm" data-action="act-beast-active" data-uid="${b.uid}">${isOn ? '歇 息' : '出 战'}</button>
+          <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
+          <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
           <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${Bag.count('m_neidan') ? '' : 'disabled'}>喂内丹（${Bag.count('m_neidan')}）</button>
           <button class="btn btn-sm btn-danger" data-action="act-beast-free" data-uid="${b.uid}">放归</button>
         </div>
       </div>`;
     }).join('');
+    // v19 洞府建筑
+    const buildRows = CaveSys.BUILDS.map(bd => {
+      const lv = CaveSys.buildLv(p, bd.id);
+      const c = CaveSys.buildCost(p, bd.id);
+      const lvTag = lv >= 3 ? '<span class="tag safe">三阶圆满</span>' : `<span class="tag">${lv ? lv + ' 阶' : '未建'}</span>`;
+      return `
+      <div class="shop-row">
+        <div class="gf-info">
+          <div class="gf-name">${bd.icon} <b>${bd.name}</b> ${lvTag}</div>
+          <div class="gf-desc">${bd.desc}<br>${lv >= 3 ? '已至圆满。' : `需灵石 ${Utils.fmtNum(c.stones)}、玄铁矿 ×${c.ore}（持有 ${Bag.count('m_xuantie')}）`}</div>
+        </div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-cave-build" data-b="${bd.id}" ${lv >= 3 ? 'disabled' : ''}>${lv ? '扩建' : '兴建'}</button></div>
+      </div>`;
+    }).join('');
+    const buildsCard = `
+    <div class="card">
+      <div class="card-title">✦ 洞府营造 <span class="tag">v19</span></div>
+      <div class="card-desc">聚灵阵之外，洞府亦可大兴土木——灵兽窝、演武场、藏经室，各至三阶。</div>
+      ${buildRows}
+    </div>`;
     const beastCard = `
     <div class="card">
       <div class="card-title">✦ 兽栏 <span class="tag">${beasts.length}/${BeastSys.maxSlots(p)} 位</span></div>
       <div class="card-desc">战斗中将可驯妖兽打至<b>两成血以下</b>，可尝试驯服。出战灵兽每回合四成几率协助攻击，并给主人一项被动加成。喂食【妖兽内丹】可升阶。</div>
       ${beastRows || '<div class="tip-line">兽栏空空——去荒野驯一头灵兽回来罢。</div>'}
     </div>`;
-    return caveCard + plotsCard + beastCard;
+    return caveCard + plotsCard + buildsCard + beastCard;
   },
 
   renderMapTab() {
@@ -10249,15 +10687,44 @@ const UI = {
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${this.gradeSpan(def.name, def.grade)}${ForgeSys.enhText(p, id)} <span style="color:var(--text-faint);font-size:12px">→ +${lv + 1}（成功率 ${rate}%）</span></div>
+          <div class="gf-name">${this.gradeSpan(def.name, def.grade)}${ForgeSys.enhText(p, id)} ${ForgeSys.affixText(typeof p.equipped[slot] === 'object' ? p.equipped[slot] : null)} <span style="color:var(--text-faint);font-size:12px">→ +${lv + 1}（成功率 ${rate}%）</span></div>
           <div class="gf-desc">需灵石 ${Utils.fmtNum(stones)}、玄铁矿 ×${lv + 1}（持有 ${Bag.count('m_xuantie')}）${lv >= 7 ? '；<span class="neg">+7 起失败跌一级</span>' : ''}。强化石可保必成。</div>
         </div>
         <div class="gf-actions"><button class="btn btn-sm" data-action="act-enhance" data-slot="${slot}">祭 炼</button></div>
       </div>`;
     }).join('');
+    // v19 词缀洗练（对已穿戴装备）
+    const affixSlots = ['weapon', 'armor', 'accessory'].map(slot => {
+      const inst = p.equipped[slot];
+      const id = inst ? Utils.eqId(inst) : null;
+      if (!id || typeof inst !== 'object') return '';
+      const def = GameData.ITEMS[id];
+      const cur = ForgeSys.affixText(inst) || '<span style="color:var(--text-faint)">尚无词缀</span>';
+      return `
+      <div class="shop-row">
+        <div class="gf-info">
+          <div class="gf-name">${this.gradeSpan(def.name, def.grade)} ${cur}</div>
+          <div class="gf-desc">洗练重掷词缀（◆前缀 / ◈后缀 择一），需玄铁矿 ×2。</div>
+        </div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-reroll" data-slot="${slot}">洗 练</button></div>
+      </div>`;
+    }).join('');
+    const affixSection = `
+      <div class="shop-section-title">◈ 词缀洗练（v19：洗练重掷，不问因果）</div>
+      ${affixSlots || '<div class="tip-line">先装备法宝，方能洗练词缀。</div>'}`;
+    // v19 本命法宝喂养
+    const benmingSection = ForgeSys.benmingOwn(p) ? `
+      <div class="shop-section-title">◈ 本命法宝 · 喂养（每阶全属性 +1%，至十阶）</div>
+      <div class="shop-row">
+        <div class="gf-info"><div class="gf-name">本命法宝 <span class="tag warn">${(p.benming && p.benming.lv) || 0} / ${ForgeSys.BENMING_MAX} 阶</span></div>
+        <div class="gf-desc">以本命精血温养，吞玄铁与灵石而长。${(p.benming && p.benming.lv) >= ForgeSys.BENMING_MAX ? '已至圆满之境。' : ''}</div></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-benming-feed" ${((p.benming && p.benming.lv) || 0) >= ForgeSys.BENMING_MAX ? 'disabled' : ''}>喂 养</button></div>
+      </div>` : '';
     const enhanceSection = `
       <div class="shop-section-title">◈ 祭炼强化（+1~+10，每级 +10% 数值属性）</div>
-      ${enhSlots || '<div class="tip-line">先在乾坤袋中装备法宝，方可祭炼强化。</div>'}`;
+      ${enhSlots || '<div class="tip-line">先在乾坤袋中装备法宝，方可祭炼强化。</div>'}
+      ${affixSection}
+      ${benmingSection}`;
     // v13 炼器坊
     const forgeRows = GameData.FORGE_RECIPES.map(r => {
       const out = GameData.ITEMS[r.out];
@@ -10404,6 +10871,7 @@ const UI = {
   },
 
   renderGongfaTab() {
+    /* v19 道韵行（渲染时拼入 gongfa 区块末尾，见下方 daoYunHtml） */
     const p = Game.player;
     const learned = Object.entries(p.gongfa).map(([id, g]) => {
       const def = GameData.ITEMS[id];
@@ -10437,9 +10905,16 @@ const UI = {
         <div class="gf-actions"><button class="btn btn-sm btn-primary" data-action="act-learn" data-item="${id}">学 习</button></div>
       </div>`;
     }).join('');
+    // v19 道韵协同
+    const dyRows = (GameData.DAO_YUN || []).map(dy => {
+      const on = dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3);
+      const names = dy.need.map(gid => `${(GameData.ITEMS[gid] || {}).name || gid} ${p.gongfa[gid] ? p.gongfa[gid].level : 0}/3层`).join(' · ');
+      return `<div class="tip-line" style="${on ? '' : 'opacity:.65'}">${on ? '✦' : '·'} <b>${dy.name}</b>（${names}）——${dy.desc}</div>`;
+    }).join('');
     return `
       <div class="card"><div class="card-title">✦ 已修功法</div>${learned || '<div class="tip-line">尚未修习任何功法。</div>'}</div>
-      ${learnRows ? `<div class="card"><div class="card-title">✦ 待学典籍（背包中）</div>${learnRows}</div>` : ''}`;
+      ${learnRows ? `<div class="card"><div class="card-title">✦ 待学典籍（背包中）</div>${learnRows}</div>` : ''}
+      <div class="card"><div class="card-title">✦ 道韵协同（双功法修至三层以上，共鸣生韵）</div>${dyRows}</div>`;
   },
 
   /* ---------- 右侧背包 ---------- */
@@ -11143,6 +11618,7 @@ const Game = {
     'act-draw': () => CraftSys.drawTalisman(),
     /* --- v13 祭炼强化 / 炼器 --- */
     'act-enhance': (d) => ForgeSys.enhance(d.slot),
+    'act-reroll': (d) => ForgeSys.reroll(d.slot),
     'act-forge': (d) => ForgeSys.forge(d.recipe),
     /* --- v13 洞府 / 灵兽 --- */
     'act-cave-up': () => CaveSys.upgrade(),
@@ -11151,6 +11627,11 @@ const Game = {
     'act-cave-water': (d) => CaveSys.water(Number(d.i)),
     'act-cave-pest': (d) => CaveSys.removePest(Number(d.i)),
     'act-beast-active': (d) => BeastSys.setActive(Number(d.uid)),
+    'act-beast-active2': (d) => BeastSys.setActive2(Number(d.uid)),
+    'act-beast-pat': (d) => BeastSys.pat(Number(d.uid)),
+    'act-cave-build': (d) => CaveSys.upgradeBuild(d.b),
+    'act-benming-feed': () => ForgeSys.feedBenming(),
+    'act-xinmo': () => XinmoSys.start(),
     'act-beast-feed': (d) => BeastSys.feed(Number(d.uid)),
     'act-beast-free': (d) => BeastSys.free(Number(d.uid)),
     /* --- v13 悬赏 / 黑市 --- */
