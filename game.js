@@ -849,7 +849,27 @@ const GameData = {
     // v18 种族克制：七族循环克制，克制时 +15%伤害
     SPECIES_COUNTER: {
       order: ['beast', 'plant', 'element', 'ghost', 'human', 'construct', 'swarm', 'snake'],
-      bonus: 0.15,  // 克制时伤害加成
+      bonus: 0.15,
+    },
+    // v18 装备词缀（前缀数值 + 后缀特效）
+    AFFIXES: {
+      prefix: [
+        { id: 'sharp', name: '锋锐', slot: 'weapon', bonus: { atkPct: 8 }, desc: '攻击+8%' },
+        { id: 'keen', name: '凝神', slot: 'weapon', bonus: { crit: 5 }, desc: '暴击+5%' },
+        { id: 'sturdy', name: '坚韧', slot: 'armor', bonus: { defPct: 8 }, desc: '防御+8%' },
+        { id: 'vital', name: '生机', slot: 'armor', bonus: { hpPct: 8 }, desc: '气血+8%' },
+        { id: 'swift', name: '迅捷', slot: 'accessory', bonus: { spdPct: 8 }, desc: '身法+8%' },
+        { id: 'lucky', name: '灵韵', slot: 'accessory', bonus: { dodge: 5 }, desc: '闪避+5%' },
+        { id: 'fort', name: '磐石', slot: 'any', bonus: { block: 5 }, desc: '格挡+5%' },
+      ],
+      suffix: [
+        { id: 'leech', name: '吸血', slot: 'weapon', desc: '攻击时回复10%伤害的气血', onHit: { leech: 0.1 } },
+        { id: 'execute', name: '斩杀', slot: 'weapon', desc: '对血量低于20%的敌人伤害+25%', onHit: { execute: 0.25 } },
+        { id: 'thorns', name: '反伤', slot: 'armor', desc: '受击时反弹15%伤害', onHurt: { thorns: 0.15 } },
+        { id: 'shield', name: '护盾', slot: 'armor', desc: '战斗开场获得10%气血上限护盾', onStart: { shield: 0.1 } },
+        { id: 'regen', name: '回灵', slot: 'accessory', desc: '每回合回复5%灵力', onTurn: { mpPct: 5 } },
+        { id: 'combo', name: '连击', slot: 'accessory', desc: '连击上限+2', onHit: { comboUp: 2 } },
+      ],
     },
     // 强化
     ENHANCE: {
