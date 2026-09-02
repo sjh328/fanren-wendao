@@ -8760,14 +8760,20 @@ const UI = {
 
   renderAll() {
     if (!Game.player) return;
-    this.renderTop();
-    this.renderFocus();
-    this.renderStatus();
-    this.renderTabs();
-    this.renderTabContent();
-    this.renderBag();
-    Anim.scan(document.getElementById('game-screen'));   // v4：数值滚动动画
+    // v18：脏标记渲染——只重建变化区域
+    const dirty = this._dirty || {};
+    const all = Object.keys(dirty).length === 0;
+    if (all || dirty.all || dirty.top) this.renderTop();
+    if (all || dirty.all || dirty.focus) this.renderFocus();
+    if (all || dirty.all || dirty.status) this.renderStatus();
+    if (all || dirty.all || dirty.tabs) this.renderTabs();
+    if (all || dirty.all || dirty.content) this.renderTabContent();
+    if (all || dirty.all || dirty.bag) this.renderBag();
+    this._dirty = {};
+    Anim.scan(document.getElementById('game-screen'));
   },
+  /** v18：标记某区域需要重渲染 */
+  markDirty(area) { this._dirty = this._dirty || {}; this._dirty[area] = true; },
 
   /* ---------- 通用弹窗（Promise 风格，resolve 选项的 value） ---------- */
   _popupResolve: null,
@@ -9225,8 +9231,9 @@ const Game = {
     const st = Stat.compute(p);
     p.hp = Utils.clamp(p.hp, 0, st.maxHp);
     p.mp = Utils.clamp(p.mp, 0, st.maxMp);
-    if (p.hp <= 0) p.hp = Math.max(1, Math.round(st.maxHp * 0.1)); // 兜底
-    try { UI.renderAll(); } catch (err) { console.error('渲染异常（不影响存档）:', err); }   // v9：渲染失败不得阻断持久化
+    if (p.hp <= 0) p.hp = Math.max(1, Math.round(st.maxHp * 0.1));
+    UI.markDirty('all');
+    try { UI.renderAll(); } catch (err) { console.error('渲染异常（不影响存档）:', err); }
     Save.autoSave();
     Achieve.check();   // v6：成就检查（解锁即发奖播报）
     try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
