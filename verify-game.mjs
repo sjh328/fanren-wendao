@@ -79,6 +79,29 @@ await page.setViewport({ width: 1280, height: 720 });
 page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 200)); });
 page.on('pageerror', e => consoleErrors.push('PAGEERROR: ' + String(e).slice(0, 200)));
 
+// v19：剧情静默器——Story.play 立即结算（记首选项/旗标/回调），本套测试不测演出本身，
+// 注入后根治「剧情链在点击间隙弹出吞掉操作」的时序抖动（演出断言在 verify-v7 中覆盖）
+await page.evaluateOnNewDocument(() => {
+  const t = setInterval(() => {
+    if (!window.Story || window.Story.__silenced) return;
+    clearInterval(t);
+    window.Story.__silenced = true;
+    window.Story.play = function (script, onEnd) {
+      try {
+        if (script && script.id && window.Game && Game.player && Game.player.story) {
+          Game.player.story.seen[script.id] = Math.floor(Game.player.day || 0) + 1;
+          const ch = (script.scenes || []).find(s => s.t === 'choice');
+          if (ch && ch.options && ch.options[0]) {
+            Story.recordChoice(script.id, ch.options[0].value);
+            if (ch.options[0].flag) Story.setFlag(ch.options[0].flag);
+          }
+        }
+      } catch (e) {}
+      if (onEnd) onEnd();
+    };
+  }, 40);
+});
+
 try {
   /* ---------- T1 开始界面 ---------- */
   await page.goto(URL, { waitUntil: 'domcontentloaded' });
@@ -647,7 +670,7 @@ try {
     (!t14.bag.gf_tiangang && !t14.gongfa.gf_tiangang) ? pass('T14 体修无法购买玄级功法') : fail('T14 体修功法限制', '竟被买下');
     await clickSel(page, '[data-action="act-buy"][data-item="gf_canghai"]'); // 凡级功法应可买
     await sleep(400);
-    const t14b = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player.bag.gf_canghai || 0);
+    const t14b = await page.evaluate(() => Game.player.bag.gf_canghai || 0);   // v19：读内存玩家
     t14b >= 1 ? pass('T14 体修可购凡级功法') : fail('T14 凡级功法购买', String(t14b));
   }
 
@@ -672,12 +695,16 @@ try {
     const shopText = await text(page, '#tab-content');
     shopText.includes('符坊') ? pass('T16 符修可见符坊') : fail('T16 符坊', '');
     await drainStory(page);   // v19：清掉可能弹出的剧情卷轴
-    const stones0 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_3')).player.stones.low);
+    const stones0 = await page.evaluate(() => Game.player.stones.low);   // v19：直接读内存玩家，避免槽位竞态
     await clickSel(page, '[data-action="act-draw"]');
     await sleep(400);
-    const t16 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
-    (t16.stones.low < stones0 && ((t16.bag.tal_huoshe || 0) + (t16.bag.tal_zilei || 0)) > 0)
-      ? pass('T16 画符产出符箓并扣灵石') : fail('T16 画符', JSON.stringify(t16.bag));
+    const t16 = await page.evaluate(() => {
+      const p = Game.player;
+      const talN = Object.keys(p.bag).filter(id => id.startsWith('tal_')).reduce((s, id) => s + p.bag[id], 0);
+      return { low: p.stones.low, talN, bag: p.bag };
+    });
+    (t16.low < stones0 && t16.talN > 0)
+      ? pass('T16 画符产出符箓并扣灵石（符池随境界随机）') : fail('T16 画符', JSON.stringify({ bag: t16.bag, stones0, low: t16.low }));
     await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
     await sleep(300);
     let talBattle = false;

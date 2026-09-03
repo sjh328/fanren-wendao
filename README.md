@@ -22,18 +22,36 @@ npm run test:all    # 七套脚本全量回归（约 260+ 断言）
 npm run test:v8     # 单独运行某一版本专项
 ```
 
-## 代码结构（v19 起）
+## 代码结构（v19 阶段十起：模块化源码 + 单体产物）
 
 ```
-game.js      ★ 唯一现役代码（单体）。顶层按系统分区：Utils/Art/Ambience/…
-               → GameData（静态数据+剧情脚本）→ 各系统 → Battle → Story/QuestSys
-               → UI → Game（动作分发/初始化）。直接编辑本文件。
+js/          ★ 开发源码（48 个模块，按 scripts/modules.json 顺序拼接）
+  core/      基建：utils/anim/art/narrative/ambience/meta/achieve/guide/autocult/codex
+             /log/save/player-factory/stat/time
+  data/      game-data.js（静态数据 + 剧情脚本库）
+  systems/   玩法系统 25+：cultivate/gongfa/bag/forge/cave/beast/shop/sect/explore
+             /dao/karma/daoxin/auction/xinmo/craft/tribulation/world/bounty/black
+             /rank/npc/dungeon/reincarnation/status-fx…
+  battle/    battle.js（战斗）
+  ui/        tutorial/story/quest/ui/start-screen
+  game.js    Game 主控（动作分发/初始化）
+game.js      ★ 构建产物（由 js/ 拼接生成，逐字节可复现；index.html 引用不变）
 style.css    宣纸水墨主题（按版本增量分区块）
 index.html   唯一入口（引用 game.js?v=N，改版时递增 N 清缓存）
 server.mjs   本地静态服务器（:8341，no-cache）
 verify-*.mjs puppeteer E2E 回归脚本（npm test:xxx）
-scripts/     辅助脚本
-attic/       归档区（gitignore）：v18 半成品模块化 + 旧构建脚本，见 attic/README.md
+scripts/     build.mjs（安全构建：缺失即失败→语法校验→备份→写盘）
+attic/       归档区（gitignore）：v18 半成品模块化遗留，见 attic/README.md
+```
+
+### 开发流程
+
+```bash
+# 1. 编辑 js/ 下的模块（不要直接改 game.js——它是产物）
+# 2. 重建产物（缺失模块会拒绝构建；产物先过 node --check 再覆盖，覆盖前自动备份）
+node scripts/build.mjs
+# 3. 跑回归
+npm run test:all
 ```
 
 ## 架构速览
