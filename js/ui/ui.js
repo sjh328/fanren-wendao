@@ -471,7 +471,7 @@ const UI = {
         const magic = WorldSys.isMagic(p, m.id) ? '<span class="tag magic">魔域</span>' : '';
         return `
       <div class="card map-card">
-        <div class="map-scene">${Art.scene(m.id, Art.seasonOf(Game.player))}</div>
+        <div class="map-scene" title="天气：${{ rain: '雨', fog: '雾', clear: '晴' }[(Art.weatherOf(Game.player, m.id) || {}).sky] || '晴'}${(Art.weatherOf(Game.player, m.id) || {}).night ? ' · 夜' : ''}">${Art.scene(m.id, Art.seasonOf(Game.player), Art.weatherOf(Game.player, m.id))}</div>
         <div class="card-title">${m.name}${magic}<span class="tag ${diff.cls}">${diff.text}</span></div>
         <div class="card-desc">${m.desc}${magic ? '<br><span class="neg">魔气狂化：妖魔更强，所获亦丰。</span>' : ''}</div>
         <div class="action-row"><button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button></div>

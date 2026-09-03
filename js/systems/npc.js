@@ -24,6 +24,21 @@ const NpcSys = {
   },
   def(id) { return GameData.NPCS.find(n => n.id === id) || null; },
   state(p, id) { return (p.npcs && p.npcs[id]) || null; },
+  /** v19 专属台词矩阵：优先取 NPC_LINES（greet 按关系档三档取句，hostile 仅在结怨时命中），回落 null */
+  lineFor(p, id, kind) {
+    const L = (GameData.NPC_LINES || {})[id];
+    if (!L || !L[kind] || !L[kind].length) return null;
+    if (kind === 'greet') {
+      const rel = (this.state(p, id) || {}).rel || 0;
+      const tier = rel >= 70 ? 2 : rel >= 15 ? 1 : 0;
+      return L.greet[Math.min(tier, L.greet.length - 1)];
+    }
+    if (kind === 'hostile') {
+      const st = this.state(p, id);
+      if (!st || st.rel > -15) return null;
+    }
+    return Utils.pick(L[kind]);
+  },
   /** v18：NPC 性格对话模板 */
   dialogText(temper, kind) {
     const DIALOG = {
@@ -110,7 +125,7 @@ const NpcSys = {
     const d = this.def(id);
     this.mem(p, id, 'story', '突破贺喜');
     return { id, name: d.name, title: d.title,
-      line: '「恭喜道友更上层楼。他日你登高之处，莫忘了今日同辈之人。」' };
+      line: this.lineFor(p, id, 'realm') || '「恭喜道友更上层楼。他日你登高之处，莫忘了今日同辈之人。」' };
   },
   /** 岁月推进：NPC 自主修炼 / 游历 / 争夺机缘 */
   yearTick(p, y) {
@@ -280,7 +295,8 @@ const NpcSys = {
       KarmaSys.addKarma(10, true);
       Log.add(`${d.name} 伤重不治，殒身当场——其血亲与你势不两立！（孽障 +20）`, 'loss');
     } else {
-      Log.add(`${d.name} 重伤遁走，临行前留下一句「此事没完」——恩怨愈结愈深。（孽障 +10）`, 'warn');
+      const hostileLine = this.lineFor(p, id, 'hostile');
+    Log.add(`${d.name} 重伤遁走，临行前留下一句${hostileLine ? hostileLine : '「此事没完」'}——恩怨愈结愈深。（孽障 +10）`, 'warn');
     }
   },
   /** 一战了断：胜则恩怨两清 */
@@ -327,7 +343,8 @@ const NpcSys = {
     if (!d || !s || !s.alive || Battle.active) return;
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴
-    Log.add(`你向 ${d.name} 递出战书，只较技，不拼命。`, 'event');
+    const sparLine = this.lineFor(p, id, 'spar');
+    Log.add(`你向 ${d.name} 递出战书，只较技，不拼命。${sparLine ? `<span style="color:var(--text-faint)">${d.name}：${sparLine}</span>` : ''}`, 'event');
     Game.afterAction();
     Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, spar: true, mapName: '切磋台' });
   },
@@ -482,7 +499,7 @@ const NpcSys = {
     s.rel = Utils.clamp(s.rel + gain, -100, 100);
     this.mem(p, id, 'gift', '赠礼之谊');
     const after = this.tierOf(Math.max(0, s.rel)).name;
-    Log.add(`你向 ${d.name} 奉上礼物。${this.dialogText(d.temper, 'gift')}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
+    Log.add(`你向 ${d.name} 奉上礼物。${this.lineFor(p, id, 'gift') || this.dialogText(d.temper, 'gift')}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
     if (after !== before) Ambience.sfx('rare');
     Game.afterAction();
   },
@@ -507,7 +524,8 @@ const NpcSys = {
     s.rel = Utils.clamp(s.rel + 1, -100, 100);
     this.mem(p, id, 'chat', '席地论道');
     Time.add(2);
-    Log.add(`你与 ${d.name} 席地论道，一言一语皆有进益。（修为 +${Utils.fmtNum(gain)}，感悟 +${insight}）`, 'gain');
+    const disLine = this.lineFor(p, id, 'discuss');
+    Log.add(`你与 ${d.name} 席地论道，一言一语皆有进益。${disLine ? `<span style="color:var(--text-faint)">${disLine}</span>` : ''}（修为 +${Utils.fmtNum(gain)}，感悟 +${insight}）`, 'gain');
     Game.afterAction();
   },
   /** 游历途中的常驻 NPC 遭遇 */
@@ -530,7 +548,7 @@ const NpcSys = {
     const tier = this.tierOf(Math.max(0, s.rel));
     const choice = await UI.popup({
       title: `偶遇 · ${d.name}`,
-      html: `${d.desc}<br>你们在 ${Utils.esc((GameData.MAPS.find(m => m.id === s.map) || {}).name || '山野')} 间打了个照面。${s.rel >= 8 ? `<br><span class="tip-line">关系：<b>${tier.name}</b>${recall ? '　' + d.name + '先开了口：' + recall : ''}</span>` : ''}`,
+      html: `${d.desc}<br>你们在 ${Utils.esc((GameData.MAPS.find(m => m.id === s.map) || {}).name || '山野')} 间打了个照面。<br><span class="tip-line">${d.name}：${this.lineFor(p, id, 'greet') || this.dialogText(d.temper, 'greeting')}</span>${s.rel >= 8 ? `<br><span class="tip-line">关系：<b>${tier.name}</b>${recall ? '　' + d.name + '先开了口：' + recall : ''}</span>` : ''}`,
       options: [
         { text: '叙话论道', value: 'chat', primary: true },
         { text: '请教一二', value: 'ask' },

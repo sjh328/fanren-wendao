@@ -153,8 +153,8 @@ const Art = {
     feizhou:  { sky: ['#dfe3ee', '#c3cbdd'], hills: ['#6a7898', '#4d5b7c', '#344064'], landmark: 'ship', mist: '#e2e7f2' },
     longyuan: { sky: ['#d6e2e6', '#b2c8cf'], hills: ['#3e6e80', '#2a5264', '#1a3a4a'], landmark: 'whirl', mist: '#cfdfe4' },
   },
-  /** 生成地图场景插画 SVG（viewBox 600x150）；season 0~3 叠加季节薄色 */
-  scene(mapId, season = -1) {
+  /** 生成地图场景插画 SVG（viewBox 600x150）；season 0~3 季节薄色，wx 天气/昼夜叠加层 */
+  scene(mapId, season = -1, wx = null) {
     const S = this.SCENES[mapId] || this.SCENES.village;
     const gid = 'sg' + mapId;
     // 三层山峦（折线剪影）
@@ -191,6 +191,9 @@ const Art = {
       <ellipse cx="180" cy="132" rx="200" ry="26" fill="${S.mist}" opacity="0.65"/>
       <ellipse cx="470" cy="140" rx="220" ry="24" fill="${S.mist}" opacity="0.5"/>
       ${season >= 0 ? `<rect width="600" height="150" fill="${this.SEASON_TINT[season] || 'none'}" opacity="0.07"/>` : ''}
+      ${wx && wx.night ? '<rect width="600" height="150" fill="#1e2a4a" opacity="0.30"/><circle cx="500" cy="34" r="18" fill="#f4f0dc" opacity="0.9"/><circle cx="508" cy="30" r="15" fill="url(#' + gid + ')" opacity="0.35"/>' : ''}
+      ${wx && wx.sky === 'rain' ? '<rect width="600" height="150" fill="#6a788a" opacity="0.14"/><g stroke="#8a98aa" stroke-width="1" opacity="0.55">' + [80,180,280,380,480,560].map((x, i) => `<line x1="${x}" y1="${10 + (i % 3) * 12}" x2="${x - 8}" y2="${34 + (i % 3) * 12}"/><line x1="${x + 40}" y1="${48 + (i % 2) * 14}" x2="${x + 32}" y2="${72 + (i % 2) * 14}"/><line x1="${x + 12}" y1="${92 + (i % 3) * 10}" x2="${x + 4}" y2="${116 + (i % 3) * 10}"/>`).join('') + '</g>' : ''}
+      ${wx && wx.sky === 'fog' ? '<g fill="#f2efe4" opacity="0.45"><ellipse cx="160" cy="118" rx="210" ry="24"/><ellipse cx="440" cy="100" rx="190" ry="20"/><ellipse cx="300" cy="132" rx="260" ry="22"/></g>' : ''}
     </svg>`;
   },
   /** 战斗敌方剪影立绘（species 形象；elite 加妖光角标） */
@@ -253,6 +256,22 @@ const Art = {
   seasonOf(p) {
     const month = p ? Math.floor((p.day || 0) / 30) % 12 : 0;
     return month <= 2 ? 0 : month <= 5 ? 1 : month <= 8 ? 2 : 3;
+  },
+  /** v19 天气/昼夜：按地图+游戏日确定性派生（同日同地必同天）——晴/雨/雾 × 昼/夜 */
+  weatherOf(p, mapId) {
+    if (!p) return { sky: 'clear', night: false };
+    const day = Math.floor(p.day || 0);
+    const h = Utils.hashStr(mapId + '#' + day);
+    const r = h % 100;
+    const sky = r < 16 ? 'rain' : r < 28 ? 'fog' : 'clear';
+    const night = (Math.floor(p.day || 0) % 10) < 3;   // 全局时辰：每十日三夜（约 30%）
+    return { sky, night };
+  },
+  /** 天气名（游历页标签用） */
+  weatherName(w) {
+    if (!w) return '';
+    const sky = { rain: '雨', fog: '雾', clear: '' }[w.sky] || '';
+    return (w.night ? '夜' : '') + sky;
   },
 
   /** v19：人物半身像（CHARACTERS.look 参数化渲染；剧情演出与人物志共用）
@@ -1908,6 +1927,154 @@ const GameData = {
       desc: '救人无数的游方医修，人脉遍布修行界。她说人心是病，得慢慢治。',
       look: { robe: '#7a9a8a', hair: '#6a5a44', item: 'herb', aura: '#5a7a6a' } },
   },
+  /* ---------- v19 NPC 专属台词矩阵（六类语境；greet 按关系档三档递进，未命中回落性情模板） ---------- */
+  NPC_LINES: {
+    n1:  { greet: ['「何事？」', '「你来得不巧——剑刚开锋。」', '「……坐。茶将就，剑别碰。」'],
+      gift: ['「不必。」（还是收下了）', '「这礼太重。下不为例。」'],
+      spar: ['「接我一招再说。」', '「你比上月快了三分。」'],
+      discuss: ['「剑非杀人器。记住这句。」', '「师父死在一场被安排的比剑上——此事，只告诉过你。」'],
+      realm: ['「又进一境。别停在半路。」', '「高处风大，站稳。」'],
+      hostile: ['「拔剑。」', '「此仇，剑上见。」'] },
+    n2:  { greet: ['「道友来访，有失远迎。」', '「炉上刚好煎着新茶。」', '「你来了——药已煎好，趁热喝。」'],
+      gift: ['「这如何使得……多谢道友。」', '「礼我收下，心意我记下了。」'],
+      spar: ['「点到为止哦。」', '「你旧伤没好利索，我让着三分。」'],
+      discuss: ['「药有药性，人有人心——都急不得。」', '「谷中那本账簿，我已交给了长老会。」'],
+      realm: ['「恭喜。记得来配副固本的药。」', '「境界高了，丹毒更凶——慎服丹。」'],
+      hostile: ['「……何必呢。」', '「药能医病，医不了贪嗔。」'] },
+    n3:  { greet: ['「有朋自远方来。」', '「正翻到你说过的那卷书。」', '「坐，我沏了新墨……不对，新茶。」'],
+      gift: ['「却之不恭。」', '「书生无以为报，抄书一卷相赠。」'],
+      spar: ['「笔阵，勉强算兵器么？」', '「败得心服口服。」'],
+      discuss: ['「史书写的是胜者——但注脚里藏着真相。」', '「藏经阁残卷的抄本，你何时来取？」'],
+      realm: ['「可喜可贺，当浮一大白……以茶代酒。」', '「他日史书里，会有你的名字。」'],
+      hostile: ['「君子动口……罢了，动手吧。」', '「士可杀，不可辱。」'] },
+    n4:  { greet: ['「说。」', '「又是你。」', '「……坐。别碰我的刀。」'],
+      gift: ['「拿回去。」（还是收了）', '「……欠你一次。」'],
+      spar: ['「三招之内见真章。」', '「你的刀，慢了。」'],
+      discuss: ['「刀出鞘就要见血——不然别拔。」', '「我仇家遍地，你别沾边。」'],
+      realm: ['「境界是拿来杀人的，不是拿来庆贺的。」', '「……快了。快追上我了。」'],
+      hostile: ['「刀下不留活口。」', '「你很勇。可惜。」'] },
+    n5:  { greet: ['「稀客稀客，快请坐。」', '「我就知道你今日会来。」', '「老规矩，二楼雅间。」'],
+      gift: ['「哟，会做人。」', '「这礼……我记在账上了。」'],
+      spar: ['「赔我袖子！这可是蜀锦！」', '「算你赢——这一局的茶钱你出。」'],
+      discuss: ['「你查黑玉令？巧了，我也在查。」', '「资金链的最后一环，在太衍宗的库房里。」'],
+      realm: ['「大喜事！烟雨楼今日酒水半价。」', '「将来你的传记我来写——包挣钱。」'],
+      hostile: ['「你砸我招牌？」', '「江湖再见——最好别再见。」'] },
+    n6:  { greet: ['「哈哈哈，来的正好！」', '「兄弟！饿不饿？锅里还有！」', '「啥也别说了，先干一碗！」'],
+      gift: ['「哈哈，那我就不客气了！」', '「下回我请你吃烤全羊！」'],
+      spar: ['「来来来，让你三招——好吧不让了！」', '「痛快！再来！」'],
+      discuss: ['「俺不懂大道理，就懂『朋友』俩字。」', '「你说往东，俺绝不往西。」'],
+      realm: ['「好小子！晚上加个菜！」', '「以后谁敢欺负你，报俺名字！」'],
+      hostile: ['「你动俺兄弟？」', '「打完这场，恩断义绝！」'] },
+    n7:  { greet: ['「你来了。」', '「一曲未终，恕不远迎。」', '「为我抚一曲？……罢了，我自己来。」'],
+      gift: ['「有心了。」', '「此物与琴相配，多谢。」'],
+      spar: ['「琴音为号，剑光为拍。」', '「你的剑，合我曲中第三拍。」'],
+      discuss: ['「《雪衣》那支曲子，弹的是雪葬故人。」', '「曲终意未尽——你听懂了几分？」'],
+      realm: ['「琴剑同源，恭喜。」', '「他日雪落时，为你再抚一曲。」'],
+      hostile: ['「搅了雅兴。」', '「琴声可以杀人，信么？」'] },
+    n8:  { greet: ['「道友可是带了什么好买卖？」', '「早——今日行情看涨。」', '「自己人，柜台后头请。」'],
+      gift: ['「好东西，值这个价。」', '「这份人情，抵五百灵石。」'],
+      spar: ['「打赢了，打八折。」', '「唉，血亏。算了算了。」'],
+      discuss: ['「万宝商会的账，能洗白也能洗黑。」', '「你要查的那笔旧账——本钱不小啊。」'],
+      realm: ['「大喜！商会奉上一份贺仪。」', '「境界就是本钱——记得来我这投资。」'],
+      hostile: ['「砸场子？先赔钱。」', '「商道无情，你也别怪我。」'] },
+    n9:  { greet: ['「唔……你身上有件有趣的东西。」', '「别踩我符阵！」', '「来得正好，帮我按住这张纸。」'],
+      gift: ['「有意思，有意思。」', '「此物可入符……谢了。」'],
+      spar: ['「先声明，我符里掺了痒粉。」', '「咳，手滑。算你赢。」'],
+      discuss: ['「三百年前我卖过一张符——买主，是血河的人。」', '「烧掉的每一张符，我都记得。」'],
+      realm: ['「境界涨了，笔也该换换了。」', '「替我瞧瞧：这道纹，直也不直？」'],
+      hostile: ['「来，尝尝痒粉。」', '「老夫的符，可不认旧情。」'] },
+    n10: { greet: ['「请坐，茶在壶里。」', '「阵成了一角，你来得巧。」', '「不必多礼——看棋？」'],
+      gift: ['「心意领了。」', '「此物可作阵眼，收下了。」'],
+      spar: ['「棋盘即战场。」', '「你赢了半子——只半子。」'],
+      discuss: ['「困杀大阵的残图，我补出了三笔。」', '「阵理即天理，强求不得。」'],
+      realm: ['「境界如布阵，步步为营。」', '「待你困龙锁天之日，我为你掌灯。」'],
+      hostile: ['「入阵者，不问来意。」', '「困你三息，够了。」'] },
+    n11: { greet: ['「施主安好。」', '「气色好了些——药按时吃了么？」', '「来得正好，后山又送来伤员。」'],
+      gift: ['「功德无量。」', '「此物转赠伤员，替他们谢过。」'],
+      spar: ['「医者也讲武德——点到即止。」', '「你的旧伤没好透，我让你双手。」'],
+      discuss: ['「人心也是病，得慢慢治。」', '「红尘炼心——你炼到哪一重了？」'],
+      realm: ['「善哉。境界高者，更当慈悲。」', '「往后跌打损伤，都找我。」'],
+      hostile: ['「冤冤相报……唉。」', '「我不还手，但也不让开。」'] },
+    n12: { greet: ['「哟，还记得我呢？」', '「嘘——我刚从太衍宗『借』东西回来。」', '「想要什么消息？先说好，不赊账。」'],
+      gift: ['「懂规矩！」', '「下次偷……借东西时，想着你。」'],
+      spar: ['「抓得到我再说。」', '「哎呀，脚滑。算你赢。」'],
+      discuss: ['「玄玑真人的密室，我进去了——三炷香的时间。」', '「他密室里挂着的，是黑玉令的拓片。」'],
+      realm: ['「又高一层？那我偷东西得更小心了。」', '「恭喜欢迎——礼我顺手替你拿来了。」'],
+      hostile: ['「你坏我好事。」', '「追我？先练十年轻功。」'] },
+    n13: { greet: ['「你胆子不小。」', '「月光正好——说吧，什么事。」', '「又是你。看来我们命里有纠缠。」'],
+      gift: ['「你这是在讨好我？」', '「收下了。别指望我还礼。」'],
+      spar: ['「伤到你，可不包治。」', '「……你进步了。有点意思。」'],
+      discuss: ['「血河余孽的销赃路，我带你走一遭。」', '「魔道也讲信誉——至少我讲。」'],
+      realm: ['「魔随道长，恭喜。」', '「月圆之夜，我请你喝酒。」'],
+      hostile: ['「犯我者，虽远必诛。」', '「给你三息，逃命的机会。」'] },
+    n14: { greet: ['「师兄师姐！」', '「你什么时候再教我剑呀？」', '「哥哥又凶我了，你评评理！」'],
+      gift: ['「哇！给我的？」', '「我要告诉哥哥去……不对，谢谢你！」'],
+      spar: ['「看招！燕子三抄水！」', '「呜，又输了。再来一次！」'],
+      discuss: ['「哥哥其实很关心你，他就是嘴硬。」', '「藏经阁后巷有只猫，我带你去摸！」'],
+      realm: ['「哇——好厉害！回头教教我嘛。」', '「以后我也能这么厉害吗？」'],
+      hostile: ['「你、你欺负人！」', '「我哥不会放过你的！」'] },
+    n15: { greet: ['「三枚灵石，包你满意。」', '「打探消息？老价钱。」', '「哎哟贵客——今日打折，九十九枚。」'],
+      gift: ['「够意思！」', '「这礼……按市价可抵十条消息。」'],
+      spar: ['「君子动口不动手……好吧，接招！」', '「认输认输！本钱都输光了。」'],
+      discuss: ['「血河的旧闻？三枚灵石。……看你诚心，两枚。」', '「黑风寨的账，坊市人人都有一份。」'],
+      realm: ['「大吉大利！今日消息免费。」', '「您这样的人物，将来用得着小弟。」'],
+      hostile: ['「断人财路，如杀人父母！」', '「这架，我记账上了！」'] },
+    n16: { greet: ['「好！痛快！」', '「来，掰个腕子！」', '「谷里新酿的酒，走一坛？」'],
+      gift: ['「够爽快！」', '「回谷给你捎两块好矿石！」'],
+      spar: ['「接俺一拳试试！」', '「好硬！俺服了！」'],
+      discuss: ['「矿洞底下那东西，又动了。」', '「磐岩谷的门，永远为你开着。」'],
+      realm: ['「好汉子！这坛酒敬你！」', '「以后矿塌了，找俺！」'],
+      hostile: ['「俺最恨阴诡之徒！」', '「拳头底下见真章！」'] },
+    n17: { greet: ['「你来了。」', '「星图刚推到一半，稍候。」', '「……坐。别踩到阵基。」'],
+      gift: ['「多谢。」', '「此物合星阵之理，收下。」'],
+      spar: ['「星辰为子，请。」', '「你快了半拍——下次再来。」'],
+      discuss: ['「血河故道的星轨，三百年没动过。」', '「塔顶的手记，只给你一个人看过。」'],
+      realm: ['「星随道转，恭喜。」', '「雷台护阵之约，我记着。」'],
+      hostile: ['「星罚将至。」', '「布阵——你走不出三步。」'] },
+    n18: { greet: ['「幸会幸会。」', '「正读《剑经》第三卷，请指教。」', '「青萍剑谱抄本，道友可要一观？」'],
+      gift: ['「却之不恭。」', '「回赠小作一篇，聊表谢意。」'],
+      spar: ['「以剑会友，请。」', '「好剑法——输得心悦诚服。」'],
+      discuss: ['「剑理通文理，都讲一个『势』字。」', '「我想把青萍剑法写成话本……你出资么？」'],
+      realm: ['「可喜可贺，改日登门道贺。」', '「他日话本开篇，必写道友。」'],
+      hostile: ['「斯文扫地……那就请了。」', '「青萍三叠——得罪了。」'] },
+    n19: { greet: ['「哎呀，什么风把您吹来了？」', '「您眼力真好，就剩最后一件了。」', '「老熟人了——内部价，内部价。」'],
+      gift: ['「您太客气了！」', '「这礼重的……账我给您抹了。」'],
+      spar: ['「和气生财，和气生财！——接招！」', '「服了服了，本钱还您。」'],
+      discuss: ['「商会的眼线遍布坊市——您想听谁的？」', '「那批黑货过秤时，我多看了两眼。」'],
+      realm: ['「大喜大喜！小店全场八折！」', '「您高升了，可别忘了我。」'],
+      hostile: ['「这是砸我饭碗啊！」', '「和气……和气没了！」'] },
+    n20: { greet: ['「俺嘴笨，不会说话……」', '「坐！垫子是俺新编的。」', '「你来了，俺就放心了。」'],
+      gift: ['「俺、俺收了啊！」', '「回头俺给你捶背！」'],
+      spar: ['「俺出手重，你挡着点。」', '「俺输了，输得不冤。」'],
+      discuss: ['「谷里那件老物件，就认你这个明白人。」', '「俺认死的理，九牛拉不回——你对俺，没使过牛。」'],
+      realm: ['「好样的！俺说给大伙儿听去！」', '「你越来越有长老样了！」'],
+      hostile: ['「你、你阴俺？」', '「俺认死理：这种人不教训不行！」'] },
+    n21: { greet: ['「你来了，我算到了。」', '「昨夜星轨有变——原来应在你身上。」', '「请。棋枰已备。」'],
+      gift: ['「顺天意，收下了。」', '「此物应星象，妙。」'],
+      spar: ['「以棋道入剑，请指教。」', '「这一局，我算漏了你。」'],
+      discuss: ['「雷台之日，星示大凶——但也示了一条生路。」', '「气数如棋，落子无悔。」'],
+      realm: ['「天数又添一子，恭喜。」', '「你的星，越来越亮了。」'],
+      hostile: ['「天数有变——不能留你。」', '「星落之地，即是你的坟。」'] },
+    n22: { greet: ['「哟，想死还是想活？」', '「这么晚来——带酒了吗？」', '「省着点命，我还有事找你。」'],
+      gift: ['「讨好我？」', '「……收下。算你识趣。」'],
+      spar: ['「打坏了脸，你赔？」', '「手底下，有点真章。」'],
+      discuss: ['「第二份名单烧了——我自由了。」', '「血河的人认得我的脸，你也快了。」'],
+      realm: ['「境界越高，命越硬——好事。」', '「改日我请你喝最烈的酒。」'],
+      hostile: ['「弄脏我的衣裳了。」', '「你的死相，我替你想好了。」'] },
+    n23: { greet: ['「酒！酒呢！」', '「打了个酒嗝——你、你说。」', '「陪我喝一碗，有话跟你说。」'],
+      gift: ['「好酒！好酒！」', '「这、这瓶留着过年！」'],
+      spar: ['「醉、醉拳——哈！」', '「你、你赢了……再来！」'],
+      discuss: ['「水、水底下那位……三百年了。」', '「别、别信水面上的倒影。」'],
+      realm: ['「喝、喝大了？你飞那么高！」', '「好！这碗敬你！」'],
+      hostile: ['「酒、酒钱还没给呢！」', '「别、别逼俺醒酒！」'] },
+    n24: { greet: ['「路见不平，拔刀相助。」', '「又见面了——可有不平事？」', '「今年雁，比去年早归了七日。」'],
+      gift: ['「大恩不言谢。」', '「此物赠侠士，物得其所。」'],
+      spar: ['「请——雁翎刀，三招。」', '「好功夫！雁都为你盘旋了。」'],
+      discuss: ['「我故乡的雁，年年还回血河故道。」', '「今年秋天，我带你回去看看。」'],
+      realm: ['「侠之大者，恭喜。」', '「改日并肩，再战三百回合！」'],
+      hostile: ['「为此不义，拔刀！」', '「今日留你——天理难容，但我留。」'] },
+  },
+
   /** 剧情引擎 who 解析：'@id' → CHARACTERS */
   char(who) {
     if (typeof who === 'string' && who[0] === '@') return this.CHARACTERS[who.slice(1)] || null;
@@ -3753,9 +3920,14 @@ const Cultivate = {
     const p = Game.player;
     let gain = Math.round(this.baseGain(p) * this.gainMult());
     let evNote = '';
-    // v8 灵机事件：修炼偶发机缘/心魔，打破千篇一律（8% 触发）
+    // v8 灵机事件（v19 扩池）：基础四类 + 六道职业特化 + 境界异象，按身份动态构建（8% 触发）
     if (Utils.chance(8)) {
-      const kind = Utils.pickWeighted({ surge: 35, epiphany: 25, heartDemon: 25, glean: 15 });
+      const pool = { surge: 35, epiphany: 25, heartDemon: 25, glean: 15 };
+      const daoEv = { sword: 'jianMeng', pill: 'danXiang', talisman: 'fuGuang', body: 'tiWu', array: 'zhenXian', demonic: 'xueYong' };
+      if (p.dao && daoEv[p.dao]) pool[daoEv[p.dao]] = 18;   // 职业特化
+      if (p.realmIdx >= 1) pool.lingZhu = 10;               // 筑基起：灵露洗尘
+      if (p.realmIdx >= 3) pool.shenYou = 12;               // 元婴起：神游太虚
+      const kind = Utils.pickWeighted(pool);
       if (kind === 'surge') {
         gain = Math.round(gain * 2.5);
         Log.add('【灵机】行功之际，灵气忽如潮涌而来，天地之力尽数灌入丹田！', 'realm');
@@ -3770,10 +3942,44 @@ const Cultivate = {
         p.insight = Math.min(100, p.insight + 6);
         Log.add('【心魔】识海中魔音滋扰，你苦守灵台方寸——虽折了些修为，道心却愈发澄明。（突破感悟 +6）', 'warn');
         evNote = '（心魔滋扰 · 修为折损）';
-      } else {
+      } else if (kind === 'glean') {
         const stones = Math.round(Utils.rand(12, 24) * GameData.stoneEco(p.realmIdx));
         Bag.addStones(stones);
         Log.add(`【拾遗】收功之时袖中沙沙作响——竟是行功震落的灵石碎屑。灵石 +${Utils.fmtNum(stones)}。`, 'gain');
+      } else if (kind === 'jianMeng') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】梦中有人仗剑而歌，醒来指间犹有剑意流转。', 'gain');
+        evNote = '（剑鸣入梦 · 剑意 +15）';
+      } else if (kind === 'danXiang') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】行功之际，鼻端忽过一缕异香，丹火自燃三分。', 'gain');
+        evNote = '（丹香引火 · 丹火 +15）';
+      } else if (kind === 'fuGuang') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】指尖无意识勾画，醒来满纸符纹自成篇章。', 'gain');
+        evNote = '（符光乍现 · 符道 +15）';
+      } else if (kind === 'tiWu') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】一夜酣眠，筋骨自行开阖吐纳——肉身自有真意。', 'gain');
+        evNote = '（体悟玄机 · 体魄 +15）';
+      } else if (kind === 'zhenXian') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】低首见石纹纵横，竟是半幅天然阵图。', 'gain');
+        evNote = '（阵纹显化 · 阵道 +15）';
+      } else if (kind === 'xueYong') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】血气翻涌如潮，你顺势引而不发——煞意淬入经脉。', 'gain');
+        evNote = '（血气翻涌 · 魔性 +15）';
+      } else if (kind === 'lingZhu') {
+        p.mp = Stat.compute(p).maxMp;
+        p.poison = Math.max(0, p.poison - 5);
+        Log.add('【灵机】草木灵露凝于窗棂，你掬而洗尘——灵力充盈，丹毒稍解。（灵力全满，丹毒 -5）', 'gain');
+        evNote = '（灵露洗尘）';
+      } else if (kind === 'shenYou') {
+        gain = Math.round(gain * 1.8);
+        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Log.add('【灵机】神识离体，遨游星海一瞬——归来时天地都已换了一副面目。（修为 ×1.8，感悟 +2）', 'realm');
+        evNote = '（神游太虚 · 修为 ×1.8）';
       }
     }
     this.addExp(p, gain);
@@ -7117,6 +7323,21 @@ const NpcSys = {
   },
   def(id) { return GameData.NPCS.find(n => n.id === id) || null; },
   state(p, id) { return (p.npcs && p.npcs[id]) || null; },
+  /** v19 专属台词矩阵：优先取 NPC_LINES（greet 按关系档三档取句，hostile 仅在结怨时命中），回落 null */
+  lineFor(p, id, kind) {
+    const L = (GameData.NPC_LINES || {})[id];
+    if (!L || !L[kind] || !L[kind].length) return null;
+    if (kind === 'greet') {
+      const rel = (this.state(p, id) || {}).rel || 0;
+      const tier = rel >= 70 ? 2 : rel >= 15 ? 1 : 0;
+      return L.greet[Math.min(tier, L.greet.length - 1)];
+    }
+    if (kind === 'hostile') {
+      const st = this.state(p, id);
+      if (!st || st.rel > -15) return null;
+    }
+    return Utils.pick(L[kind]);
+  },
   /** v18：NPC 性格对话模板 */
   dialogText(temper, kind) {
     const DIALOG = {
@@ -7203,7 +7424,7 @@ const NpcSys = {
     const d = this.def(id);
     this.mem(p, id, 'story', '突破贺喜');
     return { id, name: d.name, title: d.title,
-      line: '「恭喜道友更上层楼。他日你登高之处，莫忘了今日同辈之人。」' };
+      line: this.lineFor(p, id, 'realm') || '「恭喜道友更上层楼。他日你登高之处，莫忘了今日同辈之人。」' };
   },
   /** 岁月推进：NPC 自主修炼 / 游历 / 争夺机缘 */
   yearTick(p, y) {
@@ -7373,7 +7594,8 @@ const NpcSys = {
       KarmaSys.addKarma(10, true);
       Log.add(`${d.name} 伤重不治，殒身当场——其血亲与你势不两立！（孽障 +20）`, 'loss');
     } else {
-      Log.add(`${d.name} 重伤遁走，临行前留下一句「此事没完」——恩怨愈结愈深。（孽障 +10）`, 'warn');
+      const hostileLine = this.lineFor(p, id, 'hostile');
+    Log.add(`${d.name} 重伤遁走，临行前留下一句${hostileLine ? hostileLine : '「此事没完」'}——恩怨愈结愈深。（孽障 +10）`, 'warn');
     }
   },
   /** 一战了断：胜则恩怨两清 */
@@ -7420,7 +7642,8 @@ const NpcSys = {
     if (!d || !s || !s.alive || Battle.active) return;
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴
-    Log.add(`你向 ${d.name} 递出战书，只较技，不拼命。`, 'event');
+    const sparLine = this.lineFor(p, id, 'spar');
+    Log.add(`你向 ${d.name} 递出战书，只较技，不拼命。${sparLine ? `<span style="color:var(--text-faint)">${d.name}：${sparLine}</span>` : ''}`, 'event');
     Game.afterAction();
     Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, spar: true, mapName: '切磋台' });
   },
@@ -7575,7 +7798,7 @@ const NpcSys = {
     s.rel = Utils.clamp(s.rel + gain, -100, 100);
     this.mem(p, id, 'gift', '赠礼之谊');
     const after = this.tierOf(Math.max(0, s.rel)).name;
-    Log.add(`你向 ${d.name} 奉上礼物。${this.dialogText(d.temper, 'gift')}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
+    Log.add(`你向 ${d.name} 奉上礼物。${this.lineFor(p, id, 'gift') || this.dialogText(d.temper, 'gift')}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
     if (after !== before) Ambience.sfx('rare');
     Game.afterAction();
   },
@@ -7600,7 +7823,8 @@ const NpcSys = {
     s.rel = Utils.clamp(s.rel + 1, -100, 100);
     this.mem(p, id, 'chat', '席地论道');
     Time.add(2);
-    Log.add(`你与 ${d.name} 席地论道，一言一语皆有进益。（修为 +${Utils.fmtNum(gain)}，感悟 +${insight}）`, 'gain');
+    const disLine = this.lineFor(p, id, 'discuss');
+    Log.add(`你与 ${d.name} 席地论道，一言一语皆有进益。${disLine ? `<span style="color:var(--text-faint)">${disLine}</span>` : ''}（修为 +${Utils.fmtNum(gain)}，感悟 +${insight}）`, 'gain');
     Game.afterAction();
   },
   /** 游历途中的常驻 NPC 遭遇 */
@@ -7623,7 +7847,7 @@ const NpcSys = {
     const tier = this.tierOf(Math.max(0, s.rel));
     const choice = await UI.popup({
       title: `偶遇 · ${d.name}`,
-      html: `${d.desc}<br>你们在 ${Utils.esc((GameData.MAPS.find(m => m.id === s.map) || {}).name || '山野')} 间打了个照面。${s.rel >= 8 ? `<br><span class="tip-line">关系：<b>${tier.name}</b>${recall ? '　' + d.name + '先开了口：' + recall : ''}</span>` : ''}`,
+      html: `${d.desc}<br>你们在 ${Utils.esc((GameData.MAPS.find(m => m.id === s.map) || {}).name || '山野')} 间打了个照面。<br><span class="tip-line">${d.name}：${this.lineFor(p, id, 'greet') || this.dialogText(d.temper, 'greeting')}</span>${s.rel >= 8 ? `<br><span class="tip-line">关系：<b>${tier.name}</b>${recall ? '　' + d.name + '先开了口：' + recall : ''}</span>` : ''}`,
       options: [
         { text: '叙话论道', value: 'chat', primary: true },
         { text: '请教一二', value: 'ask' },
@@ -8863,6 +9087,19 @@ const Battle = {
     if (B.enemy.charging) { this.act('defend'); return; }
     // 3) 被束缚/冰封：行动会被跳过，直接点防御等待
     if (StatusFx.has(B.myFx, 'stun') || StatusFx.has(B.myFx, 'freeze')) { this.act('defend'); return; }
+    // v19 3.5) 职业必杀策略表：真元够且条件满足即施放（各道打法各异）
+    const ultStrategy = {
+      sword:    { id: 'us1', when: () => B.enemy.hp > B.enemy.hpMax * 0.5 },                 // 敌健在则剑斩削血
+      pill:     { id: 'up2', when: () => p.hp < st.maxHp * 0.65 },                            // 血线偏低以丹心续命
+      talisman: { id: 'ut1', when: () => B.enemy.hp > B.enemy.hpMax * 0.2 },                 // 雷狱压制
+      body:     { id: 'ub1', when: () => !!B.enemy.elite || B.enemy.hp > B.enemy.hpMax * 0.7 }, // 精英或开局崩山震
+      array:    { id: 'ua2', when: () => B.enemy.hp > B.enemy.hpMax * 0.3 },                 // 八方杀阵收割
+      demonic:  { id: 'ud1', when: () => p.hp < st.maxHp * 0.7 },                            // 血遁吸血续航
+    }[p.dao];
+    if (ultStrategy && (B.zhenyuan || 0) >= 3 && ultStrategy.when()) {
+      const sk = (GameData.BATTLE_SKILLS[p.dao] || []).find(x => x.id === ultStrategy.id);
+      if (sk && (B.zhenyuan || 0) >= sk.cost) { this.actUlt(ultStrategy.id); return; }
+    }
     // v18 4) 自动祭符：符修优先，伤害符/控制符
     if (p.dao === 'talisman') {
       const talList = Object.entries(p.bag).filter(([id]) => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman');
@@ -10913,7 +11150,7 @@ const UI = {
         const magic = WorldSys.isMagic(p, m.id) ? '<span class="tag magic">魔域</span>' : '';
         return `
       <div class="card map-card">
-        <div class="map-scene">${Art.scene(m.id, Art.seasonOf(Game.player))}</div>
+        <div class="map-scene" title="天气：${{ rain: '雨', fog: '雾', clear: '晴' }[(Art.weatherOf(Game.player, m.id) || {}).sky] || '晴'}${(Art.weatherOf(Game.player, m.id) || {}).night ? ' · 夜' : ''}">${Art.scene(m.id, Art.seasonOf(Game.player), Art.weatherOf(Game.player, m.id))}</div>
         <div class="card-title">${m.name}${magic}<span class="tag ${diff.cls}">${diff.text}</span></div>
         <div class="card-desc">${m.desc}${magic ? '<br><span class="neg">魔气狂化：妖魔更强，所获亦丰。</span>' : ''}</div>
         <div class="action-row"><button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button></div>

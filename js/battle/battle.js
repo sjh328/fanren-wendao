@@ -696,6 +696,19 @@ const Battle = {
     if (B.enemy.charging) { this.act('defend'); return; }
     // 3) 被束缚/冰封：行动会被跳过，直接点防御等待
     if (StatusFx.has(B.myFx, 'stun') || StatusFx.has(B.myFx, 'freeze')) { this.act('defend'); return; }
+    // v19 3.5) 职业必杀策略表：真元够且条件满足即施放（各道打法各异）
+    const ultStrategy = {
+      sword:    { id: 'us1', when: () => B.enemy.hp > B.enemy.hpMax * 0.5 },                 // 敌健在则剑斩削血
+      pill:     { id: 'up2', when: () => p.hp < st.maxHp * 0.65 },                            // 血线偏低以丹心续命
+      talisman: { id: 'ut1', when: () => B.enemy.hp > B.enemy.hpMax * 0.2 },                 // 雷狱压制
+      body:     { id: 'ub1', when: () => !!B.enemy.elite || B.enemy.hp > B.enemy.hpMax * 0.7 }, // 精英或开局崩山震
+      array:    { id: 'ua2', when: () => B.enemy.hp > B.enemy.hpMax * 0.3 },                 // 八方杀阵收割
+      demonic:  { id: 'ud1', when: () => p.hp < st.maxHp * 0.7 },                            // 血遁吸血续航
+    }[p.dao];
+    if (ultStrategy && (B.zhenyuan || 0) >= 3 && ultStrategy.when()) {
+      const sk = (GameData.BATTLE_SKILLS[p.dao] || []).find(x => x.id === ultStrategy.id);
+      if (sk && (B.zhenyuan || 0) >= sk.cost) { this.actUlt(ultStrategy.id); return; }
+    }
     // v18 4) 自动祭符：符修优先，伤害符/控制符
     if (p.dao === 'talisman') {
       const talList = Object.entries(p.bag).filter(([id]) => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman');

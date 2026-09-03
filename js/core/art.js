@@ -17,8 +17,8 @@ const Art = {
     feizhou:  { sky: ['#dfe3ee', '#c3cbdd'], hills: ['#6a7898', '#4d5b7c', '#344064'], landmark: 'ship', mist: '#e2e7f2' },
     longyuan: { sky: ['#d6e2e6', '#b2c8cf'], hills: ['#3e6e80', '#2a5264', '#1a3a4a'], landmark: 'whirl', mist: '#cfdfe4' },
   },
-  /** 生成地图场景插画 SVG（viewBox 600x150）；season 0~3 叠加季节薄色 */
-  scene(mapId, season = -1) {
+  /** 生成地图场景插画 SVG（viewBox 600x150）；season 0~3 季节薄色，wx 天气/昼夜叠加层 */
+  scene(mapId, season = -1, wx = null) {
     const S = this.SCENES[mapId] || this.SCENES.village;
     const gid = 'sg' + mapId;
     // 三层山峦（折线剪影）
@@ -55,6 +55,9 @@ const Art = {
       <ellipse cx="180" cy="132" rx="200" ry="26" fill="${S.mist}" opacity="0.65"/>
       <ellipse cx="470" cy="140" rx="220" ry="24" fill="${S.mist}" opacity="0.5"/>
       ${season >= 0 ? `<rect width="600" height="150" fill="${this.SEASON_TINT[season] || 'none'}" opacity="0.07"/>` : ''}
+      ${wx && wx.night ? '<rect width="600" height="150" fill="#1e2a4a" opacity="0.30"/><circle cx="500" cy="34" r="18" fill="#f4f0dc" opacity="0.9"/><circle cx="508" cy="30" r="15" fill="url(#' + gid + ')" opacity="0.35"/>' : ''}
+      ${wx && wx.sky === 'rain' ? '<rect width="600" height="150" fill="#6a788a" opacity="0.14"/><g stroke="#8a98aa" stroke-width="1" opacity="0.55">' + [80,180,280,380,480,560].map((x, i) => `<line x1="${x}" y1="${10 + (i % 3) * 12}" x2="${x - 8}" y2="${34 + (i % 3) * 12}"/><line x1="${x + 40}" y1="${48 + (i % 2) * 14}" x2="${x + 32}" y2="${72 + (i % 2) * 14}"/><line x1="${x + 12}" y1="${92 + (i % 3) * 10}" x2="${x + 4}" y2="${116 + (i % 3) * 10}"/>`).join('') + '</g>' : ''}
+      ${wx && wx.sky === 'fog' ? '<g fill="#f2efe4" opacity="0.45"><ellipse cx="160" cy="118" rx="210" ry="24"/><ellipse cx="440" cy="100" rx="190" ry="20"/><ellipse cx="300" cy="132" rx="260" ry="22"/></g>' : ''}
     </svg>`;
   },
   /** 战斗敌方剪影立绘（species 形象；elite 加妖光角标） */
@@ -117,6 +120,22 @@ const Art = {
   seasonOf(p) {
     const month = p ? Math.floor((p.day || 0) / 30) % 12 : 0;
     return month <= 2 ? 0 : month <= 5 ? 1 : month <= 8 ? 2 : 3;
+  },
+  /** v19 天气/昼夜：按地图+游戏日确定性派生（同日同地必同天）——晴/雨/雾 × 昼/夜 */
+  weatherOf(p, mapId) {
+    if (!p) return { sky: 'clear', night: false };
+    const day = Math.floor(p.day || 0);
+    const h = Utils.hashStr(mapId + '#' + day);
+    const r = h % 100;
+    const sky = r < 16 ? 'rain' : r < 28 ? 'fog' : 'clear';
+    const night = (Math.floor(p.day || 0) % 10) < 3;   // 全局时辰：每十日三夜（约 30%）
+    return { sky, night };
+  },
+  /** 天气名（游历页标签用） */
+  weatherName(w) {
+    if (!w) return '';
+    const sky = { rain: '雨', fog: '雾', clear: '' }[w.sky] || '';
+    return (w.night ? '夜' : '') + sky;
   },
 
   /** v19：人物半身像（CHARACTERS.look 参数化渲染；剧情演出与人物志共用）

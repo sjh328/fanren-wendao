@@ -47,9 +47,14 @@ const Cultivate = {
     const p = Game.player;
     let gain = Math.round(this.baseGain(p) * this.gainMult());
     let evNote = '';
-    // v8 灵机事件：修炼偶发机缘/心魔，打破千篇一律（8% 触发）
+    // v8 灵机事件（v19 扩池）：基础四类 + 六道职业特化 + 境界异象，按身份动态构建（8% 触发）
     if (Utils.chance(8)) {
-      const kind = Utils.pickWeighted({ surge: 35, epiphany: 25, heartDemon: 25, glean: 15 });
+      const pool = { surge: 35, epiphany: 25, heartDemon: 25, glean: 15 };
+      const daoEv = { sword: 'jianMeng', pill: 'danXiang', talisman: 'fuGuang', body: 'tiWu', array: 'zhenXian', demonic: 'xueYong' };
+      if (p.dao && daoEv[p.dao]) pool[daoEv[p.dao]] = 18;   // 职业特化
+      if (p.realmIdx >= 1) pool.lingZhu = 10;               // 筑基起：灵露洗尘
+      if (p.realmIdx >= 3) pool.shenYou = 12;               // 元婴起：神游太虚
+      const kind = Utils.pickWeighted(pool);
       if (kind === 'surge') {
         gain = Math.round(gain * 2.5);
         Log.add('【灵机】行功之际，灵气忽如潮涌而来，天地之力尽数灌入丹田！', 'realm');
@@ -64,10 +69,44 @@ const Cultivate = {
         p.insight = Math.min(100, p.insight + 6);
         Log.add('【心魔】识海中魔音滋扰，你苦守灵台方寸——虽折了些修为，道心却愈发澄明。（突破感悟 +6）', 'warn');
         evNote = '（心魔滋扰 · 修为折损）';
-      } else {
+      } else if (kind === 'glean') {
         const stones = Math.round(Utils.rand(12, 24) * GameData.stoneEco(p.realmIdx));
         Bag.addStones(stones);
         Log.add(`【拾遗】收功之时袖中沙沙作响——竟是行功震落的灵石碎屑。灵石 +${Utils.fmtNum(stones)}。`, 'gain');
+      } else if (kind === 'jianMeng') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】梦中有人仗剑而歌，醒来指间犹有剑意流转。', 'gain');
+        evNote = '（剑鸣入梦 · 剑意 +15）';
+      } else if (kind === 'danXiang') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】行功之际，鼻端忽过一缕异香，丹火自燃三分。', 'gain');
+        evNote = '（丹香引火 · 丹火 +15）';
+      } else if (kind === 'fuGuang') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】指尖无意识勾画，醒来满纸符纹自成篇章。', 'gain');
+        evNote = '（符光乍现 · 符道 +15）';
+      } else if (kind === 'tiWu') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】一夜酣眠，筋骨自行开阖吐纳——肉身自有真意。', 'gain');
+        evNote = '（体悟玄机 · 体魄 +15）';
+      } else if (kind === 'zhenXian') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】低首见石纹纵横，竟是半幅天然阵图。', 'gain');
+        evNote = '（阵纹显化 · 阵道 +15）';
+      } else if (kind === 'xueYong') {
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 15);
+        Log.add('【灵机】血气翻涌如潮，你顺势引而不发——煞意淬入经脉。', 'gain');
+        evNote = '（血气翻涌 · 魔性 +15）';
+      } else if (kind === 'lingZhu') {
+        p.mp = Stat.compute(p).maxMp;
+        p.poison = Math.max(0, p.poison - 5);
+        Log.add('【灵机】草木灵露凝于窗棂，你掬而洗尘——灵力充盈，丹毒稍解。（灵力全满，丹毒 -5）', 'gain');
+        evNote = '（灵露洗尘）';
+      } else if (kind === 'shenYou') {
+        gain = Math.round(gain * 1.8);
+        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Log.add('【灵机】神识离体，遨游星海一瞬——归来时天地都已换了一副面目。（修为 ×1.8，感悟 +2）', 'realm');
+        evNote = '（神游太虚 · 修为 ×1.8）';
       }
     }
     this.addExp(p, gain);
