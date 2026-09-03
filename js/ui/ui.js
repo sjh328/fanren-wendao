@@ -1346,13 +1346,19 @@ const UI = {
     show.style.setProperty('--aura', color);
     show.style.setProperty('--aura-soft', this.aura(color, 0.55));
     show.querySelector('.rs-text').textContent = text;
-    flash.classList.remove('go');
-    show.classList.remove('go');
+    // v19 突破演出分档：境界越高，异象越盛（低境轻光 → 中境光环 + 粒子 → 高境全屏潮涌）
+    const tier = (Game.player && Game.player.realmIdx) || 0;
+    const tierCls = tier >= 7 ? 'rs-t3' : tier >= 4 ? 'rs-t2' : tier >= 2 ? 'rs-t1' : '';
+    flash.classList.remove('go', 'rs-t1', 'rs-t2', 'rs-t3');
+    show.classList.remove('go', 'rs-t1', 'rs-t2', 'rs-t3');
     void flash.offsetWidth;   // 重启动画
     flash.classList.add('go');
     show.classList.add('go');
+    if (tierCls) { flash.classList.add(tierCls); show.classList.add(tierCls); }
+    if (tier >= 4) Ambience.sfx('breakthrough');
     clearTimeout(this._realmTimer);
-    this._realmTimer = setTimeout(() => { flash.classList.remove('go'); show.classList.remove('go'); }, 3500);
+    const dur = tier >= 7 ? 4600 : tier >= 4 ? 4000 : 3500;
+    this._realmTimer = setTimeout(() => { flash.classList.remove('go', 'rs-t1', 'rs-t2', 'rs-t3'); show.classList.remove('go', 'rs-t1', 'rs-t2', 'rs-t3'); }, dur);
   },
   saveFlash() {
     const dot = document.querySelector('.save-dot');

@@ -48,7 +48,7 @@ const Battle = {
     this.speed = this.speed || this.loadSpeed();
     p.counters.battles++;
     document.getElementById('battle-modal').classList.remove('hidden');
-    if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('battle');   // v19 情境配乐
+    if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood(ctx.boss ? 'boss' : 'battle');   // v19 情境配乐（守关 Boss 独立情境）
     this.log(`⚔ 于${ctx.mapName || '荒野'}遭遇 <b class="grade-0">${enemy.name}</b>（${enemy.realmLabel}${enemy.elite ? ' · 精英' : ''}）！`, 'warn');
     if (enemy._storyBark) this.log(enemy._storyBark, 'log-event');   // v19 剧情战入场台词
     if (ctx.spar) this.log('此为切磋较技，点到为止，不伤性命。', 'log-system');

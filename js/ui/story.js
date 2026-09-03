@@ -32,6 +32,7 @@ const Story = {
       document.getElementById('app').appendChild(modal);
     }
     modal.classList.remove('hidden');
+    if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('story');   // v19 剧情情境配乐
     this.render();
   },
   isSeen(id) {
@@ -170,6 +171,7 @@ const Story = {
   finish() {
     const c = this.cur;
     this.cur = null;
+    if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 剧情毕归平静
     const modal = document.getElementById('story-modal');
     if (modal) modal.classList.add('hidden');
     if (c && c.onEnd) { const fn = c.onEnd; c.onEnd = null; fn(); }
@@ -207,6 +209,20 @@ const Story = {
       <div class="story-text story-choice-lead">${sc.t === 'investigate' ? '「细察」' : ''}${sc.text}</div>
       <div class="story-choices">${sc.options.map((o, i) =>
         `<button class="story-opt" data-action="story-choice" data-story-choice="${i}">${o.text}</button>`).join('')}</div>`;
+    } else if (sc.t === 'figure') {
+      // v19 剧情大图：关键章人物横幅（chr: '@c_xxx'，art: 底衬题词）
+      const chr = GameData.char(sc.chr || '');
+      const nm = chr ? chr.name : (sc.chr || '');
+      const color = chr ? chr.color : '#6a5a3e';
+      const look = (chr && chr.look) || {};
+      body = `
+      <div class="story-figure-big" style="--fig-c:${color}">
+        <div class="sfb-portrait">${chr ? Art.portrait(chr.look) : Utils.esc(nm[0] || '？')}</div>
+        <div class="sfb-text">
+          <div class="sfb-name">${Utils.esc(nm)}</div>
+          <div class="sfb-art">${sc.art || ''}</div>
+        </div>
+      </div>`;
     } else if (sc.t === 'battle') {
       const foeName = sc.foe && sc.foe.npc ? ((NpcSys.def(sc.foe.npc) || {}).name)
         : sc.foe && sc.foe.m ? ((GameData.MONSTERS[sc.foe.m] || {}).name)

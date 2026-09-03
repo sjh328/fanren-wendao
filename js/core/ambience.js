@@ -167,15 +167,20 @@ const Ambience = {
       const t = this.ctx.currentTime + 0.02;
       this.musicStep++;
       const P = this.PENTA;
-      if (this.musicStep % 8 === 1) this.tone(P[0] / (mood === 'battle' ? 2 : 2), t, mood === 'battle' ? 2.2 : 3.2, { type: 'sine', gain: 0.20, dest: this.musicBus });
-      if (Utils.chance(mood === 'battle' ? 78 : 62)) {
-        const f = P[Math.floor(Math.random() * P.length)] * (mood === 'battle' && Utils.chance(40) ? 2 : 1);
+      if (this.musicStep % 8 === 1) this.tone(P[0] / (mood === 'battle' || mood === 'boss' ? 2 : 2), t, mood === 'battle' ? 2.2 : 3.2, { type: 'sine', gain: 0.20, dest: this.musicBus });
+      const density = { battle: 78, boss: 85, story: 42, calm: 62 }[mood] || 62;
+      if (Utils.chance(density)) {
+        const lift = (mood === 'battle' && Utils.chance(40)) || (mood === 'boss' && Utils.chance(55));
+        const damp = mood === 'story' && Utils.chance(60);
+        const f = P[Math.floor(Math.random() * P.length)] * (lift ? 2 : damp ? 0.5 : 1);
         this.tone(f, t, mood === 'battle' ? 1.1 : 1.6, { type: 'triangle', gain: 0.30, dest: this.musicBus });
         if (Utils.chance(30)) this.tone(f * 2, t + 0.03, 0.8, { type: 'sine', gain: 0.10, dest: this.musicBus });
+        if (mood === 'boss' && Utils.chance(35)) this.tone(f * 1.5, t + 0.06, 0.5, { type: 'square', gain: 0.08, dest: this.musicBus });   // 小二度摩擦，杀气
       }
     };
     tick();
-    this.musicTimer = setInterval(tick, this.mood === 'battle' ? 460 : 640);
+    const tempo = { battle: 460, boss: 400, story: 760, calm: 640 }[this.mood || 'calm'];
+    this.musicTimer = setInterval(tick, tempo);
   },
   /** v19 情境配乐：战斗急促（短音阶+高八度倾向），平静舒缓 */
   setMood(m) {
