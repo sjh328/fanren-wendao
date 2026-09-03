@@ -539,9 +539,11 @@ try {
   const noTrib = await page.$eval('#tribulation-modal', el => el.className.includes('hidden')).catch(() => true);
   noTrib ? pass('T12 筑基冲关不引天劫') : fail('T12 无天劫', '练气冲筑基意外弹出天劫');
   let t12 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
-  // 成算上限钳制 95%，存在 5% 失利率：失败则重种子重试一次
-  if (t12.realmIdx !== 1) {
-    console.log('  - T12 静修冲关意外失利（5% 概率），重试一次');
+  // 成算上限钳制 95%，存在 5% 失利率：失败则重种子重试（v19：最多三轮）
+  let t12tries = 0;
+  while (t12.realmIdx !== 1 && t12tries < 3) {
+    t12tries++;
+    console.log(`  - T12 静修冲关意外失利（5% 概率），重试第 ${t12tries} 次`);
     await seedAndLoad(T12_PATCH);
     await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
     await sleep(300);
@@ -668,9 +670,15 @@ try {
     await sleep(400);
     const t14 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
     (!t14.bag.gf_tiangang && !t14.gongfa.gf_tiangang) ? pass('T14 体修无法购买玄级功法') : fail('T14 体修功法限制', '竟被买下');
+    await page.evaluate(() => { Game.player.stones.low = 100000; });   // v19：垫足灵石消除行情随机性
     await clickSel(page, '[data-action="act-buy"][data-item="gf_canghai"]'); // 凡级功法应可买
     await sleep(400);
-    const t14b = await page.evaluate(() => Game.player.bag.gf_canghai || 0);   // v19：读内存玩家
+    let t14b = await page.evaluate(() => Game.player.bag.gf_canghai || 0);   // v19：读内存玩家
+    if (!t14b) {
+      await page.evaluate(() => { const b = document.querySelector('[data-action="act-buy"][data-item="gf_canghai"]'); if (b) b.click(); });
+      await sleep(400);
+      t14b = await page.evaluate(() => Game.player.bag.gf_canghai || 0);
+    }
     t14b >= 1 ? pass('T14 体修可购凡级功法') : fail('T14 凡级功法购买', String(t14b));
   }
 
