@@ -119,7 +119,7 @@ const QuestSys = {
       reward: { stones: 200000, fortune: 20 },
     },
   ],
-  /** 奇遇录 · 支线五则（minRealm 解锁境界） */
+  /** 奇遇录 · 支线十二则（minRealm 解锁境界；v19 起含 NPC 绑定与任务链） */
   SIDES: [
     {
       id: 's1', title: '义庄尸变', minRealm: 0,

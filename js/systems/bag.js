@@ -71,7 +71,7 @@ const Bag = {
     let guard = 0;
     while (guard++ < 40) {
       const st = Stat.compute(p);
-      const cap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+      const cap = Stat.poisonCap(p);   // v20：上限单源化
       // 疗伤丹：气血未满才服
       if (Bag.count('pill_liaoshang') > 0 && p.hp < st.maxHp) {
         const gain = (GameData.ITEMS['pill_liaoshang'].poison || 0) * (1 - st.poisonReduce / 100);
@@ -126,10 +126,17 @@ const Bag = {
     }
     this.removeItem(itemId, 1);
     // v18：装备槽存 {id, enhance} 对象，强化等级随实例走
-    const oldEnhance = p.equipped[slot] ? (p.equipped[slot].enhance || 0) : 0;
-    if (p.equipped[slot]) Bag.addItem(p.equipped[slot].id, 1); // 旧装备回包
-    const newEnhance = p.enhanced && p.enhanced[itemId] ? p.enhanced[itemId] : oldEnhance;
-    p.equipped[slot] = { id: itemId, enhance: newEnhance };
+    if (p.equipped[slot]) {
+      const old = p.equipped[slot];
+      // v20 修瑕：旧装备的强化先写回 p.enhanced 留档（与卸下行为一致），换装绝不丢失
+      if (old && typeof old === 'object' && old.enhance) {
+        p.enhanced = p.enhanced || {};
+        p.enhanced[old.id] = Math.max(p.enhanced[old.id] || 0, old.enhance);
+      }
+      Bag.addItem(old.id, 1); // 旧装备回包
+    }
+    // v20 修瑕：新装备只继承「同 id 祭炼心得」，不再跨 id 继承旧装备的强化
+    p.equipped[slot] = { id: itemId, enhance: (p.enhanced && p.enhanced[itemId]) || 0 };
     // 从 p.enhanced 中清除（现由槽位实例持有）
     if (p.enhanced && p.enhanced[itemId]) delete p.enhanced[itemId];
     Log.add(`你装备了 <b>${def.name}</b>。`, 'gain');
@@ -213,7 +220,7 @@ const Pill = {
     // 丹毒结算
     let poisonGain = (def.poison || 0) * (1 - st.poisonReduce / 100);
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 3) poisonGain *= 0.7;   // v10 丹道六境·丹火境
-    const cap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+    const cap = Stat.poisonCap(p);   // v20：上限单源化
     if (p.poison + poisonGain > cap) {
       const lost = Math.round(p.exp * 0.1);
       p.exp = Math.max(0, p.exp - lost);

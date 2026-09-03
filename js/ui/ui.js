@@ -87,7 +87,7 @@ const UI = {
     const p = Game.player;
     const st = Stat.compute(p);
     const need = GameData.layerNeed(p.realmIdx, p.layer);
-    const poisonCap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+    const poisonCap = Stat.poisonCap(p);   // v20：上限单源化
     const eqNames = { weapon: '兵器', armor: '护甲', accessory: '饰品' };
     const eqHtml = Object.keys(eqNames).map(slot => {
       const it = p.equipped[slot];
@@ -173,7 +173,7 @@ const UI = {
     if (!p) return;
     const st = Stat.compute(p);
     const need = GameData.layerNeed(p.realmIdx, p.layer);
-    const cap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+    const cap = Stat.poisonCap(p);   // v20：上限单源化
     // 紧急提醒（major：够格顶替主行动的里程碑）
     let alert = null;
     if (p.layer === 3 && p.exp >= need && p.realmIdx < 9) alert = { text: '修为圆满，可冲击瓶颈', go: 'cultivate', major: true };
@@ -388,6 +388,8 @@ const UI = {
         <div class="card-desc">洞府乃修士安身立命之所——聚灵阵助修行、灵田可种药、兽栏能养灵兽。<br>然开辟洞府耗费甚巨，须至<b>筑基期</b>方可为之。</div></div>`;
     }
     if (!p.cave) p.cave = CaveSys.freshCave();
+    CaveSys.visitorEvent(p);   // v20 接线：每日访客事件（15% 几率，v18 起闲置）
+    CaveSys.checkPest(p);      // v20 接线：每日虫害检查（v18 起闲置）
     const lv = p.cave.lv;
     const maxed = lv >= CaveSys.MAX_LV;
     const c = CaveSys.upCost(p);
@@ -630,7 +632,7 @@ const UI = {
     return `
     <div class="card">
       <div class="card-title">✦ 江湖人脉</div>
-      <div class="card-desc">修行界有十五位常驻修士，随岁月自行修炼、游历地图、争夺机缘，境界与你所见的时光同步成长。<br>
+      <div class="card-desc">修行界有二十四位常驻修士，随岁月自行修炼、游历地图、争夺机缘，境界与你所见的时光同步成长。<br>
       结交可成好友、结拜、道侣——你于战斗、渡劫的虚弱危急关头，他们有概率舍命相助；背刺夺宝收益翻倍，但气运暴跌、恩怨永结——宿敌会趁你历练、突破、渡劫时偷袭。</div>
       ${rel.length ? `<div class="card-tags"><span class="tag safe">${rel.join(' · ')}</span></div>` : ''}
       ${awayLine}

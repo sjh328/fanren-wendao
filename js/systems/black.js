@@ -30,10 +30,12 @@ const BlackSys = {
     }
     return out;
   },
-  /** 黑市售价：基准 × 1.6 × 境界经济（材料类随行情） */
+  /** 黑市售价：基准 × 1.6 × 境界经济（材料类随行情）。
+   *  v20 修瑕：定价 0 的稀有物（套装件/秘境功法等）按品阶折算基准价，杜绝 800 灵石捡漏地级套装。 */
   price(p, id) {
     const def = GameData.ITEMS[id];
-    let base = def.price || 500;
+    let base = def.price || 0;
+    if (!base) base = Math.round(2000 * Math.pow(3, Utils.clamp(def.grade ?? def.tier ?? 1, 0, 5)));
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
     return Math.max(1, Math.round(base * 1.6));
   },

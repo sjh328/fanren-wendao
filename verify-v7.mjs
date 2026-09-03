@@ -438,7 +438,11 @@ try {
     const orig = Bag.addStones;
     Bag.addStones = function (n) { paid += n; return orig.call(Bag, n); };
     kill.progress = kill.need;
+    // v20 加固：屏蔽 25% 连锁悬赏随机，保证领后置空可确定性断言
+    const origChance = Utils.chance;
+    Utils.chance = () => false;
     BountySys.claim(idx);
+    Utils.chance = origChance;
     Bag.addStones = orig;
     return { idx, progressed, paid, cleared: B.list[idx] === null };
   });

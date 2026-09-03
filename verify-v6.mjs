@@ -132,7 +132,10 @@ try {
   await sleep(200);
   const toast1 = await page.evaluate(() => document.getElementById('toast').innerText);
   toast1.includes('尚未解锁') ? pass('G1 点击锁定标签给出提示') : fail('G1 锁提示', toast1);
-  await page.evaluate(() => { Cultivate.normal(); Cultivate.normal(); Cultivate.normal(); Cultivate.normal(); });
+  await page.evaluate(() => {
+    Game.player.attrs.comp = 6;   // v20 加固：去 RNG——低悟性时 4 轮不满一层会误报
+    Cultivate.normal(); Cultivate.normal(); Cultivate.normal(); Cultivate.normal();
+  });
   await sleep(250);
   const r2 = await page.evaluate(() => [...document.querySelectorAll('.tab-btn.locked')].map(e => e.dataset.tab));
   JSON.stringify(r2.sort()) === JSON.stringify(['cave', 'jianghu', 'sect'])
@@ -247,8 +250,13 @@ try {
     UI.renderAll();
   });
   await page.evaluate(() => AutoCult.start({ kind: 'exp', need: 120, label: '攒够 120 修为' }));
-  await sleep(300);
-  const f1 = await page.evaluate(() => ({ active: AutoCult.active, btn: !!document.querySelector('[data-action="act-auto-stop"]') }));
+  // v20 加固：负载下轮询等待启动，替代固定 300ms 单查
+  let f1 = { active: false, btn: false };
+  for (let i = 0; i < 20; i++) {
+    f1 = await page.evaluate(() => ({ active: AutoCult.active, btn: !!document.querySelector('[data-action="act-auto-stop"]') }));
+    if (f1.active && f1.btn) break;
+    await sleep(150);
+  }
   f1.active && f1.btn ? pass('F1 挂机启动并显示停止按钮') : fail('F1 启动', JSON.stringify(f1));
   await sleep(5000);
   const f2 = await page.evaluate(() => ({

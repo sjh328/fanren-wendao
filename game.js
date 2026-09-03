@@ -723,7 +723,7 @@ LOCKS: {
     if (AutoCult.active) t.push(`自动修炼中（${AutoCult.rounds} 轮，修为 +${Utils.fmtNum(Math.max(0, this.totalExp(p) - AutoCult.startExp))}），可随时停止`);
     if ((p.karma || 0) >= 100) t.push('孽障缠身，可于修炼页<b>斩三尸</b>');
     else if ((p.karma || 0) >= 60) t.push('孽障渐高，仇家窥伺于后——宜谨言慎行');
-    const cap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+    const cap = Stat.poisonCap(p);   // v20：上限单源化
     if (p.poison > cap * 0.75) t.push('丹毒将满，宜服解毒丹或停药休养');
     if (p.hp < st.maxHp * 0.3) t.push('气血衰微，宜打坐调息或服丹补满');
     if (p.canReincarnate) t.push('兵解转世之机已现——或可重开一世');
@@ -1675,9 +1675,9 @@ const GameData = {
     { id: 'f11', out: 's_hj_ling', need: { m_lianhun: 2, m_jiaojin: 2 },                rate: 45 },
     { id: 'f7', out: 'a_taiyi',     need: { m_xuecan: 2, m_shenmu: 1, m_xianjing: 1 },   rate: 45 },
     { id: 'f8', out: 'z_longyu',    need: { m_longxue: 1, m_jiaojin: 1, m_haixin: 1 },   rate: 45 },
-    { id: 'f9', out: 's_xt_jian',   need: { m_xuantie: 4, m_bingpo: 2 },             rate: 55 },
-    { id: 'f10', out: 's_xt_jia',   need: { m_xuantie: 4, m_xuecan: 2 },             rate: 55 },
-    { id: 'f11', out: 's_xt_pei',   need: { m_lianhun: 1, m_bingpo: 2 },             rate: 55 },
+    { id: 'f15', out: 's_xt_jian',   need: { m_xuantie: 4, m_bingpo: 2 },             rate: 55 },
+    { id: 'f16', out: 's_xt_jia',   need: { m_xuantie: 4, m_xuecan: 2 },             rate: 55 },
+    { id: 'f17', out: 's_xt_pei',   need: { m_lianhun: 1, m_bingpo: 2 },             rate: 55 },
     { id: 'f12', out: 's_cx_jian',  need: { m_huolin: 2, m_jiaojin: 1 },             rate: 50 },
     { id: 'f13', out: 's_cx_pao',   need: { m_huolin: 2, m_yaopi: 3 },               rate: 50 },
     { id: 'f14', out: 's_cx_gou',   need: { m_huolin: 1, m_neidan: 2 },              rate: 50 },
@@ -1693,7 +1693,7 @@ const GameData = {
     { id: 'oldwoman', title: '风雪老妪', text: '风雪中一名老妪蜷缩乞食，你若施舍盘缠，只怕自己下一程要徒步挨饿。' },
   ],
 
-  /* ---------- §24 十五位常驻修士（随游戏时间自行修炼游历）----------
+  /* ---------- §24 二十四位常驻修士（随游戏时间自行修炼游历）----------
    * realm: 初始大境界；talent: 资质（成长速度）；kin: 血亲（恩怨连坐）；
    * sect: 所属宗门（影响称呼与派系）；temper: 性情。
    */
@@ -2011,91 +2011,91 @@ const GameData = {
     n10: { greet: ['「请坐，茶在壶里。」', '「阵成了一角，你来得巧。」', '「不必多礼——看棋？」'],
       gift: ['「心意领了。」', '「此物可作阵眼，收下了。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「棋盘即战场。」', '「你赢了半子——只半子。」'],
-      discuss: ['「困杀大阵的残图，我补出了三笔。」', '「阵理即天理，强求不得。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「困杀大阵的残图，我补出了三笔。」', '「阵理即天理，强求不得。」', '「阵成之日，天地无言——大巧若拙，方是布阵的至境。」'],
       realm: ['「境界如布阵，步步为营。」', '「待你困龙锁天之日，我为你掌灯。」'],
       hostile: ['「入阵者，不问来意。」', '「困你三息，够了。」'] },
     n11: { greet: ['「施主安好。」', '「气色好了些——药按时吃了么？」', '「来得正好，后山又送来伤员。」'],
       gift: ['「功德无量。」', '「此物转赠伤员，替他们谢过。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「医者也讲武德——点到即止。」', '「你的旧伤没好透，我让你双手。」'],
-      discuss: ['「人心也是病，得慢慢治。」', '「红尘炼心——你炼到哪一重了？」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「人心也是病，得慢慢治。」', '「红尘炼心——你炼到哪一重了？」', '「救人一命，胜修十年——这不是虚言，是一笔实账。」'],
       realm: ['「善哉。境界高者，更当慈悲。」', '「往后跌打损伤，都找我。」'],
       hostile: ['「冤冤相报……唉。」', '「我不还手，但也不让开。」'] },
     n12: { greet: ['「哟，还记得我呢？」', '「嘘——我刚从太衍宗『借』东西回来。」', '「想要什么消息？先说好，不赊账。」'],
       gift: ['「懂规矩！」', '「下次偷……借东西时，想着你。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「抓得到我再说。」', '「哎呀，脚滑。算你赢。」'],
-      discuss: ['「玄玑真人的密室，我进去了——三炷香的时间。」', '「他密室里挂着的，是黑玉令的拓片。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「玄玑真人的密室，我进去了——三炷香的时间。」', '「他密室里挂着的，是黑玉令的拓片。」', '「天下的锁，锁得住笨贼，锁不住有心人。」'],
       realm: ['「又高一层？那我偷东西得更小心了。」', '「恭喜欢迎——礼我顺手替你拿来了。」'],
       hostile: ['「你坏我好事。」', '「追我？先练十年轻功。」'] },
     n13: { greet: ['「你胆子不小。」', '「月光正好——说吧，什么事。」', '「又是你。看来我们命里有纠缠。」'],
       gift: ['「你这是在讨好我？」', '「收下了。别指望我还礼。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「伤到你，可不包治。」', '「……你进步了。有点意思。」'],
-      discuss: ['「血河余孽的销赃路，我带你走一遭。」', '「魔道也讲信誉——至少我讲。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「血河余孽的销赃路，我带你走一遭。」', '「魔道也讲信誉——至少我讲。」', '「月圆看人最准——你眼底的光，比三年前亮了。」'],
       realm: ['「魔随道长，恭喜。」', '「月圆之夜，我请你喝酒。」'],
       hostile: ['「犯我者，虽远必诛。」', '「给你三息，逃命的机会。」'] },
     n14: { greet: ['「师兄师姐！」', '「你什么时候再教我剑呀？」', '「哥哥又凶我了，你评评理！」'],
       gift: ['「哇！给我的？」', '「我要告诉哥哥去……不对，谢谢你！」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「看招！燕子三抄水！」', '「呜，又输了。再来一次！」'],
-      discuss: ['「哥哥其实很关心你，他就是嘴硬。」', '「藏经阁后巷有只猫，我带你去摸！」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「哥哥其实很关心你，他就是嘴硬。」', '「藏经阁后巷有只猫，我带你去摸！」', '「等我练成万剑诀，第一个演给你看！」'],
       realm: ['「哇——好厉害！回头教教我嘛。」', '「以后我也能这么厉害吗？」'],
       hostile: ['「你、你欺负人！」', '「我哥不会放过你的！」'] },
     n15: { greet: ['「三枚灵石，包你满意。」', '「打探消息？老价钱。」', '「哎哟贵客——今日打折，九十九枚。」'],
       gift: ['「够意思！」', '「这礼……按市价可抵十条消息。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「君子动口不动手……好吧，接招！」', '「认输认输！本钱都输光了。」'],
-      discuss: ['「血河的旧闻？三枚灵石。……看你诚心，两枚。」', '「黑风寨的账，坊市人人都有一份。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「血河的旧闻？三枚灵石。……看你诚心，两枚。」', '「黑风寨的账，坊市人人都有一份。」', '「消息这行有句话：知道得越多，睡得越少。」'],
       realm: ['「大吉大利！今日消息免费。」', '「您这样的人物，将来用得着小弟。」'],
       hostile: ['「断人财路，如杀人父母！」', '「这架，我记账上了！」'] },
     n16: { greet: ['「好！痛快！」', '「来，掰个腕子！」', '「谷里新酿的酒，走一坛？」'],
       gift: ['「够爽快！」', '「回谷给你捎两块好矿石！」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「接俺一拳试试！」', '「好硬！俺服了！」'],
-      discuss: ['「矿洞底下那东西，又动了。」', '「磐岩谷的门，永远为你开着。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「矿洞底下那东西，又动了。」', '「磐岩谷的门，永远为你开着。」', '「山就摆在那儿——你怕它，它压你；你扛它，它服你。」'],
       realm: ['「好汉子！这坛酒敬你！」', '「以后矿塌了，找俺！」'],
       hostile: ['「俺最恨阴诡之徒！」', '「拳头底下见真章！」'] },
     n17: { greet: ['「你来了。」', '「星图刚推到一半，稍候。」', '「……坐。别踩到阵基。」'],
       gift: ['「多谢。」', '「此物合星阵之理，收下。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「星辰为子，请。」', '「你快了半拍——下次再来。」'],
-      discuss: ['「血河故道的星轨，三百年没动过。」', '「塔顶的手记，只给你一个人看过。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「血河故道的星轨，三百年没动过。」', '「塔顶的手记，只给你一个人看过。」', '「星轨无言，可错一分，人间便是百年。」'],
       realm: ['「星随道转，恭喜。」', '「雷台护阵之约，我记着。」'],
       hostile: ['「星罚将至。」', '「布阵——你走不出三步。」'] },
     n18: { greet: ['「幸会幸会。」', '「正读《剑经》第三卷，请指教。」', '「青萍剑谱抄本，道友可要一观？」'],
       gift: ['「却之不恭。」', '「回赠小作一篇，聊表谢意。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「以剑会友，请。」', '「好剑法——输得心悦诚服。」'],
-      discuss: ['「剑理通文理，都讲一个『势』字。」', '「我想把青萍剑法写成话本……你出资么？」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「剑理通文理，都讲一个『势』字。」', '「我想把青萍剑法写成话本……你出资么？」', '「起承转合——收势最难，收心更难。」'],
       realm: ['「可喜可贺，改日登门道贺。」', '「他日话本开篇，必写道友。」'],
       hostile: ['「斯文扫地……那就请了。」', '「青萍三叠——得罪了。」'] },
     n19: { greet: ['「哎呀，什么风把您吹来了？」', '「您眼力真好，就剩最后一件了。」', '「老熟人了——内部价，内部价。」'],
       gift: ['「您太客气了！」', '「这礼重的……账我给您抹了。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「和气生财，和气生财！——接招！」', '「服了服了，本钱还您。」'],
-      discuss: ['「商会的眼线遍布坊市——您想听谁的？」', '「那批黑货过秤时，我多看了两眼。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「商会的眼线遍布坊市——您想听谁的？」', '「那批黑货过秤时，我多看了两眼。」', '「买卖做的是长久——今天让三分利，明天他替你守门。」'],
       realm: ['「大喜大喜！小店全场八折！」', '「您高升了，可别忘了我。」'],
       hostile: ['「这是砸我饭碗啊！」', '「和气……和气没了！」'] },
     n20: { greet: ['「俺嘴笨，不会说话……」', '「坐！垫子是俺新编的。」', '「你来了，俺就放心了。」'],
       gift: ['「俺、俺收了啊！」', '「回头俺给你捶背！」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「俺出手重，你挡着点。」', '「俺输了，输得不冤。」'],
-      discuss: ['「谷里那件老物件，就认你这个明白人。」', '「俺认死的理，九牛拉不回——你对俺，没使过牛。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「谷里那件老物件，就认你这个明白人。」', '「俺认死的理，九牛拉不回——你对俺，没使过牛。」', '「俺不识几个字，可俺认死理：理直了，就大胆往前走。」'],
       realm: ['「好样的！俺说给大伙儿听去！」', '「你越来越有长老样了！」'],
       hostile: ['「你、你阴俺？」', '「俺认死理：这种人不教训不行！」'] },
     n21: { greet: ['「你来了，我算到了。」', '「昨夜星轨有变——原来应在你身上。」', '「请。棋枰已备。」'],
       gift: ['「顺天意，收下了。」', '「此物应星象，妙。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「以棋道入剑，请指教。」', '「这一局，我算漏了你。」'],
-      discuss: ['「雷台之日，星示大凶——但也示了一条生路。」', '「气数如棋，落子无悔。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「雷台之日，星示大凶——但也示了一条生路。」', '「气数如棋，落子无悔。」', '「棋手落子，终究是人，不是天。」'],
       realm: ['「天数又添一子，恭喜。」', '「你的星，越来越亮了。」'],
       hostile: ['「天数有变——不能留你。」', '「星落之地，即是你的坟。」'] },
     n22: { greet: ['「哟，想死还是想活？」', '「这么晚来——带酒了吗？」', '「省着点命，我还有事找你。」'],
       gift: ['「讨好我？」', '「……收下。算你识趣。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「打坏了脸，你赔？」', '「手底下，有点真章。」'],
-      discuss: ['「第二份名单烧了——我自由了。」', '「血河的人认得我的脸，你也快了。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「第二份名单烧了——我自由了。」', '「血河的人认得我的脸，你也快了。」', '「这行当的规矩：留三分余地下注，留七分狠活保命。」'],
       realm: ['「境界越高，命越硬——好事。」', '「改日我请你喝最烈的酒。」'],
       hostile: ['「弄脏我的衣裳了。」', '「你的死相，我替你想好了。」'] },
     n23: { greet: ['「酒！酒呢！」', '「打了个酒嗝——你、你说。」', '「陪我喝一碗，有话跟你说。」'],
       gift: ['「好酒！好酒！」', '「这、这瓶留着过年！」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「醉、醉拳——哈！」', '「你、你赢了……再来！」'],
-      discuss: ['「水、水底下那位……三百年了。」', '「别、别信水面上的倒影。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「水、水底下那位……三百年了。」', '「别、别信水面上的倒影。」', '「醉、醉里看水最真——水底下，才是真身。」'],
       realm: ['「喝、喝大了？你飞那么高！」', '「好！这碗敬你！」'],
       hostile: ['「酒、酒钱还没给呢！」', '「别、别逼俺醒酒！」'] },
     n24: { greet: ['「路见不平，拔刀相助。」', '「又见面了——可有不平事？」', '「今年雁，比去年早归了七日。」'],
       gift: ['「大恩不言谢。」', '「此物赠侠士，物得其所。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「请——雁翎刀，三招。」', '「好功夫！雁都为你盘旋了。」'],
-      discuss: ['「我故乡的雁，年年还回血河故道。」', '「今年秋天，我带你回去看看。」', '「画符如做人：一笔错，满盘输。」'],
+      discuss: ['「我故乡的雁，年年还回血河故道。」', '「今年秋天，我带你回去看看。」', '「侠字怎么写？人肩上担着的事——放下容易，担着难。」'],
       realm: ['「侠之大者，恭喜。」', '「改日并肩，再战三百回合！」'],
       hostile: ['「为此不义，拔刀！」', '「今日留你——天理难容，但我留。」'] },
   },
@@ -3502,6 +3502,9 @@ const PlayerFactory = {
       personal: {},   // v19 个人线进度 {npcId: 已完成幕数}
       daoExp: {},   // v16 职业道境经验（六大职业独立积累，不随修为境界绑定）
       jade: 0,      // v18 残玉共鸣（0-9 重，主线每完结一章 +1）
+      reputation: 0, // v18 江湖声望（RepSys 六档；v20 显式入模板，老档经 fresh 合并自动补齐）
+      tameSkill: 0, // v13 驯熟练度（0-100，驯服成功率 +1%/10点；v20 显式入模板）
+      xinmo: 0,     // v19 心魔值（v20 显式入模板，杜绝 undefined 参与钳制前的运算）
     };
     const st = Stat.compute(p);
     p.hp = st.maxHp; p.mp = st.maxMp;
@@ -3842,6 +3845,8 @@ const Stat = {
   /** 防御减伤后的伤害期望值 */
   /** 防御减伤后的伤害期望值 */
   afterDef(atk, def) { return atk * (1 - def / (def + (GameData.BALANCE.COMBAT.AFTER_DEF_DENOM || 140))); },
+  /** v20 丹毒上限单源化（原公式散落 5 处硬编码）：60 + 体魄×8，炼虚「合道」+20 */
+  poisonCap(p) { return 60 + ((p.attrs && p.attrs.body) || 0) * 8 + (p.realmIdx >= 5 ? 20 : 0); },
 };
 
 /* ======================================================================
@@ -4339,7 +4344,7 @@ const Bag = {
     let guard = 0;
     while (guard++ < 40) {
       const st = Stat.compute(p);
-      const cap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+      const cap = Stat.poisonCap(p);   // v20：上限单源化
       // 疗伤丹：气血未满才服
       if (Bag.count('pill_liaoshang') > 0 && p.hp < st.maxHp) {
         const gain = (GameData.ITEMS['pill_liaoshang'].poison || 0) * (1 - st.poisonReduce / 100);
@@ -4394,10 +4399,17 @@ const Bag = {
     }
     this.removeItem(itemId, 1);
     // v18：装备槽存 {id, enhance} 对象，强化等级随实例走
-    const oldEnhance = p.equipped[slot] ? (p.equipped[slot].enhance || 0) : 0;
-    if (p.equipped[slot]) Bag.addItem(p.equipped[slot].id, 1); // 旧装备回包
-    const newEnhance = p.enhanced && p.enhanced[itemId] ? p.enhanced[itemId] : oldEnhance;
-    p.equipped[slot] = { id: itemId, enhance: newEnhance };
+    if (p.equipped[slot]) {
+      const old = p.equipped[slot];
+      // v20 修瑕：旧装备的强化先写回 p.enhanced 留档（与卸下行为一致），换装绝不丢失
+      if (old && typeof old === 'object' && old.enhance) {
+        p.enhanced = p.enhanced || {};
+        p.enhanced[old.id] = Math.max(p.enhanced[old.id] || 0, old.enhance);
+      }
+      Bag.addItem(old.id, 1); // 旧装备回包
+    }
+    // v20 修瑕：新装备只继承「同 id 祭炼心得」，不再跨 id 继承旧装备的强化
+    p.equipped[slot] = { id: itemId, enhance: (p.enhanced && p.enhanced[itemId]) || 0 };
     // 从 p.enhanced 中清除（现由槽位实例持有）
     if (p.enhanced && p.enhanced[itemId]) delete p.enhanced[itemId];
     Log.add(`你装备了 <b>${def.name}</b>。`, 'gain');
@@ -4481,7 +4493,7 @@ const Pill = {
     // 丹毒结算
     let poisonGain = (def.poison || 0) * (1 - st.poisonReduce / 100);
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 3) poisonGain *= 0.7;   // v10 丹道六境·丹火境
-    const cap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+    const cap = Stat.poisonCap(p);   // v20：上限单源化
     if (p.poison + poisonGain > cap) {
       const lost = Math.round(p.exp * 0.1);
       p.exp = Math.max(0, p.exp - lost);
@@ -4801,9 +4813,8 @@ const CaveSys = {
     Ambience.sfx('forge');
     Game.afterAction();
   },
-  /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级 */
+  /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级；炼丹房（v18：每级+5%成丹率） */
   cultBonus(p) { return p.cave ? p.cave.lv * 4 : 0; },
-  /** v18：炼丹房加成（每级+5%成丹率） */
   pillBonus(p) { return p.cave ? p.cave.lv * 5 : 0; },
   /** v18：访客事件（每日第一次进入洞府时触发） */
   visitorEvent(p) {
@@ -4847,8 +4858,12 @@ const CaveSys = {
     Log.add(`你以灵泉浇灌第 ${idx + 1} 田，作物生长加快了一分。`, 'info');
     Game.afterAction();
   },
-  /** v18：随机虫害检查（进入洞府时触发） */
+  /** v20 接线：每日一次的虫害检查（此前为无调用方的死代码） */
   checkPest(p) {
+    if (!p.cave) return;
+    const today = Math.floor(p.day || 0);
+    if (p.cave._pestDay === today) return;
+    p.cave._pestDay = today;
     const plots = this.plotsOf(p);
     for (let i = 0; i < plots.length; i++) {
       const plot = plots[i];
@@ -4877,8 +4892,6 @@ const CaveSys = {
     return p.cave.plots;
   },
   plotCount(p) { return Math.min(8, 4 + (p.cave ? p.cave.lv - 1 : 0)); },
-  /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级 */
-  cultBonus(p) { return p.cave ? p.cave.lv * 4 : 0; },
   upCost(p) {
     const lv = p.cave ? p.cave.lv : 1;
     return {
@@ -7251,10 +7264,12 @@ const BlackSys = {
     }
     return out;
   },
-  /** 黑市售价：基准 × 1.6 × 境界经济（材料类随行情） */
+  /** 黑市售价：基准 × 1.6 × 境界经济（材料类随行情）。
+   *  v20 修瑕：定价 0 的稀有物（套装件/秘境功法等）按品阶折算基准价，杜绝 800 灵石捡漏地级套装。 */
   price(p, id) {
     const def = GameData.ITEMS[id];
-    let base = def.price || 500;
+    let base = def.price || 0;
+    if (!base) base = Math.round(2000 * Math.pow(3, Utils.clamp(def.grade ?? def.tier ?? 1, 0, 5)));
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
     return Math.max(1, Math.round(base * 1.6));
   },
@@ -8913,8 +8928,8 @@ const Battle = {
           B.combo = 0;
         } else {
           let dmg = Stat.afterDef(this.myAtk(st), this.enDef(B.enemy)) * Utils.randF(0.85, 1.15) * this.moraleMul() * this.comboMul();
-          // v18 种族克制
-          const speciesRel = GameData.speciesRelation(p.dao ? 'human' : 'human', B.enemy.species);
+          // v18 种族克制（玩家恒为人族；v20 修瑕：移除恒真三元死条件）
+          const speciesRel = GameData.speciesRelation('human', B.enemy.species);
           if (speciesRel > 0) dmg *= 1.15;
           else if (speciesRel < 0) dmg *= 0.85;
           const eqFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p) : {};   // v19 词缀特效
@@ -9884,7 +9899,7 @@ const Tutorial = {
     { icon: '📜', title: '左侧 · 道途面板', text: '随时查看你的<b>境界修为</b>、气血灵力、先天四维（根骨 / 悟性 / 福缘 / 体魄）与战斗属性。<br>每个境界都有独有的<b>境界特性</b>，择定大道后更可修炼<b>职业道境</b>——皆在此一览。修为攒满即可突破，寿元耗尽则道消身殒，切莫蹉跎岁月。', target: '#panel-left' },
     { icon: '⚔', title: '中央 · 行动与游历', text: '<b>修炼</b>积攒修为，<b>探索</b>历练搏杀，<b>坊市</b>买卖丹药法器，筑基后可拜入<b>宗门</b>。<br>下方游历记载会记录你的每一步。遇敌时可选普攻、法诀、丹药或遁走。', target: '#panel-center' },
     { icon: '🎒', title: '右侧 · 背包与存档', text: '丹药、功法、法宝、材料分类收纳。法宝可装备，功法可参悟升级。<br>菜单中可随时存读档（共三档 + 自动存档）。', target: '#panel-right' },
-    { icon: '🕳', title: '最后一句忠告', text: '丹药虽好，丹毒伤身；地图凶险，量力而行。<br>境界不足莫闯险地，否则……重伤事小，道消事大。<br>此外：「游历」页有<b>天下大势</b>与各大境界的<b>秘境</b>，「江湖」页可结交十五位常驻修士——恩怨情仇，皆是道途。<br><b>祝道友早日飞升！</b>', target: null },
+    { icon: '🕳', title: '最后一句忠告', text: '丹药虽好，丹毒伤身；地图凶险，量力而行。<br>境界不足莫闯险地，否则……重伤事小，道消事大。<br>此外：「游历」页有<b>天下大势</b>与各大境界的<b>秘境</b>，「江湖」页可结交二十四位常驻修士——恩怨情仇，皆是道途。<br><b>祝道友早日飞升！</b>', target: null },
   ],
   idx: 0,
   show(force = false) {
@@ -10309,7 +10324,7 @@ const QuestSys = {
       reward: { stones: 200000, fortune: 20 },
     },
   ],
-  /** 奇遇录 · 支线五则（minRealm 解锁境界） */
+  /** 奇遇录 · 支线十二则（minRealm 解锁境界；v19 起含 NPC 绑定与任务链） */
   SIDES: [
     {
       id: 's1', title: '义庄尸变', minRealm: 0,
@@ -10899,7 +10914,7 @@ const UI = {
     const p = Game.player;
     const st = Stat.compute(p);
     const need = GameData.layerNeed(p.realmIdx, p.layer);
-    const poisonCap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+    const poisonCap = Stat.poisonCap(p);   // v20：上限单源化
     const eqNames = { weapon: '兵器', armor: '护甲', accessory: '饰品' };
     const eqHtml = Object.keys(eqNames).map(slot => {
       const it = p.equipped[slot];
@@ -10985,7 +11000,7 @@ const UI = {
     if (!p) return;
     const st = Stat.compute(p);
     const need = GameData.layerNeed(p.realmIdx, p.layer);
-    const cap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+    const cap = Stat.poisonCap(p);   // v20：上限单源化
     // 紧急提醒（major：够格顶替主行动的里程碑）
     let alert = null;
     if (p.layer === 3 && p.exp >= need && p.realmIdx < 9) alert = { text: '修为圆满，可冲击瓶颈', go: 'cultivate', major: true };
@@ -11200,6 +11215,8 @@ const UI = {
         <div class="card-desc">洞府乃修士安身立命之所——聚灵阵助修行、灵田可种药、兽栏能养灵兽。<br>然开辟洞府耗费甚巨，须至<b>筑基期</b>方可为之。</div></div>`;
     }
     if (!p.cave) p.cave = CaveSys.freshCave();
+    CaveSys.visitorEvent(p);   // v20 接线：每日访客事件（15% 几率，v18 起闲置）
+    CaveSys.checkPest(p);      // v20 接线：每日虫害检查（v18 起闲置）
     const lv = p.cave.lv;
     const maxed = lv >= CaveSys.MAX_LV;
     const c = CaveSys.upCost(p);
@@ -11442,7 +11459,7 @@ const UI = {
     return `
     <div class="card">
       <div class="card-title">✦ 江湖人脉</div>
-      <div class="card-desc">修行界有十五位常驻修士，随岁月自行修炼、游历地图、争夺机缘，境界与你所见的时光同步成长。<br>
+      <div class="card-desc">修行界有二十四位常驻修士，随岁月自行修炼、游历地图、争夺机缘，境界与你所见的时光同步成长。<br>
       结交可成好友、结拜、道侣——你于战斗、渡劫的虚弱危急关头，他们有概率舍命相助；背刺夺宝收益翻倍，但气运暴跌、恩怨永结——宿敌会趁你历练、突破、渡劫时偷袭。</div>
       ${rel.length ? `<div class="card-tags"><span class="tag safe">${rel.join(' · ')}</span></div>` : ''}
       ${awayLine}

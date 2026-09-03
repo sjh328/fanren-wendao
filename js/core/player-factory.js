@@ -57,6 +57,9 @@ const PlayerFactory = {
       personal: {},   // v19 个人线进度 {npcId: 已完成幕数}
       daoExp: {},   // v16 职业道境经验（六大职业独立积累，不随修为境界绑定）
       jade: 0,      // v18 残玉共鸣（0-9 重，主线每完结一章 +1）
+      reputation: 0, // v18 江湖声望（RepSys 六档；v20 显式入模板，老档经 fresh 合并自动补齐）
+      tameSkill: 0, // v13 驯熟练度（0-100，驯服成功率 +1%/10点；v20 显式入模板）
+      xinmo: 0,     // v19 心魔值（v20 显式入模板，杜绝 undefined 参与钳制前的运算）
     };
     const st = Stat.compute(p);
     p.hp = st.maxHp; p.mp = st.maxMp;

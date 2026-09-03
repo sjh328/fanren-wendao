@@ -25,7 +25,7 @@ node server.mjs     # http://localhost:8341/index.html
 测试为 puppeteer-core 驱动真实 Chrome 的 E2E 回归（需先启动 `node server.mjs`，并保证本机装有 Chrome）：
 
 ```bash
-npm run test:all    # 七套脚本全量回归（约 260+ 断言）
+npm run test:all    # 九套脚本全量回归（330+ 断言，随版本增长）
 npm run test:v8     # 单独运行某一版本专项
 ```
 

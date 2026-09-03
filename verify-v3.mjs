@@ -38,11 +38,21 @@ const clickSel = async (page, sel, timeout = 6000) => {
   await sleep(150);
 };
 const clickPopupBtn = async (idx) => {
-  const open = await page.$eval('#popup-modal', el => !el.className.includes('hidden')).catch(() => false);
-  if (!open) return;
-  const btns = await page.$$('#popup-btns button');
-  if (btns.length > idx) await btns[idx].click();
-  await sleep(350);
+  // v20 加固：旧实现先 $ _$ 抓按钮快照再点击——若间隙内弹窗 DOM 被重渲染，
+  // click 会落在游离节点上，事件不冒泡到委托层，Promise 永久悬置、后续全链卡死。
+  // 改为实时查询 + 点击后验证弹窗确实关闭，未关闭则重试。
+  for (let i = 0; i < 8; i++) {
+    const st = await page.evaluate((k) => {
+      const modal = document.getElementById('popup-modal');
+      if (!modal || modal.className.includes('hidden')) return 'closed';
+      const btns = document.querySelectorAll('#popup-btns button');
+      if (btns.length <= k) return 'nobtn';
+      btns[k].click();
+      return modal.className.includes('hidden') ? 'resolved' : 'stale';
+    }, idx).catch(() => 'err');
+    if (st === 'resolved' || st === 'closed') { await sleep(300); return; }
+    await sleep(220);
+  }
 };
 // v6：渡劫失败会弹出「回溯因果」确认框，测试一律点「继续前行」保留原时序
 const dismissRollback = async () => {
@@ -63,6 +73,8 @@ const dismissRollback = async () => {
     await sleep(300);
   }
   await sleep(300);
+  // v20 加固：渡劫偷袭（14%）会开启战斗，残留战场会阻断后续兵解流程——统一清理
+  await page.evaluate(() => { if (Battle.active) { Battle.active.over = true; Battle.end(); } });
 };
 const player = (page) => page.evaluate(() => (typeof Game !== 'undefined' && Game.player) ? JSON.parse(JSON.stringify(Game.player)) : null);
 const finishBattle = async (page, maxTurns = 60) => {

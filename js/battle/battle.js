@@ -413,8 +413,8 @@ const Battle = {
           B.combo = 0;
         } else {
           let dmg = Stat.afterDef(this.myAtk(st), this.enDef(B.enemy)) * Utils.randF(0.85, 1.15) * this.moraleMul() * this.comboMul();
-          // v18 种族克制
-          const speciesRel = GameData.speciesRelation(p.dao ? 'human' : 'human', B.enemy.species);
+          // v18 种族克制（玩家恒为人族；v20 修瑕：移除恒真三元死条件）
+          const speciesRel = GameData.speciesRelation('human', B.enemy.species);
           if (speciesRel > 0) dmg *= 1.15;
           else if (speciesRel < 0) dmg *= 0.85;
           const eqFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p) : {};   // v19 词缀特效

@@ -52,7 +52,7 @@ LOCKS: {
     if (AutoCult.active) t.push(`自动修炼中（${AutoCult.rounds} 轮，修为 +${Utils.fmtNum(Math.max(0, this.totalExp(p) - AutoCult.startExp))}），可随时停止`);
     if ((p.karma || 0) >= 100) t.push('孽障缠身，可于修炼页<b>斩三尸</b>');
     else if ((p.karma || 0) >= 60) t.push('孽障渐高，仇家窥伺于后——宜谨言慎行');
-    const cap = 60 + p.attrs.body * 8 + (p.realmIdx >= 5 ? 20 : 0);
+    const cap = Stat.poisonCap(p);   // v20：上限单源化
     if (p.poison > cap * 0.75) t.push('丹毒将满，宜服解毒丹或停药休养');
     if (p.hp < st.maxHp * 0.3) t.push('气血衰微，宜打坐调息或服丹补满');
     if (p.canReincarnate) t.push('兵解转世之机已现——或可重开一世');

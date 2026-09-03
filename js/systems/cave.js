@@ -41,9 +41,8 @@ const CaveSys = {
     Ambience.sfx('forge');
     Game.afterAction();
   },
-  /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级 */
+  /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级；炼丹房（v18：每级+5%成丹率） */
   cultBonus(p) { return p.cave ? p.cave.lv * 4 : 0; },
-  /** v18：炼丹房加成（每级+5%成丹率） */
   pillBonus(p) { return p.cave ? p.cave.lv * 5 : 0; },
   /** v18：访客事件（每日第一次进入洞府时触发） */
   visitorEvent(p) {
@@ -87,8 +86,12 @@ const CaveSys = {
     Log.add(`你以灵泉浇灌第 ${idx + 1} 田，作物生长加快了一分。`, 'info');
     Game.afterAction();
   },
-  /** v18：随机虫害检查（进入洞府时触发） */
+  /** v20 接线：每日一次的虫害检查（此前为无调用方的死代码） */
   checkPest(p) {
+    if (!p.cave) return;
+    const today = Math.floor(p.day || 0);
+    if (p.cave._pestDay === today) return;
+    p.cave._pestDay = today;
     const plots = this.plotsOf(p);
     for (let i = 0; i < plots.length; i++) {
       const plot = plots[i];
@@ -117,8 +120,6 @@ const CaveSys = {
     return p.cave.plots;
   },
   plotCount(p) { return Math.min(8, 4 + (p.cave ? p.cave.lv - 1 : 0)); },
-  /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级 */
-  cultBonus(p) { return p.cave ? p.cave.lv * 4 : 0; },
   upCost(p) {
     const lv = p.cave ? p.cave.lv : 1;
     return {
