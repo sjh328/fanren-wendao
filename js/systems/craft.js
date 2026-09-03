@@ -40,10 +40,38 @@ const CraftSys = {
   },
   /** 炼丹：耗药材，赌成丹；times>1 为批量连炉（药材不足自动停炉，汇总一行结算）
    *  v18：火候选择 + 品质判定 */
+  /** v19 失传丹方参悟：集齐残页即可永久解锁配方 */
+  async studyRecipe(recipeId) {
+    const p = Game.player;
+    const r = GameData.ALCHEMY_RECIPES.find(x => x.id === recipeId);
+    if (!r || !r.needPages) return;
+    p.flags = p.flags || {};
+    if ((p.flags.recipeOk || {})[r.id]) { UI.toast('此丹方早已参悟'); return; }
+    const have = Bag.count('m_danfang');
+    if (have < r.needPages) { UI.toast(`残页不足（${have}/${r.needPages}）`); return; }
+    const out = GameData.ITEMS[r.out];
+    const ok = await UI.popup({
+      title: `参悟失传丹方 · ${out.name}`,
+      html: `以 ${r.needPages} 页【丹方残页】互校补全，失传的炼法在炉火中重新亮起。<br>参悟后可永久炼制【<b>${out.name}</b>】。`,
+      options: [{ text: '参 悟', value: true, primary: true }, { text: '再凑凑', value: false }],
+    });
+    if (!ok) return;
+    Bag.removeItem('m_danfang', r.needPages);
+    p.flags.recipeOk = p.flags.recipeOk || {};
+    p.flags.recipeOk[r.id] = true;
+    p.insight = Math.min(100, (p.insight || 0) + 6);
+    Log.add(`你将 ${r.needPages} 页残稿拼合推演——失传丹方【<b>${out.name}</b>】重见天日！（突破感悟 +6）`, 'realm');
+    UI.announce(`✦ 丹方重光 · ${out.name} ✦`, 'gold');
+    Story.chron(`参悟失传丹方「${out.name}」`);
+    Ambience.sfx('rare');
+    Game.afterAction();
+  },
   alchemy(recipeId, times = 1) {
     const p = Game.player;
     const r = GameData.ALCHEMY_RECIPES.find(x => x.id === recipeId);
     if (!r) return;
+    // v19 失传丹方：须先以残页参悟
+    if (r.needPages && !(p.flags.recipeOk || {})[r.id]) { UI.toast('此丹方失传——需先集齐丹方残页参悟'); return; }
     times = Utils.clamp(Math.floor(Number(times)) || 1, 1, 99);
     // 单炉时弹出火候选择
     let fire = null;

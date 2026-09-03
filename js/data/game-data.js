@@ -216,6 +216,10 @@ const GameData = {
     pill_qingshen: { name: '轻身丹',   type: 'pill', grade: 1, price: 800,    desc: '服之身轻如燕——身法 +30%、闪避 +10%，持续三回合（战斗中可用）。', buff: { spdPct: 30, dodge: 10, rounds: 3 }, poison: 6, battle: true },
     pill_mingmu:   { name: '明目丹',   type: 'pill', grade: 1, price: 800,    desc: '服之目若朗星——暴击 +12%，持续三回合（战斗中可用）。', buff: { crit: 12, rounds: 3 }, poison: 6, battle: true },
     pill_dahuan:   { name: '大还丹',   type: 'pill', grade: 3, price: 6000,   desc: '续命奇丹，气血尽复，兼化二十点丹毒。', use: { hpPct: 100, curePoison: 20 }, poison: 15, battle: true },
+    /* ---- v19 丹方残页系（参悟失传丹方后可炼） ---- */
+    pill_huiyuan:  { name: '回元丹',   type: 'pill', grade: 4, price: 26000,  desc: '气血灵力一夜尽复——断续之伤亦能弥合。', use: { hpPct: 100, mpPct: 100 }, poison: 22, battle: true },
+    pill_potian:   { name: '破天丹',   type: 'pill', grade: 4, price: 30000,  desc: '以命火淬道心，突破感悟 +80。', use: { insight: 80 }, poison: 25 },
+    pill_poxu:     { name: '破虚丹',   type: 'pill', grade: 4, price: 36000,  desc: '凿窍开脉，四维属性随机 +1。', use: { stat: 1 }, poison: 28 },
     pill_qingxin:  { name: '清心丹',   type: 'pill', grade: 1, price: 500,    desc: '宁神定魄，服之可解束缚、缓滞诸般禁制（战斗中可用，解除自身负面状态）。', use: { purge: 1 }, poison: 0, battle: true },
     pill_posha:    { name: '破煞丹',   type: 'pill', grade: 2, price: 2400,   desc: '药力如破军煞气，服之可得五千点修为。', use: { exp: 5000 }, poison: 50 },
     pill_xuanling: { name: '玄灵丹',   type: 'pill', grade: 3, price: 9000,   desc: '玄灵蕴道，服之突破感悟 +25。', use: { insight: 25 }, poison: 18 },
@@ -323,6 +327,7 @@ const GameData = {
     m_shenmu:   { name: '建木神枝',   type: 'material', tier: 4, price: 95000, desc: '通天建木的一截神枝，生机不灭。' },
     /* ---- v13 灵田种子（洞府种植用） ---- */
     m_qianghua: { name: '强化石',     type: 'material', tier: 3, price: 3000,  desc: '蕴含精纯灵性的晶石，祭炼强化法宝时掺入一枚，+7 以上强化必定成功。' },
+    m_danfang:  { name: '丹方残页',   type: 'material', tier: 3, price: 2600,  desc: '前辈丹师遗稿的残页。集齐数页，可在炼丹炉前参悟失传的丹方。' },
     seed_lingcao:  { name: '灵草种',   type: 'seed', grade: 1, price: 40,    crop: 'm_lingcao',  days: 10, desc: '播入灵田，十日可收【百年灵草】。' },
     seed_lingzhi:  { name: '灵芝种',   type: 'seed', grade: 2, price: 500,   crop: 'm_lingzhi',  days: 25, desc: '播入灵田，廿五日可收【千年灵芝】。' },
     seed_bingpo:   { name: '冰魄花种', type: 'seed', grade: 2, price: 900,   crop: 'm_bingpo',   days: 30, desc: '播入灵田，三十日可收【冰魄石】。' },
@@ -759,6 +764,10 @@ const GameData = {
     { id: 'r12', out: 'pill_xuanling', need: { m_lianhun: 2 },                 rate: 45 },
     { id: 'r13', out: 'pill_yuanshen', need: { m_xianjing: 2 },                rate: 40 },
     { id: 'r14', out: 'pill_tianyuan', need: { m_shentie: 1, m_haixin: 1 },    rate: 35 },
+    /* ---- v19 失传丹方（需丹方残页参悟解锁：flags.recipeOk） ---- */
+    { id: 'a1', out: 'pill_huiyuan', need: { m_lingzhi: 2, m_haixin: 1 },   rate: 45, needPages: 2 },
+    { id: 'a2', out: 'pill_potian',  need: { m_neidan: 3, m_shentie: 1 },   rate: 40, needPages: 4 },
+    { id: 'a3', out: 'pill_poxu',    need: { m_shenmu: 2, m_xiancui: 2 },   rate: 35, needPages: 6 },
   ],
 
   /* ---------- v13 炼器配方（坊市炼器坊，消耗材料锻造装备；产出天级神兵的唯一途径） ---------- */

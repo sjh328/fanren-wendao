@@ -449,6 +449,17 @@ const Ambience = {
     if (kind === 'breakthrough') {
       [329.63, 392.0, 440.0, 523.25, 659.25].forEach((f, i) => this.tone(f, t + i * 0.13, 0.9, { type: 'triangle', gain: 0.28 }));
       this.tone(130.81, t, 1.8, { type: 'sine', gain: 0.20 });
+    } else if (kind === 'auction') {
+      this.tone(196, t, 0.18, { type: 'square', gain: 0.30 });
+      this.tone(131, t + 0.22, 0.3, { type: 'square', gain: 0.34 });
+      this.tone(659, t + 0.5, 0.5, { type: 'sine', gain: 0.16 });
+    } else if (kind === 'evolve') {
+      [261, 329, 392, 523, 659, 784].forEach((f, i) => this.tone(f, t + i * 0.09, 0.5, { type: 'triangle', gain: 0.22 }));
+      this.tone(1046, t + 0.6, 0.8, { type: 'sine', gain: 0.14 });
+    } else if (kind === 'xinmo') {
+      this.tone(220, t, 0.9, { type: 'sawtooth', gain: 0.16 });
+      this.tone(311, t + 0.1, 0.9, { type: 'sawtooth', gain: 0.12 });
+      this.tone(110, t + 0.2, 1.2, { type: 'sine', gain: 0.20 });
     } else if (kind === 'rare') {
       this.tone(880, t, 1.2, { type: 'sine', gain: 0.24 });
       this.tone(1318.5, t + 0.06, 1.0, { type: 'sine', gain: 0.14 });
@@ -1091,6 +1102,10 @@ const GameData = {
     pill_qingshen: { name: '轻身丹',   type: 'pill', grade: 1, price: 800,    desc: '服之身轻如燕——身法 +30%、闪避 +10%，持续三回合（战斗中可用）。', buff: { spdPct: 30, dodge: 10, rounds: 3 }, poison: 6, battle: true },
     pill_mingmu:   { name: '明目丹',   type: 'pill', grade: 1, price: 800,    desc: '服之目若朗星——暴击 +12%，持续三回合（战斗中可用）。', buff: { crit: 12, rounds: 3 }, poison: 6, battle: true },
     pill_dahuan:   { name: '大还丹',   type: 'pill', grade: 3, price: 6000,   desc: '续命奇丹，气血尽复，兼化二十点丹毒。', use: { hpPct: 100, curePoison: 20 }, poison: 15, battle: true },
+    /* ---- v19 丹方残页系（参悟失传丹方后可炼） ---- */
+    pill_huiyuan:  { name: '回元丹',   type: 'pill', grade: 4, price: 26000,  desc: '气血灵力一夜尽复——断续之伤亦能弥合。', use: { hpPct: 100, mpPct: 100 }, poison: 22, battle: true },
+    pill_potian:   { name: '破天丹',   type: 'pill', grade: 4, price: 30000,  desc: '以命火淬道心，突破感悟 +80。', use: { insight: 80 }, poison: 25 },
+    pill_poxu:     { name: '破虚丹',   type: 'pill', grade: 4, price: 36000,  desc: '凿窍开脉，四维属性随机 +1。', use: { stat: 1 }, poison: 28 },
     pill_qingxin:  { name: '清心丹',   type: 'pill', grade: 1, price: 500,    desc: '宁神定魄，服之可解束缚、缓滞诸般禁制（战斗中可用，解除自身负面状态）。', use: { purge: 1 }, poison: 0, battle: true },
     pill_posha:    { name: '破煞丹',   type: 'pill', grade: 2, price: 2400,   desc: '药力如破军煞气，服之可得五千点修为。', use: { exp: 5000 }, poison: 50 },
     pill_xuanling: { name: '玄灵丹',   type: 'pill', grade: 3, price: 9000,   desc: '玄灵蕴道，服之突破感悟 +25。', use: { insight: 25 }, poison: 18 },
@@ -1198,6 +1213,7 @@ const GameData = {
     m_shenmu:   { name: '建木神枝',   type: 'material', tier: 4, price: 95000, desc: '通天建木的一截神枝，生机不灭。' },
     /* ---- v13 灵田种子（洞府种植用） ---- */
     m_qianghua: { name: '强化石',     type: 'material', tier: 3, price: 3000,  desc: '蕴含精纯灵性的晶石，祭炼强化法宝时掺入一枚，+7 以上强化必定成功。' },
+    m_danfang:  { name: '丹方残页',   type: 'material', tier: 3, price: 2600,  desc: '前辈丹师遗稿的残页。集齐数页，可在炼丹炉前参悟失传的丹方。' },
     seed_lingcao:  { name: '灵草种',   type: 'seed', grade: 1, price: 40,    crop: 'm_lingcao',  days: 10, desc: '播入灵田，十日可收【百年灵草】。' },
     seed_lingzhi:  { name: '灵芝种',   type: 'seed', grade: 2, price: 500,   crop: 'm_lingzhi',  days: 25, desc: '播入灵田，廿五日可收【千年灵芝】。' },
     seed_bingpo:   { name: '冰魄花种', type: 'seed', grade: 2, price: 900,   crop: 'm_bingpo',   days: 30, desc: '播入灵田，三十日可收【冰魄石】。' },
@@ -1634,6 +1650,10 @@ const GameData = {
     { id: 'r12', out: 'pill_xuanling', need: { m_lianhun: 2 },                 rate: 45 },
     { id: 'r13', out: 'pill_yuanshen', need: { m_xianjing: 2 },                rate: 40 },
     { id: 'r14', out: 'pill_tianyuan', need: { m_shentie: 1, m_haixin: 1 },    rate: 35 },
+    /* ---- v19 失传丹方（需丹方残页参悟解锁：flags.recipeOk） ---- */
+    { id: 'a1', out: 'pill_huiyuan', need: { m_lingzhi: 2, m_haixin: 1 },   rate: 45, needPages: 2 },
+    { id: 'a2', out: 'pill_potian',  need: { m_neidan: 3, m_shentie: 1 },   rate: 40, needPages: 4 },
+    { id: 'a3', out: 'pill_poxu',    need: { m_shenmu: 2, m_xiancui: 2 },   rate: 35, needPages: 6 },
   ],
 
   /* ---------- v13 炼器配方（坊市炼器坊，消耗材料锻造装备；产出天级神兵的唯一途径） ---------- */
@@ -5050,7 +5070,7 @@ const BeastSys = {
     const one = (bb, mul) => {
       if (!bb) return null;
       const key = this.PASSIVE[bb.species] || 'atkPct';
-      return [key, Math.round((bb.power * 0.6 + bb.level * 0.8) * mul)];
+      return [key, Math.round((bb.power * 0.6 + bb.level * 0.8) * mul * (bb.evolved ? 1.4 : 1))];
     };
     const entries = [one(b, 1), one(b2, 0.5)].filter(Boolean);
     const out = {};
@@ -5073,7 +5093,7 @@ const BeastSys = {
     const p = Game.player;
     const b = this.activeBeast(p);
     if (!B || !b || B.over || !Utils.chance(40 + (b.bond || 0) * 0.1)) return false;   // v19 抚摸亲昵加成
-    const dmg = Math.max(1, Math.round(st.atk * (0.22 + b.level * 0.03) * (1 + b.power * 0.02) * Utils.randF(0.8, 1.2)));
+    const dmg = Math.max(1, Math.round(st.atk * (0.22 + b.level * 0.03) * (1 + b.power * 0.02) * (b.evolved ? 1.3 : 1) * Utils.randF(0.8, 1.2)));   // v19 进化 ×1.3
     B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
     B.hitShake = true;
     B.pushFloat('enemy', `-${dmg}`, 'dmg');
@@ -5132,6 +5152,32 @@ const BeastSys = {
     p.beasts.active2 = p.beasts.active2 === uid ? null : uid;
     const b = p.beasts.list.find(x => x.uid === p.beasts.active2);
     Log.add(b ? `<b>${b.name}</b> 化作一道灵光护持你身——被动以五成效力相佐。` : '副战灵兽归栏。', 'info');
+    Game.afterAction();
+  },
+  /** v19 灵兽进化：十阶圆满 + 妖兽内丹×5，蜕凡成王——被动 ×1.4、协战 ×1.3 */
+  async evolve(uid) {
+    const p = Game.player;
+    const b = p.beasts.list.find(x => x.uid === uid);
+    if (!b) return;
+    if (b.evolved) { UI.toast('它已完成蜕变'); return; }
+    if (b.level < 10) { UI.toast('需修至十阶圆满方可蜕变'); return; }
+    const cost = Math.round(8000 * Math.pow(2.2, Math.min(5, p.realmIdx)));
+    const ok = await UI.popup({
+      title: `灵兽蜕变 · ${b.name}`,
+      html: `${b.name} 已至十阶圆满，妖气内蕴——以五枚【妖兽内丹】引其蜕凡成王。<br>蜕变后：<b>战力 +5、被动 ×1.4、协战 ×1.3</b>，名称冠以「王」号。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span> 与【妖兽内丹】×5（持有 ${Bag.count('m_neidan')}）。`,
+      options: [{ text: '引 其 蜕 变', value: true, primary: true }, { text: '再等等', value: false }],
+    });
+    if (!ok) return;
+    if (Bag.count('m_neidan') < 5) { UI.toast('妖兽内丹不足'); return; }
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    Bag.removeItem('m_neidan', 5);
+    b.evolved = true;
+    b.power = Utils.clamp(b.power + 5, 0, 60);
+    if (!/王$/.test(b.name)) b.name = b.name + '王';
+    Log.add(`<b>妖光冲霄——${b.name} 蜕凡成王！</b>战力 +5，被动 ×1.4，协战 ×1.3。`, 'realm');
+    UI.announce(`✦ 灵兽蜕变 · ${b.name} ✦`, 'gold');
+    Story.chron(`灵兽「${b.name}」蜕凡成王`);
+    Ambience.sfx('evolve');
     Game.afterAction();
   },
   /** v19 抚摸：每日一次，亲昵 +4~8（协战几率 +0.1%/点） */
@@ -6330,6 +6376,7 @@ const AuctionSys = {
   LOT_POOL: [
     { item: 's_hj_sha', base: 16000 }, { item: 's_hj_pao', base: 15000 }, { item: 's_hj_ling', base: 14000 },
     { item: 's_xy_jian', base: 30000 }, { item: 's_xy_ling', base: 28000 },
+    { item: 'm_danfang', base: 4000 },
     { item: 'gf_zhoutian', base: 6000 }, { item: 'gf_leishen', base: 9000 },
     { item: 'gf_hunyuan', base: 9000 }, { item: 'gf_niepan', base: 9000 },
     { item: 'w_sanqing', base: 12000 }, { item: 'pill_zaohua', base: 15000 },
@@ -6373,7 +6420,7 @@ const AuctionSys = {
       UI.announce('✦ 竞拍得手 · ' + def.name + ' ✦', 'gold');
       Story.chron(`拍卖行竞得「${def.name}」`);
       p.auction.until = 0;   // 本期拍品易主，刷新下一件
-      Ambience.sfx('rare');
+      Ambience.sfx('auction');   // v19 落槌音
     } else {
       Bag.addStones(price);
       Log.add(`竞价失利——有人以更高价截胡。灵石已原路退回。`, 'warn');
@@ -6429,7 +6476,7 @@ const XinmoSys = {
       if (before < this.THRESHOLD && p.xinmo >= this.THRESHOLD) {
         Log.add('<b>心魔已成气候！它在你识海深处叩门——再不降伏，修行必受其乱。</b>', 'loss');
         UI.toast('心魔值已满，速去修炼页降伏心魔！', true);
-        Ambience.sfx('rage');
+        Ambience.sfx('xinmo');   // v19 心魔音
       }
     }
   },
@@ -6570,10 +6617,38 @@ const CraftSys = {
   },
   /** 炼丹：耗药材，赌成丹；times>1 为批量连炉（药材不足自动停炉，汇总一行结算）
    *  v18：火候选择 + 品质判定 */
+  /** v19 失传丹方参悟：集齐残页即可永久解锁配方 */
+  async studyRecipe(recipeId) {
+    const p = Game.player;
+    const r = GameData.ALCHEMY_RECIPES.find(x => x.id === recipeId);
+    if (!r || !r.needPages) return;
+    p.flags = p.flags || {};
+    if ((p.flags.recipeOk || {})[r.id]) { UI.toast('此丹方早已参悟'); return; }
+    const have = Bag.count('m_danfang');
+    if (have < r.needPages) { UI.toast(`残页不足（${have}/${r.needPages}）`); return; }
+    const out = GameData.ITEMS[r.out];
+    const ok = await UI.popup({
+      title: `参悟失传丹方 · ${out.name}`,
+      html: `以 ${r.needPages} 页【丹方残页】互校补全，失传的炼法在炉火中重新亮起。<br>参悟后可永久炼制【<b>${out.name}</b>】。`,
+      options: [{ text: '参 悟', value: true, primary: true }, { text: '再凑凑', value: false }],
+    });
+    if (!ok) return;
+    Bag.removeItem('m_danfang', r.needPages);
+    p.flags.recipeOk = p.flags.recipeOk || {};
+    p.flags.recipeOk[r.id] = true;
+    p.insight = Math.min(100, (p.insight || 0) + 6);
+    Log.add(`你将 ${r.needPages} 页残稿拼合推演——失传丹方【<b>${out.name}</b>】重见天日！（突破感悟 +6）`, 'realm');
+    UI.announce(`✦ 丹方重光 · ${out.name} ✦`, 'gold');
+    Story.chron(`参悟失传丹方「${out.name}」`);
+    Ambience.sfx('rare');
+    Game.afterAction();
+  },
   alchemy(recipeId, times = 1) {
     const p = Game.player;
     const r = GameData.ALCHEMY_RECIPES.find(x => x.id === recipeId);
     if (!r) return;
+    // v19 失传丹方：须先以残页参悟
+    if (r.needPages && !(p.flags.recipeOk || {})[r.id]) { UI.toast('此丹方失传——需先集齐丹方残页参悟'); return; }
     times = Utils.clamp(Math.floor(Number(times)) || 1, 1, 99);
     // 单炉时弹出火候选择
     let fire = null;
@@ -7840,6 +7915,33 @@ const NpcSys = {
       Log.add(`<b>前尘如潮——</b>你盯着 ${d.name} 的眉眼，一段不属于此生的记忆轰然翻涌：前世，你与TA之间，横着一笔血债。`, 'warn');
       Story.chron(`前世闪回：与 ${d.name} 的旧债翻涌`);
     }
+    // v19 前世事件·第二幕：遗物托付（闪回后的再次相逢）
+    if (s.pastLife && s._flashback && !s._relicGiven && Utils.chance(60)) {
+      s._relicGiven = true;
+      const gainExp = Math.round(120 * GameData.eco(p.realmIdx));
+      const choice = await UI.popup({
+        title: `前世遗物 · ${d.name}`,
+        html: `（${d.name} 从袖中取出一件旧物——那纹路，你的前世再熟悉不过。）<br>「这是……你前世的遗物。当年你倒下时，它滚到我脚边。<br>三百年了，物归原主。」<br><br>收下，还是婉拒？`,
+        options: [
+          { text: '收下遗物', value: 'take', primary: true },
+          { text: '婉拒', value: 'refuse' },
+        ],
+      });
+      this.mem(p, id, 'story', '前世遗物托付');
+      if (choice === 'take') {
+        Cultivate.addExp(p, gainExp);
+        p.insight = Math.min(100, (p.insight || 0) + 6);
+        s.rel = Utils.clamp(s.rel + 5, -100, 100);
+        Log.add(`你接过前世遗物，一段封存的功法感悟涌入识海——${d.name} 默然颔首。（修为 +${Utils.fmtNum(gainExp)}，感悟 +6，交情 +5）`, 'gain');
+      } else {
+        KarmaSys.addFortune(3);
+        s.rel = Utils.clamp(s.rel + 8, -100, 100);
+        Log.add(`你婉拒了遗物：「物随故人，你替我收着，便是最好的归宿。」${d.name} 怔了片刻，眼底恨意淡了三分。（气运 +3，交情 +8）`, 'gain');
+      }
+      Story.chron(`前世事件：${d.name} 归还前世遗物`);
+      Game.afterAction();
+      return;
+    }
     const greet = Narrative.greet();   // v5：道途礼数
     const recall = this.recallLine(p, id);   // v19 回忆杀
     Log.add(`途中遇上了 ${GameData.SECTS.find(x => x.id === d.sect) ? GameData.SECTS.find(x => x.id === d.sect).name + '的' : ''}<b>${d.name}</b>（${d.title}）。${greet ? `<span style="color:var(--text-faint)">（${greet}）</span>` : ''}`, 'event');
@@ -8680,6 +8782,7 @@ const Battle = {
     B.menu = null;
     this.log(`【必杀 · ${sk.name}】${sk.desc}`, 'log-crit');
     Ambience.sfx('crit');
+    this.fxShow({ sword: 'sword', pill: 'fire', talisman: 'lightning', body: 'quake', array: 'array', demonic: 'demonic' }[p.dao] || 'sword');   // v19 必杀全屏特效
     await this.wait(500);
     const hits = sk.hits || 1;
     if (sk.selfHp) { p.hp = Math.max(1, Math.round(p.hp * (1 - sk.selfHp))); this.log(`你燃血催招，气血降至 ${p.hp}！`, 'log-warn'); }
@@ -9395,6 +9498,11 @@ const Battle = {
       Bag.addItem(mat, qty);
       drops.push(`${GameData.ITEMS[mat].name} ×${qty}`);
     }
+    // v19 丹方残页：精英 12% / 普通妖兽 3%
+    if (Utils.chance(e.elite ? 12 : 3)) {
+      Bag.addItem('m_danfang', 1);
+      drops.push('丹方残页 ×1');
+    }
     // §23 魔域掉落提升：额外一撮战利品，偶得上古碎片
     if (ctx.dropMul) {
       if (Utils.chance(30)) {
@@ -9567,6 +9675,8 @@ const Battle = {
   /** 结束战斗（统一收尾） */
   end() {
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 情境配乐
+    // v19 战斗回顾：留档最近一场的记录
+    if (this.active) this.lastLogs = (this.active.logs || []).slice(-60);
     const B = this.active;
     const p = Game.player;
     // 邪修：杀伐之气萦绕，每场战斗孽障 +1
@@ -11096,7 +11206,7 @@ const UI = {
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name"><b class="${isOn || isOn2 ? 'hl' : ''}">${b.name}</b> ${bTag} <span class="tag">${b.level} 阶</span>${b.bond ? `<span class="tag">亲昵 ${b.bond}/100</span>` : ''}</div>
+          <div class="gf-name"><b class="${isOn || isOn2 ? 'hl' : ''}">${b.evolved ? '✦ ' : ''}${b.name}</b> ${bTag} <span class="tag">${b.level} 阶</span>${b.evolved ? '<span class="tag warn">已蜕变</span>' : ''}${b.bond ? `<span class="tag">亲昵 ${b.bond}/100</span>` : ''}</div>
           <div class="gf-desc">${b.species === 'beast' ? '凶兽' : b.species === 'snake' ? '灵蛇' : b.species === 'swarm' ? '虫群' : b.species === 'plant' ? '草木精' : '灵体'} · 协战与被动随阶成长<br>
           被动：${passiveName[pk]} +${pv}${isOn2 ? '（护持中以五成效力生效）' : ''} ｜ 经验 ${Math.floor(b.exp)}/${needExp}${b.skills.length ? ` ｜ 技能：${b.skills[0].name}` : ` ｜ 五阶习得天生技`}</div>
         </div>
@@ -11104,6 +11214,7 @@ const UI = {
           <button class="btn btn-sm" data-action="act-beast-active" data-uid="${b.uid}">${isOn ? '歇 息' : '出 战'}</button>
           <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
           <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
+          ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
           <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${Bag.count('m_neidan') ? '' : 'disabled'}>喂内丹（${Bag.count('m_neidan')}）</button>
           <button class="btn btn-sm btn-danger" data-action="act-beast-free" data-uid="${b.uid}">放归</button>
         </div>
@@ -11362,17 +11473,22 @@ const UI = {
       <div class="shop-section-title">◈ 炼丹炉${p.dao === 'pill' ? '（丹道加持，成丹率大增）' : ''}</div>
       ${GameData.ALCHEMY_RECIPES.map(r => {
         const out = GameData.ITEMS[r.out];
+        const locked = r.needPages && !(p.flags.recipeOk || {})[r.id];
         const mats = Object.entries(r.need).map(([id, n]) => `${GameData.ITEMS[id].name} ${Bag.count(id)}/${n}`).join('、');
-        const can = CraftSys.haveMats(p, r);
+        const can = CraftSys.haveMats(p, r) && !locked;
+        const lockTxt = locked ? `<span class="tag danger" title="集齐丹方残页后可参悟解锁">失传 · 残页 ${Bag.count('m_danfang')}/${r.needPages}</span> ` : '';
+        const drawBtn = locked
+          ? `<button class="btn btn-sm" data-action="act-study-recipe" data-recipe="${r.id}" ${Bag.count('m_danfang') >= r.needPages ? '' : 'disabled'}>参悟</button>`
+          : `<button class="btn btn-sm" data-action="act-alchemy" data-recipe="${r.id}" ${can ? '' : 'disabled'}>炼制</button>
+            <button class="btn btn-sm" data-action="act-alchemy-multi" data-recipe="${r.id}" data-times="5" ${can ? '' : 'disabled'} title="连开五炉，药材不足自动停炉">×5</button>`;
         return `
         <div class="shop-row">
           <div class="gf-info">
-            <div class="gf-name">${this.gradeSpan(out.name, out.grade)}（成丹率 ${CraftSys.rate(p, r).toFixed(0)}%）</div>
+            <div class="gf-name">${this.gradeSpan(out.name, out.grade)}（成丹率 ${CraftSys.rate(p, r).toFixed(0)}%）${lockTxt}</div>
             <div class="gf-desc">需 ${mats}</div>
           </div>
           <div class="gf-actions">
-            <button class="btn btn-sm" data-action="act-alchemy" data-recipe="${r.id}" ${can ? '' : 'disabled'}>炼制</button>
-            <button class="btn btn-sm" data-action="act-alchemy-multi" data-recipe="${r.id}" data-times="5" ${can ? '' : 'disabled'} title="连开五炉，药材不足自动停炉">×5</button>
+            ${drawBtn}
           </div>
         </div>`;
       }).join('')}`;
@@ -12326,6 +12442,12 @@ const Game = {
     'amb-panel': () => { const el = document.getElementById('amb-panel'); if (el) el.classList.toggle('hidden'); },
     /* --- v6 成就图鉴 / 挂机 / 存档导出导入 --- */
     'act-codex': () => UI.achvModal(),
+    'act-figures': () => QuestSys.openArchive('figures'),
+    'act-battle-review': () => {
+      const logs = Battle.lastLogs || [];
+      if (!logs.length) { UI.toast('尚无战斗记录——先去打一场'); return; }
+      UI.popup({ title: '⚔ 战斗回顾 · 上一场', html: `<div style="max-height:52vh;overflow:auto">${logs.map(l => `<div class="tip-line">· ${l}</div>`).join('')}</div>`, options: [{ text: '合 上', value: true, primary: true }] });
+    },
     'codex-tab': (d) => { UI._achvTab = d.t; if (!UI.el['popup-modal'].classList.contains('hidden')) UI.el['popup-body'].innerHTML = UI.achvBody(); },
     'act-auto-open': () => AutoCult.open(),
     'act-auto-stop': () => { if (AutoCult.active) AutoCult.finish('道友叫停'); },
@@ -12421,6 +12543,7 @@ const Game = {
     'quest-side': (d) => QuestSys.claimSide(d.side),
     'act-sign': () => DailySign.draw(),
     'act-alchemy': (d) => CraftSys.alchemy(d.recipe),
+    'act-study-recipe': (d) => CraftSys.studyRecipe(d.recipe),
     'act-alchemy-multi': (d) => CraftSys.alchemy(d.recipe, Number(d.times) || 5),
     'act-draw': () => CraftSys.drawTalisman(),
     /* --- v13 祭炼强化 / 炼器 --- */
@@ -12436,6 +12559,7 @@ const Game = {
     'act-beast-active': (d) => BeastSys.setActive(Number(d.uid)),
     'act-beast-active2': (d) => BeastSys.setActive2(Number(d.uid)),
     'act-beast-pat': (d) => BeastSys.pat(Number(d.uid)),
+    'act-beast-evolve': (d) => BeastSys.evolve(Number(d.uid)),
     'act-cave-build': (d) => CaveSys.upgradeBuild(d.b),
     'act-benming-feed': () => ForgeSys.feedBenming(),
     'act-xinmo': () => XinmoSys.start(),

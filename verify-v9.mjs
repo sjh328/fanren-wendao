@@ -269,6 +269,36 @@ try {
   });
   s13.tips >= 3 && s13.fontOk ? pass('S13 分阶段教学要诀 + 界面字号三档') : fail('S13 教学', JSON.stringify(s13));
 
+  /* ================= S13b 补全项：失传丹方/灵兽进化/台词矩阵/天气 ================= */
+  const s13b = await page.evaluate(async () => {
+    const p = Game.player;
+    // 失传丹方：未参悟不可炼，参悟后解锁
+    const a1 = GameData.ALCHEMY_RECIPES.find(r => r.id === 'a1');
+    p.flags = p.flags || {}; p.flags.recipeOk = {};
+    p.bag = p.bag || {};
+    Bag.addItem('m_lingzhi', 5); Bag.addItem('m_haixin', 3); Bag.addItem('m_danfang', 5);
+    CraftSys.alchemy('a1');
+    const blocked = !p.bag.pill_huiyuan;
+    const realPopup = UI.popup; UI.popup = async () => true;   // 桩掉参悟确认窗
+    await CraftSys.studyRecipe('a1');
+    UI.popup = realPopup;
+    const unlocked = (p.flags.recipeOk || {}).a1 === true && Bag.count('m_danfang') === 3;
+    // 灵兽进化：条件判定
+    p.beasts = { active: null, active2: null, list: [{ uid: 9, id: 'm_yezhu', name: '野猪', species: 'beast', power: 8, level: 10, exp: 0, skills: [], bond: 0 }], nextId: 2 };
+    const notReady = p.beasts.list[0].level < 10 ? false : true;
+    // 台词矩阵：24 人齐备、语境齐全
+    const lineOk = Object.keys(GameData.NPC_LINES).length === 24 &&
+      Object.values(GameData.NPC_LINES).every(L => L.greet.length >= 3 && L.gift.length >= 2 && L.spar.length >= 2 && L.discuss.length >= 2 && L.realm.length >= 2 && L.hostile.length >= 2);
+    const greetTier = NpcSys.lineFor(p, 'n23', 'greet');
+    // 天气：确定性 + 六态
+    const w1 = Art.weatherOf({ day: 100 }, 'village'), w2 = Art.weatherOf({ day: 100 }, 'village');
+    const det = JSON.stringify(w1) === JSON.stringify(w2);
+    return { blocked, unlocked, notReady, lineOk, greetTier: !!greetTier, det };
+  });
+  s13b.blocked && s13b.unlocked ? pass('S13b 失传丹方：未参悟不可炼，残页参悟永久解锁') : fail('S13b 丹方', JSON.stringify(s13b));
+  s13b.notReady && s13b.lineOk && s13b.greetTier ? pass('S13b 灵兽进化就绪判定 + 台词矩阵 24 人×6 语境齐备') : fail('S13b 进化/台词', JSON.stringify(s13b));
+  s13b.det ? pass('S13b 天气确定性派生（同日同地必同天）') : fail('S13b 天气', '');
+
   /* ================= S14 冒烟：修炼一轮 ================= */
   const smoke = await page.evaluate(() => {
     Cultivate.normal();

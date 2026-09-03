@@ -16,7 +16,7 @@ const XinmoSys = {
       if (before < this.THRESHOLD && p.xinmo >= this.THRESHOLD) {
         Log.add('<b>心魔已成气候！它在你识海深处叩门——再不降伏，修行必受其乱。</b>', 'loss');
         UI.toast('心魔值已满，速去修炼页降伏心魔！', true);
-        Ambience.sfx('rage');
+        Ambience.sfx('xinmo');   // v19 心魔音
       }
     }
   },

@@ -100,6 +100,17 @@ const Ambience = {
     if (kind === 'breakthrough') {
       [329.63, 392.0, 440.0, 523.25, 659.25].forEach((f, i) => this.tone(f, t + i * 0.13, 0.9, { type: 'triangle', gain: 0.28 }));
       this.tone(130.81, t, 1.8, { type: 'sine', gain: 0.20 });
+    } else if (kind === 'auction') {
+      this.tone(196, t, 0.18, { type: 'square', gain: 0.30 });
+      this.tone(131, t + 0.22, 0.3, { type: 'square', gain: 0.34 });
+      this.tone(659, t + 0.5, 0.5, { type: 'sine', gain: 0.16 });
+    } else if (kind === 'evolve') {
+      [261, 329, 392, 523, 659, 784].forEach((f, i) => this.tone(f, t + i * 0.09, 0.5, { type: 'triangle', gain: 0.22 }));
+      this.tone(1046, t + 0.6, 0.8, { type: 'sine', gain: 0.14 });
+    } else if (kind === 'xinmo') {
+      this.tone(220, t, 0.9, { type: 'sawtooth', gain: 0.16 });
+      this.tone(311, t + 0.1, 0.9, { type: 'sawtooth', gain: 0.12 });
+      this.tone(110, t + 0.2, 1.2, { type: 'sine', gain: 0.20 });
     } else if (kind === 'rare') {
       this.tone(880, t, 1.2, { type: 'sine', gain: 0.24 });
       this.tone(1318.5, t + 0.06, 1.0, { type: 'sine', gain: 0.14 });

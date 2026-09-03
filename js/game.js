@@ -268,6 +268,12 @@ const Game = {
     'amb-panel': () => { const el = document.getElementById('amb-panel'); if (el) el.classList.toggle('hidden'); },
     /* --- v6 成就图鉴 / 挂机 / 存档导出导入 --- */
     'act-codex': () => UI.achvModal(),
+    'act-figures': () => QuestSys.openArchive('figures'),
+    'act-battle-review': () => {
+      const logs = Battle.lastLogs || [];
+      if (!logs.length) { UI.toast('尚无战斗记录——先去打一场'); return; }
+      UI.popup({ title: '⚔ 战斗回顾 · 上一场', html: `<div style="max-height:52vh;overflow:auto">${logs.map(l => `<div class="tip-line">· ${l}</div>`).join('')}</div>`, options: [{ text: '合 上', value: true, primary: true }] });
+    },
     'codex-tab': (d) => { UI._achvTab = d.t; if (!UI.el['popup-modal'].classList.contains('hidden')) UI.el['popup-body'].innerHTML = UI.achvBody(); },
     'act-auto-open': () => AutoCult.open(),
     'act-auto-stop': () => { if (AutoCult.active) AutoCult.finish('道友叫停'); },
@@ -363,6 +369,7 @@ const Game = {
     'quest-side': (d) => QuestSys.claimSide(d.side),
     'act-sign': () => DailySign.draw(),
     'act-alchemy': (d) => CraftSys.alchemy(d.recipe),
+    'act-study-recipe': (d) => CraftSys.studyRecipe(d.recipe),
     'act-alchemy-multi': (d) => CraftSys.alchemy(d.recipe, Number(d.times) || 5),
     'act-draw': () => CraftSys.drawTalisman(),
     /* --- v13 祭炼强化 / 炼器 --- */
@@ -378,6 +385,7 @@ const Game = {
     'act-beast-active': (d) => BeastSys.setActive(Number(d.uid)),
     'act-beast-active2': (d) => BeastSys.setActive2(Number(d.uid)),
     'act-beast-pat': (d) => BeastSys.pat(Number(d.uid)),
+    'act-beast-evolve': (d) => BeastSys.evolve(Number(d.uid)),
     'act-cave-build': (d) => CaveSys.upgradeBuild(d.b),
     'act-benming-feed': () => ForgeSys.feedBenming(),
     'act-xinmo': () => XinmoSys.start(),

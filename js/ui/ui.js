@@ -417,7 +417,7 @@ const UI = {
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name"><b class="${isOn || isOn2 ? 'hl' : ''}">${b.name}</b> ${bTag} <span class="tag">${b.level} 阶</span>${b.bond ? `<span class="tag">亲昵 ${b.bond}/100</span>` : ''}</div>
+          <div class="gf-name"><b class="${isOn || isOn2 ? 'hl' : ''}">${b.evolved ? '✦ ' : ''}${b.name}</b> ${bTag} <span class="tag">${b.level} 阶</span>${b.evolved ? '<span class="tag warn">已蜕变</span>' : ''}${b.bond ? `<span class="tag">亲昵 ${b.bond}/100</span>` : ''}</div>
           <div class="gf-desc">${b.species === 'beast' ? '凶兽' : b.species === 'snake' ? '灵蛇' : b.species === 'swarm' ? '虫群' : b.species === 'plant' ? '草木精' : '灵体'} · 协战与被动随阶成长<br>
           被动：${passiveName[pk]} +${pv}${isOn2 ? '（护持中以五成效力生效）' : ''} ｜ 经验 ${Math.floor(b.exp)}/${needExp}${b.skills.length ? ` ｜ 技能：${b.skills[0].name}` : ` ｜ 五阶习得天生技`}</div>
         </div>
@@ -425,6 +425,7 @@ const UI = {
           <button class="btn btn-sm" data-action="act-beast-active" data-uid="${b.uid}">${isOn ? '歇 息' : '出 战'}</button>
           <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
           <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
+          ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
           <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${Bag.count('m_neidan') ? '' : 'disabled'}>喂内丹（${Bag.count('m_neidan')}）</button>
           <button class="btn btn-sm btn-danger" data-action="act-beast-free" data-uid="${b.uid}">放归</button>
         </div>
@@ -683,17 +684,22 @@ const UI = {
       <div class="shop-section-title">◈ 炼丹炉${p.dao === 'pill' ? '（丹道加持，成丹率大增）' : ''}</div>
       ${GameData.ALCHEMY_RECIPES.map(r => {
         const out = GameData.ITEMS[r.out];
+        const locked = r.needPages && !(p.flags.recipeOk || {})[r.id];
         const mats = Object.entries(r.need).map(([id, n]) => `${GameData.ITEMS[id].name} ${Bag.count(id)}/${n}`).join('、');
-        const can = CraftSys.haveMats(p, r);
+        const can = CraftSys.haveMats(p, r) && !locked;
+        const lockTxt = locked ? `<span class="tag danger" title="集齐丹方残页后可参悟解锁">失传 · 残页 ${Bag.count('m_danfang')}/${r.needPages}</span> ` : '';
+        const drawBtn = locked
+          ? `<button class="btn btn-sm" data-action="act-study-recipe" data-recipe="${r.id}" ${Bag.count('m_danfang') >= r.needPages ? '' : 'disabled'}>参悟</button>`
+          : `<button class="btn btn-sm" data-action="act-alchemy" data-recipe="${r.id}" ${can ? '' : 'disabled'}>炼制</button>
+            <button class="btn btn-sm" data-action="act-alchemy-multi" data-recipe="${r.id}" data-times="5" ${can ? '' : 'disabled'} title="连开五炉，药材不足自动停炉">×5</button>`;
         return `
         <div class="shop-row">
           <div class="gf-info">
-            <div class="gf-name">${this.gradeSpan(out.name, out.grade)}（成丹率 ${CraftSys.rate(p, r).toFixed(0)}%）</div>
+            <div class="gf-name">${this.gradeSpan(out.name, out.grade)}（成丹率 ${CraftSys.rate(p, r).toFixed(0)}%）${lockTxt}</div>
             <div class="gf-desc">需 ${mats}</div>
           </div>
           <div class="gf-actions">
-            <button class="btn btn-sm" data-action="act-alchemy" data-recipe="${r.id}" ${can ? '' : 'disabled'}>炼制</button>
-            <button class="btn btn-sm" data-action="act-alchemy-multi" data-recipe="${r.id}" data-times="5" ${can ? '' : 'disabled'} title="连开五炉，药材不足自动停炉">×5</button>
+            ${drawBtn}
           </div>
         </div>`;
       }).join('')}`;

@@ -289,6 +289,7 @@ const Battle = {
     B.menu = null;
     this.log(`【必杀 · ${sk.name}】${sk.desc}`, 'log-crit');
     Ambience.sfx('crit');
+    this.fxShow({ sword: 'sword', pill: 'fire', talisman: 'lightning', body: 'quake', array: 'array', demonic: 'demonic' }[p.dao] || 'sword');   // v19 必杀全屏特效
     await this.wait(500);
     const hits = sk.hits || 1;
     if (sk.selfHp) { p.hp = Math.max(1, Math.round(p.hp * (1 - sk.selfHp))); this.log(`你燃血催招，气血降至 ${p.hp}！`, 'log-warn'); }
@@ -1004,6 +1005,11 @@ const Battle = {
       Bag.addItem(mat, qty);
       drops.push(`${GameData.ITEMS[mat].name} ×${qty}`);
     }
+    // v19 丹方残页：精英 12% / 普通妖兽 3%
+    if (Utils.chance(e.elite ? 12 : 3)) {
+      Bag.addItem('m_danfang', 1);
+      drops.push('丹方残页 ×1');
+    }
     // §23 魔域掉落提升：额外一撮战利品，偶得上古碎片
     if (ctx.dropMul) {
       if (Utils.chance(30)) {
@@ -1176,6 +1182,8 @@ const Battle = {
   /** 结束战斗（统一收尾） */
   end() {
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 情境配乐
+    // v19 战斗回顾：留档最近一场的记录
+    if (this.active) this.lastLogs = (this.active.logs || []).slice(-60);
     const B = this.active;
     const p = Game.player;
     // 邪修：杀伐之气萦绕，每场战斗孽障 +1

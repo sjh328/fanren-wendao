@@ -2224,3 +2224,44 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
 .bt-info-btn { background: none; border: none; cursor: pointer; font-size: 13px; padding: 0 4px; opacity: 0.8; }
 .bt-summary { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--gold, #8a6a2a); background: rgba(0,0,0,0.03); text-align: center; animation: fadeIn 0.3s; }
 .bt-sum-title { font-weight: 700; letter-spacing: 2px; margin-bottom: 6px; color: var(--gold, #8a6a2a); }
+
+/* ==================== v19 移动端战斗触控复核 ==================== */
+@media (max-width: 860px) {
+  .bt-actions { flex-wrap: wrap; gap: 6px; }
+  .bt-actions .btn, .ult-row .btn { min-height: 44px; }
+  .ult-row { flex-wrap: wrap; }
+}
+
+/* ==================== v19 必杀全屏特效（阵道/魔道/体修） ==================== */
+.bt-fx.fx-array::before {
+  content: '☰'; position: absolute; top: 50%; left: 50%; width: 130px; height: 130px; margin: -65px 0 0 -65px;
+  display: flex; align-items: center; justify-content: center; font-size: 64px; color: rgba(90, 130, 200, 0.9);
+  border: 3px solid rgba(90, 130, 200, 0.75); transform: rotate(0deg);
+  animation: arraySpin 0.85s ease-out forwards; box-shadow: 0 0 24px rgba(90, 130, 200, 0.5), inset 0 0 18px rgba(90, 130, 200, 0.4);
+}
+.bt-fx.fx-array::after {
+  content: ''; position: absolute; top: 50%; left: 50%; width: 90px; height: 90px; margin: -45px 0 0 -45px;
+  border: 2px dashed rgba(150, 180, 230, 0.7); border-radius: 50%; animation: arraySpinR 0.85s ease-out forwards;
+}
+@keyframes arraySpin { 0% { opacity: 0; transform: rotate(0deg) scale(0.4); } 30% { opacity: 1; } 100% { opacity: 0; transform: rotate(220deg) scale(1.35); } }
+@keyframes arraySpinR { 0% { opacity: 0; transform: rotate(0deg) scale(1.4); } 30% { opacity: 1; } 100% { opacity: 0; transform: rotate(-160deg) scale(0.5); } }
+.bt-fx.fx-demonic::before {
+  content: ''; position: absolute; bottom: -10%; left: -10%; width: 120%; height: 70%;
+  background: radial-gradient(ellipse at 50% 100%, rgba(40, 16, 24, 0.92), rgba(90, 30, 40, 0.55) 55%, transparent 78%);
+  animation: demonicRise 0.8s ease-out forwards;
+}
+.bt-fx.fx-demonic::after {
+  content: ''; position: absolute; top: 20%; left: 15%; width: 70%; height: 60%;
+  background: radial-gradient(ellipse, rgba(160, 40, 50, 0.4), transparent 70%); animation: fxFade 0.8s ease-out forwards;
+}
+@keyframes demonicRise { 0% { opacity: 0; transform: translateY(40%); } 35% { opacity: 1; } 100% { opacity: 0; transform: translateY(-8%); } }
+.bt-fx.fx-quake::before {
+  content: ''; position: absolute; top: 55%; left: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px;
+  border-radius: 50%; border: 4px solid rgba(168, 134, 42, 0.85);
+  animation: quakeRing 0.6s ease-out forwards;
+}
+.bt-fx.fx-quake::after {
+  content: ''; position: absolute; top: 55%; left: 50%; width: 40px; height: 40px; margin: -20px 0 0 -20px;
+  border-radius: 50%; border: 3px solid rgba(200, 160, 60, 0.6); animation: quakeRing 0.6s 0.12s ease-out forwards;
+}
+@keyframes quakeRing { 0% { opacity: 1; transform: scale(0.3); } 100% { opacity: 0; transform: scale(6); } }

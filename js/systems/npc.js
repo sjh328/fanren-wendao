@@ -541,6 +541,33 @@ const NpcSys = {
       Log.add(`<b>前尘如潮——</b>你盯着 ${d.name} 的眉眼，一段不属于此生的记忆轰然翻涌：前世，你与TA之间，横着一笔血债。`, 'warn');
       Story.chron(`前世闪回：与 ${d.name} 的旧债翻涌`);
     }
+    // v19 前世事件·第二幕：遗物托付（闪回后的再次相逢）
+    if (s.pastLife && s._flashback && !s._relicGiven && Utils.chance(60)) {
+      s._relicGiven = true;
+      const gainExp = Math.round(120 * GameData.eco(p.realmIdx));
+      const choice = await UI.popup({
+        title: `前世遗物 · ${d.name}`,
+        html: `（${d.name} 从袖中取出一件旧物——那纹路，你的前世再熟悉不过。）<br>「这是……你前世的遗物。当年你倒下时，它滚到我脚边。<br>三百年了，物归原主。」<br><br>收下，还是婉拒？`,
+        options: [
+          { text: '收下遗物', value: 'take', primary: true },
+          { text: '婉拒', value: 'refuse' },
+        ],
+      });
+      this.mem(p, id, 'story', '前世遗物托付');
+      if (choice === 'take') {
+        Cultivate.addExp(p, gainExp);
+        p.insight = Math.min(100, (p.insight || 0) + 6);
+        s.rel = Utils.clamp(s.rel + 5, -100, 100);
+        Log.add(`你接过前世遗物，一段封存的功法感悟涌入识海——${d.name} 默然颔首。（修为 +${Utils.fmtNum(gainExp)}，感悟 +6，交情 +5）`, 'gain');
+      } else {
+        KarmaSys.addFortune(3);
+        s.rel = Utils.clamp(s.rel + 8, -100, 100);
+        Log.add(`你婉拒了遗物：「物随故人，你替我收着，便是最好的归宿。」${d.name} 怔了片刻，眼底恨意淡了三分。（气运 +3，交情 +8）`, 'gain');
+      }
+      Story.chron(`前世事件：${d.name} 归还前世遗物`);
+      Game.afterAction();
+      return;
+    }
     const greet = Narrative.greet();   // v5：道途礼数
     const recall = this.recallLine(p, id);   // v19 回忆杀
     Log.add(`途中遇上了 ${GameData.SECTS.find(x => x.id === d.sect) ? GameData.SECTS.find(x => x.id === d.sect).name + '的' : ''}<b>${d.name}</b>（${d.title}）。${greet ? `<span style="color:var(--text-faint)">（${greet}）</span>` : ''}`, 'event');

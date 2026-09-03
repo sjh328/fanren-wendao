@@ -87,7 +87,7 @@ const BeastSys = {
     const one = (bb, mul) => {
       if (!bb) return null;
       const key = this.PASSIVE[bb.species] || 'atkPct';
-      return [key, Math.round((bb.power * 0.6 + bb.level * 0.8) * mul)];
+      return [key, Math.round((bb.power * 0.6 + bb.level * 0.8) * mul * (bb.evolved ? 1.4 : 1))];
     };
     const entries = [one(b, 1), one(b2, 0.5)].filter(Boolean);
     const out = {};
@@ -110,7 +110,7 @@ const BeastSys = {
     const p = Game.player;
     const b = this.activeBeast(p);
     if (!B || !b || B.over || !Utils.chance(40 + (b.bond || 0) * 0.1)) return false;   // v19 抚摸亲昵加成
-    const dmg = Math.max(1, Math.round(st.atk * (0.22 + b.level * 0.03) * (1 + b.power * 0.02) * Utils.randF(0.8, 1.2)));
+    const dmg = Math.max(1, Math.round(st.atk * (0.22 + b.level * 0.03) * (1 + b.power * 0.02) * (b.evolved ? 1.3 : 1) * Utils.randF(0.8, 1.2)));   // v19 进化 ×1.3
     B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
     B.hitShake = true;
     B.pushFloat('enemy', `-${dmg}`, 'dmg');
@@ -169,6 +169,32 @@ const BeastSys = {
     p.beasts.active2 = p.beasts.active2 === uid ? null : uid;
     const b = p.beasts.list.find(x => x.uid === p.beasts.active2);
     Log.add(b ? `<b>${b.name}</b> 化作一道灵光护持你身——被动以五成效力相佐。` : '副战灵兽归栏。', 'info');
+    Game.afterAction();
+  },
+  /** v19 灵兽进化：十阶圆满 + 妖兽内丹×5，蜕凡成王——被动 ×1.4、协战 ×1.3 */
+  async evolve(uid) {
+    const p = Game.player;
+    const b = p.beasts.list.find(x => x.uid === uid);
+    if (!b) return;
+    if (b.evolved) { UI.toast('它已完成蜕变'); return; }
+    if (b.level < 10) { UI.toast('需修至十阶圆满方可蜕变'); return; }
+    const cost = Math.round(8000 * Math.pow(2.2, Math.min(5, p.realmIdx)));
+    const ok = await UI.popup({
+      title: `灵兽蜕变 · ${b.name}`,
+      html: `${b.name} 已至十阶圆满，妖气内蕴——以五枚【妖兽内丹】引其蜕凡成王。<br>蜕变后：<b>战力 +5、被动 ×1.4、协战 ×1.3</b>，名称冠以「王」号。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span> 与【妖兽内丹】×5（持有 ${Bag.count('m_neidan')}）。`,
+      options: [{ text: '引 其 蜕 变', value: true, primary: true }, { text: '再等等', value: false }],
+    });
+    if (!ok) return;
+    if (Bag.count('m_neidan') < 5) { UI.toast('妖兽内丹不足'); return; }
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    Bag.removeItem('m_neidan', 5);
+    b.evolved = true;
+    b.power = Utils.clamp(b.power + 5, 0, 60);
+    if (!/王$/.test(b.name)) b.name = b.name + '王';
+    Log.add(`<b>妖光冲霄——${b.name} 蜕凡成王！</b>战力 +5，被动 ×1.4，协战 ×1.3。`, 'realm');
+    UI.announce(`✦ 灵兽蜕变 · ${b.name} ✦`, 'gold');
+    Story.chron(`灵兽「${b.name}」蜕凡成王`);
+    Ambience.sfx('evolve');
     Game.afterAction();
   },
   /** v19 抚摸：每日一次，亲昵 +4~8（协战几率 +0.1%/点） */

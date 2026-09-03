@@ -6,6 +6,7 @@ const AuctionSys = {
   LOT_POOL: [
     { item: 's_hj_sha', base: 16000 }, { item: 's_hj_pao', base: 15000 }, { item: 's_hj_ling', base: 14000 },
     { item: 's_xy_jian', base: 30000 }, { item: 's_xy_ling', base: 28000 },
+    { item: 'm_danfang', base: 4000 },
     { item: 'gf_zhoutian', base: 6000 }, { item: 'gf_leishen', base: 9000 },
     { item: 'gf_hunyuan', base: 9000 }, { item: 'gf_niepan', base: 9000 },
     { item: 'w_sanqing', base: 12000 }, { item: 'pill_zaohua', base: 15000 },
@@ -49,7 +50,7 @@ const AuctionSys = {
       UI.announce('✦ 竞拍得手 · ' + def.name + ' ✦', 'gold');
       Story.chron(`拍卖行竞得「${def.name}」`);
       p.auction.until = 0;   // 本期拍品易主，刷新下一件
-      Ambience.sfx('rare');
+      Ambience.sfx('auction');   // v19 落槌音
     } else {
       Bag.addStones(price);
       Log.add(`竞价失利——有人以更高价截胡。灵石已原路退回。`, 'warn');
