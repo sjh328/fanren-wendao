@@ -137,6 +137,12 @@ const NpcSys = {
       if (Utils.chance(18)) s.map = Utils.pick(GameData.MAPS).id; // 游历
       let gain = GameData.layerNeed(Utils.clamp(s.realmIdx, 0, 9), Math.min(3, s.layer))
         * Utils.randF(0.05, 0.12) * (0.6 + d.talent * 0.18);
+      // v20 宿敌养成：与你结怨者追着你成长——落后越多，修得越凶
+      if (s.grudge) {
+        const myRp = p.realmIdx * 4 + p.layer;
+        const hisRp = s.realmIdx * 4 + s.layer;
+        gain *= 1.5 + Utils.clamp((myRp - hisRp) * 0.1, 0, 1);
+      }
       if (Utils.chance(10)) { // 争夺机缘
         gain *= 2;
         if (s.met) Log.add(`听闻 ${d.name} 于${(GameData.MAPS.find(m => m.id === s.map) || {}).name || '某地'}夺得一桩机缘，修为大进。`, 'event');
@@ -197,6 +203,41 @@ const NpcSys = {
     }
   },
   grudgeCount(p) { return Object.values(p.npcs || {}).filter(s => s.grudge && s.alive).length; },
+  /** v20 宿敌截胡：结怨者有几率抢走你历练中的好事（宝箱/机缘） */
+  rivalSnatch(p) {
+    const ids = Object.keys(p.npcs || {}).filter(id => p.npcs[id].grudge && p.npcs[id].alive);
+    if (!ids.length) return false;
+    if (!Utils.chance(Utils.clamp(ids.length * 5, 0, 20))) return false;
+    const id = Utils.pick(ids);
+    const d = this.def(id);
+    this.mem(p, id, 'betray', '半路截胡');
+    Log.add(`一道熟悉的身影快你一步——<b>${d.name}</b> 早候在此，将机缘掠了个干净，还朝你晃了晃手中之物！`, 'warn');
+    return true;
+  },
+  /** v20 雷台了断：宿敌关系恶化至极、且境界相当时，可约战雷台做个了断 */
+  canShowdown(p, id) {
+    const s = this.state(p, id);
+    if (!s || !s.grudge || !s.alive) return false;
+    if (s.rel > -60) return false;
+    const myRp = p.realmIdx * 4 + p.layer;
+    const hisRp = s.realmIdx * 4 + s.layer;
+    return Math.abs(hisRp - myRp) <= 2;
+  },
+  async showdown(id) {
+    const p = Game.player;
+    const d = this.def(id);
+    if (!this.canShowdown(p, id) || Battle.active) return;
+    const ok = await UI.popup({
+      title: `雷台了断 · ${d.name}`,
+      html: `你们之间的仇怨，已经到了不死不休的地步。<br>约战雷台，做个了断——<b>胜者可夺对方一件随身法宝</b>，恩怨就此两清。<br><span class="neg">若败，恩怨依旧，且伤势难免。</span>`,
+      options: [{ text: '雷台相见', value: true, primary: true }, { text: '再等等', value: false }],
+    });
+    if (!ok) return;
+    Log.add(`你向 <b>${d.name}</b> 递上雷台战书——三百年恩怨，今日做个了断！`, 'warn');
+    Story.chron(`与 ${d.name} 约战雷台`);
+    Game.afterAction();
+    Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, mode: 'confront', showdown: true, mapName: '雷台' });
+  },
   pickAmbusher(p) {
     const ids = Object.keys(p.npcs || {}).filter(id => p.npcs[id].grudge && p.npcs[id].alive);
     return ids.length ? Utils.pick(ids) : null;
@@ -299,16 +340,24 @@ const NpcSys = {
     Log.add(`${d.name} 重伤遁走，临行前留下一句${hostileLine ? hostileLine : '「此事没完」'}——恩怨愈结愈深。（孽障 +10）`, 'warn');
     }
   },
-  /** 一战了断：胜则恩怨两清 */
-  onConfrontWin(p, id) {
+  /** 一战了断：胜则恩怨两清（v20 雷台了断：另夺法宝彩头） */
+  onConfrontWin(p, id, showdown = false) {
     const s = this.state(p, id);
     if (!s) return;
     s.grudge = false;
     s.pastLife = false;
     s.rel = Utils.clamp(s.rel + 15, -100, 100);
-    this.mem(p, id, 'peace', '一战了断');   // v19 记忆
+    this.mem(p, id, 'peace', showdown ? '雷台了断' : '一战了断');   // v19 记忆
     KarmaSys.addKarma(8, true);
     Log.add(`一战之后，恩怨两清。${(this.def(id) || {}).name || ''} 收起敌意，与你相顾无言。（孽障 +8）`, 'system');
+    if (showdown) {
+      const pool = Object.keys(GameData.ITEMS).filter(k => GameData.ITEMS[k].type === 'artifact' && (GameData.ITEMS[k].grade || 0) >= 1 && (GameData.ITEMS[k].grade || 0) <= 3);
+      const art = Utils.pick(pool);
+      Bag.addItem(art, 1);
+      Log.add(`雷台之约如约兑现——你收下 ${(GameData.ITEMS[art] || {}).name || '一件法宝'} 作为彩头。胜负已分，恩怨两讫。`, 'gain');
+      Story.chron(`雷台了断胜${(this.def(id) || {}).name || ''}`);
+      UI.announce('✦ 雷台了断 ✦', 'gold');
+    }
   },
   /* ---------- 社交动作 ---------- */
   befriendCost(p, id) {
@@ -487,7 +536,9 @@ const NpcSys = {
     if (Battle.active) return;
     const cost = Math.round(30 * GameData.stoneEco(s.realmIdx));
     const tier = this.tierOf(Math.max(0, s.rel));
-    const gain = { known: Utils.rand(3, 6), friend: Utils.rand(2, 4), bosom: Utils.rand(1, 3), sworn: 1 }[tier.id] || 2;
+    const midautumn = typeof FestivalSys !== 'undefined' && FestivalSys.is(p, 'zhongqiu');
+    const gain0 = { known: Utils.rand(3, 6), friend: Utils.rand(2, 4), bosom: Utils.rand(1, 3), sworn: 1 }[tier.id] || 2;
+    const gain = midautumn ? gain0 * 2 : gain0;   // v20 中秋：情谊加倍
     const ok = await UI.popup({
       title: `赠礼 · ${d.name}`,
       html: `${this.dialogText(d.temper, 'greeting')}<br>备一份投其所好的礼，可增进交情。需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">关系愈深，礼愈难打动人——相交贵在知心。</span>`,

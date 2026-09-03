@@ -194,6 +194,7 @@ const Game = {
     Save.autoSave();
     Achieve.check();   // v6：成就检查（解锁即发奖播报）
     try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
+    try { if (typeof FestivalSys !== 'undefined') FestivalSys.check(p); } catch (err) { console.error('节庆检查异常:', err); }   // v20：节庆触发
     try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
     if (p.pendingDao && !p.dao && !p.dead && !Battle.active
@@ -430,6 +431,7 @@ const Game = {
     'npc-swear': (d) => NpcSys.swear(d.npc),
     'npc-dao': (d) => NpcSys.becomeDao(d.npc),
     'npc-peace': (d) => NpcSys.peacemake(d.npc),
+    'npc-showdown': (d) => NpcSys.showdown(d.npc),   // v20 雷台了断
     /* --- v3 派系 --- */
     'act-faction-join': (d) => SectSys.joinFaction(d.f),
     'act-faction-exchange': (d) => SectSys.factionExchange(Number(d.i)),

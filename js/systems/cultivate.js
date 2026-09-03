@@ -10,8 +10,12 @@ const Cultivate = {
     if (p.dao === 'demonic') g *= 1.8;
     if (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 3) g *= 1.2;   // v10 魔道六境·化功境
     if (p.dao === 'array' && DaoSys.tierLevel(p) >= 2) g *= 1.1;   // v10 阵道六境·聚灵境
+    if (typeof Art !== 'undefined' && Art.seasonOf(p) === 0) g *= 1.1;   // v20 孟春灵潮：修炼 +10%
+    if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) g *= 1.2;   // v20 天下大事·灵潮
     return g;
   },
+  /** v20 闭关效率：隆冬蛰伏 +10% */
+  secludeMul(p) { return (typeof Art !== 'undefined' && Art.seasonOf(p) === 3) ? 1.1 : 1; },
   gainMult() {
     return (1 + Stat.compute(Game.player).cultPct / 100) * Utils.randF(0.9, 1.15);
   },
@@ -154,7 +158,7 @@ const Cultivate = {
     const cb = document.getElementById('seclude-until-level');
     if (cb && cb.checked) { await this.secludeLoop(); return; }
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足，付不起洞府开销'); return; }
-    const gain = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult());
+    const gain = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult() * this.secludeMul(p));   // v20 隆冬蛰伏
     if (p.dao === 'array') DaoSys.gain(p, 10);   // v16 阵道：聚灵
     if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
     Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
@@ -183,7 +187,7 @@ const Cultivate = {
         Log.add('洞府灵石开销难以为继，你只得提前出关。', 'warn');
         break;
       }
-      const gain = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult());
+      const gain = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult() * this.secludeMul(p));   // v20 隆冬蛰伏
       if (p.dao === 'array') DaoSys.gain(p, 10);   // v16 阵道：聚灵
       if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
       Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（第${rounds}轮 · 修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');

@@ -1321,6 +1321,10 @@ const GameData = {
     m_tianle:    { name: '九霄雷兽',     power: 41, hp: 1.25, atk: 1.35, species: 'beast', skills: [{ name: '雷牙撕裂', w: 30, kind: 'bleed', pct: 5, rounds: 2 }, { name: '雷暴', w: 25, kind: 'burn', pct: 5, rounds: 2 }] },
     m_xianzun:   { name: '仙尊残念',     power: 44, hp: 1.3,  atk: 1.45, elite: true, rareDrop: 'z_xianyao', species: 'ghost', skills: [{ name: '一念断生', w: 30, kind: 'weaken', pct: 40, rounds: 2 }, { name: '夺魄', w: 25, kind: 'drain', mult: 1.4, leech: 0.6 }] },
     m_leishen:   { name: '雷狱主宰',     power: 46, hp: 1.5,  atk: 1.5,  elite: true, rareDrop: 'gf_leishen', species: 'construct', skills: [{ name: '灭世雷罚', w: 30, kind: 'cursed', pct: 8, rounds: 3 }, { name: '雷狱封锁', w: 25, kind: 'stun', rounds: 1 }] },
+    /* ---- v20 夜行妖兽（仅夜间出没） ---- */
+    m_yexiao:    { name: '夜啼枭',       power: 4,  hp: 0.95, atk: 1.1,  spd: 1.2, night: true, species: 'beast', skills: [{ name: '无声俯袭', w: 40, kind: 'slow', pct: 20, rounds: 2 }] },
+    m_yexing:    { name: '夜行幽狼',     power: 16, hp: 1.05, atk: 1.15, night: true, species: 'beast', skills: [{ name: '月下撕咬', w: 40, kind: 'bleed', pct: 3, rounds: 2 }, { name: '幽嚎', w: 20, kind: 'weaken', pct: 20, rounds: 2 }] },
+    m_yuemei:    { name: '月魄夜魅',     power: 27, hp: 1.0,  atk: 1.2,  spd: 1.25, night: true, species: 'ghost', skills: [{ name: '摄月之光', w: 35, kind: 'mpburn', pct: 30 }, { name: '魄爪', w: 30, kind: 'drain', mult: 1.15, leech: 0.4 }] },
   },
 
   /* ---------- 地图区域 ---------- */
@@ -1826,12 +1830,26 @@ const GameData = {
     { id: 'merchant', name: '商会学徒', desc: '算盘打得比剑快——财路通仙路。', mods: { comp: 1, luck: 1, gen: -1 }, start: { stones: 3000, bag: {} } },
   ],
 
-  /* ---------- §23 世界大事件（每 100 游戏年一次，永久改变格局） ---------- */
+  /* ---------- §23 世界大事件（每 100 游戏年一次全图大事，永久改变格局；v20 扩池 4→8） ---------- */
   WORLD_EVENTS: [
     { id: 'demon',  name: '魔界入侵',     desc: '魔气自天外涌入，一方之地化为魔域——域内妖魔狂化暴增，凶险倍之，然所获亦丰。' },
     { id: 'preach', name: '圣地讲道',     desc: '上古圣地开启讲道大会，道音涤荡神魂。十年之内，天下修士悟性倍增。' },
     { id: 'ruins',  name: '上古秘境现世', desc: '一座上古秘境重现人间，二十年间秘宝频现，机缘遍地。' },
     { id: 'war',    name: '宗门大战',     desc: '正道宗门因理念的裂痕兵戎相见，三十年战火——宗门悬赏暴涨，坊市物价腾贵。' },
+    /* ---- v20 扩池 ---- */
+    { id: 'lingchao', name: '灵潮涌动',   desc: '地脉灵潮奔涌不息，十年之间天地灵气格外充盈——修炼效率大增。' },
+    { id: 'beastwave', name: '兽潮',      desc: '妖王振臂，群兽出山！十五年之间某地妖兽横行——凶险倍增，猎杀所获亦厚。' },
+    { id: 'xianmen',  name: '仙门收徒大会', desc: '诸宗联席开设收徒大会，以考较选取英才——通过者可获宗门秘传。' },
+    { id: 'meteor',   name: '陨星坠落',   desc: '一颗天外陨星划破长空坠入人间——星陨之处，天材地宝俯拾即是。' },
+  ],
+
+  /* ---------- v20 节庆（按年内日序触发，每年一遍） ---------- */
+  FESTIVALS: [
+    { id: 'shangyuan', name: '上元灯会', day: 15,  desc: '满城花灯如昼。猜中一盏灯谜，可得前辈留下的感悟。' },
+    { id: 'huazhao',   name: '花朝节',   day: 45,  desc: '百花生日。灵田作物承花神之气，生长骤然加快。' },
+    { id: 'zhongyuan', name: '中元鬼节', day: 225, desc: '鬼门大开，阴魂夜行——夜里凶险倍增，然超度亡魂者福缘深厚。' },
+    { id: 'zhongqiu',  name: '中秋月圆', day: 270, desc: '千里共婵娟。今日赠礼，情谊加倍。' },
+    { id: 'chuxi',     name: '除夕年关', day: 360, desc: '爆竹声中一岁除——却有年兽循着人间烟火气而来。' },
   ],
 
   /* ---------- v6 图鉴：妖兽背景介绍（其余图鉴条目沿用各 def.desc） ---------- */
@@ -1895,6 +1913,10 @@ const GameData = {
     m_tianle: '九霄雷兽，雷狱深处的凶兽，皮糙如雷砧，吼声滚滚如雷过境。',
     m_xianzun: '仙尊残念，一位仙尊陨落前的不灭执念，仙威犹存。近之者，神魂如坠冰渊。',
     m_leishen: '雷狱主宰，九霄雷狱的最深处的主人，雷罚加身而不伤——渡劫者若有幸一见，多半已无幸。',
+    /* ---- v20 夜行妖兽图录 ---- */
+    m_yexiao: '夜啼枭，白日敛羽夜半啼，一声枭鸣能叫人手脚发软。猎户说它是给阴司引路的。',
+    m_yexing: '夜行幽狼，月圆之夜成群出游，双目如磷火。天一亮，便只剩雪地上一串爪印。',
+    m_yuemei: '月魄夜魅，凝月华而生的魅影，专摄修士灵力。老修士常叮嘱：夜里赶路，莫应月中人语。',
   },
 
   /* ======================================================================
@@ -4004,8 +4026,12 @@ const Cultivate = {
     if (p.dao === 'demonic') g *= 1.8;
     if (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 3) g *= 1.2;   // v10 魔道六境·化功境
     if (p.dao === 'array' && DaoSys.tierLevel(p) >= 2) g *= 1.1;   // v10 阵道六境·聚灵境
+    if (typeof Art !== 'undefined' && Art.seasonOf(p) === 0) g *= 1.1;   // v20 孟春灵潮：修炼 +10%
+    if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) g *= 1.2;   // v20 天下大事·灵潮
     return g;
   },
+  /** v20 闭关效率：隆冬蛰伏 +10% */
+  secludeMul(p) { return (typeof Art !== 'undefined' && Art.seasonOf(p) === 3) ? 1.1 : 1; },
   gainMult() {
     return (1 + Stat.compute(Game.player).cultPct / 100) * Utils.randF(0.9, 1.15);
   },
@@ -4148,7 +4174,7 @@ const Cultivate = {
     const cb = document.getElementById('seclude-until-level');
     if (cb && cb.checked) { await this.secludeLoop(); return; }
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足，付不起洞府开销'); return; }
-    const gain = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult());
+    const gain = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult() * this.secludeMul(p));   // v20 隆冬蛰伏
     if (p.dao === 'array') DaoSys.gain(p, 10);   // v16 阵道：聚灵
     if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
     Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
@@ -4177,7 +4203,7 @@ const Cultivate = {
         Log.add('洞府灵石开销难以为继，你只得提前出关。', 'warn');
         break;
       }
-      const gain = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult());
+      const gain = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult() * this.secludeMul(p));   // v20 隆冬蛰伏
       if (p.dao === 'array') DaoSys.gain(p, 10);   // v16 阵道：聚灵
       if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
       Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（第${rounds}轮 · 修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
@@ -5122,8 +5148,9 @@ const CaveSys = {
     let qty = 2;
     if (over >= 20) qty = 1;
     if (plot.pested) qty = Math.max(0, qty - 1); // v18：虫害减产
+    if (typeof Art !== 'undefined' && Art.seasonOf(p) === 2) qty += 1;   // v20 季秋丰收：产量 +1
     Bag.addItem(plot.crop, qty);
-    Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}。`, 'gain');
+    Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}${typeof Art !== 'undefined' && Art.seasonOf(p) === 2 ? '（季秋丰收）' : ''}。`, 'gain');
     plots[idx] = null;
     Game.afterAction();
   },
@@ -5918,13 +5945,28 @@ const Explore = {
     for (const k of ['treasure', 'fortune', 'npc']) if (weights[k]) weights[k] *= gm;
     // §23 上古秘境现世：宝箱与机缘权重提升
     if (WorldSys.ruinsActive(p)) for (const k of ['treasure', 'fortune']) if (weights[k]) weights[k] *= 1.5;
+    // v20 天时与深耕：雾日机缘↑、隆冬遇敌↓、兽潮妖患↑、深耕宝箱↑
+    const wx0 = Art.weatherOf(p, map.id);
+    if (wx0.sky === 'fog' && weights.fortune) weights.fortune *= 1.5;
+    if (Art.seasonOf(p) === 3 && weights.battle) weights.battle *= 0.9;
+    if (WorldSys.beastWaveActive(p, map.id) && weights.battle) weights.battle *= 1.3;
+    const deepN = (p.counters.mapExplores || {})[map.id] || 0;
+    const deepTier = deepN >= 100 ? 3 : deepN >= 50 ? 2 : deepN >= 20 ? 1 : 0;
+    if (deepTier > 0 && weights.treasure) weights.treasure += deepTier * 3;
     const type = Utils.pickWeighted(weights);
     switch (type) {
       case 'battle': {
-        const eliteChance = under ? 14 : 8;
-        const monsterId = Utils.chance(eliteChance) && map.elite
+        const eliteChance = (under ? 14 : 8) + deepTier * 4;   // v20 深耕：精英率 +
+        let monsterId = Utils.chance(eliteChance) && map.elite
           ? map.elite
           : Utils.pickWeighted(map.pool);
+        // v20 夜行妖兽：夜半（及中元）出没，境界相近者主动寻人
+        const isNight = wx0.night || (typeof FestivalSys !== 'undefined' && FestivalSys.is(p, 'zhongyuan'));
+        if (isNight) {
+          const rp = p.realmIdx * 4 + p.layer;
+          const nightIds = Object.keys(GameData.MONSTERS).filter(id => GameData.MONSTERS[id].night && Math.abs(GameData.MONSTERS[id].power - rp) <= 6);
+          if (nightIds.length && Utils.chance(30)) monsterId = Utils.pick(nightIds);
+        }
         Log.add(`你在 ${map.name} 探索时，惊动了什么……`, 'event');
         // v10 境界特性 · 神识（化神起）：五成先手；低打依旧保留原有先手机会
         const firstStrike = (under && Utils.chance(25)) || (p.realmIdx >= 4 && Utils.chance(50));
@@ -5933,6 +5975,16 @@ const Explore = {
         const arraySetup = arrayTier >= 1 && Utils.chance(50);
         if (arraySetup) DaoSys.gain(p, 20);   // v16 阵道
         const bctx = { mapName: map.name, mapId: map.id, firstStrike, arraySetup, arrayPotent: arrayTier >= 3, arrayGrand: arrayTier >= 6 };
+        // v20 深耕掉落与兽潮掉落
+        if (deepTier > 0) {
+          bctx.dropMul = (bctx.dropMul || 1) * (1 + deepTier * 0.15);
+          Log.add(`此地你已走过 ${deepN} 遍，路径烂熟于心——深耕${['一', '二', '三'][deepTier - 1]}重：精英率与所获俱增。`, 'system');
+        }
+        if (WorldSys.beastWaveActive(p, map.id)) {
+          bctx.dropMul = (bctx.dropMul || 1) * 1.3;
+          Log.add('兽潮未退——四野妖兽环伺，猎杀所获亦厚。', 'warn');
+        }
+        bctx.wx = wx0;
         // §23 魔域：妖魔狂化，凶险与收获并增
         if (WorldSys.isMagic(p, map.id)) {
           bctx.worldMul = 1.3; bctx.dropMul = 1.4;
@@ -5945,7 +5997,6 @@ const Explore = {
           for (let w = 1; w < n; w++) waveIds.push(Utils.pickWeighted(map.pool));
           bctx.waveIds = waveIds;
         }
-        bctx.wx = Art.weatherOf(p, map.id);
         Battle.start(monsterId, bctx);
         return; // 战斗结束后自行结算
       }
@@ -6015,6 +6066,7 @@ const EventSys = {
   },
   treasure(map) {
     const p = Game.player;
+    if (NpcSys.rivalSnatch(p)) return;   // v20 宿敌截胡
     const st = Stat.compute(p);
     Log.add('你拨开蔓草，发现了一只落满尘土的储物箱！', 'event');
     Narrative.logScene('treasure');   // v5：道途语气
@@ -6038,6 +6090,7 @@ const EventSys = {
   },
   fortune(map) {
     const p = Game.player;
+    if (NpcSys.rivalSnatch(p)) return;   // v20 宿敌截胡
     Narrative.logScene('fortune');   // v5：道途语气
     // §26 前世记忆：兵解转世者偶得前世洞府机缘
     if (p.reinc && Utils.chance(15)) {
@@ -7011,6 +7064,7 @@ const CraftSys = {
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足，置不起朱砂灵纸'); return; }
     Time.add(1);
     let qty = 2 + Utils.rand(0, 2) + (p.realmIdx >= 2 ? 1 : 0) + (DaoSys.tierLevel(p) >= 1 ? 1 : 0);   // v10 符道三境·描符境
+    if (typeof Art !== 'undefined' && Art.seasonOf(p) === 1) qty += 2;   // v20 仲夏雷雨：朱砂易引雷，成符 +2
     if (Utils.chance(p.dao === 'talisman' && DaoSys.tierLevel(p) >= 2 ? 20 : 12)) qty *= 2;   // v10 符道六境·朱砂境
     if (DaoSys.tierLevel(p) >= 6) qty += 2;   // v10 符道六境·符仙境
     // v13 符池：随境界解锁高阶符箓
@@ -7282,13 +7336,16 @@ const Tribulation = {
  * ====================================================================== */
 const WorldSys = {
   freshWorld() {
-    return { nextEventYear: 100, pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, priceMul: 1, market: null };
+    return { nextEventYear: 100, pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null };
   },
   year(p) { return Math.floor((p.day || 0) / 365) + 1; },
   isMagic(p, mapId) { const w = p.world; return !!(w && w.magicMaps && w.magicMaps.includes(mapId)); },
   preachActive(p) { const w = p.world; return !!(w && w.preachUntil && this.year(p) <= w.preachUntil); },
   ruinsActive(p) { const w = p.world; return !!(w && w.ruinsUntil && this.year(p) <= w.ruinsUntil); },
   warActive(p) { const w = p.world; return !!(w && w.warUntil && this.year(p) <= w.warUntil); },
+  /** v20 灵潮 / 兽潮判定 */
+  lingchaoActive(p) { const w = p.world; return !!(w && w.lingchaoUntil && this.year(p) <= w.lingchaoUntil); },
+  beastWaveActive(p, mapId) { const w = p.world; return !!(w && w.beastMaps && w.beastMaps.some(b => b.map === mapId && this.year(p) <= b.until)); },
   priceMul(p) { return this.warActive(p) ? 1.15 : 1; },
   /* ---------- v5：坊市行情 ---------- */
   /** 每 30 游戏日换一茬市况种子；种子持久化，读档后行情不变 */
@@ -7319,11 +7376,16 @@ const WorldSys = {
     if (w.preachUntil && y > w.preachUntil) { w.preachUntil = 0; Log.add('圣地讲道落幕，道音散入天地之间。', 'system'); }
     if (w.ruinsUntil && y > w.ruinsUntil) { w.ruinsUntil = 0; Log.add('上古秘境重归虚妄，机缘之门缓缓关闭。', 'system'); }
     if (w.warUntil && y > w.warUntil) { w.warUntil = 0; w.priceMul = 1; Log.add('宗门大战落幕，各方罢兵言和，物价渐归平常。', 'system'); }
+    if (w.lingchaoUntil && y > w.lingchaoUntil) { w.lingchaoUntil = 0; Log.add('灵潮渐渐退去，天地灵气复归平常。', 'system'); }
+    if (w.beastMaps && w.beastMaps.length) {
+      const rest = w.beastMaps.filter(b => y <= b.until);
+      if (rest.length !== w.beastMaps.length) { w.beastMaps = rest; if (!rest.length) Log.add('兽潮退去，出山的群兽重归深山。', 'system'); }
+    }
     if (y >= w.nextEventYear) { w.nextEventYear = y + 100; this.fireEvent(p, y); }
   },
   fireEvent(p, y) {
     const w = p.world;
-    const type = Utils.pickWeighted({ demon: 30, preach: 25, ruins: 25, war: 20 });
+    const type = Utils.pickWeighted({ demon: 22, preach: 18, ruins: 18, war: 15, lingchao: 12, beastwave: 8, xianmen: 4, meteor: 3 });
     const ev = { type, year: y };
     let text = '';
     if (type === 'demon') {
@@ -7338,10 +7400,24 @@ const WorldSys = {
     } else if (type === 'ruins') {
       w.ruinsUntil = y + 20;
       text = `<b>上古秘境现世</b>——此后二十年秘宝频现，历练中的<b>宝箱与机缘遍地</b>。`;
-    } else {
+    } else if (type === 'war') {
       w.warUntil = y + 30;
       w.priceMul = 1.15;
       text = `<b>宗门大战</b>——此后三十年宗门悬赏暴涨，坊市<b>物价腾贵</b>。`;
+    } else if (type === 'lingchao') {
+      w.lingchaoUntil = y + 10;
+      text = `<b>灵潮涌动</b>——地脉灵潮奔涌，此后十年<b>修炼效率 +20%</b>。`;
+    } else if (type === 'beastwave') {
+      const candidates = GameData.MAPS.filter(m => m.id !== 'village');
+      const map = Utils.pick(candidates);
+      w.beastMaps = w.beastMaps || [];
+      w.beastMaps.push({ map: map.id, until: y + 15 });
+      ev.mapId = map.id;
+      text = `<b>兽潮</b>——妖王振臂，群兽出山！${map.name} 一带十五年<b>妖兽横行</b>：遇敌频密，猎杀所获亦厚。`;
+    } else if (type === 'xianmen') {
+      text = `<b>仙门收徒大会</b>——诸宗联席考较英才，通过者可获<b>宗门秘传</b>。`;
+    } else {
+      text = `<b>陨星坠落</b>——天外陨星坠入人间，星陨之处<b>天材地宝俯拾即是</b>。`;
     }
     w.history.push({ year: y, type });
     if (w.history.length > 8) w.history.shift();
@@ -7395,6 +7471,61 @@ const WorldSys = {
       Bag.addStones(stones);
       Time.add(10);
       Log.add(`你在战乱中辗转护送商旅，得灵石 ${Utils.fmtNum(stones)}。`, 'gain');
+    } else if (ev.type === 'lingchao') {
+      // v20 灵潮涌动：静坐采灵（时段加成已在修炼中生效）
+      const gain = Math.round(200 * GameData.eco(p.realmIdx));
+      Cultivate.addExp(p, gain);
+      p.insight = Math.min(100, (p.insight || 0) + 8);
+      Time.add(10);
+      Log.add(`你在灵潮最盛处吐纳十日，经脉尽润——修为 +${Utils.fmtNum(gain)}，突破感悟 +8。`, 'gain');
+    } else if (ev.type === 'beastwave') {
+      // v20 兽潮：猎杀头兽
+      const map = GameData.MAPS.find(m => m.id === ev.mapId) || GameData.MAPS[2];
+      Log.add(`你奔赴${map.name}兽潮前线，与出山的群兽战作一团！`, 'event');
+      const mid = Utils.pickWeighted(map.pool);
+      const en = buildMonster(mid, Math.max(0, p.realmIdx * 4 + 2 - GameData.MONSTERS[mid].power));
+      en.hpMax = Math.round(en.hpMax * 1.3); en.atk = Math.round(en.atk * 1.2);
+      en.expGain = Math.round(en.expGain * 1.8); en.stoneGain = Math.round(en.stoneGain * 2);
+      en.hp = en.hpMax;
+      Game.afterAction();
+      Battle.start(null, { enemy: en, weType: 'beastwave', mapName: '兽潮前线' });
+      return;
+    } else if (ev.type === 'xianmen') {
+      // v20 仙门收徒大会：三题取一，答对得秘传
+      Time.add(5);
+      const ans = await UI.popup({
+        title: '仙门收徒大会 · 大道之问',
+        html: '考官居高声问：「修行路上，何为根本？」<br><br>甲：「戒律清规，守法不失。」<br>乙：「明悟本心，道法自然。」<br>丙：「广结善缘，借力而行。」',
+        options: [{ text: '选 甲', value: 'a' }, { text: '选 乙', value: 'b', primary: true }, { text: '选 丙', value: 'c' }],
+      });
+      if (ans === 'b') {
+        const pool = ['gf_lieyang', 'gf_xuantian', 'gf_jifeng', 'gf_tiangang', 'gf_hansha', 'gf_yulin', 'gf_feixian'].filter(id => !p.gongfa[id] && !p.bag[id]);
+        if (pool.length) {
+          const gf = Utils.pick(pool);
+          Bag.addItem(gf, 1);
+          p.insight = Math.min(100, (p.insight || 0) + 10);
+          Log.add(`你以「明悟本心」作答，满堂喝彩——考官亲授【<b>${GameData.ITEMS[gf].name}</b>】一册！（突破感悟 +10）`, 'gain');
+          UI.announce('✦ 收徒大会 · 技惊四座 ✦', 'gold');
+        } else {
+          const stones2 = Math.round(80 * GameData.stoneEco(p.realmIdx));
+          Bag.addStones(stones2);
+          Log.add(`你以「明悟本心」作答，考官抚须而笑——然所授之法你皆已修习，遂折为程仪灵石 ${Utils.fmtNum(stones2)}。`, 'gain');
+        }
+      } else {
+        const stones3 = Math.round(30 * GameData.stoneEco(p.realmIdx));
+        Bag.addStones(stones3);
+        Log.add(ans === 'a' ? '「守法不失，倒也稳妥。」考官淡淡颔首，赠程仪灵石打发。' : '「借力而行……终究是求诸于人。」考官摇头，赠灵石若干打发。', 'info');
+      }
+    } else if (ev.type === 'meteor') {
+      // v20 陨星坠落：拾取星陨异宝
+      const tier = Utils.clamp(Math.floor(p.realmIdx / 2) + 2, 2, 4);
+      const mat = Utils.pick(GameData.matsByTier(tier));
+      Bag.addItem(mat, 2);
+      Bag.addItem('m_gupian', 1);
+      const stones4 = Math.round(60 * GameData.stoneEco(p.realmIdx));
+      Bag.addStones(stones4);
+      Time.add(10);
+      Log.add(`你在星陨坑中翻捡十日——得【${GameData.ITEMS[mat].name}】×2、上古法宝碎片 ×1、灵石 ${Utils.fmtNum(stones4)}。`, 'gain');
     }
     Game.afterAction();
   },
@@ -7675,6 +7806,118 @@ const RankSys = {
 };
 
 /* ======================================================================
+ * §13.7 v20 节庆系统 FestivalSys（按年内日序，一年一遍）
+ * 上元灯会 / 花朝节 / 中元鬼节 / 中秋月圆 / 除夕年关——给世界一份日历感。
+ * ====================================================================== */
+const FestivalSys = {
+  /** 今日节庆（年内第几日对表） */
+  today(p) {
+    const doy = Math.floor((p.day || 0) % 365) + 1;
+    return GameData.FESTIVALS.find(f => f.day === doy) || null;
+  },
+  /** 每次行动后检查：节庆日首次触发（按 年+节庆 记旗标，一年只过一次） */
+  check(p) {
+    const f = this.today(p);
+    if (!f || !p || p.dead) return;
+    const year = Math.floor((p.day || 0) / 365) + 1;
+    p.flags = p.flags || {};
+    const key = 'fest_' + f.id + '_' + year;
+    if (p.flags[key]) return;
+    p.flags[key] = true;
+    this.fire(p, f);
+  },
+  /** 当日是否某节庆（供玩法钩子查询，如中秋赠礼加倍） */
+  is(p, id) { const f = this.today(p); return !!(f && f.id === id); },
+  async fire(p, f) {
+    Log.add(`【节庆 · ${f.name}】${f.desc}`, 'event');
+    UI.announce(`✦ ${f.name} ✦`, 'gold');
+    if (f.id === 'shangyuan') {
+      const right = Utils.chance(50);
+      const ans = await UI.popup({
+        title: '上元灯会 · 灯谜',
+        html: '一盏走马灯下悬着谜面：「白日隐形，夜里提灯，照尽人间不平。——打一修行之物。」',
+        options: [{ text: '火符', value: 'a' }, { text: '明镜', value: 'b', primary: true }, { text: '灯芯', value: 'c' }],
+      });
+      if ((right && ans === 'b') || (!right && ans !== 'b')) {
+        p.insight = Math.min(100, (p.insight || 0) + 5);
+        KarmaSys.addFortune(1);
+        Log.add('你揭下谜底——满堂彩声，灯楼主人赠你一页前辈手札。（突破感悟 +5，气运 +1）', 'gain');
+      } else {
+        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Log.add('谜底揭错，众人善意的哄笑里，你也悟得几分。（突破感悟 +2）', 'info');
+      }
+    } else if (f.id === 'huazhao') {
+      let n = 0;
+      for (const plot of (p.cave && p.cave.plots) || []) {
+        if (plot && plot.seed) { plot.days = Math.max(1, plot.days - 2); n++; }
+      }
+      Log.add(n ? `花神过境——灵田里 ${n} 块作物的生长骤然加快（每块 -2 日）！` : '花神过境——可惜你灵田里空空如也，只讨了个好彩头。', n ? 'gain' : 'info');
+    } else if (f.id === 'zhongyuan') {
+      const choice = await UI.popup({
+        title: '中元鬼节 · 河灯',
+        html: '河面上漂满引魂灯。你手边正有一盏——<br><span class="tip-line">· 点灯超度：孽障 -3，气运 +2<br>· 静观其变：一身轻</span>',
+        options: [{ text: '点灯超度', value: 'light', primary: true }, { text: '静观其变', value: 'skip' }],
+      });
+      if (choice === 'light') {
+        KarmaSys.addKarma(-3, true);
+        KarmaSys.addFortune(2);
+        Log.add('你俯身点亮河灯，看它摇摇晃晃漂向黑暗深处——愿各安来处。（孽障 -3，气运 +2）', 'gain');
+      } else {
+        Log.add('你抱臂看了一夜河灯，天明方归。', 'info');
+      }
+    } else if (f.id === 'zhongqiu') {
+      const st = Stat.compute(p);
+      p.hp = st.maxHp; p.mp = st.maxMp;
+      KarmaSys.addFortune(1);
+      Log.add('你分得一块月饼，与同门席地分食，月色正好。（气血灵力尽复，气运 +1；今日赠礼情谊加倍）', 'gain');
+    } else if (f.id === 'chuxi') {
+      const choice = await UI.popup({
+        title: '除夕年关 · 年兽',
+        html: '爆竹声里，山中隐隐传来低吼——年兽循着人间烟火气来了。<br><span class="tip-line">· 迎战年兽：胜则压岁厚重<br>· 安分守岁：闭门不出</span>',
+        options: [{ text: '迎战年兽', value: 'fight', primary: true }, { text: '安分守岁', value: 'safe' }],
+      });
+      if (choice !== 'fight') { Log.add('你紧闭门户，听了一夜风吼——天亮时，雪地上满是巨大的爪印。', 'info'); return; }
+      const rp = Utils.clamp(p.realmIdx * 4 + p.layer + 1, 1, 60);
+      const rIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
+      const enemy = {
+        id: null, name: '年兽', elite: true, power: rp, species: 'beast',
+        realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
+        hpMax: Math.round((55 + Math.pow(rp, 1.6) * 5) * 1.7 * 1.2),
+        atk: Math.round((6 + rp * 2.6) * 1.35),
+        def: Math.round((4 + rp * 2.2) * 0.9), spd: Math.round(7 + rp * 0.9),
+        dodge: 5, crit: 10,
+        skills: [
+          { name: '吞火吐雷', w: 30, kind: 'burn', pct: 4, rounds: 2 },
+          { name: '岁末狂啸', w: 30, kind: 'roar', atk: 25, rounds: 2 },
+          { name: '噬岁', w: 25, kind: 'drain', mult: 1.2, leech: 0.4 },
+        ],
+        expGain: Math.round(40 * GameData.eco(rIdx)), stoneGain: 0, dropTier: 3, rareDrop: null, hp: 0,
+        _storyBark: '年兽浑身的毛尖上都燃着火星——它饿了整整一年。',
+      };
+      Battle.start(null, { enemy, mapName: '除夕 · 年关', story: {
+        onEnd: (win) => {
+          const pp = Game.player;
+          if (win) {
+            const lucky = Math.round(200 * GameData.stoneEco(Math.min(5, pp.realmIdx)));
+            Bag.addStones(lucky);
+            KarmaSys.addFortune(3);
+            Log.add(`年兽哀鸣着伏倒——满地红绸与碎银！压岁灵石 ${Utils.fmtNum(lucky)}，气运 +3。来年百邪不侵。`, 'gain');
+            UI.announce('✦ 年关大吉 ✦', 'gold');
+            Story.chron('除夕迎战年兽得胜');
+          } else {
+            Story.chron('除夕年兽来袭，闭门自守');
+          }
+          Game.afterAction();
+        },
+      } });
+      return;
+    }
+    Game.afterAction();
+  },
+};
+window.FestivalSys = FestivalSys;
+
+/* ======================================================================
  * §24 动态NPC与恩怨 NpcSys（十五常驻修士 / 恩怨偷袭 / 社交 / 派系）
  * ====================================================================== */
 const NpcSys = {
@@ -7812,6 +8055,12 @@ const NpcSys = {
       if (Utils.chance(18)) s.map = Utils.pick(GameData.MAPS).id; // 游历
       let gain = GameData.layerNeed(Utils.clamp(s.realmIdx, 0, 9), Math.min(3, s.layer))
         * Utils.randF(0.05, 0.12) * (0.6 + d.talent * 0.18);
+      // v20 宿敌养成：与你结怨者追着你成长——落后越多，修得越凶
+      if (s.grudge) {
+        const myRp = p.realmIdx * 4 + p.layer;
+        const hisRp = s.realmIdx * 4 + s.layer;
+        gain *= 1.5 + Utils.clamp((myRp - hisRp) * 0.1, 0, 1);
+      }
       if (Utils.chance(10)) { // 争夺机缘
         gain *= 2;
         if (s.met) Log.add(`听闻 ${d.name} 于${(GameData.MAPS.find(m => m.id === s.map) || {}).name || '某地'}夺得一桩机缘，修为大进。`, 'event');
@@ -7872,6 +8121,41 @@ const NpcSys = {
     }
   },
   grudgeCount(p) { return Object.values(p.npcs || {}).filter(s => s.grudge && s.alive).length; },
+  /** v20 宿敌截胡：结怨者有几率抢走你历练中的好事（宝箱/机缘） */
+  rivalSnatch(p) {
+    const ids = Object.keys(p.npcs || {}).filter(id => p.npcs[id].grudge && p.npcs[id].alive);
+    if (!ids.length) return false;
+    if (!Utils.chance(Utils.clamp(ids.length * 5, 0, 20))) return false;
+    const id = Utils.pick(ids);
+    const d = this.def(id);
+    this.mem(p, id, 'betray', '半路截胡');
+    Log.add(`一道熟悉的身影快你一步——<b>${d.name}</b> 早候在此，将机缘掠了个干净，还朝你晃了晃手中之物！`, 'warn');
+    return true;
+  },
+  /** v20 雷台了断：宿敌关系恶化至极、且境界相当时，可约战雷台做个了断 */
+  canShowdown(p, id) {
+    const s = this.state(p, id);
+    if (!s || !s.grudge || !s.alive) return false;
+    if (s.rel > -60) return false;
+    const myRp = p.realmIdx * 4 + p.layer;
+    const hisRp = s.realmIdx * 4 + s.layer;
+    return Math.abs(hisRp - myRp) <= 2;
+  },
+  async showdown(id) {
+    const p = Game.player;
+    const d = this.def(id);
+    if (!this.canShowdown(p, id) || Battle.active) return;
+    const ok = await UI.popup({
+      title: `雷台了断 · ${d.name}`,
+      html: `你们之间的仇怨，已经到了不死不休的地步。<br>约战雷台，做个了断——<b>胜者可夺对方一件随身法宝</b>，恩怨就此两清。<br><span class="neg">若败，恩怨依旧，且伤势难免。</span>`,
+      options: [{ text: '雷台相见', value: true, primary: true }, { text: '再等等', value: false }],
+    });
+    if (!ok) return;
+    Log.add(`你向 <b>${d.name}</b> 递上雷台战书——三百年恩怨，今日做个了断！`, 'warn');
+    Story.chron(`与 ${d.name} 约战雷台`);
+    Game.afterAction();
+    Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, mode: 'confront', showdown: true, mapName: '雷台' });
+  },
   pickAmbusher(p) {
     const ids = Object.keys(p.npcs || {}).filter(id => p.npcs[id].grudge && p.npcs[id].alive);
     return ids.length ? Utils.pick(ids) : null;
@@ -7974,16 +8258,24 @@ const NpcSys = {
     Log.add(`${d.name} 重伤遁走，临行前留下一句${hostileLine ? hostileLine : '「此事没完」'}——恩怨愈结愈深。（孽障 +10）`, 'warn');
     }
   },
-  /** 一战了断：胜则恩怨两清 */
-  onConfrontWin(p, id) {
+  /** 一战了断：胜则恩怨两清（v20 雷台了断：另夺法宝彩头） */
+  onConfrontWin(p, id, showdown = false) {
     const s = this.state(p, id);
     if (!s) return;
     s.grudge = false;
     s.pastLife = false;
     s.rel = Utils.clamp(s.rel + 15, -100, 100);
-    this.mem(p, id, 'peace', '一战了断');   // v19 记忆
+    this.mem(p, id, 'peace', showdown ? '雷台了断' : '一战了断');   // v19 记忆
     KarmaSys.addKarma(8, true);
     Log.add(`一战之后，恩怨两清。${(this.def(id) || {}).name || ''} 收起敌意，与你相顾无言。（孽障 +8）`, 'system');
+    if (showdown) {
+      const pool = Object.keys(GameData.ITEMS).filter(k => GameData.ITEMS[k].type === 'artifact' && (GameData.ITEMS[k].grade || 0) >= 1 && (GameData.ITEMS[k].grade || 0) <= 3);
+      const art = Utils.pick(pool);
+      Bag.addItem(art, 1);
+      Log.add(`雷台之约如约兑现——你收下 ${(GameData.ITEMS[art] || {}).name || '一件法宝'} 作为彩头。胜负已分，恩怨两讫。`, 'gain');
+      Story.chron(`雷台了断胜${(this.def(id) || {}).name || ''}`);
+      UI.announce('✦ 雷台了断 ✦', 'gold');
+    }
   },
   /* ---------- 社交动作 ---------- */
   befriendCost(p, id) {
@@ -8162,7 +8454,9 @@ const NpcSys = {
     if (Battle.active) return;
     const cost = Math.round(30 * GameData.stoneEco(s.realmIdx));
     const tier = this.tierOf(Math.max(0, s.rel));
-    const gain = { known: Utils.rand(3, 6), friend: Utils.rand(2, 4), bosom: Utils.rand(1, 3), sworn: 1 }[tier.id] || 2;
+    const midautumn = typeof FestivalSys !== 'undefined' && FestivalSys.is(p, 'zhongqiu');
+    const gain0 = { known: Utils.rand(3, 6), friend: Utils.rand(2, 4), bosom: Utils.rand(1, 3), sworn: 1 }[tier.id] || 2;
+    const gain = midautumn ? gain0 * 2 : gain0;   // v20 中秋：情谊加倍
     const ok = await UI.popup({
       title: `赠礼 · ${d.name}`,
       html: `${this.dialogText(d.temper, 'greeting')}<br>备一份投其所好的礼，可增进交情。需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">关系愈深，礼愈难打动人——相交贵在知心。</span>`,
@@ -8891,10 +9185,14 @@ const Battle = {
     B.waveIdx = 0;
     if (B.waveIds && B.waveIds.length > 1) this.log(`妖群环伺——预计将<b>接连遭遇 ${B.waveIds.length} 波</b>！且战且退，或一鼓作气。`, 'log-warn');
     if (B.enemy && B.enemy.elite) this.rollEliteFx(B);
-    // v20 天气联动钩子（阶段三扩展）：夜战敌方攻势更盛
+    // v20 天气联动：夜战敌方攻势更盛；雾战双方闪避皆升
     if (ctx.wx && ctx.wx.night) {
-      B.enemy.atk = Math.round(B.enemy.atk * 1.1);
-      this.log('【夜战】月黑风高，妖物借着夜色愈发凶悍——敌方攻击 +10%。', 'log-warn');
+      B.enemy.atk = Math.round(B.enemy.atk * 1.15);
+      this.log('【夜战】月黑风高，妖物借着夜色愈发凶悍——敌方攻击 +15%，然夜行所获亦丰。', 'log-warn');
+    }
+    if (ctx.wx && ctx.wx.sky === 'fog') {
+      B.fogDodge = 5;
+      this.log('【雾战】雾气迷目——双方身形皆难捉摸（闪避 +5%）。', 'log-system');
     }
     if (!ctx.firstStrike && !ctx.ambush) this.planIntent();   // v20 意图预演：先手局由敌方先动再规划
     // v19 词缀·护盾：战斗开场金光护体
@@ -9297,10 +9595,13 @@ const Battle = {
     if (who === 'me') {
       const p = Game.player;
       const st = Stat.compute(p);
+      const rain = B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain';
       let dotDmg = 0;
       for (const x of B.myFx) {
         if (!(StatusFx.DEFS[x.kind] || {}).dot) continue;
-        dotDmg += Math.max(1, Math.round(st.maxHp * (x.pct || 3) / 100));
+        let v = Math.max(1, Math.round(st.maxHp * (x.pct || 3) / 100));
+        if (x.kind === 'burn' && rain) v = Math.max(1, Math.round(v * 0.8));   // v20 雨天灼烧 -20%
+        dotDmg += v;
       }
       if (dotDmg > 0) {
         p.hp = Math.max(0, p.hp - dotDmg);
@@ -9310,10 +9611,13 @@ const Battle = {
       B.myFx = StatusFx.decayDots(B.myFx);
     } else {
       const e = B.enemy;
+      const rain = B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain';
       let dotDmg = 0;
       for (const x of e.fx) {
         if (!(StatusFx.DEFS[x.kind] || {}).dot) continue;
-        dotDmg += Math.max(1, Math.round(e.hpMax * (x.pct || 3) / 100));
+        let v = Math.max(1, Math.round(e.hpMax * (x.pct || 3) / 100));
+        if (x.kind === 'burn' && rain) v = Math.max(1, Math.round(v * 0.8));   // v20 雨天灼烧 -20%
+        dotDmg += v;
       }
       if (dotDmg > 0) {
         e.hp = Math.max(0, e.hp - dotDmg);
@@ -9357,7 +9661,7 @@ const Battle = {
         const daoTier = DaoSys.tierLevel(p);
         const enSpd = this.enSpd(B.enemy);
         // v10 剑心六境·剑仙境：普攻必中
-        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)), 2, 35);
+        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)) + (B.fogDodge || 0), 2, 40);
         if (Utils.chance(miss)) {
           this.log(`你奋力一击，却被 ${B.enemy.name} 敏捷地避开了！`);
           this.pushFloat('enemy', '闪避', 'miss');
@@ -9469,6 +9773,8 @@ const Battle = {
         let power = sk.power * (1 + (g.level - 1) * 0.06);
         // v10 剑心三境·第三重「万剑归宗」：法诀伤害 +25%
         if (p.dao === 'sword' && DaoSys.tierLevel(p) >= 5) power *= 1.25;
+        // v20 雨天：雷系法诀 +20%
+        if (B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain' && /雷/.test(def.name)) power *= 1.2;
         if (sk.kind === 'damage') {
           const miss = Utils.clamp(3 + (this.enSpd(B.enemy) - this.mySpd(st)), 2, 35);
           if (Utils.chance(miss)) {
@@ -9516,6 +9822,7 @@ const Battle = {
             let dmg = Stat.afterDef(st.atk * (def.power || 2.2), this.enDef(B.enemy)) * Utils.randF(0.95, 1.1) * this.moraleMul() * this.comboMul();
             if (p.dao === 'talisman' && DaoSys.tierLevel(p) >= 3) dmg *= 1.3;   // v10 符道六境·雷笔境
             if (this.eFx(B, 'e_tstorm')) dmg *= 1.3;   // v20 精英词缀·雷皮
+            if (B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain' && /雷/.test(def.name)) dmg *= 1.2;   // v20 雨天雷符 +20%
             dmg = Math.max(1, Math.round(dmg));
             B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
             this.pushFloat('enemy', `-${dmg}`, 'crit');
@@ -9927,7 +10234,7 @@ const Battle = {
     const B = this.active;
     const p = Game.player;
     const e = B.enemy;
-    const dodgeChance = Utils.clamp(3 + (this.mySpd(st) - this.enSpd(e)) * 1.1 + st.dodge + (B.buffs.dodgeRounds > 0 ? B.buffs.dodgeBonus : 0), 0, 65);
+    const dodgeChance = Utils.clamp(3 + (this.mySpd(st) - this.enSpd(e)) * 1.1 + st.dodge + (B.buffs.dodgeRounds > 0 ? B.buffs.dodgeBonus : 0) + (B.fogDodge || 0), 0, 70);
     if (Utils.chance(dodgeChance)) {
       this.log(`${e.name} ${tagText || (heavy ? '杀招当头' : '扑击而来')}，却被你身形一晃，堪堪避过！`);
       this.pushFloat('me', '闪避', 'miss');
@@ -10009,6 +10316,12 @@ const Battle = {
   rollDrops(e, ctx = {}) {
     const p = Game.player;
     const drops = [];
+    // v20 夜战：夜行所获亦丰（额外掉落判定）
+    if (ctx.wx && ctx.wx.night && Utils.chance(35)) {
+      const mat = Utils.pick(GameData.matsByTier(e.dropTier));
+      Bag.addItem(mat, 1);
+      drops.push(`${GameData.ITEMS[mat].name} ×1（夜获）`);
+    }
     if (Utils.chance(45)) {
       const qty = Utils.chance(20) ? 2 : 1;
       const mat = Utils.pick(GameData.matsByTier(e.dropTier));
@@ -10131,7 +10444,7 @@ const Battle = {
     BountySys.onKill(B.enemy.id);   // v13 悬赏猎杀进度
     // §24 恩怨 / 了断 / 立场结算
     if (B.ctx.npcId && B.ctx.mode === 'hunt') NpcSys.onPlayerKillsNpc(p, B.ctx.npcId);
-    if (B.ctx.npcId && B.ctx.mode === 'confront') NpcSys.onConfrontWin(p, B.ctx.npcId);
+    if (B.ctx.npcId && B.ctx.mode === 'confront') NpcSys.onConfrontWin(p, B.ctx.npcId, !!B.ctx.showdown);
     if (B.ctx.mode === 'war' && p.sect) {
       p.sect.contrib += 200;
       this.log('战功赫赫！宗门贡献 +200。', 'log-gain');
@@ -11852,11 +12165,24 @@ const UI = {
             ? { cls: 'warn', text: `推荐${m.recText} · 势均力敌` }
             : { cls: 'safe', text: `推荐${m.recText} · 游刃有余` };
         const magic = WorldSys.isMagic(p, m.id) ? '<span class="tag magic">魔域</span>' : '';
+        // v20 天时 / 深耕 / 兽潮标签
+        const wx = Art.weatherOf(p, m.id);
+        const deepN = (p.counters.mapExplores || {})[m.id] || 0;
+        const deepTier = deepN >= 100 ? 3 : deepN >= 50 ? 2 : deepN >= 20 ? 1 : 0;
+        const wxBits = [];
+        if (wx.night) wxBits.push('夜战：敌攻+15% · 夜获');
+        if (wx.sky === 'rain') wxBits.push('雨：雷系+20% · 灼烧-20%');
+        if (wx.sky === 'fog') wxBits.push('雾：机缘↑ · 命中↓');
+        if (WorldSys.beastWaveActive(p, m.id)) wxBits.push('兽潮：遇敌频密 · 猎获+30%');
+        const wxLine = wxBits.length || deepTier > 0
+          ? `<div class="tip-line">${deepTier > 0 ? `· 深耕${['一', '二', '三'][deepTier - 1]}重（探索 ${deepN} 次）　` : ''}${wxBits.length ? '· ' + wxBits.join('　·　') : ''}</div>`
+          : '';
         return `
       <div class="card map-card">
-        <div class="map-scene" title="天气：${{ rain: '雨', fog: '雾', clear: '晴' }[(Art.weatherOf(Game.player, m.id) || {}).sky] || '晴'}${(Art.weatherOf(Game.player, m.id) || {}).night ? ' · 夜' : ''}">${Art.scene(m.id, Art.seasonOf(Game.player), Art.weatherOf(Game.player, m.id))}</div>
+        <div class="map-scene" title="天气：${{ rain: '雨', fog: '雾', clear: '晴' }[wx.sky] || '晴'}${wx.night ? ' · 夜' : ''}">${Art.scene(m.id, Art.seasonOf(p), wx)}</div>
         <div class="card-title">${m.name}${magic}<span class="tag ${diff.cls}">${diff.text}</span></div>
         <div class="card-desc">${m.desc}${magic ? '<br><span class="neg">魔气狂化：妖魔更强，所获亦丰。</span>' : ''}</div>
+        ${wxLine}
         <div class="action-row"><button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button></div>
       </div>`;
       }).join('');
@@ -11873,6 +12199,10 @@ const UI = {
     if (w.preachUntil && y <= w.preachUntil) tags.push(`<span class="tag safe">圣地讲道 · 悟性翻倍（余 ${w.preachUntil - y} 年）</span>`);
     if (w.ruinsUntil && y <= w.ruinsUntil) tags.push(`<span class="tag warn">秘境现世 · 机缘遍地（余 ${w.ruinsUntil - y} 年）</span>`);
     if (w.warUntil && y <= w.warUntil) tags.push(`<span class="tag magic">宗门大战 · 物价腾贵（余 ${w.warUntil - y} 年）</span>`);
+    if (WorldSys.lingchaoActive(p)) tags.push(`<span class="tag safe">灵潮涌动 · 修炼+20%（余 ${w.lingchaoUntil - y} 年）</span>`);   // v20
+    for (const b of (w.beastMaps || [])) {   // v20
+      if (y <= b.until) tags.push(`<span class="tag danger">兽潮：${(GameData.MAPS.find(m => m.id === b.map) || {}).name || '某地'}（余 ${b.until - y} 年）</span>`);
+    }
     let pend = '';
     if (w.pending) {
       const def = GameData.WORLD_EVENTS.find(e => e.id === w.pending.type) || { name: '天下大事', desc: '' };
@@ -11905,9 +12235,10 @@ const UI = {
     const p = Game.player;
     const today = Math.floor(p.day);
     const drawn = p.signDay === today;
+    const fest = (typeof FestivalSys !== 'undefined') ? FestivalSys.today(p) : null;
     return `
     <div class="card sign-card">
-      <div class="card-title">✦ 黄历 · 每日一签 <span class="tag">${Time.labelLong(p)}</span></div>
+      <div class="card-title">✦ 黄历 · 每日一签 <span class="tag">${Time.labelLong(p)}</span>${fest ? ` <span class="tag warn" title="${Utils.esc(fest.desc)}">✦ 今日 ${fest.name}</span>` : ''}</div>
       <div class="card-desc">${drawn
         ? `今日签文：<b class="hl">${p.signText}</b>——${p.signDesc}`
         : '一炷清香，诚心摇签。每日一支，问今日道途吉凶。'}</div>
@@ -11993,6 +12324,7 @@ const UI = {
         s.rel >= 70 && !(p.sworn || []).includes(d.id) ? `<button class="btn btn-sm" data-action="npc-swear" data-npc="${d.id}">结拜</button>` : '',
         s.rel >= 90 && !p.partner ? `<button class="btn btn-sm btn-primary" data-action="npc-dao" data-npc="${d.id}">结为道侣</button>` : '',
         s.grudge ? `<button class="btn btn-sm" data-action="npc-peace" data-npc="${d.id}">${s.pastLife ? '前世恩怨' : '化解仇怨'}</button>` : '',
+        NpcSys.canShowdown(p, d.id) ? `<button class="btn btn-sm btn-danger" data-action="npc-showdown" data-npc="${d.id}" title="约战雷台，胜者夺其法宝，恩怨两清">⚡ 雷台了断</button>` : '',
       ].filter(Boolean).join('');
       return `
       <div class="shop-row">
@@ -12991,6 +13323,7 @@ const Game = {
     Save.autoSave();
     Achieve.check();   // v6：成就检查（解锁即发奖播报）
     try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
+    try { if (typeof FestivalSys !== 'undefined') FestivalSys.check(p); } catch (err) { console.error('节庆检查异常:', err); }   // v20：节庆触发
     try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
     if (p.pendingDao && !p.dao && !p.dead && !Battle.active
@@ -13227,6 +13560,7 @@ const Game = {
     'npc-swear': (d) => NpcSys.swear(d.npc),
     'npc-dao': (d) => NpcSys.becomeDao(d.npc),
     'npc-peace': (d) => NpcSys.peacemake(d.npc),
+    'npc-showdown': (d) => NpcSys.showdown(d.npc),   // v20 雷台了断
     /* --- v3 派系 --- */
     'act-faction-join': (d) => SectSys.joinFaction(d.f),
     'act-faction-exchange': (d) => SectSys.factionExchange(Number(d.i)),

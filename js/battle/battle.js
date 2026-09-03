@@ -91,10 +91,14 @@ const Battle = {
     B.waveIdx = 0;
     if (B.waveIds && B.waveIds.length > 1) this.log(`妖群环伺——预计将<b>接连遭遇 ${B.waveIds.length} 波</b>！且战且退，或一鼓作气。`, 'log-warn');
     if (B.enemy && B.enemy.elite) this.rollEliteFx(B);
-    // v20 天气联动钩子（阶段三扩展）：夜战敌方攻势更盛
+    // v20 天气联动：夜战敌方攻势更盛；雾战双方闪避皆升
     if (ctx.wx && ctx.wx.night) {
-      B.enemy.atk = Math.round(B.enemy.atk * 1.1);
-      this.log('【夜战】月黑风高，妖物借着夜色愈发凶悍——敌方攻击 +10%。', 'log-warn');
+      B.enemy.atk = Math.round(B.enemy.atk * 1.15);
+      this.log('【夜战】月黑风高，妖物借着夜色愈发凶悍——敌方攻击 +15%，然夜行所获亦丰。', 'log-warn');
+    }
+    if (ctx.wx && ctx.wx.sky === 'fog') {
+      B.fogDodge = 5;
+      this.log('【雾战】雾气迷目——双方身形皆难捉摸（闪避 +5%）。', 'log-system');
     }
     if (!ctx.firstStrike && !ctx.ambush) this.planIntent();   // v20 意图预演：先手局由敌方先动再规划
     // v19 词缀·护盾：战斗开场金光护体
@@ -497,10 +501,13 @@ const Battle = {
     if (who === 'me') {
       const p = Game.player;
       const st = Stat.compute(p);
+      const rain = B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain';
       let dotDmg = 0;
       for (const x of B.myFx) {
         if (!(StatusFx.DEFS[x.kind] || {}).dot) continue;
-        dotDmg += Math.max(1, Math.round(st.maxHp * (x.pct || 3) / 100));
+        let v = Math.max(1, Math.round(st.maxHp * (x.pct || 3) / 100));
+        if (x.kind === 'burn' && rain) v = Math.max(1, Math.round(v * 0.8));   // v20 雨天灼烧 -20%
+        dotDmg += v;
       }
       if (dotDmg > 0) {
         p.hp = Math.max(0, p.hp - dotDmg);
@@ -510,10 +517,13 @@ const Battle = {
       B.myFx = StatusFx.decayDots(B.myFx);
     } else {
       const e = B.enemy;
+      const rain = B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain';
       let dotDmg = 0;
       for (const x of e.fx) {
         if (!(StatusFx.DEFS[x.kind] || {}).dot) continue;
-        dotDmg += Math.max(1, Math.round(e.hpMax * (x.pct || 3) / 100));
+        let v = Math.max(1, Math.round(e.hpMax * (x.pct || 3) / 100));
+        if (x.kind === 'burn' && rain) v = Math.max(1, Math.round(v * 0.8));   // v20 雨天灼烧 -20%
+        dotDmg += v;
       }
       if (dotDmg > 0) {
         e.hp = Math.max(0, e.hp - dotDmg);
@@ -557,7 +567,7 @@ const Battle = {
         const daoTier = DaoSys.tierLevel(p);
         const enSpd = this.enSpd(B.enemy);
         // v10 剑心六境·剑仙境：普攻必中
-        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)), 2, 35);
+        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)) + (B.fogDodge || 0), 2, 40);
         if (Utils.chance(miss)) {
           this.log(`你奋力一击，却被 ${B.enemy.name} 敏捷地避开了！`);
           this.pushFloat('enemy', '闪避', 'miss');
@@ -669,6 +679,8 @@ const Battle = {
         let power = sk.power * (1 + (g.level - 1) * 0.06);
         // v10 剑心三境·第三重「万剑归宗」：法诀伤害 +25%
         if (p.dao === 'sword' && DaoSys.tierLevel(p) >= 5) power *= 1.25;
+        // v20 雨天：雷系法诀 +20%
+        if (B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain' && /雷/.test(def.name)) power *= 1.2;
         if (sk.kind === 'damage') {
           const miss = Utils.clamp(3 + (this.enSpd(B.enemy) - this.mySpd(st)), 2, 35);
           if (Utils.chance(miss)) {
@@ -716,6 +728,7 @@ const Battle = {
             let dmg = Stat.afterDef(st.atk * (def.power || 2.2), this.enDef(B.enemy)) * Utils.randF(0.95, 1.1) * this.moraleMul() * this.comboMul();
             if (p.dao === 'talisman' && DaoSys.tierLevel(p) >= 3) dmg *= 1.3;   // v10 符道六境·雷笔境
             if (this.eFx(B, 'e_tstorm')) dmg *= 1.3;   // v20 精英词缀·雷皮
+            if (B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain' && /雷/.test(def.name)) dmg *= 1.2;   // v20 雨天雷符 +20%
             dmg = Math.max(1, Math.round(dmg));
             B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
             this.pushFloat('enemy', `-${dmg}`, 'crit');
@@ -1127,7 +1140,7 @@ const Battle = {
     const B = this.active;
     const p = Game.player;
     const e = B.enemy;
-    const dodgeChance = Utils.clamp(3 + (this.mySpd(st) - this.enSpd(e)) * 1.1 + st.dodge + (B.buffs.dodgeRounds > 0 ? B.buffs.dodgeBonus : 0), 0, 65);
+    const dodgeChance = Utils.clamp(3 + (this.mySpd(st) - this.enSpd(e)) * 1.1 + st.dodge + (B.buffs.dodgeRounds > 0 ? B.buffs.dodgeBonus : 0) + (B.fogDodge || 0), 0, 70);
     if (Utils.chance(dodgeChance)) {
       this.log(`${e.name} ${tagText || (heavy ? '杀招当头' : '扑击而来')}，却被你身形一晃，堪堪避过！`);
       this.pushFloat('me', '闪避', 'miss');
@@ -1209,6 +1222,12 @@ const Battle = {
   rollDrops(e, ctx = {}) {
     const p = Game.player;
     const drops = [];
+    // v20 夜战：夜行所获亦丰（额外掉落判定）
+    if (ctx.wx && ctx.wx.night && Utils.chance(35)) {
+      const mat = Utils.pick(GameData.matsByTier(e.dropTier));
+      Bag.addItem(mat, 1);
+      drops.push(`${GameData.ITEMS[mat].name} ×1（夜获）`);
+    }
     if (Utils.chance(45)) {
       const qty = Utils.chance(20) ? 2 : 1;
       const mat = Utils.pick(GameData.matsByTier(e.dropTier));
@@ -1331,7 +1350,7 @@ const Battle = {
     BountySys.onKill(B.enemy.id);   // v13 悬赏猎杀进度
     // §24 恩怨 / 了断 / 立场结算
     if (B.ctx.npcId && B.ctx.mode === 'hunt') NpcSys.onPlayerKillsNpc(p, B.ctx.npcId);
-    if (B.ctx.npcId && B.ctx.mode === 'confront') NpcSys.onConfrontWin(p, B.ctx.npcId);
+    if (B.ctx.npcId && B.ctx.mode === 'confront') NpcSys.onConfrontWin(p, B.ctx.npcId, !!B.ctx.showdown);
     if (B.ctx.mode === 'war' && p.sect) {
       p.sect.contrib += 200;
       this.log('战功赫赫！宗门贡献 +200。', 'log-gain');

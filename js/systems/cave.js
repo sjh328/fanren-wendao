@@ -205,8 +205,9 @@ const CaveSys = {
     let qty = 2;
     if (over >= 20) qty = 1;
     if (plot.pested) qty = Math.max(0, qty - 1); // v18：虫害减产
+    if (typeof Art !== 'undefined' && Art.seasonOf(p) === 2) qty += 1;   // v20 季秋丰收：产量 +1
     Bag.addItem(plot.crop, qty);
-    Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}。`, 'gain');
+    Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}${typeof Art !== 'undefined' && Art.seasonOf(p) === 2 ? '（季秋丰收）' : ''}。`, 'gain');
     plots[idx] = null;
     Game.afterAction();
   },

@@ -482,11 +482,24 @@ const UI = {
             ? { cls: 'warn', text: `推荐${m.recText} · 势均力敌` }
             : { cls: 'safe', text: `推荐${m.recText} · 游刃有余` };
         const magic = WorldSys.isMagic(p, m.id) ? '<span class="tag magic">魔域</span>' : '';
+        // v20 天时 / 深耕 / 兽潮标签
+        const wx = Art.weatherOf(p, m.id);
+        const deepN = (p.counters.mapExplores || {})[m.id] || 0;
+        const deepTier = deepN >= 100 ? 3 : deepN >= 50 ? 2 : deepN >= 20 ? 1 : 0;
+        const wxBits = [];
+        if (wx.night) wxBits.push('夜战：敌攻+15% · 夜获');
+        if (wx.sky === 'rain') wxBits.push('雨：雷系+20% · 灼烧-20%');
+        if (wx.sky === 'fog') wxBits.push('雾：机缘↑ · 命中↓');
+        if (WorldSys.beastWaveActive(p, m.id)) wxBits.push('兽潮：遇敌频密 · 猎获+30%');
+        const wxLine = wxBits.length || deepTier > 0
+          ? `<div class="tip-line">${deepTier > 0 ? `· 深耕${['一', '二', '三'][deepTier - 1]}重（探索 ${deepN} 次）　` : ''}${wxBits.length ? '· ' + wxBits.join('　·　') : ''}</div>`
+          : '';
         return `
       <div class="card map-card">
-        <div class="map-scene" title="天气：${{ rain: '雨', fog: '雾', clear: '晴' }[(Art.weatherOf(Game.player, m.id) || {}).sky] || '晴'}${(Art.weatherOf(Game.player, m.id) || {}).night ? ' · 夜' : ''}">${Art.scene(m.id, Art.seasonOf(Game.player), Art.weatherOf(Game.player, m.id))}</div>
+        <div class="map-scene" title="天气：${{ rain: '雨', fog: '雾', clear: '晴' }[wx.sky] || '晴'}${wx.night ? ' · 夜' : ''}">${Art.scene(m.id, Art.seasonOf(p), wx)}</div>
         <div class="card-title">${m.name}${magic}<span class="tag ${diff.cls}">${diff.text}</span></div>
         <div class="card-desc">${m.desc}${magic ? '<br><span class="neg">魔气狂化：妖魔更强，所获亦丰。</span>' : ''}</div>
+        ${wxLine}
         <div class="action-row"><button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button></div>
       </div>`;
       }).join('');
@@ -503,6 +516,10 @@ const UI = {
     if (w.preachUntil && y <= w.preachUntil) tags.push(`<span class="tag safe">圣地讲道 · 悟性翻倍（余 ${w.preachUntil - y} 年）</span>`);
     if (w.ruinsUntil && y <= w.ruinsUntil) tags.push(`<span class="tag warn">秘境现世 · 机缘遍地（余 ${w.ruinsUntil - y} 年）</span>`);
     if (w.warUntil && y <= w.warUntil) tags.push(`<span class="tag magic">宗门大战 · 物价腾贵（余 ${w.warUntil - y} 年）</span>`);
+    if (WorldSys.lingchaoActive(p)) tags.push(`<span class="tag safe">灵潮涌动 · 修炼+20%（余 ${w.lingchaoUntil - y} 年）</span>`);   // v20
+    for (const b of (w.beastMaps || [])) {   // v20
+      if (y <= b.until) tags.push(`<span class="tag danger">兽潮：${(GameData.MAPS.find(m => m.id === b.map) || {}).name || '某地'}（余 ${b.until - y} 年）</span>`);
+    }
     let pend = '';
     if (w.pending) {
       const def = GameData.WORLD_EVENTS.find(e => e.id === w.pending.type) || { name: '天下大事', desc: '' };
@@ -535,9 +552,10 @@ const UI = {
     const p = Game.player;
     const today = Math.floor(p.day);
     const drawn = p.signDay === today;
+    const fest = (typeof FestivalSys !== 'undefined') ? FestivalSys.today(p) : null;
     return `
     <div class="card sign-card">
-      <div class="card-title">✦ 黄历 · 每日一签 <span class="tag">${Time.labelLong(p)}</span></div>
+      <div class="card-title">✦ 黄历 · 每日一签 <span class="tag">${Time.labelLong(p)}</span>${fest ? ` <span class="tag warn" title="${Utils.esc(fest.desc)}">✦ 今日 ${fest.name}</span>` : ''}</div>
       <div class="card-desc">${drawn
         ? `今日签文：<b class="hl">${p.signText}</b>——${p.signDesc}`
         : '一炷清香，诚心摇签。每日一支，问今日道途吉凶。'}</div>
@@ -623,6 +641,7 @@ const UI = {
         s.rel >= 70 && !(p.sworn || []).includes(d.id) ? `<button class="btn btn-sm" data-action="npc-swear" data-npc="${d.id}">结拜</button>` : '',
         s.rel >= 90 && !p.partner ? `<button class="btn btn-sm btn-primary" data-action="npc-dao" data-npc="${d.id}">结为道侣</button>` : '',
         s.grudge ? `<button class="btn btn-sm" data-action="npc-peace" data-npc="${d.id}">${s.pastLife ? '前世恩怨' : '化解仇怨'}</button>` : '',
+        NpcSys.canShowdown(p, d.id) ? `<button class="btn btn-sm btn-danger" data-action="npc-showdown" data-npc="${d.id}" title="约战雷台，胜者夺其法宝，恩怨两清">⚡ 雷台了断</button>` : '',
       ].filter(Boolean).join('');
       return `
       <div class="shop-row">

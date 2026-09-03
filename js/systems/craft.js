@@ -135,6 +135,7 @@ const CraftSys = {
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足，置不起朱砂灵纸'); return; }
     Time.add(1);
     let qty = 2 + Utils.rand(0, 2) + (p.realmIdx >= 2 ? 1 : 0) + (DaoSys.tierLevel(p) >= 1 ? 1 : 0);   // v10 符道三境·描符境
+    if (typeof Art !== 'undefined' && Art.seasonOf(p) === 1) qty += 2;   // v20 仲夏雷雨：朱砂易引雷，成符 +2
     if (Utils.chance(p.dao === 'talisman' && DaoSys.tierLevel(p) >= 2 ? 20 : 12)) qty *= 2;   // v10 符道六境·朱砂境
     if (DaoSys.tierLevel(p) >= 6) qty += 2;   // v10 符道六境·符仙境
     // v13 符池：随境界解锁高阶符箓

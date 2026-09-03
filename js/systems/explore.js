@@ -17,13 +17,28 @@ const Explore = {
     for (const k of ['treasure', 'fortune', 'npc']) if (weights[k]) weights[k] *= gm;
     // §23 上古秘境现世：宝箱与机缘权重提升
     if (WorldSys.ruinsActive(p)) for (const k of ['treasure', 'fortune']) if (weights[k]) weights[k] *= 1.5;
+    // v20 天时与深耕：雾日机缘↑、隆冬遇敌↓、兽潮妖患↑、深耕宝箱↑
+    const wx0 = Art.weatherOf(p, map.id);
+    if (wx0.sky === 'fog' && weights.fortune) weights.fortune *= 1.5;
+    if (Art.seasonOf(p) === 3 && weights.battle) weights.battle *= 0.9;
+    if (WorldSys.beastWaveActive(p, map.id) && weights.battle) weights.battle *= 1.3;
+    const deepN = (p.counters.mapExplores || {})[map.id] || 0;
+    const deepTier = deepN >= 100 ? 3 : deepN >= 50 ? 2 : deepN >= 20 ? 1 : 0;
+    if (deepTier > 0 && weights.treasure) weights.treasure += deepTier * 3;
     const type = Utils.pickWeighted(weights);
     switch (type) {
       case 'battle': {
-        const eliteChance = under ? 14 : 8;
-        const monsterId = Utils.chance(eliteChance) && map.elite
+        const eliteChance = (under ? 14 : 8) + deepTier * 4;   // v20 深耕：精英率 +
+        let monsterId = Utils.chance(eliteChance) && map.elite
           ? map.elite
           : Utils.pickWeighted(map.pool);
+        // v20 夜行妖兽：夜半（及中元）出没，境界相近者主动寻人
+        const isNight = wx0.night || (typeof FestivalSys !== 'undefined' && FestivalSys.is(p, 'zhongyuan'));
+        if (isNight) {
+          const rp = p.realmIdx * 4 + p.layer;
+          const nightIds = Object.keys(GameData.MONSTERS).filter(id => GameData.MONSTERS[id].night && Math.abs(GameData.MONSTERS[id].power - rp) <= 6);
+          if (nightIds.length && Utils.chance(30)) monsterId = Utils.pick(nightIds);
+        }
         Log.add(`你在 ${map.name} 探索时，惊动了什么……`, 'event');
         // v10 境界特性 · 神识（化神起）：五成先手；低打依旧保留原有先手机会
         const firstStrike = (under && Utils.chance(25)) || (p.realmIdx >= 4 && Utils.chance(50));
@@ -32,6 +47,16 @@ const Explore = {
         const arraySetup = arrayTier >= 1 && Utils.chance(50);
         if (arraySetup) DaoSys.gain(p, 20);   // v16 阵道
         const bctx = { mapName: map.name, mapId: map.id, firstStrike, arraySetup, arrayPotent: arrayTier >= 3, arrayGrand: arrayTier >= 6 };
+        // v20 深耕掉落与兽潮掉落
+        if (deepTier > 0) {
+          bctx.dropMul = (bctx.dropMul || 1) * (1 + deepTier * 0.15);
+          Log.add(`此地你已走过 ${deepN} 遍，路径烂熟于心——深耕${['一', '二', '三'][deepTier - 1]}重：精英率与所获俱增。`, 'system');
+        }
+        if (WorldSys.beastWaveActive(p, map.id)) {
+          bctx.dropMul = (bctx.dropMul || 1) * 1.3;
+          Log.add('兽潮未退——四野妖兽环伺，猎杀所获亦厚。', 'warn');
+        }
+        bctx.wx = wx0;
         // §23 魔域：妖魔狂化，凶险与收获并增
         if (WorldSys.isMagic(p, map.id)) {
           bctx.worldMul = 1.3; bctx.dropMul = 1.4;
@@ -44,7 +69,6 @@ const Explore = {
           for (let w = 1; w < n; w++) waveIds.push(Utils.pickWeighted(map.pool));
           bctx.waveIds = waveIds;
         }
-        bctx.wx = Art.weatherOf(p, map.id);
         Battle.start(monsterId, bctx);
         return; // 战斗结束后自行结算
       }
@@ -114,6 +138,7 @@ const EventSys = {
   },
   treasure(map) {
     const p = Game.player;
+    if (NpcSys.rivalSnatch(p)) return;   // v20 宿敌截胡
     const st = Stat.compute(p);
     Log.add('你拨开蔓草，发现了一只落满尘土的储物箱！', 'event');
     Narrative.logScene('treasure');   // v5：道途语气
@@ -137,6 +162,7 @@ const EventSys = {
   },
   fortune(map) {
     const p = Game.player;
+    if (NpcSys.rivalSnatch(p)) return;   // v20 宿敌截胡
     Narrative.logScene('fortune');   // v5：道途语气
     // §26 前世记忆：兵解转世者偶得前世洞府机缘
     if (p.reinc && Utils.chance(15)) {

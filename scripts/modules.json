@@ -37,6 +37,7 @@
   "js/systems/bounty.js",
   "js/systems/black.js",
   "js/systems/rank.js",
+  "js/systems/festival.js",
   "js/systems/npc.js",
   "js/systems/dungeon.js",
   "js/systems/reincarnation.js",

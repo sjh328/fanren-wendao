@@ -785,8 +785,11 @@ try {
     Battle.setSpeed(3);
     // 直接结算一次普攻路径（命中分支由 attack case 驱动，用 act 触发）
     B.combo = 0;
+    const oc = Utils.chance;
+    Utils.chance = v => v >= 90;   // v20 加固：屏蔽闪避/暴击等随机分支，保证普攻必中
     Battle.act('attack');
     await new Promise(r => setTimeout(r, 700));
+    Utils.chance = oc;
     const expGot = p.daoExp.sword;
     Battle.end();
     return { expGot, gained: expGot > 0 };

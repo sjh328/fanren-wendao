@@ -361,6 +361,97 @@ try {
     ? pass('C5 养成纵深：六营造 / 灵泉日产 / 藏宝阁 +9% / 天机果破桎至11')
     : fail('C5 建筑/天机果', JSON.stringify(c5));
 
+  /* ================= D 世界组（阶段三） ================= */
+  // D1 节庆：按年内日序触发、年旗标防重、年兽迎战入口
+  const d1 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.day = 359;   // 年内第 360 日 → 除夕
+    const f = FestivalSys.today(p);
+    const oc = Utils.chance;
+    const origStart = Battle.start.bind(Battle);
+    const origPopup = UI.popup.bind(UI);
+    let fought = false;
+    Battle.start = (id, ctx) => { fought = true; if (ctx && ctx.story && ctx.story.onEnd) ctx.story.onEnd(true); return Promise.resolve(); };
+    UI.popup = async (o) => (o.title || '').includes('年兽') ? 'fight' : origPopup(o);
+    FestivalSys.check(p);
+    await new Promise(r => setTimeout(r, 250));
+    Battle.start = origStart;
+    UI.popup = origPopup;
+    Utils.chance = oc;
+    const year = Math.floor(p.day / 365) + 1;
+    const once = p.flags['fest_chuxi_' + year] === true;
+    const todayName = (f || {}).id;
+    p.day = 100;
+    return { todayName, fought, once };
+  });
+  d1.todayName === 'chuxi' && d1.fought && d1.once
+    ? pass('D1 节庆系统：除夕按年内日触发、年旗标防重、年兽迎战可达')
+    : fail('D1 节庆', JSON.stringify(d1));
+
+  // D2 天时钩子：夜战加成 / 雾战闪避（直接走 Battle.start）
+  const d2 = await page.evaluate(async () => {
+    const p = Game.player;
+    const en = buildMonster('m_yezhu');
+    const base = en.atk;
+    Battle.speed = 3;
+    await Battle.start(null, { enemy: en, wx: { night: true, sky: 'fog' }, mapName: '天时测试' });
+    const boosted = en.atk === Math.round(base * 1.15);
+    const fog = Battle.active && Battle.active.fogDodge === 5;
+    const logs = Battle.active ? Battle.active.logs.map(l => String(l.html)).join('|') : '';
+    const nightOk = logs.includes('夜战');
+    const fogOk = logs.includes('雾战');
+    if (Battle.active) { Battle.active.over = true; Battle.end(); }
+    Battle.speed = 1;
+    return { boosted, fog, nightOk, fogOk };
+  });
+  d2.boosted && d2.fog && d2.nightOk && d2.fogOk
+    ? pass('D2 天时玩法化：夜战敌攻 +15% / 雾战双方闪避 +5%')
+    : fail('D2 天时', JSON.stringify(d2));
+
+  // D3 灵潮 / 兽潮世界状态与修炼加成
+  const d3 = await page.evaluate(() => {
+    const p = Game.player;
+    p.world = Object.assign(WorldSys.freshWorld(), { lingchaoUntil: 999, beastMaps: [{ map: 'village', until: 999 }] });
+    const ling = WorldSys.lingchaoActive(p);
+    const bw = WorldSys.beastWaveActive(p, 'village');
+    const bw2 = WorldSys.beastWaveActive(p, 'qingfeng');
+    const g1 = Cultivate.baseGain(p);
+    p.world.lingchaoUntil = 0;
+    const g0 = Cultivate.baseGain(p);
+    p.world = WorldSys.freshWorld();
+    return { ling, bw, bw2, boost: g1 > g0 };
+  });
+  d3.ling && d3.bw && !d3.bw2 && d3.boost
+    ? pass('D3 世界事件扩池：灵潮修炼 +20% / 兽潮按地图生效')
+    : fail('D3 世界状态', JSON.stringify(d3));
+
+  // D4 宿敌截胡与雷台了断资格
+  const d4 = await page.evaluate(() => {
+    const p = Game.player;
+    p.npcs = NpcSys.freshNpcs();
+    p.npcs.n1.realmIdx = p.realmIdx; p.npcs.n1.layer = p.layer;
+    p.npcs.n1.rel = -80; p.npcs.n1.grudge = true; p.npcs.n1.met = true;
+    const oc = Utils.chance;
+    Utils.chance = () => true;
+    const snatched = NpcSys.rivalSnatch(p);
+    Utils.chance = oc;
+    const canSd = NpcSys.canShowdown(p, 'n1');
+    p.npcs.n1.rel = 0;
+    const noSd = NpcSys.canShowdown(p, 'n1');
+    p.npcs = NpcSys.freshNpcs();
+    return { snatched, canSd, noSd };
+  });
+  d4.snatched && d4.canSd && !d4.noSd
+    ? pass('D4 宿敌养成：截胡机制 / 雷台了断资格判定（关系+境界双门槛）')
+    : fail('D4 宿敌', JSON.stringify(d4));
+
+  // D5 夜行妖兽注册完整（技能/种族/图录）
+  const d5 = await page.evaluate(() => {
+    const keys = Object.keys(GameData.MONSTERS).filter(k => GameData.MONSTERS[k].night);
+    return { n: keys.length, ok: keys.every(k => { const m = GameData.MONSTERS[k]; return m.skills && m.skills.length && m.species && GameData.CODEX_INTRO[k]; }) };
+  });
+  d5.n >= 3 && d5.ok ? pass('D5 夜行妖兽：三只夜怪注册完整（技能/种族/图录）') : fail('D5 夜怪', JSON.stringify(d5));
+
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');
   console.log('\n========== verify-v10 汇总 ==========');

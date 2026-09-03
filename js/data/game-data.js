@@ -430,6 +430,10 @@ const GameData = {
     m_tianle:    { name: '九霄雷兽',     power: 41, hp: 1.25, atk: 1.35, species: 'beast', skills: [{ name: '雷牙撕裂', w: 30, kind: 'bleed', pct: 5, rounds: 2 }, { name: '雷暴', w: 25, kind: 'burn', pct: 5, rounds: 2 }] },
     m_xianzun:   { name: '仙尊残念',     power: 44, hp: 1.3,  atk: 1.45, elite: true, rareDrop: 'z_xianyao', species: 'ghost', skills: [{ name: '一念断生', w: 30, kind: 'weaken', pct: 40, rounds: 2 }, { name: '夺魄', w: 25, kind: 'drain', mult: 1.4, leech: 0.6 }] },
     m_leishen:   { name: '雷狱主宰',     power: 46, hp: 1.5,  atk: 1.5,  elite: true, rareDrop: 'gf_leishen', species: 'construct', skills: [{ name: '灭世雷罚', w: 30, kind: 'cursed', pct: 8, rounds: 3 }, { name: '雷狱封锁', w: 25, kind: 'stun', rounds: 1 }] },
+    /* ---- v20 夜行妖兽（仅夜间出没） ---- */
+    m_yexiao:    { name: '夜啼枭',       power: 4,  hp: 0.95, atk: 1.1,  spd: 1.2, night: true, species: 'beast', skills: [{ name: '无声俯袭', w: 40, kind: 'slow', pct: 20, rounds: 2 }] },
+    m_yexing:    { name: '夜行幽狼',     power: 16, hp: 1.05, atk: 1.15, night: true, species: 'beast', skills: [{ name: '月下撕咬', w: 40, kind: 'bleed', pct: 3, rounds: 2 }, { name: '幽嚎', w: 20, kind: 'weaken', pct: 20, rounds: 2 }] },
+    m_yuemei:    { name: '月魄夜魅',     power: 27, hp: 1.0,  atk: 1.2,  spd: 1.25, night: true, species: 'ghost', skills: [{ name: '摄月之光', w: 35, kind: 'mpburn', pct: 30 }, { name: '魄爪', w: 30, kind: 'drain', mult: 1.15, leech: 0.4 }] },
   },
 
   /* ---------- 地图区域 ---------- */
@@ -935,12 +939,26 @@ const GameData = {
     { id: 'merchant', name: '商会学徒', desc: '算盘打得比剑快——财路通仙路。', mods: { comp: 1, luck: 1, gen: -1 }, start: { stones: 3000, bag: {} } },
   ],
 
-  /* ---------- §23 世界大事件（每 100 游戏年一次，永久改变格局） ---------- */
+  /* ---------- §23 世界大事件（每 100 游戏年一次全图大事，永久改变格局；v20 扩池 4→8） ---------- */
   WORLD_EVENTS: [
     { id: 'demon',  name: '魔界入侵',     desc: '魔气自天外涌入，一方之地化为魔域——域内妖魔狂化暴增，凶险倍之，然所获亦丰。' },
     { id: 'preach', name: '圣地讲道',     desc: '上古圣地开启讲道大会，道音涤荡神魂。十年之内，天下修士悟性倍增。' },
     { id: 'ruins',  name: '上古秘境现世', desc: '一座上古秘境重现人间，二十年间秘宝频现，机缘遍地。' },
     { id: 'war',    name: '宗门大战',     desc: '正道宗门因理念的裂痕兵戎相见，三十年战火——宗门悬赏暴涨，坊市物价腾贵。' },
+    /* ---- v20 扩池 ---- */
+    { id: 'lingchao', name: '灵潮涌动',   desc: '地脉灵潮奔涌不息，十年之间天地灵气格外充盈——修炼效率大增。' },
+    { id: 'beastwave', name: '兽潮',      desc: '妖王振臂，群兽出山！十五年之间某地妖兽横行——凶险倍增，猎杀所获亦厚。' },
+    { id: 'xianmen',  name: '仙门收徒大会', desc: '诸宗联席开设收徒大会，以考较选取英才——通过者可获宗门秘传。' },
+    { id: 'meteor',   name: '陨星坠落',   desc: '一颗天外陨星划破长空坠入人间——星陨之处，天材地宝俯拾即是。' },
+  ],
+
+  /* ---------- v20 节庆（按年内日序触发，每年一遍） ---------- */
+  FESTIVALS: [
+    { id: 'shangyuan', name: '上元灯会', day: 15,  desc: '满城花灯如昼。猜中一盏灯谜，可得前辈留下的感悟。' },
+    { id: 'huazhao',   name: '花朝节',   day: 45,  desc: '百花生日。灵田作物承花神之气，生长骤然加快。' },
+    { id: 'zhongyuan', name: '中元鬼节', day: 225, desc: '鬼门大开，阴魂夜行——夜里凶险倍增，然超度亡魂者福缘深厚。' },
+    { id: 'zhongqiu',  name: '中秋月圆', day: 270, desc: '千里共婵娟。今日赠礼，情谊加倍。' },
+    { id: 'chuxi',     name: '除夕年关', day: 360, desc: '爆竹声中一岁除——却有年兽循着人间烟火气而来。' },
   ],
 
   /* ---------- v6 图鉴：妖兽背景介绍（其余图鉴条目沿用各 def.desc） ---------- */
@@ -1004,6 +1022,10 @@ const GameData = {
     m_tianle: '九霄雷兽，雷狱深处的凶兽，皮糙如雷砧，吼声滚滚如雷过境。',
     m_xianzun: '仙尊残念，一位仙尊陨落前的不灭执念，仙威犹存。近之者，神魂如坠冰渊。',
     m_leishen: '雷狱主宰，九霄雷狱的最深处的主人，雷罚加身而不伤——渡劫者若有幸一见，多半已无幸。',
+    /* ---- v20 夜行妖兽图录 ---- */
+    m_yexiao: '夜啼枭，白日敛羽夜半啼，一声枭鸣能叫人手脚发软。猎户说它是给阴司引路的。',
+    m_yexing: '夜行幽狼，月圆之夜成群出游，双目如磷火。天一亮，便只剩雪地上一串爪印。',
+    m_yuemei: '月魄夜魅，凝月华而生的魅影，专摄修士灵力。老修士常叮嘱：夜里赶路，莫应月中人语。',
   },
 
   /* ======================================================================
