@@ -426,6 +426,63 @@ const Battle = {
     this.autoNext();
   },
 
+  /** v20 本命法宝觉醒战技：guard3 金光 / strike6 锁魂 / strike9 归一斩（每战各一次） */
+  async actBenming(k) {
+    const B = this.active;
+    const p = Game.player;
+    const st = Stat.compute(p);
+    if (!B || B.over || B.busy) return;
+    if (B.bmUsed && B.bmUsed[k]) return;
+    const bmLv = (p.benming && p.benming.lv) || 0;
+    const need = { guard3: 3, strike6: 6, strike9: 9 }[k] || 0;
+    if (bmLv < need) { UI.toast('本命法宝阶数不足'); return; }
+    B.busy = true;
+    B.menu = null;
+    if (k === 'guard3') {
+      B.bmUsed.guard3 = true;
+      StatusFx.add(B.myFx, { kind: 'shield', pct: 30, rounds: 2 });
+      this.log('【本命·护主金光】法宝自主嗡鸣，金光罩体——两回合内所受伤害减轻三成！', 'log-gain');
+    } else if (k === 'strike6') {
+      B.bmUsed.strike6 = true;
+      this.log('【本命·锁魂一击】法宝化作流光直贯敌身！', 'log-crit');
+      this.fxShow('lightning');
+      await this.wait(400);
+      let dmg = Stat.afterDef(this.myAtk(st) * 2.5, this.enDef(B.enemy)) * Utils.randF(0.95, 1.2) * this.moraleMul();
+      dmg = Math.max(1, Math.round(dmg));
+      B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
+      B.stats.out += dmg; if (B.stats.src) B.stats.src.ult += dmg;
+      StatusFx.add(B.enemy.fx, { kind: 'defdown', pct: 30, rounds: 3 });
+      this.pushFloat('enemy', `-${dmg}`, 'crit');
+      B.hitShake = true;
+      this.log(`造成 <b>${dmg}</b> 点伤害，敌方防御大破！`, 'log-crit');
+    } else if (k === 'strike9') {
+      B.bmUsed.strike9 = true;
+      this.log('【本命·两世归一斩】两世道韵合流于器，一斩而下！', 'log-crit');
+      this.fxShow('sword');
+      await this.wait(500);
+      let dmg = Stat.afterDef(this.myAtk(st) * 4.0, this.enDef(B.enemy)) * Utils.randF(1.0, 1.25) * this.moraleMul();
+      dmg = Math.max(1, Math.round(dmg));
+      B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
+      const heal = Math.round(st.maxHp * 0.15);
+      p.hp = Math.min(st.maxHp, p.hp + heal);
+      B.stats.out += dmg; if (B.stats.src) B.stats.src.ult += dmg;
+      this.pushFloat('enemy', `-${dmg}`, 'crit');
+      this.pushFloat('me', `+${heal}`, 'heal');
+      B.hitShake = true;
+      this.log(`造成 <b>${dmg}</b> 点伤害，并借器反哺回复 <b>${heal}</b> 点气血！`, 'log-crit');
+    }
+    this.render();
+    if (B.enemy.hp <= 0) { await this.victory(); return; }
+    await this.wait(400);
+    await this.enemyTurn();
+    if (!this.active) return;
+    if (B.enemy.hp <= 0) { await this.victory(); return; }
+    if (await this.afterEnemyPhase(st)) return;
+    B.busy = false;
+    this.render();
+    this.autoNext();
+  },
+
   /** v13：给敌方施加状态（符箓/破煞法诀） */
   applyEnemyFx(e, st, logFmt) {
     StatusFx.add(e.fx, st);
@@ -1456,6 +1513,15 @@ const Battle = {
     const ultBtns = ults.length ? ults.map(sk =>
       `<button class="btn btn-sm ult-btn" data-action="bt-ult" data-ult="${sk.id}" ${(B.busy || (B.zhenyuan || 0) < sk.cost) ? 'disabled' : ''} title="${sk.desc}">${sk.name}<span style="color:var(--text-faint)">（真元${sk.cost}）</span></button>`).join('') : '';
     const ultRow = ultBtns ? `<div class="bt-sub ult-row">${ultBtns}</div>` : '';
+    // v20 本命法宝觉醒战技（喂养 3/6/9 阶各解锁一式，每战各限一次）
+    const bmLv = (p.benming && p.benming.lv) || 0;
+    const bmOwn = (typeof ForgeSys !== 'undefined' && ForgeSys.benmingOwn) ? ForgeSys.benmingOwn(p) : false;
+    B.bmUsed = B.bmUsed || {};
+    const bmBtns = [];
+    if (bmOwn && bmLv >= 3 && !B.bmUsed.guard3) bmBtns.push(`<button class="btn btn-sm" data-action="bt-benming" data-k="guard3" ${B.busy ? 'disabled' : ''} title="金光罩体：两回合减伤三成">◍ 护主金光</button>`);
+    if (bmOwn && bmLv >= 6 && !B.bmUsed.strike6) bmBtns.push(`<button class="btn btn-sm" data-action="bt-benming" data-k="strike6" ${B.busy ? 'disabled' : ''} title="2.5× 伤害并破防三成">◈ 锁魂一击</button>`);
+    if (bmOwn && bmLv >= 9 && !B.bmUsed.strike9) bmBtns.push(`<button class="btn btn-sm btn-primary" data-action="bt-benming" data-k="strike9" ${B.busy ? 'disabled' : ''} title="4.0× 伤害并回复一成五气血">✦ 两世归一斩</button>`);
+    const bmRow = bmBtns.length ? `<div class="bt-sub">${bmBtns.join('')}</div>` : '';
     const speedLabels = { 1: '×1', 2: '×2', 3: '极速' };
     const btns = [
       `<button class="btn" data-action="bt-attack" ${B.busy ? 'disabled' : ''}>普 攻</button>`,
@@ -1497,6 +1563,7 @@ const Battle = {
       <div id="bt-log"></div>
       ${sub}
       ${ultRow}
+      ${bmRow}
       ${tameBtn}
       <div class="bt-actions" style="margin-top:8px">${btns}</div>
       <div class="bt-ctl">${ctlBtns}</div>

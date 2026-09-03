@@ -104,6 +104,16 @@ const BeastSys = {
     ghost:    { name: '摄魂低语', kind: 'drain', mult: 1.15, leech: 0.4 },
     construct:{ name: '铁壁守护', kind: 'guard', def: 30, rounds: 2 },
   },
+  /** v20 十阶第二天生技（每物种另一路打法） */
+  SPECIES_SKILLS2: {
+    beast:    { name: '裂地重扑', kind: 'stun', rounds: 1 },
+    snake:    { name: '腐骨毒雾', kind: 'poison', pct: 4, rounds: 3 },
+    swarm:    { name: '蚀魂之群', kind: 'mpburn', pct: 20 },
+    plant:    { name: '盘根错节', kind: 'slow', pct: 30, rounds: 2 },
+    element:  { name: '灵爆', kind: 'burn', pct: 5, rounds: 2 },
+    ghost:    { name: '慑心之嚎', kind: 'weaken', pct: 25, rounds: 2 },
+    construct:{ name: '地裂震波', kind: 'stun', rounds: 1 },
+  },
   /** 战斗中灵兽协助攻击（Battle.act 开头调用）：40% 几率出手 */
   async assist(st) {
     const B = Battle.active;
@@ -115,13 +125,12 @@ const BeastSys = {
     B.hitShake = true;
     if (B.stats) { B.stats.out += dmg; if (B.stats.src) B.stats.src.beast += dmg; }   // v20 伤害构成统计
     B.pushFloat('enemy', `-${dmg}`, 'dmg');
-    // v18：灵兽技能实效化——施加真实技能效果（毒/流血/减益等）
+    // v18：灵兽技能实效化——施加真实技能效果（毒/流血/减益等）；v20 支持双技
     let skillNote = '';
-    if (b.skills && b.skills.length > 0) {
-      const sk = b.skills[0];
+    for (const sk of (b.skills || []).slice(0, 2)) {
       if (sk.kind && ['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken', 'stun'].includes(sk.kind)) {
         Battle.applyEnemyFx(B.enemy, { kind: sk.kind, pct: (sk.pct || 2) * 0.6, rounds: sk.rounds || 2 });
-        skillNote = `【${sk.name}】`;
+        skillNote += `【${sk.name}】`;
       }
     }
     B.log(`${skillNote}你的灵兽 <b>${b.name}</b> 亦张牙舞爪扑上助战——造成 <b>${dmg}</b> 点伤害！`, 'log-gain');
@@ -139,19 +148,25 @@ const BeastSys = {
     b.exp += 500;
     let up = false;
     while (b.level < 10 && b.exp >= b.level * 400) { b.exp -= b.level * 400; b.level++; up = true; }
-    if (up) {
-      let extra = '';
-      // v19 五阶习得物种天生技，九阶精进
-      if (b.level === 5 && (!b.skills || !b.skills.length) && this.SPECIES_SKILLS[b.species]) {
-        b.skills = [{ ...this.SPECIES_SKILLS[b.species] }];
-        extra = `，并领悟天生技【${b.skills[0].name}】`;
-      } else if (b.level === 9 && b.skills && b.skills.length && b.skills[0].pct) {
-        b.skills[0].pct = Math.round(b.skills[0].pct * 1.5 * 10) / 10;
-        extra = `，天生技【${b.skills[0].name}】威力精进`;
-      }
-      Log.add(`【${b.name}】吞下内丹，周身妖气一涨——灵兽升至 <b>${b.level} 阶</b>！${extra || '协助作战愈发骁勇。'}`, 'gain');
-      UI.toast(`${b.name} 升至 ${b.level} 阶`);
-    } else {
+      if (up) {
+        let extra = '';
+        // v19 五阶习得物种天生技，九阶精进
+        if (b.level === 5 && (!b.skills || !b.skills.length) && this.SPECIES_SKILLS[b.species]) {
+          b.skills = [{ ...this.SPECIES_SKILLS[b.species] }];
+          extra = `，并领悟天生技【${b.skills[0].name}】`;
+        } else if (b.level === 9 && b.skills && b.skills.length && b.skills[0].pct) {
+          b.skills[0].pct = Math.round(b.skills[0].pct * 1.5 * 10) / 10;
+          extra = `，天生技【${b.skills[0].name}】威力精进`;
+        }
+        // v20 十阶开第二天生技
+        if (b.level >= 10 && (!b.skills || b.skills.length < 2) && this.SPECIES_SKILLS2[b.species]) {
+          b.skills = b.skills || [];
+          b.skills.push({ ...this.SPECIES_SKILLS2[b.species] });
+          extra = `，并领悟第二天生技【${b.skills[b.skills.length - 1].name}】！`;
+        }
+        Log.add(`【${b.name}】吞下内丹，周身妖气一涨——灵兽升至 <b>${b.level} 阶</b>！${extra || '协助作战愈发骁勇。'}`, 'gain');
+        UI.toast(`${b.name} 升至 ${b.level} 阶`);
+      } else {
       Log.add(`【${b.name}】吞下内丹，妖气渐长（灵兽经验 +500）。`, 'info');
     }
     Game.afterAction();
@@ -208,6 +223,82 @@ const BeastSys = {
     b.patDay = today;
     b.bond = Math.min(100, (b.bond || 0) + Utils.rand(4, 8));
     Log.add(`你轻抚 <b>${b.name}</b> 的脊背，它眯起眼，尾巴轻轻扫过你的手腕。（亲昵 ${b.bond}/100，协战几率微增）`, 'gain');
+    Game.afterAction();
+  },
+  /** v20 寻宝派遣：灵兽外出 N 日带回灵材（离线也计时） */
+  async dispatch(uid) {
+    const p = Game.player;
+    const b = p.beasts.list.find(x => x.uid === uid);
+    if (!b) return;
+    if (b.trip) { UI.toast('它已在寻宝途中'); return; }
+    if (p.beasts.active === uid || p.beasts.active2 === uid) { UI.toast('出战/护持中的灵兽不可派遣'); return; }
+    const days = await UI.popup({
+      title: `派遣寻宝 · ${b.name}`,
+      html: `放它独自外出寻宝——归期越久，带回的灵材越厚。<br>派遣期间不可出战，归来时自动入栏。`,
+      options: [
+        { text: '三 日', value: 3, primary: true },
+        { text: '七 日', value: 7 },
+        { text: '十五 日', value: 15 },
+        { text: '作罢', value: null },
+      ],
+    });
+    if (!days) return;
+    b.trip = { until: Math.floor(p.day || 0) + days, days };
+    Log.add(`你系上小竹篓，<b>${b.name}</b> 欢快地窜入山林——${days} 日后归来。`, 'info');
+    Game.afterAction();
+  },
+  /** v20 寻宝归来结算 */
+  claimTrip(uid) {
+    const p = Game.player;
+    const b = p.beasts.list.find(x => x.uid === uid);
+    if (!b || !b.trip) return;
+    const today = Math.floor(p.day || 0);
+    if (today < b.trip.until) { UI.toast(`尚未归来（还差 ${b.trip.until - today} 日）`); return; }
+    const tier = Utils.clamp(Math.floor(b.power / 12) + Math.floor(b.trip.days / 6), 1, 4);
+    const mat = Utils.pick(GameData.matsByTier(tier));
+    const qty = b.trip.days >= 7 ? 2 : 1;
+    const stones = Math.round((30 + b.power * 2) * b.trip.days * GameData.stoneEco(Math.min(4, p.realmIdx)) / 3);
+    Bag.addItem(mat, qty);
+    Bag.addStones(stones);
+    b.exp += b.trip.days * 120;
+    Log.add(`【${b.name}】叼着竹篓归来——带回【${GameData.ITEMS[mat].name}】×${qty}、灵石 ${Utils.fmtNum(stones)}，妖气也涨了几分。`, 'gain');
+    if (b.exp >= b.level * 400) UI.toast(`${b.name} 经验涨了，可喂内丹升阶`);
+    b.trip = null;
+    Game.afterAction();
+  },
+  /** v20 斗兽场：押注观战，胜得 1.8 倍彩头 */
+  async arena() {
+    const p = Game.player;
+    const b = this.activeBeast(p);
+    if (!b) { UI.toast('需先有一头出战灵兽'); return; }
+    const eco = GameData.stoneEco(Math.min(5, p.realmIdx));
+    const tiers = [
+      { name: '小注', base: 100 },
+      { name: '中注', base: 800 },
+      { name: '豪注', base: 5000 },
+    ];
+    const pick = await UI.popup({
+      title: `斗兽场 · ${b.name}`,
+      html: `洞府演武场难得热闹—— ${b.name}（${b.level} 阶${b.evolved ? ' · 蜕变' : ''}）对阵山野妖王。<br>押它一注，胜者得 1.8 倍彩头。`,
+      options: tiers.map((t, i) => ({ text: `${t.name}（${Utils.fmtNum(Math.round(t.base * eco))}灵石）`, value: i, primary: i === 0 })).concat([{ text: '看看就好', value: null }]),
+    });
+    if (pick == null) return;
+    const cost = Math.round(tiers[pick].base * eco);
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    Time.add(1);
+    const oppPower = Utils.clamp(Math.round(b.power * Utils.randF(0.8, 1.3)), 1, 60);
+    const myScore = b.power + b.level * 2 + (b.evolved ? 8 : 0) + (b.bond || 0) / 10 + Utils.rand(0, 10);
+    const oppScore = oppPower + Utils.rand(0, 14);
+    const win = myScore >= oppScore;
+    if (win) {
+      const prize = Math.round(cost * 1.8);
+      Bag.addStones(prize);
+      p.counters.arenaWins = (p.counters.arenaWins || 0) + 1;
+      Log.add(`⚔ 斗兽场——<b>${b.name}</b> 三招逼退对手，满场喝彩！彩头灵石 ${Utils.fmtNum(prize)}。（斗兽连胜 ${p.counters.arenaWins} 场）`, 'gain');
+      if (p.counters.arenaWins % 5 === 0) { KarmaSys.addFortune(2); Log.add('驯兽的名声传开了——气运 +2。', 'gain'); }
+    } else {
+      Log.add(`⚔ 斗兽场——<b>${b.name}</b> 苦战落败，垂头丧气地缩到你脚边。押注的 ${Utils.fmtNum(cost)} 灵石归了庄家。`, 'loss');
+    }
     Game.afterAction();
   },
   async free(uid) {

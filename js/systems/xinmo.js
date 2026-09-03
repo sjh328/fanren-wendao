@@ -48,6 +48,18 @@ const XinmoSys = {
       expGain: Math.round(30 * GameData.eco(rIdx)), stoneGain: 0, dropTier: 2, rareDrop: null, hp: 0,
       _storyBark: '心魔化身开口，用的却是你自己的声音：「你不敢看的那一面……就是我。」',
     };
+    // v20 心魔镜像：它抬手的，分明是你自己的成名绝技
+    const dmgGf = Object.entries(p.gongfa || {})
+      .map(([id]) => GameData.ITEMS[id])
+      .filter(d => d && d.skill && d.skill.kind === 'damage')
+      .sort((a, b) => b.skill.power - a.skill.power)[0];
+    if (dmgGf) {
+      enemy.skills.unshift({ name: '心魔·' + dmgGf.skill.name, w: 35, kind: 'bleed', pct: 3, rounds: 2 });
+      enemy._storyBark += '\n（它抬手的那一式，分明是你修的【' + dmgGf.skill.name + '】——）';
+    }
+    if ((p.benming && p.benming.lv >= 6) || (p.jade || 0) >= 6) {
+      enemy.skills.push({ name: '心魔·两世噬', w: 25, kind: 'drain', mult: 1.25, leech: 0.5 });
+    }
     Battle.start(null, { mapName: '识海 · 心魔劫', enemy, story: {
       onEnd: (win) => {
         const pp = Game.player;

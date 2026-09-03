@@ -140,6 +140,12 @@ const DungeonSys = {
         Bag.addItem('m_gupian', 1);
         extra = '另得上古法宝碎片 ×1。';
       }
+      // v20 天机果：深处偶得的破桎异果
+      if (D.depth >= 4 && Utils.chance(8)) {
+        Bag.addItem('fruit_tianji', 1);
+        parts.push('天机果 ×1');
+        extra += '蒲团之下竟还藏着一枚<b>天机果</b>！';
+      }
       Log.add(`你误入一处天然道场，残存的道韵仍自流转。${parts.join('、')}。${extra}`, 'gain');
       this.gain(D, `奇遇（第${D.depth + 1}层）`);
       result = { icon: '✨', title: '奇 遇 · 道场遗韵', cls: 'gain', lines: [`你误入一处天然<b>道场</b>，残存的道韵仍自流转。`, `获得 <b class="hl">${parts.join('、')}</b>。${extra}`] };

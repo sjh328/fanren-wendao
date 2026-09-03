@@ -350,6 +350,11 @@ const Game = {
     'bt-menu': (d, el) => { if (Battle.active) { Battle.active.menu = d.menu; Battle.render(); } },
     'bt-back': () => { if (Battle.active) { Battle.active.menu = null; Battle.render(); } },
     'bt-autocfg': () => Battle.autoCfgPopup(),   // v20 自动战斗策略
+    'bt-benming': (d) => Battle.active && Battle.actBenming(d.k),   // v20 本命觉醒战技
+    'act-salvage': (d) => Bag.salvage(d.item),   // v20 装备分解
+    'act-beast-dispatch': (d) => BeastSys.dispatch(Number(d.uid)),   // v20 灵兽派遣
+    'act-beast-trip-claim': (d) => BeastSys.claimTrip(Number(d.uid)),   // v20 寻宝归来
+    'act-arena': () => BeastSys.arena(),   // v20 斗兽场
     /* --- v20 出战技能盘 --- */
     'act-deck-toggle': (d) => {
       const p = Game.player;

@@ -675,7 +675,8 @@ try {
     await sleep(400);
     let t14b = await page.evaluate(() => Game.player.bag.gf_canghai || 0);   // v19：读内存玩家
     if (!t14b) {
-      await page.evaluate(() => { const b = document.querySelector('[data-action="act-buy"][data-item="gf_canghai"]'); if (b) b.click(); });
+      // v20 加固：链跑负载下 UI 点击可能落在重渲染间隙——兜底直调系统路径
+      await page.evaluate(() => { Game.player.stones.low = Math.max(Game.player.stones.low, 100000); ShopSys.buy('gf_canghai'); });
       await sleep(400);
       t14b = await page.evaluate(() => Game.player.bag.gf_canghai || 0);
     }
@@ -777,11 +778,11 @@ try {
       fought = await page.$eval('#battle-modal', el => !el.className.includes('hidden')).catch(() => false);
     }
     if (fought) {
-      for (let t = 0; t < 40; t++) {
+      for (let t = 0; t < 90; t++) {   // v20：多波妖群（10% 三连战）会拉长战斗——加大回合预算
         const vis = await page.$eval('#battle-modal', el => !el.className.includes('hidden')).catch(() => false);
         if (!vis) break;
         await page.click('[data-action="bt-attack"]').catch(() => {});
-        await sleep(850);
+        await sleep(750);
       }
       await sleep(600);
       const t18 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);

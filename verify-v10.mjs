@@ -242,6 +242,125 @@ try {
   });
   b6.used && b6.spent === 3 && b6.srcUlt ? pass('B6 必杀成长：真元扣减、熟练度入档、伤害构成计入') : fail('B6 必杀', JSON.stringify(b6));
 
+  /* ================= C 养成组（阶段二） ================= */
+  // C1 功法大成奥义：满层解锁被动并入 gongfaBonus
+  const c1 = await page.evaluate(() => {
+    const p = Game.player;
+    const def = GameData.ITEMS.gf_canghai;
+    const maxLv = GongfaSys.maxLevel(def);
+    p.gongfa = { gf_canghai: { level: maxLv, exp: 0 } };
+    const total = Stat.gongfaBonus(p).atkPct;
+    const expect = 4 + 2 * (maxLv - 1) + GameData.GF_MASTERY.gf_canghai.fx.atkPct;
+    p.gongfa = {};
+    return { total, expect, all30: Object.keys(GameData.ITEMS).filter(i => GameData.ITEMS[i].type === 'gongfa' && !GameData.GF_MASTERY[i]).length === 0 };
+  });
+  c1.total === c1.expect && c1.all30 ? pass('C1 功法大成奥义：满层被动生效，30 部全覆盖') : fail('C1 奥义', JSON.stringify(c1));
+
+  // C2 装备传承（随炉化）+ 分解回收
+  const c2 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.enhanced = {}; p.bag['m_xuantie'] = 20;
+    p.equipped.weapon = { id: 'w_tiejian', enhance: 8 };
+    delete p.bag['w_tiejian'];
+    p.bag['w_qinggang'] = 1;
+    const origPopup = UI.popup.bind(UI);
+    UI.popup = async (o) => (o.title === '装备对比') ? 'inherit' : origPopup(o);
+    await Bag.equip('w_qinggang');
+    UI.popup = origPopup;
+    const eq = p.equipped.weapon;
+    const ore = p.bag['m_xuantie'];
+    const oldGone = !p.bag['w_tiejian'];
+    UI.popup = async (o) => (o.title || '').includes('分解') ? true : origPopup(o);
+    p.bag['w_sanqing'] = 1;   // 传承后青钢剑已穿在身上——改分解包内另一件（grade2 → 返玄铁3）
+    await Bag.salvage('w_sanqing');
+    UI.popup = origPopup;
+    const out = { id: eq && eq.id, enh: eq && eq.enhance, ore, oldGone, salvaged: !p.bag['w_sanqing'], oreAfter: p.bag['m_xuantie'] };
+    delete p.equipped.weapon;
+    return out;
+  });
+  c2.id === 'w_qinggang' && c2.enh === 5 && c2.ore === 8 && c2.oldGone && c2.salvaged && c2.oreAfter === 11
+    ? pass('C2 传承换装（承5级/耗玄铁12/旧器随炉化）与分解回炉（返玄铁2）')
+    : fail('C2 传承分解', JSON.stringify(c2));
+
+  // C3 本命法宝觉醒战技
+  const c3 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.benming = { lv: 6 }; p.bag['z_benming'] = 1;
+    const en = buildMonster('m_yezhu');
+    en.hpMax = 999999; en.hp = 999999; en.atk = 1; en.crit = 0; en.fx = []; en.charging = false;
+    Battle.active = { enemy: en, ctx: {}, myFx: [], buffs: { defRounds: 0, dodgeRounds: 0 }, over: false, busy: false, enemyFxIds: [], stats: { out: 0, in: 0, maxCombo: 0, src: { attack: 0, skill: 0, ult: 0, beast: 0, dot: 0, thorns: 0, counter: 0 } }, floats: [], morale: 0, combo: 0, zhenyuan: 0, zmax: 6, bmUsed: {}, logs: [] };
+    Battle.speed = 3;
+    await Battle.actBenming('strike6');
+    const hit = Battle.active.stats.src.ult > 0;
+    const debuffed = StatusFx.pctOf(Battle.active.enemy.fx, 'defdown') > 0;
+    await Battle.actBenming('guard3');
+    const shield = StatusFx.pctOf(Battle.active.myFx, 'shield') >= 30;
+    await Battle.actBenming('strike9');
+    const blocked9 = Battle.active.bmUsed.strike9 !== true;
+    Battle.active = null; Battle.speed = 1;
+    delete p.bag['z_benming']; p.benming = { lv: 0 };
+    return { hit, debuffed, shield, blocked9 };
+  });
+  c3.hit && c3.debuffed && c3.shield && c3.blocked9
+    ? pass('C3 本命战技：锁魂一击（2.5×+破防）/ 护主金光 / 九阶技 correctly 封锁')
+    : fail('C3 本命战技', JSON.stringify(c3));
+
+  // C4 灵兽：十阶第二天生技 / 派遣寻宝 / 斗兽场
+  const c4 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.beasts = { active: null, active2: null, nextId: 1, list: [{ uid: 1, id: 'm_yezhu', name: '野猪', species: 'beast', power: 10, level: 9, exp: 9 * 400, skills: [{ name: '兽王撕咬', kind: 'bleed', pct: 3, rounds: 2 }], bond: 0 }] };
+    p.bag['m_neidan'] = 1;
+    BeastSys.feed(1);
+    const b = p.beasts.list[0];
+    const two = b.level === 10 && b.skills.length === 2;
+    p.day = 100;
+    const origPopup = UI.popup.bind(UI);
+    UI.popup = async (o) => (o.title || '').includes('派遣') ? 3 : origPopup(o);
+    await BeastSys.dispatch(1);
+    UI.popup = origPopup;
+    const tripping = !!(b.trip && b.trip.days === 3);
+    p.day = 103;
+    BeastSys.claimTrip(1);
+    const claimed = !b.trip && Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'material');
+    p.beasts.active = 1;
+    p.stones.low += 100000;
+    UI.popup = async (o) => (o.title || '').includes('斗兽') ? 0 : origPopup(o);
+    await BeastSys.arena();
+    UI.popup = origPopup;
+    const arenaOk = (p.counters.arenaWins || 0) >= 1 || Log.entries.join('|').includes('斗兽场');
+    p.beasts = { active: null, active2: null, nextId: 1, list: [] };
+    return { two, tripping, claimed, arenaOk };
+  });
+  c4.two && c4.tripping && c4.claimed && c4.arenaOk
+    ? pass('C4 灵兽纵深：十阶双技 / 派遣寻宝归来 / 斗兽场结算')
+    : fail('C4 灵兽', JSON.stringify(c4));
+
+  // C5 洞府新建筑 / 灵泉日产 / 藏宝阁加成 / 天机果破桎
+  const c5 = await page.evaluate(() => {
+    const p = Game.player;
+    p.cave = { lv: 1, builds: { beast: 0, train: 0, lib: 0, forge: 2, spring: 3, treasury: 3 }, plots: [] };
+    const treasuryOk = Stat.compute(p).stonePct >= 9;
+    let gained = 0;
+    const orig = Bag.addStones;
+    Bag.addStones = n => { gained += n; return orig.call(Bag, n); };
+    CaveSys.springDaily(p);
+    Bag.addStones = orig;
+    const springOk = gained > 0 && p.cave._springDay === Math.floor(p.day);
+    const buildsOk = CaveSys.BUILDS.length === 6;
+    for (const k of Object.keys(p.attrs)) p.attrs[k] = 10;
+    p.bag['fruit_tianji'] = 1;
+    Bag.use('fruit_tianji');
+    const fruitOk = Object.values(p.attrs).some(v => v === 11);
+    delete p.bag['fruit_tianji'];
+    p.attrs = { gen: 5, comp: 5, luck: 5, body: 5 };
+    p.poison = 0;
+    p.cave = null;
+    return { treasuryOk, springOk, buildsOk, fruitOk };
+  });
+  c5.treasuryOk && c5.springOk && c5.buildsOk && c5.fruitOk
+    ? pass('C5 养成纵深：六营造 / 灵泉日产 / 藏宝阁 +9% / 天机果破桎至11')
+    : fail('C5 建筑/天机果', JSON.stringify(c5));
+
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');
   console.log('\n========== verify-v10 汇总 ==========');

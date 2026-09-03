@@ -11,7 +11,12 @@ const CaveSys = {
     { id: 'beast', name: '灵兽窝', icon: '🐾', desc: '兽栏位 +2/阶，灵兽居所愈发宽裕。' },
     { id: 'train', name: '演武场', icon: '⚔', desc: '演武淬体：攻击、防御 +2%/阶。' },
     { id: 'lib',   name: '藏经室', icon: '📖', desc: '藏经参悟：功法参悟所得 +20%/阶。' },
+    /* ---- v20 营造扩容 ---- */
+    { id: 'forge',    name: '炼器室', icon: '⚒', desc: '炉火纯青：炼器成器率 +4%/阶。' },
+    { id: 'spring',   name: '灵泉',   icon: '⛲', desc: '每日涌出灵石：80 × 阶 × 境界系数，自动入账。' },
+    { id: 'treasury', name: '藏宝阁', icon: '💎', desc: '聚财有道：灵石获取 +3%/阶。' },
   ],
+  BUILD_KEYS: ['beast', 'train', 'lib', 'forge', 'spring', 'treasury'],
   buildLv(p, id) { return (p.cave && p.cave.builds && p.cave.builds[id]) || 0; },
   buildCost(p, id) {
     const lv = this.buildLv(p, id);
@@ -74,6 +79,16 @@ const CaveSys = {
     ev.fn();
     Log.add(`【洞府访客】${ev.text}`, 'info');
     Game.afterAction();
+  },
+  /** v20 灵泉：每日首次入洞府自动涌出灵石（日界防重） */
+  springDaily(p) {
+    if (!p.cave || !p.cave.builds || !p.cave.builds.spring) return;
+    const today = Math.floor(p.day || 0);
+    if (p.cave._springDay === today) return;
+    p.cave._springDay = today;
+    const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(4, p.realmIdx)));
+    Bag.addStones(gain);
+    Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。`, 'gain');
   },
   async water(idx) {
     const p = Game.player;

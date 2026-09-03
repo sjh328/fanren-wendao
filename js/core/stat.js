@@ -13,16 +13,24 @@ const Stat = {
         total[k] = (total[k] || 0) + base + per * (g.level - 1);
       }
     }
-    // v19 道韵协同：特定功法组合双双修至三层以上，共鸣生韵
-    for (const dy of (GameData.DAO_YUN || [])) {
+    // v19 道韵协同：特定功法组合双修至三层以上，共鸣生韵（v20 扩池合并消费）
+    for (const dy of (GameData.DAO_YUN || []).concat(GameData.DAO_YUN_EXTRA || [])) {
       if (!dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3)) continue;
       for (const [k, v] of Object.entries(dy.fx)) total[k] = (total[k] || 0) + v;
     }
+    // v20 功法大成奥义：修至满层解锁专属被动
+    for (const [id, g] of Object.entries(p.gongfa)) {
+      const def = GameData.ITEMS[id];
+      const mst = def && GameData.GF_MASTERY[id];
+      if (!mst || g.level < GongfaSys.maxLevel(def)) continue;
+      for (const [k, v] of Object.entries(mst.fx)) total[k] = (total[k] || 0) + v;
+    }
     return total;
   },
-  /** v19 已激活的道韵列表（功法页展示） */
+  /** v19 已激活的道韵列表（功法页展示；v20 扩池合并） */
   activeDaoYun(p) {
-    return (GameData.DAO_YUN || []).filter(dy => dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3));
+    return (GameData.DAO_YUN || []).concat(GameData.DAO_YUN_EXTRA || [])
+      .filter(dy => dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3));
   },
   /** 汇总已穿戴法宝的加成（v13：数值属性受强化等级 +10%/级 加成；套装加成并入） */
   equipBonus(p) {
@@ -115,7 +123,7 @@ const Stat = {
       dodge: Utils.clamp((gf.dodge || 0) + (eq.dodge || 0) + (sb.dodge || 0) + (beastPass.dodge || 0) + (dx.dodge || 0) + (pl.dodge || 0) + (p.dao === 'array' && DaoSys.tierLevel(p) >= 4 ? 8 : 0), 0, 35),   // v10 阵道六境·迷踪境 · v13 宗门/灵兽
       block: Utils.clamp(8 + (gf.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0), 0, 60),   // v10 般若六境·铁骨境
       cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0),
-      stonePct: (sb.stonePct || 0) + (eq.stonePct || 0),
+      stonePct: (sb.stonePct || 0) + (eq.stonePct || 0) + (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3),   // v20 藏宝阁
       luck: A.luck + (eq.luck || 0),
       pillPct: (sb.pillPct || 0) + (pl.pillPct || 0),
       poisonReduce: sb.poisonReduce || 0,

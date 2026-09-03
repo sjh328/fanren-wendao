@@ -12,6 +12,7 @@ const AuctionSys = {
     { item: 'w_sanqing', base: 12000 }, { item: 'pill_zaohua', base: 15000 },
     { item: 'gf_dayan', base: 12000 }, { item: 'm_gupian', base: 10000 },
     { item: 'gf_wangchen', base: 15000 }, { item: 'gf_feixian', base: 15000 },
+    { item: 'fruit_tianji', base: 22000 },   // v20 天机果（先天破桎）
   ],
   PERIOD: 60,
   state(p) {

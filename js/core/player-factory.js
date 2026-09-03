@@ -202,6 +202,23 @@ const PlayerFactory = {
           }
         }
       },
+      // v20: 养成纵深——洞府新建筑补齐 / 出战技能盘 / 必杀熟练度 / 灵兽派遣与斗兽 / 先天上限 12
+      (out) => {
+        if (out.cave && typeof out.cave === 'object') {
+          const b = out.cave.builds && typeof out.cave.builds === 'object' ? out.cave.builds : {};
+          const six = {};
+          for (const key of CaveSys.BUILD_KEYS) six[key] = Utils.clamp(Math.floor(Number(b[key])) || 0, 0, 3);
+          out.cave.builds = six;
+        }
+        if (!Array.isArray(out.battleDeck)) out.battleDeck = [];
+        if (!out.ultLv || typeof out.ultLv !== 'object') out.ultLv = {};
+        for (const bst of (out.beasts && out.beasts.list) || []) {
+          if (!bst || typeof bst !== 'object') continue;
+          if (!Array.isArray(bst.skills)) bst.skills = [];
+          if (bst.trip && !isFinite(Number(bst.trip.until))) bst.trip = null;
+        }
+        for (const k of Object.keys(out.attrs)) out.attrs[k] = Utils.clamp(out.attrs[k], 0, 12);
+      },
     ];
     // 基础：fresh 模板 + 展开合并
     const fresh = this.create(p.name || '无名散修', p.attrs || { gen: 5, comp: 5, luck: 5, body: 5 });
@@ -209,7 +226,7 @@ const PlayerFactory = {
     out.attrs = { ...fresh.attrs, ...(p.attrs || {}) };
     for (const k of Object.keys(out.attrs)) {
       const v = Math.round(Number(out.attrs[k]));
-      out.attrs[k] = isFinite(v) ? Utils.clamp(v, 0, 10) : fresh.attrs[k];
+      out.attrs[k] = isFinite(v) ? Utils.clamp(v, 0, 12) : fresh.attrs[k];   // v20：天机果可破至十二点
     }
     out.stones = { ...fresh.stones, ...(p.stones || {}) };
     for (const k of Object.keys(out.stones)) {

@@ -113,16 +113,36 @@ const Bag = {
     if (curId) {
       const curDef = GameData.ITEMS[curId];
       const fmt = b => Object.entries(b || {}).map(([k, v]) => `${({ atk: '攻击', def: '防御', hp: '气血', mp: '灵力', spd: '身法', atkPct: '攻击%', defPct: '防御%', hpPct: '气血%', mpPct: '灵力%', spdPct: '身法%', crit: '暴击', dodge: '闪避', block: '格挡', cult: '修炼%' }[k] || k)  }+${v}`).join('，') || '无';
-      const enh = cur && typeof cur === 'object' ? (cur.enhance || 0) : ((p.enhanced || {})[curId] || 0);
+      const oldEnh = cur && typeof cur === 'object' ? (cur.enhance || 0) : ((p.enhanced || {})[curId] || 0);
+      const inhOre = Math.ceil(oldEnh * 1.5);
+      const canInh = oldEnh > 0 && Bag.count('m_xuantie') >= inhOre;
       const ok = await UI.popup({
         title: '装备对比',
-        html: `<div class="stat-line"><span>当前</span><b>${curDef.name}${enh ? ' +' + enh : ''}</b></div>
+        html: `<div class="stat-line"><span>当前</span><b>${curDef.name}${oldEnh ? ' +' + oldEnh : ''}</b></div>
           <div class="tip-line">· ${fmt(curDef.bonus)}</div>
           <div class="stat-line" style="margin-top:4px"><span>换上</span><b>${def.name}</b></div>
-          <div class="tip-line">· ${fmt(def.bonus)}</div>`,
-        options: [{ text: '换 上', value: true, primary: true }, { text: '作罢', value: false }],
+          <div class="tip-line">· ${fmt(def.bonus)}</div>
+          ${oldEnh > 0 ? `<div class="tip-line" style="margin-top:4px">· <b>传承</b>：旧装备随炉而化，新装备承其 ${Math.ceil(oldEnh * 0.6)} 级强化（需玄铁矿 ×${inhOre}）</div>` : ''}`,
+        options: [
+          { text: '换 上', value: true, primary: true },
+          ...(oldEnh > 0 ? [{ text: `传承换上${canInh ? '' : '（玄铁不足）'}`, value: 'inherit' }] : []),
+          { text: '作罢', value: false },
+        ],
       });
       if (!ok) return;
+      if (ok === 'inherit') {
+        if (!canInh) { UI.toast('玄铁矿不足，无法传承'); return; }
+        this.removeItem(itemId, 1);
+        Bag.removeItem('m_xuantie', inhOre);
+        const carried = Math.min(ForgeSys.MAX_LV, Math.ceil(oldEnh * 0.6));
+        // 旧装备随炉而化：不回包，其强化一并转入新装备（不再留档）
+        if (p.enhanced && p.enhanced[curId]) delete p.enhanced[curId];
+        p.equipped[slot] = { id: itemId, enhance: carried };
+        Log.add(`炉火重燃——你将【${curDef.name}】化入【<b>${def.name}</b>】的器胚，强化承其 <b>${carried}</b> 级。`, 'gain');
+        Ambience.sfx('forge');
+        Game.afterAction();
+        return;
+      }
     }
     this.removeItem(itemId, 1);
     // v18：装备槽存 {id, enhance} 对象，强化等级随实例走
@@ -154,6 +174,27 @@ const Bag = {
     Bag.addItem(eq.id, 1);
     Log.add(`你卸下了 ${GameData.ITEMS[eq.id].name}。`, 'info');
     p.equipped[slot] = null;
+    Game.afterAction();
+  },
+  /** v20 装备分解：按品阶与强化回炉，返还玄铁矿与灵石 */
+  async salvage(itemId) {
+    const p = Game.player;
+    const def = GameData.ITEMS[itemId];
+    if (!def || def.type !== 'artifact' || !this.count(itemId)) return;
+    const enh = (p.enhanced || {})[itemId] || 0;
+    const oreBack = (def.grade || 0) + 1 + enh;
+    const stones = Math.max(10, Math.round((def.price || 500) * 0.15 * (1 + enh * 0.2)));
+    const ok = await UI.popup({
+      title: `分解 · ${def.name}`,
+      html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br><span class="neg">分解之物与其祭炼心得将一并化去，无法找回。</span>`,
+      options: [{ text: '分 解', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    this.removeItem(itemId, 1);
+    if (enh) delete p.enhanced[itemId];
+    Bag.addItem('m_xuantie', oreBack);
+    Bag.addStones(stones);
+    Log.add(`你将【${def.name}】投入熔炉——得玄铁矿 ×${oreBack}、灵石 ${Utils.fmtNum(stones)}。`, 'gain');
     Game.afterAction();
   },
   async drop(itemId) {
@@ -215,6 +256,19 @@ const Pill = {
         const gain = Math.round(120 * GameData.eco(p.realmIdx));
         Cultivate.addExp(p, gain, inBattle);
         effectText.push(`洗筋伐髓，修为 +${Utils.fmtNum(gain)}`);
+      }
+    }
+    // v20 天机果：突破先天十点桎梏（至多十二点）
+    if (effect.stat12) {
+      const keys = Object.keys(p.attrs).filter(k => p.attrs[k] < 12);
+      if (keys.length) {
+        const k = Utils.pick(keys);
+        p.attrs[k]++;
+        effectText.push(`${GameData.ATTR_NAMES[k]} +1（天机破桎）`);
+      } else {
+        const gain = Math.round(400 * GameData.eco(p.realmIdx));
+        Cultivate.addExp(p, gain, inBattle);
+        effectText.push(`天机已圆，化为修为 +${Utils.fmtNum(gain)}`);
       }
     }
     // 丹毒结算

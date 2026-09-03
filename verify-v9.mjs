@@ -220,7 +220,7 @@ try {
     const skill = BeastSys.SPECIES_SKILLS['beast'];
     return { slots, passiveAtk: passive.atkPct || 0, half: passive.atkPct < Math.round(5 * 0.6 + 1 * 0.8) + 1, skill: !!skill, builds: CaveSys.BUILDS.length };
   });
-  s10.slots >= 8 && s10.builds === 3 ? pass(`S10 洞府营造三建筑（灵兽窝使兽栏至 ${s10.slots} 位）`) : fail('S10 营造', JSON.stringify(s10));
+  s10.slots >= 8 && s10.builds === 6 ? pass(`S10 洞府营造六建筑（v20 扩容；灵兽窝使兽栏至 ${s10.slots} 位）`) : fail('S10 营造', JSON.stringify(s10));
   s10.passiveAtk > 0 && s10.half && s10.skill ? pass('S10 副战灵兽五成被动 + 物种天生技表') : fail('S10 灵兽', JSON.stringify(s10));
 
   /* ================= S11 套装与出身/传承树 ================= */

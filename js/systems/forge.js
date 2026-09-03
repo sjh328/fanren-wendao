@@ -98,8 +98,10 @@ const ForgeSys = {
     p.counters.forges = (p.counters.forges || 0) + 1;
     Time.add(5);
     if (p.dead) return;
+    // v20 炼器室：成器率 +4%/阶（上限 95%）
+    const rate = Math.min(95, r.rate + ((p.cave && p.cave.builds && p.cave.builds.forge) || 0) * 4);
     const out = GameData.ITEMS[r.out];
-    if (Utils.chance(r.rate)) {
+    if (Utils.chance(rate)) {
       Bag.addItem(r.out, 1);
       Ambience.sfx('forge');
       Log.add(`锤起锤落，火星四溅——<b class="grade-${out.grade}">${out.name}</b> 铸成出世！`, 'gain');

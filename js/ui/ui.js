@@ -390,6 +390,7 @@ const UI = {
     if (!p.cave) p.cave = CaveSys.freshCave();
     CaveSys.visitorEvent(p);   // v20 接线：每日访客事件（15% 几率，v18 起闲置）
     CaveSys.checkPest(p);      // v20 接线：每日虫害检查（v18 起闲置）
+    CaveSys.springDaily(p);    // v20：灵泉日产灵石
     const lv = p.cave.lv;
     const maxed = lv >= CaveSys.MAX_LV;
     const c = CaveSys.upCost(p);
@@ -409,24 +410,32 @@ const UI = {
     // 兽栏
     const beasts = p.beasts.list || [];
     const passiveName = BeastSys.NAME;
+    const today = Math.floor(p.day || 0);
     const beastRows = beasts.map(b => {
       const isOn = p.beasts.active === b.uid;
       const isOn2 = p.beasts.active2 === b.uid;
       const pk = BeastSys.PASSIVE[b.species] || 'atkPct';
       const pv = Math.round(b.power * 0.6 + b.level * 0.8);
       const needExp = b.level * 400;
-      const bTag = isOn ? '<span class="tag safe">出战中</span>' : isOn2 ? '<span class="tag warn">护持中</span>' : '<span class="tag">栏中</span>';
+      const bTag = isOn ? '<span class="tag safe">出战中</span>' : isOn2 ? '<span class="tag warn">护持中</span>' : b.trip ? '<span class="tag magic">寻宝途中</span>' : '<span class="tag">栏中</span>';
+      const tripTxt = b.trip
+        ? (today >= b.trip.until
+          ? `<div class="gf-actions"><button class="btn btn-sm btn-primary" data-action="act-beast-trip-claim" data-uid="${b.uid}">归来（已带回灵材）</button></div>`
+          : ` ｜ <span class="tag">寻宝归期：${b.trip.until - today} 日后</span>`)
+        : '';
+      const skillsTxt = (b.skills && b.skills.length) ? b.skills.map(s => s.name).join('、') : '五阶习得天生技（十阶开第二栏）';
       return `
       <div class="shop-row">
         <div class="gf-info">
           <div class="gf-name"><b class="${isOn || isOn2 ? 'hl' : ''}">${b.evolved ? '✦ ' : ''}${b.name}</b> ${bTag} <span class="tag">${b.level} 阶</span>${b.evolved ? '<span class="tag warn">已蜕变</span>' : ''}${b.bond ? `<span class="tag">亲昵 ${b.bond}/100</span>` : ''}</div>
           <div class="gf-desc">${b.species === 'beast' ? '凶兽' : b.species === 'snake' ? '灵蛇' : b.species === 'swarm' ? '虫群' : b.species === 'plant' ? '草木精' : '灵体'} · 协战与被动随阶成长<br>
-          被动：${passiveName[pk]} +${pv}${isOn2 ? '（护持中以五成效力生效）' : ''} ｜ 经验 ${Math.floor(b.exp)}/${needExp}${b.skills.length ? ` ｜ 技能：${b.skills[0].name}` : ` ｜ 五阶习得天生技`}</div>
+          被动：${passiveName[pk]} +${pv}${isOn2 ? '（护持中以五成效力生效）' : ''} ｜ 经验 ${Math.floor(b.exp)}/${needExp} ｜ 技能：${skillsTxt}${tripTxt}</div>
         </div>
         <div class="gf-actions">
           <button class="btn btn-sm" data-action="act-beast-active" data-uid="${b.uid}">${isOn ? '歇 息' : '出 战'}</button>
           <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
           <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
+          ${!b.trip ? `<button class="btn btn-sm" data-action="act-beast-dispatch" data-uid="${b.uid}" title="外出寻宝，数日后带回灵材">派 遣</button>` : ''}
           ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
           <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${Bag.count('m_neidan') ? '' : 'disabled'}>喂内丹（${Bag.count('m_neidan')}）</button>
           <button class="btn btn-sm btn-danger" data-action="act-beast-free" data-uid="${b.uid}">放归</button>
@@ -455,8 +464,9 @@ const UI = {
     </div>`;
     const beastCard = `
     <div class="card">
-      <div class="card-title">✦ 兽栏 <span class="tag">${beasts.length}/${BeastSys.maxSlots(p)} 位</span></div>
-      <div class="card-desc">战斗中将可驯妖兽打至<b>两成血以下</b>，可尝试驯服。出战灵兽每回合四成几率协助攻击，并给主人一项被动加成。喂食【妖兽内丹】可升阶。</div>
+      <div class="card-title">✦ 兽栏 <span class="tag">${beasts.length}/${BeastSys.maxSlots(p)} 位</span>
+        <button class="btn btn-sm" data-action="act-arena" style="margin-left:auto" title="押注观战，胜得 1.8 倍彩头">⚔ 斗兽场</button></div>
+      <div class="card-desc">战斗中将可驯妖兽打至<b>两成血以下</b>，可尝试驯服。出战灵兽每回合四成几率协助攻击，并给主人一项被动加成。喂食【妖兽内丹】可升阶；派遣外出可寻回灵材。</div>
       ${beastRows || '<div class="tip-line">兽栏空空——去荒野驯一头灵兽回来罢。</div>'}
     </div>`;
     return caveCard + plotsCard + buildsCard + beastCard;
@@ -1022,7 +1032,13 @@ const UI = {
         <div class="gf-info">
           <div class="gf-name">${this.gradeSpan(def.name, def.grade)}（${{ attack: '攻', defense: '防', support: '辅' }[def.gtype]}）
             <span class="gf-lv">第${g.level}层${maxed ? ' · 大成' : ` · 感悟${Math.floor(g.exp)}/${need}`}</span></div>
-          <div class="gf-desc">${def.desc}${bonusText ? `<br>当前加成：${bonusText}` : ''}${def.skill ? `<br>神通：<span class="grade-2">${def.skill.name}</span> —— ${def.skill.desc}` : ''}</div>
+          <div class="gf-desc">${def.desc}${bonusText ? `<br>当前加成：${bonusText}` : ''}${def.skill ? `<br>神通：<span class="grade-2">${def.skill.name}</span> —— ${def.skill.desc}` : ''}${(() => {
+            const mst = GameData.GF_MASTERY[id];
+            if (!mst) return '';
+            return maxed
+              ? `<br><b class="hl">大成奥义【${mst.name}】</b>：${mst.desc}`
+              : `<br><span style="color:var(--text-faint)">大成奥义（修至大成解锁）：${mst.name} —— ${mst.desc}</span>`;
+          })()}</div>
         </div>
         <div class="gf-actions"><button class="btn btn-sm" data-action="act-study" data-gf="${id}" ${maxed ? 'disabled' : ''}>${maxed ? '已大成' : '参悟（5日）'}</button></div>
       </div>`;
@@ -1092,7 +1108,7 @@ const UI = {
       if (def.type === 'gongfa') btns = `<button class="btn btn-sm" data-action="act-learn" data-item="${id}">学习</button>`;
       if (def.type === 'artifact') {
         const isOn = Object.values(p.equipped).some(e => e && Utils.eqId(e) === id);
-        btns = isOn ? '' : `<button class="btn btn-sm" data-action="act-equip" data-item="${id}">装备</button>`;
+        btns = isOn ? '' : `<button class="btn btn-sm" data-action="act-equip" data-item="${id}">装备</button><button class="btn btn-sm" data-action="act-salvage" data-item="${id}" title="回炉分解，返玄铁矿与灵石">分解</button>`;
       }
       btns += `<button class="btn btn-sm btn-danger" data-action="act-drop" data-item="${id}">丢弃</button>`;
       return `
