@@ -128,6 +128,120 @@ try {
     ? pass('F6 文案与台词修瑕：24 人矩阵齐、论道句无重复填充、支线 12 则')
     : fail('F6 台词/文案', JSON.stringify(f6));
 
+  /* ================= B 战斗组（阶段一） ================= */
+  // B1 意图预演：决策树产出合法意图；蓄力后必承诺杀招
+  const b1 = await page.evaluate(() => {
+    const p = Game.player;
+    p.dao = null; p.realmIdx = 2; p.layer = 0;
+    p.hp = 99999; p.mp = 999;
+    const en = buildMonster('m_tiexia');
+    en.hp = en.hpMax; en.fx = []; en.charging = false;
+    Battle.active = { enemy: en, ctx: {}, myFx: [], buffs: { defRounds: 0, dodgeRounds: 0 }, over: false, busy: false, enemyFxIds: [] };
+    const kinds = new Set();
+    for (let i = 0; i < 40; i++) {
+      const a = Battle.enemyDecide();
+      if (!a || !['strike', 'skill', 'charge', 'finisher'].includes(a.kind)) return { ok: false };
+      kinds.add(a.kind);
+    }
+    en.charging = true;
+    const f = Battle.enemyDecide();
+    en.charging = false;
+    Battle.active = null;
+    return { ok: kinds.size >= 1, finisher: f.kind === 'finisher' };
+  });
+  b1.ok && b1.finisher ? pass('B1 意图预演：决策树产出合法意图，蓄力承诺杀招') : fail('B1 意图', JSON.stringify(b1));
+
+  // B2 破招：蓄力中的敌人被会心普攻打断
+  const b2 = await page.evaluate(async () => {
+    const p = Game.player;
+    const oldLuck = p.attrs.luck;
+    p.attrs.luck = 10;   // 暴击 = 5 + 福缘×0.6 = 11 → 与强制 chance 阈值咬合
+    const origChance = Utils.chance;
+    Utils.chance = v => v >= 11;   // 强制会心、屏蔽闪避/反击等低概率分支
+    const en = buildMonster('m_yezhu');
+    en.hpMax = 999999; en.hp = 999999; en.atk = 1; en.crit = 0; en.fx = []; en.charging = true;
+    Battle.active = { enemy: en, ctx: {}, myFx: [], buffs: { defRounds: 0, dodgeRounds: 0 }, over: false, busy: false, enemyFxIds: [], stats: { out: 0, in: 0, maxCombo: 0, src: { attack: 0, skill: 0, ult: 0, beast: 0, dot: 0, thorns: 0, counter: 0 } }, floats: [], morale: 0, combo: 0, zhenyuan: 0, zmax: 6, logs: [] };
+    Battle.speed = 3;
+    await Battle.act('attack');
+    const brk = !en.charging && Battle.active && Battle.active.logs.some(l => String(l.html).includes('破招'));
+    Utils.chance = origChance;
+    p.attrs.luck = oldLuck;
+    Battle.active = null; Battle.speed = 1;
+    return { brk };
+  });
+  b2.brk ? pass('B2 破招：会心打断蓄力杀招并追加伤害') : fail('B2 破招', JSON.stringify(b2));
+
+  // B3 习性模板：buildMonster 附带合法模板字段
+  const b3 = await page.evaluate(() => {
+    let withTpl = 0, none = 0;
+    for (let i = 0; i < 200; i++) {
+      const m = buildMonster('m_yezhu');
+      if (m.tpl) {
+        if (!GameData.MONSTER_TEMPLATES.find(t => t.id === m.tpl) || !m.tplName) return { ok: false };
+        withTpl++;
+      } else none++;
+    }
+    return { ok: true, withTpl, none };
+  });
+  b3.ok && b3.withTpl > 30 && b3.none > 30 ? pass('B3 习性模板：个体差异生效（模板/普通两态分布）') : fail('B3 模板', JSON.stringify(b3));
+
+  // B4 精英词缀扩池：互斥表生效，随机 1~2 条
+  const b4 = await page.evaluate(() => {
+    let bad = 0, rolled = 0;
+    for (let i = 0; i < 120; i++) {
+      const en = buildMonster('m_toumu'); en.hp = en.hpMax;
+      const B2 = { enemy: en, enemyFxIds: [] };
+      Battle.rollEliteFx(B2);
+      const ids = B2.enemyFxIds;
+      if (ids.length) rolled++;
+      for (const [x, y] of GameData.ELITE_AFFIX_MUTEX) if (ids.includes(x) && ids.includes(y)) bad++;
+      if (ids.length > 2) bad++;
+    }
+    return { bad, rolled };
+  });
+  b4.bad === 0 && b4.rolled >= 110 ? pass('B4 精英词缀扩池：12 词缀、互斥对永不同现') : fail('B4 词缀', JSON.stringify(b4));
+
+  // B5 多波遭遇：击破一波立即接战下一波，终波方才收仗
+  const b5 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.hp = 99999; p.mp = 9999;
+    const mkB = (idx) => {
+      const en = buildMonster(['m_yezhu', 'm_dushe', 'm_shanlang'][idx]);
+      en.hpMax = 1; en.hp = 1; en.atk = 0; en.crit = 0; en.fx = []; en.charging = false;
+      Battle.active = { enemy: en, ctx: { waveIds: ['m_yezhu', 'm_dushe', 'm_shanlang'] }, myFx: [], buffs: { defRounds: 0, dodgeRounds: 0 }, over: false, busy: true, enemyFxIds: [], stats: { out: 0, in: 0, maxCombo: 0, src: { attack: 0, skill: 0, ult: 0, beast: 0, dot: 0, thorns: 0, counter: 0 } }, floats: [], morale: 0, combo: 0, zhenyuan: 0, zmax: 6, waveIds: ['m_yezhu', 'm_dushe', 'm_shanlang'], waveIdx: idx, logs: [] };
+    };
+    Battle.speed = 3;
+    mkB(0);
+    await Battle.victory();
+    const mid = Battle.active ? { idx: Battle.active.waveIdx, over: Battle.active.over, second: Battle.active.enemy.id } : null;
+    if (mid) { Battle.active.enemy.hp = 1; await Battle.victory(); }
+    const mid2 = Battle.active ? { idx: Battle.active.waveIdx, enemy: Battle.active.enemy.id } : null;
+    if (Battle.active) { Battle.active.enemy.hp = 1; await Battle.victory(); }
+    const done = Battle.active === null;
+    Battle.speed = 1; Battle.active = null;
+    return { mid, mid2, done };
+  });
+  b5.mid && b5.mid.over === false && b5.mid.idx === 1 && b5.mid2 && b5.mid2.idx === 2 && b5.done
+    ? pass('B5 多波遭遇：波间接战不脱战，终波全额结算')
+    : fail('B5 多波', JSON.stringify(b5));
+
+  // B6 必杀盘：真元扣减 + 熟练度入档
+  const b6 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.dao = 'sword'; p.ultLv = {};
+    const en = buildMonster('m_yezhu');
+    en.hpMax = 999999; en.hp = 999999; en.atk = 1; en.crit = 0; en.fx = []; en.charging = false;
+    Battle.active = { enemy: en, ctx: {}, myFx: [], buffs: { defRounds: 0, dodgeRounds: 0 }, over: false, busy: false, enemyFxIds: [], stats: { out: 0, in: 0, maxCombo: 0, src: { attack: 0, skill: 0, ult: 0, beast: 0, dot: 0, thorns: 0, counter: 0 } }, floats: [], morale: 0, combo: 0, zhenyuan: 6, zmax: 8, logs: [] };
+    Battle.speed = 3;
+    await Battle.actUlt('us1');
+    const used = p.ultLv.us1 === 1;
+    const spent = Battle.active ? Battle.active.zhenyuan : -1;
+    const srcUlt = Battle.active && Battle.active.stats.src.ult > 0;
+    Battle.active = null; Battle.speed = 1; p.dao = null;
+    return { used, spent, srcUlt };
+  });
+  b6.used && b6.spent === 3 && b6.srcUlt ? pass('B6 必杀成长：真元扣减、熟练度入档、伤害构成计入') : fail('B6 必杀', JSON.stringify(b6));
+
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');
   console.log('\n========== verify-v10 汇总 ==========');

@@ -37,6 +37,14 @@ const Explore = {
           bctx.worldMul = 1.3; bctx.dropMul = 1.4;
           Log.add('魔气森然——此间妖魔已被魔域之气狂化！', 'warn');
         }
+        // v20 多波妖群（一成几率）与天时上下文（夜战/雨雾，阶段三继续扩展）
+        if (Utils.chance(10)) {
+          const waveIds = [monsterId];
+          const n = Utils.rand(2, 3);
+          for (let w = 1; w < n; w++) waveIds.push(Utils.pickWeighted(map.pool));
+          bctx.waveIds = waveIds;
+        }
+        bctx.wx = Art.weatherOf(p, map.id);
         Battle.start(monsterId, bctx);
         return; // 战斗结束后自行结算
       }

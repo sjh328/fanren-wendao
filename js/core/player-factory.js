@@ -60,6 +60,8 @@ const PlayerFactory = {
       reputation: 0, // v18 江湖声望（RepSys 六档；v20 显式入模板，老档经 fresh 合并自动补齐）
       tameSkill: 0, // v13 驯熟练度（0-100，驯服成功率 +1%/10点；v20 显式入模板）
       xinmo: 0,     // v19 心魔值（v20 显式入模板，杜绝 undefined 参与钳制前的运算）
+      battleDeck: [], // v20 出战技能盘（最多四招；空盘=全部法诀可用）
+      ultLv: {},    // v20 必杀熟练度 { 式id: 使用次数 }，每 8 次升一重（至三重）
     };
     const st = Stat.compute(p);
     p.hp = st.maxHp; p.mp = st.maxMp;

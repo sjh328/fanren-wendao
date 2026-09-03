@@ -349,6 +349,17 @@ const Game = {
     'bt-flee': () => Battle.active && Battle.act('flee'),
     'bt-menu': (d, el) => { if (Battle.active) { Battle.active.menu = d.menu; Battle.render(); } },
     'bt-back': () => { if (Battle.active) { Battle.active.menu = null; Battle.render(); } },
+    'bt-autocfg': () => Battle.autoCfgPopup(),   // v20 自动战斗策略
+    /* --- v20 出战技能盘 --- */
+    'act-deck-toggle': (d) => {
+      const p = Game.player;
+      if (!p.battleDeck) p.battleDeck = [];
+      const i = p.battleDeck.indexOf(d.gf);
+      if (i >= 0) { p.battleDeck.splice(i, 1); UI.toast('已移出战盘'); }
+      else if (p.battleDeck.length >= 4) { UI.toast('战盘已满四招——先移出再入', true); return; }
+      else { p.battleDeck.push(d.gf); UI.toast('已入出战战盘'); }
+      Game.afterAction();
+    },
     /* --- v13 战斗：自动 / 速度 / 驯服 --- */
     'bt-auto': () => {
       const B = Battle.active;

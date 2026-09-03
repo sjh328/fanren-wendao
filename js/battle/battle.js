@@ -84,21 +84,19 @@ const Battle = {
     // v19 真元与战斗统计、精英词缀掷取
     const B = this.active;
     B.zhenyuan = 0;
-    B.stats = { out: 0, in: 0, maxCombo: 0 };
-    if (B.enemy && B.enemy.elite) {
-      const pool = GameData.ELITE_AFFIXES.slice();
-      const n = Utils.chance(30) ? 2 : 1;
-      B.enemyFxIds = [];
-      for (let i = 0; i < n && pool.length; i++) {
-        const a = pool.splice(Utils.rand(0, pool.length - 1), 1)[0];
-        B.enemyFxIds.push(a.id);
-        if (a.id === 'e_swift') B.enemy._fxSwift = true;
-        if (a.id === 'e_wall') B.enemy._fxWall = true;
-        if (a.id === 'e_reborn') B.enemy._rebornUsed = false;
-        if (a.id === 'e_rage2') B.enemy._canRage2 = true;
-      }
-      if (B.enemyFxIds.length) this.log(`【${B.enemy.name}】词缀：${B.enemyFxIds.map(fid => { const d = GameData.ELITE_AFFIXES.find(x => x.id === fid); return d ? `◆${d.name}` : ''; }).join('')}——点其名旁 🔍 可查情报。`, 'log-warn');
+    B.zmax = 6 + (DaoSys.tierLevel(p) >= 3 ? 2 : 0);   // v20 道境三重以上真元上限扩至 8
+    B.stats = { out: 0, in: 0, maxCombo: 0, src: { attack: 0, skill: 0, ult: 0, beast: 0, dot: 0, thorns: 0, counter: 0 } };
+    // v20 多波遭遇：探索妖群战按 waveIds 依次接战
+    B.waveIds = ctx.waveIds || null;
+    B.waveIdx = 0;
+    if (B.waveIds && B.waveIds.length > 1) this.log(`妖群环伺——预计将<b>接连遭遇 ${B.waveIds.length} 波</b>！且战且退，或一鼓作气。`, 'log-warn');
+    if (B.enemy && B.enemy.elite) this.rollEliteFx(B);
+    // v20 天气联动钩子（阶段三扩展）：夜战敌方攻势更盛
+    if (ctx.wx && ctx.wx.night) {
+      B.enemy.atk = Math.round(B.enemy.atk * 1.1);
+      this.log('【夜战】月黑风高，妖物借着夜色愈发凶悍——敌方攻击 +10%。', 'log-warn');
     }
+    if (!ctx.firstStrike && !ctx.ambush) this.planIntent();   // v20 意图预演：先手局由敌方先动再规划
     // v19 词缀·护盾：战斗开场金光护体
     const startFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(Game.player) : {};
     if (startFx.shield > 0) {
@@ -259,9 +257,10 @@ const Battle = {
     const skillTxt = (e.skills || []).map(sk => `· <b>${sk.name}</b>（${StatusFx.DEFS[sk.kind] ? StatusFx.DEFS[sk.kind].name : sk.kind}）`).join('<br>') || '· 普攻与重击';
     const affTxt = (B.enemyFxIds || []).map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `◆<b>${d.name}</b>：${d.desc}` : ''; }).filter(Boolean).join('<br>') || '无';
     const drops = e.dropTier ? `材料品阶：${['', '凡', '灵', '玄', '地'][e.dropTier] || e.dropTier}级${e.rareDrop ? `；稀有掉落：<b>${(GameData.ITEMS[e.rareDrop] || {}).name || '?'}</b>` : ''}` : '来历不明之物';
+    const tpl = e.tpl ? (GameData.MONSTER_TEMPLATES.find(t => t.id === e.tpl) || {}) : null;
     UI.popup({
       title: `情报 · ${e.name}`,
-      html: `<div class="tip-line">${e.realmLabel}${e.elite ? ' · 精英' : ''} · 战力 ${e.power}</div>
+      html: `<div class="tip-line">${e.realmLabel}${e.elite ? ' · 精英' : ''}${tpl ? ` · 习性【<b>${tpl.name}</b>】${tpl.desc}` : ''} · 战力 ${e.power}</div>
         <div class="stat-line"><span>种族克制</span><b>${relTxt}</b></div>
         <div class="stat-line"><span>攻/防/速</span><b>${this.enAtk(e)} / ${this.enDef(e)} / ${this.enSpd(e)}</b></div>
         <div class="tip-line" style="margin-top:4px">技能池：<br>${skillTxt}</div>
@@ -269,6 +268,91 @@ const Battle = {
         <div class="tip-line" style="margin-top:4px">${drops}</div>`,
       options: [{ text: '收 起', value: true, primary: true }],
     });
+  },
+
+  /** v20 精英词缀掷取（1~2 条 + 互斥表过滤；守财实时加成攻防血） */
+  rollEliteFx(B) {
+    const e = B.enemy;
+    for (let tries = 0; tries < 40 && (!B.enemyFxIds || !B.enemyFxIds.length); tries++) {
+      const pool = GameData.ELITE_AFFIXES.slice();
+      const n = Utils.chance(30) ? 2 : 1;
+      B.enemyFxIds = [];
+      for (let i = 0; i < n && pool.length; i++) {
+        const a = pool.splice(Utils.rand(0, pool.length - 1), 1)[0];
+        B.enemyFxIds.push(a.id);
+      }
+      // 互斥过滤：任一对同时出现则重掷
+      const pairs = GameData.ELITE_AFFIX_MUTEX || [];
+      if (B.enemyFxIds.length === 2 && pairs.some(([x, y]) => B.enemyFxIds.includes(x) && B.enemyFxIds.includes(y))) B.enemyFxIds = [];
+    }
+    if (!B.enemyFxIds || !B.enemyFxIds.length) B.enemyFxIds = [GameData.ELITE_AFFIXES[0].id];
+    for (const fid of B.enemyFxIds) {
+      if (fid === 'e_swift') e._fxSwift = true;
+      if (fid === 'e_wall') e._fxWall = true;
+      if (fid === 'e_reborn') e._rebornUsed = false;
+      if (fid === 'e_rage2') e._canRage2 = true;
+      if (fid === 'e_mirror') e._mirror = 0;
+      if (fid === 'e_gold') {
+        e._fxGold = true;
+        e.hpMax = Math.round(e.hpMax * 1.2); e.atk = Math.round(e.atk * 1.2); e.def = Math.round(e.def * 1.2);
+      }
+      if (fid === 'e_tstorm') { e._fxTstorm = true; e.atk = Math.round(e.atk * 0.7); }
+    }
+    if (e.hpMax && !e.hp) e.hp = e.hpMax;
+    this.log(`【${e.name}】词缀：${B.enemyFxIds.map(fid => { const d = GameData.ELITE_AFFIXES.find(x => x.id === fid); return d ? `◆${d.name}` : ''; }).join('')}——点其名旁 🔍 可查情报。`, 'log-warn');
+  },
+
+  /** v20 敌方意图预演：与敌方回合同一棵决策树，提前算出下一手并在面板公示——读招博弈由此成立 */
+  planIntent() {
+    const B = this.active;
+    if (!B || B.over || !B.enemy || B.enemy.hp <= 0) { if (B) B.intent = null; return; }
+    B.intent = this.enemyDecide();
+  },
+  /** 决策树（纯函数化）：返回 {kind, ...}；kind: strike / skill / charge / finisher */
+  enemyDecide() {
+    const B = this.active;
+    const p = Game.player;
+    const st = Stat.compute(p);
+    const e = B.enemy;
+    const rageBonus = e.raged ? 8 : 0;
+    const hpPct = e.hp / e.hpMax;
+    const hasSkill = e.skills && e.skills.length > 0;
+    const playerHasDebuff = StatusFx.has(B.myFx, 'defdown') || StatusFx.has(B.myFx, 'weaken') || StatusFx.has(B.myFx, 'slow');
+    const playerLowHp = p.hp < st.maxHp * 0.4;
+    const playerBuffed = StatusFx.has(B.myFx, 'atkup') || StatusFx.has(B.myFx, 'defup') || StatusFx.has(B.myFx, 'agiup');
+    const healSkill = hasSkill ? e.skills.find(s => s.kind === 'heal') : null;
+    const guardSkill = hasSkill ? e.skills.find(s => s.kind === 'guard') : null;
+    const debuffSkill = hasSkill ? e.skills.find(s => ['defdown', 'slow', 'weaken', 'poison', 'burn', 'bleed'].includes(s.kind)) : null;
+    const controlSkill = hasSkill ? e.skills.find(s => ['stun', 'freeze'].includes(s.kind)) : null;
+    const drainSkill = hasSkill ? e.skills.find(s => s.kind === 'drain') : null;
+    const roarSkill = hasSkill ? e.skills.find(s => s.kind === 'roar') : null;
+    if (e.charging) return { kind: 'finisher' };
+    if (hpPct < 0.25 && healSkill && Utils.chance(70)) return { kind: 'skill', sk: healSkill };
+    if (hpPct < 0.35 && guardSkill && !e.guardRounds && Utils.chance(60)) return { kind: 'skill', sk: guardSkill };
+    if (playerBuffed && debuffSkill && Utils.chance(50 + rageBonus)) return { kind: 'skill', sk: debuffSkill };
+    if (playerLowHp && drainSkill && Utils.chance(50 + rageBonus)) return { kind: 'skill', sk: drainSkill };
+    if (!playerLowHp && controlSkill && !StatusFx.has(B.myFx, 'stun') && Utils.chance(35 + rageBonus)) return { kind: 'skill', sk: controlSkill };
+    if (hpPct < 0.5 && !e.raged && roarSkill && Utils.chance(45 + rageBonus)) return { kind: 'skill', sk: roarSkill };
+    if (hasSkill && Utils.chance(50 + rageBonus)) {
+      const total = e.skills.reduce((s, x) => s + (x.w || 1), 0);
+      let r = Math.random() * total, sk = e.skills[e.skills.length - 1];
+      for (const s of e.skills) { r -= (s.w || 1); if (r <= 0) { sk = s; break; } }
+      return { kind: 'skill', sk };
+    }
+    if (Utils.chance((e.elite ? 30 : 20) + rageBonus)) return { kind: 'charge' };
+    return { kind: 'strike', heavy: Utils.chance((e.elite ? 35 : 25) + Math.floor(rageBonus / 2)) };
+  },
+  /** 意图展示文案 */
+  intentLabel(intent) {
+    if (!intent) return '';
+    if (intent.kind === 'finisher') return '☠ 杀招 ×2.1';
+    if (intent.kind === 'charge') return '💤 蓄力（下回合杀招）';
+    if (intent.kind === 'strike') return intent.heavy ? '⚔ 重击' : '⚔ 普攻';
+    if (intent.kind === 'skill') {
+      const d = StatusFx.DEFS[intent.sk.kind];
+      return `✦ ${intent.sk.name}${d ? `（${d.name}）` : ''}`;
+    }
+    return '？';
   },
 
   /* ---------- v19 职业必杀技 ---------- */
@@ -287,19 +371,27 @@ const Battle = {
     B.busy = true;
     B.zhenyuan -= sk.cost;
     B.menu = null;
-    this.log(`【必杀 · ${sk.name}】${sk.desc}`, 'log-crit');
+    // v20 必杀熟练度：每式使用累积，每 8 次升一重（至三重），效果 +6%/重
+    p.ultLv = p.ultLv || {};
+    const uses = (p.ultLv[id] || 0) + 1;
+    p.ultLv[id] = uses;
+    const mst = Math.min(3, Math.floor(uses / 8));
+    const mstMul = 1 + mst * 0.06;
+    if (uses % 8 === 0) { this.log(`【必杀精进】${sk.name} 愈发圆融如意——熟练 ${mst} 重（效果 +${mst * 6}%）！`, 'log-gain'); UI.toast(`${sk.name} 熟练 ${mst} 重`); }
+    this.log(`【必杀 · ${sk.name}】${sk.desc}${mst ? `（熟练 ${mst} 重）` : ''}`, 'log-crit');
     Ambience.sfx('crit');
     this.fxShow({ sword: 'sword', pill: 'fire', talisman: 'lightning', body: 'quake', array: 'array', demonic: 'demonic' }[p.dao] || 'sword');   // v19 必杀全屏特效
     await this.wait(500);
     const hits = sk.hits || 1;
     if (sk.selfHp) { p.hp = Math.max(1, Math.round(p.hp * (1 - sk.selfHp))); this.log(`你燃血催招，气血降至 ${p.hp}！`, 'log-warn'); }
     for (let h = 0; h < hits && B.enemy.hp > 0; h++) {
-      let dmg = Stat.afterDef(this.myAtk(st) * (sk.mult || 1), this.enDef(B.enemy)) * Utils.randF(0.95, 1.2) * this.moraleMul();
+      let dmg = Stat.afterDef(this.myAtk(st) * (sk.mult || 1) * mstMul, this.enDef(B.enemy)) * Utils.randF(0.95, 1.2) * this.moraleMul();
       const crit = Utils.chance(this.myCrit(st) + (sk.crit || 0));
       if (crit) dmg *= 1.7;
       dmg = Math.max(1, Math.round(dmg));
       B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
       B.stats.out += dmg;
+      if (B.stats.src) B.stats.src.ult += dmg;
       this.pushFloat('enemy', `-${dmg}`, crit ? 'crit' : 'dmg');
       B.hitShake = true;
       this.addMorale(10);
@@ -312,7 +404,7 @@ const Battle = {
       if (hits > 1) this.log(`第二段杀招接踵而至！再造成 <b>${Math.max(0, dmg)}</b> 点伤害。`, 'log-crit');
     }
     if (sk.heal) {
-      const heal = Math.round(st.maxHp * sk.heal);
+      const heal = Math.round(st.maxHp * sk.heal * mstMul);
       p.hp = Math.min(st.maxHp, p.hp + heal);
       this.log(`丹香入腹——回复 <b>${heal}</b> 点气血。`, 'log-gain');
     }
@@ -325,7 +417,10 @@ const Battle = {
     if (sk.freeze && B.enemy.hp > 0 && Utils.chance(sk.freeze)) { StatusFx.add(B.enemy.fx, { kind: 'freeze', rounds: 1 }); this.log(`紫雷封形——${B.enemy.name} 被冻结一回合！`, 'log-gain'); }
     if (B.enemy.hp <= 0) { await this.victory(); return; }
     await this.enemyTurn(st);
-    if (!B.over) { if (await this.afterEnemyPhase(st)) return; }
+    if (!B.over) {
+      if (B.enemy.hp <= 0) { await this.victory(); return; }   // v20：反伤/反击等中途斩杀
+      if (await this.afterEnemyPhase(st)) return;
+    }
     this.render();
     B.busy = false;
     this.autoNext();
@@ -366,6 +461,7 @@ const Battle = {
       if (dotDmg > 0) {
         e.hp = Math.max(0, e.hp - dotDmg);
         this.pushFloat('enemy', `-${dotDmg}`, 'dmg');
+        if (B.stats && B.stats.src) B.stats.src.dot += dotDmg;
         parts.push(`${e.name} 在毒火中哀嚎（气血 -${dotDmg}）`);
       }
       e.fx = StatusFx.decayDots(e.fx);
@@ -430,10 +526,21 @@ const Battle = {
           if (p.dao === 'body' && daoTier >= 4) dmg *= 1.1;
           dmg = Math.max(1, Math.round(dmg));
           B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
+          if (B.stats && B.stats.src) B.stats.src.attack += dmg;
+          // v20 破招：对蓄力中的敌人打出会心，可打断杀招并追加五成攻击的伤害
+          if (crit && B.enemy.charging) {
+            B.enemy.charging = false;
+            B.intent = null;
+            const brk = Math.max(1, Math.round(Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy)) * Utils.randF(0.9, 1.1)));
+            B.enemy.hp = Math.max(0, B.enemy.hp - brk);
+            if (B.stats) B.stats.out += brk;
+            this.pushFloat('enemy', `-${brk}`, 'crit');
+            this.log(`【破招】会心正中蓄力破绽——${B.enemy.name} 的杀招被硬生生打断，再受 <b>${brk}</b> 点伤害！`, 'log-crit');
+          }
           const comboCap = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? 5 + (ForgeSys.suffixFx(p).comboUp || 0) : 5;   // v19 词缀·连击上限
           B.combo = Math.min(comboCap, (B.combo || 0) + 1);   // v13 连击累积
           B.stats.out += dmg; if (B.combo > B.stats.maxCombo) B.stats.maxCombo = B.combo;   // v19 统计
-          B.zhenyuan = Math.min(6, (B.zhenyuan || 0) + (crit || jianxin ? 2 : 1));   // v19 真元
+          B.zhenyuan = Math.min(B.zmax || 6, (B.zhenyuan || 0) + (crit || jianxin ? 2 : 1));   // v19 真元（v20 上限随道境）
           if (p.dao === 'sword') DaoSys.gain(p, (crit || jianxin) ? 20 : 12);   // v16 剑意
           this.pushFloat('enemy', `-${dmg}`, (crit || jianxin) ? 'crit' : 'dmg');
           B.hitShake = true;
@@ -512,11 +619,13 @@ const Battle = {
             this.pushFloat('enemy', '闪避', 'miss');
           } else {
             let dmg = Stat.afterDef(this.myAtk(st) * power, this.enDef(B.enemy)) * Utils.randF(0.9, 1.15) * this.moraleMul() * this.comboMul();
+            if (this.eFx(B, 'e_tstorm')) dmg *= 1.3;   // v20 精英词缀·雷皮：受法诀伤害 +30%
             const crit = Utils.chance(this.myCrit(st));
             if (crit) dmg *= 1.7;
             dmg = Math.max(1, Math.round(dmg));
             B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
             this.pushFloat('enemy', `-${dmg}`, crit ? 'crit' : 'dmg');
+            if (B.stats) { B.stats.out += dmg; if (B.stats.src) B.stats.src.skill += dmg; }
             B.hitShake = true;
             this.addMorale(10);
             Battle.fxShow('sword');
@@ -549,9 +658,11 @@ const Battle = {
             // 伤害符：符光必中，高额爆发（雷笔境 +30%）
             let dmg = Stat.afterDef(st.atk * (def.power || 2.2), this.enDef(B.enemy)) * Utils.randF(0.95, 1.1) * this.moraleMul() * this.comboMul();
             if (p.dao === 'talisman' && DaoSys.tierLevel(p) >= 3) dmg *= 1.3;   // v10 符道六境·雷笔境
+            if (this.eFx(B, 'e_tstorm')) dmg *= 1.3;   // v20 精英词缀·雷皮
             dmg = Math.max(1, Math.round(dmg));
             B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
             this.pushFloat('enemy', `-${dmg}`, 'crit');
+            if (B.stats) { B.stats.out += dmg; if (B.stats.src) B.stats.src.skill += dmg; }
             B.hitShake = true;
             this.addMorale(8);
             Battle.fxShow(fk === 'damage' && (def.power || 0) >= 3 ? 'lightning' : 'fire');
@@ -598,6 +709,12 @@ const Battle = {
           if (b.defPct) StatusFx.add(B.myFx, { kind: 'defup', pct: b.defPct, rounds: b.rounds || 3 });
           if (b.spdPct || b.dodge) StatusFx.add(B.myFx, { kind: 'agiup', pct: Math.max(b.spdPct || 0, b.dodge || 0), rounds: b.rounds || 3 });
           if (b.crit) StatusFx.add(B.myFx, { kind: 'critup', pct: b.crit, rounds: b.rounds || 3 });
+          // v20 精英词缀·镜像：玩家每获一项增益，敌方攻击 +8%
+          if (this.eFx(B, 'e_mirror') && B.enemy.hp > 0) {
+            B.enemy._mirror = (B.enemy._mirror || 0) + 1;
+            B.enemy.atk = Math.round(B.enemy.atk * 1.08);
+            this.log(`【镜像】${B.enemy.name} 映照你的增益，妖气涨了一分（攻击 +8%）！`, 'log-warn');
+          }
           this.pushFloat('me', def.name, 'heal');
           this.log(`你服下 <b>${def.name}</b>——${def.desc.split('——')[1] || '气力涌动'}！`, 'log-gain');
         } else {
@@ -610,7 +727,7 @@ const Battle = {
         B.defending = true;
         if (p.dao === 'body') DaoSys.gain(p, 6);   // v16 体魄
         this.addMorale(6);
-        B.zhenyuan = Math.min(6, (B.zhenyuan || 0) + 1);   // v19 真元
+        B.zhenyuan = Math.min(B.zmax || 6, (B.zhenyuan || 0) + 1);   // v19 真元（v20 上限随道境）
         p.mp = Math.min(st.maxMp, p.mp + Math.round(st.maxMp * 0.15));
         this.log('你凝神戒备，摆出防御姿态，灵力缓缓回复，战意亦在蓄积。', 'log-gain');
         break;
@@ -634,6 +751,7 @@ const Battle = {
     await this.wait(560);
     await this.enemyTurn();
     if (!this.active) return;
+    if (B.enemy.hp <= 0) { await this.victory(); return; }   // v20：反伤/反击等中途斩杀
     if (await this.afterEnemyPhase(st)) return;
     B.busy = false;
     this.render();
@@ -673,12 +791,51 @@ const Battle = {
     return false;
   },
 
+  /** v20 自动战斗策略配置（持久化）：血线阈值 / 必杀偏好 / 符箓保留 */
+  AUTO_KEY: 'fanren_wd_autocfg',
+  autoCfg() {
+    if (!this._cfg) {
+      this._cfg = { hp: 40, ult: 'auto', tal: 0 };
+      try {
+        const raw = Save.storage.getItem ? Save.storage.getItem(this.AUTO_KEY) : Save.mem[this.AUTO_KEY];
+        if (raw) Object.assign(this._cfg, JSON.parse(raw) || {});
+      } catch (e) { /* ignore */ }
+    }
+    return this._cfg;
+  },
+  async autoCfgPopup() {
+    const c = this.autoCfg();
+    const ok = await UI.popup({
+      title: '自动战斗 · 策略',
+      html: `替你执掌招式的起居注——按此策略自动出招。<br>
+        <div class="auto-row">残血服药线 <select id="ac-hp">${[30, 40, 50, 60].map(v => `<option value="${v}" ${c.hp === v ? 'selected' : ''}>${v}%</option>`).join('')}</select></div>
+        <div class="auto-row">必杀偏好 <select id="ac-ult">
+          <option value="auto" ${c.ult === 'auto' ? 'selected' : ''}>有真元就放</option>
+          <option value="save" ${c.ult === 'save' ? 'selected' : ''}>攒满真元再放</option>
+          <option value="off" ${c.ult === 'off' ? 'selected' : ''}>不自动放必杀</option>
+        </select></div>
+        <div class="auto-row">符箓保留 <select id="ac-tal">${[0, 1, 2, 3].map(v => `<option value="${v}" ${c.tal === v ? 'selected' : ''}>留 ${v} 张</option>`).join('')}</select></div>
+        <div class="tip-line">· 残血服药线同时决定法诀治疗与血遁类必杀的出手时机。</div>`,
+      options: [{ text: '记 下', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    c.hp = Number(document.getElementById('ac-hp').value) || 40;
+    c.ult = document.getElementById('ac-ult').value || 'auto';
+    c.tal = Number(document.getElementById('ac-tal').value) || 0;
+    try {
+      const raw = JSON.stringify(c);
+      if (Save.storage.setItem) Save.storage.setItem(this.AUTO_KEY, raw); else Save.mem[this.AUTO_KEY] = raw;
+    } catch (e) { /* ignore */ }
+    UI.toast('自动战斗策略已更新');
+    this.render();
+  },
+
   /** v13 自动战斗：回合收尾后若开启自动，择机自动出招（策略：残血吃丹 → 敌蓄力则防御 → 有蓝放最强法诀 → 普攻） */
   autoNext() {
     const B = this.active;
     if (!B || B.over || !B.auto || B.busy) return;
     setTimeout(() => {
-      const b2 = this.active;
+    const b2 = this.active;
       if (!b2 || b2.over || !b2.auto || b2.busy) return;
       this.autoPilot();
     }, Math.max(120, Math.round(420 * (this.speed === 3 ? 0.15 : this.speed === 2 ? 0.5 : 1))));
@@ -688,8 +845,10 @@ const Battle = {
     const p = Game.player;
     const st = Stat.compute(p);
     if (!B || B.busy || B.over) return;
+    const cfg = this.autoCfg();
+    const hpLine = st.maxHp * (cfg.hp / 100);
     // 1) 残血：优先疗伤丹，其次大还丹/固本丹
-    if (p.hp < st.maxHp * 0.4) {
+    if (p.hp < hpLine) {
       const healPill = ['pill_dahuan', 'pill_guben', 'pill_liaoshang'].find(id => Bag.count(id) > 0);
       if (healPill) { this.act('item', healPill); return; }
     }
@@ -697,22 +856,25 @@ const Battle = {
     if (B.enemy.charging) { this.act('defend'); return; }
     // 3) 被束缚/冰封：行动会被跳过，直接点防御等待
     if (StatusFx.has(B.myFx, 'stun') || StatusFx.has(B.myFx, 'freeze')) { this.act('defend'); return; }
-    // v19 3.5) 职业必杀策略表：真元够且条件满足即施放（各道打法各异）
-    const ultStrategy = {
-      sword:    { id: 'us1', when: () => B.enemy.hp > B.enemy.hpMax * 0.5 },                 // 敌健在则剑斩削血
-      pill:     { id: 'up2', when: () => p.hp < st.maxHp * 0.65 },                            // 血线偏低以丹心续命
-      talisman: { id: 'ut1', when: () => B.enemy.hp > B.enemy.hpMax * 0.2 },                 // 雷狱压制
-      body:     { id: 'ub1', when: () => !!B.enemy.elite || B.enemy.hp > B.enemy.hpMax * 0.7 }, // 精英或开局崩山震
-      array:    { id: 'ua2', when: () => B.enemy.hp > B.enemy.hpMax * 0.3 },                 // 八方杀阵收割
-      demonic:  { id: 'ud1', when: () => p.hp < st.maxHp * 0.7 },                            // 血遁吸血续航
-    }[p.dao];
-    if (ultStrategy && (B.zhenyuan || 0) >= 3 && ultStrategy.when()) {
-      const sk = (GameData.BATTLE_SKILLS[p.dao] || []).find(x => x.id === ultStrategy.id);
-      if (sk && (B.zhenyuan || 0) >= sk.cost) { this.actUlt(ultStrategy.id); return; }
+    // v20 3.5) 职业必杀策略表：真元够且条件满足即施放（各道打法各异；偏好可攒满/禁用）
+    if (cfg.ult !== 'off') {
+      const ultStrategy = {
+        sword:    { id: 'us1', when: () => B.enemy.hp > B.enemy.hpMax * 0.5 },                 // 敌健在则剑斩削血
+        pill:     { id: 'up2', when: () => p.hp < hpLine * 1.6 },                              // 血线偏低以丹心续命
+        talisman: { id: 'ut1', when: () => B.enemy.hp > B.enemy.hpMax * 0.2 },                 // 雷狱压制
+        body:     { id: 'ub1', when: () => !!B.enemy.elite || B.enemy.hp > B.enemy.hpMax * 0.7 }, // 精英或开局崩山震
+        array:    { id: 'ua2', when: () => B.enemy.hp > B.enemy.hpMax * 0.3 },                 // 八方杀阵收割
+        demonic:  { id: 'ud1', when: () => p.hp < hpLine * 1.75 },                             // 血遁吸血续航
+      }[p.dao];
+      const zOk = cfg.ult === 'save' ? (B.zhenyuan || 0) >= (B.zmax || 6) : (B.zhenyuan || 0) >= 3;
+      if (ultStrategy && zOk && ultStrategy.when()) {
+        const sk = (GameData.BATTLE_SKILLS[p.dao] || []).find(x => x.id === ultStrategy.id);
+        if (sk && (B.zhenyuan || 0) >= sk.cost) { this.actUlt(ultStrategy.id); return; }
+      }
     }
-    // v18 4) 自动祭符：符修优先，伤害符/控制符
+    // v18 4) 自动祭符：符修优先，伤害符/控制符（v20：保留张数可配置）
     if (p.dao === 'talisman') {
-      const talList = Object.entries(p.bag).filter(([id]) => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman');
+      const talList = Object.entries(p.bag).filter(([id]) => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman' && p.bag[id] > (cfg.tal || 0));
       if (talList.length) {
         // 优先伤害符，其次控制符
         const dmgTal = talList.find(([id]) => GameData.ITEMS[id].fkind === 'damage');
@@ -766,11 +928,12 @@ const Battle = {
     // v13 敌方 DOT 结算（毒/焰/血）与控制判定（被缚/冰封则跳过本回合）
     const dotTxt = this.tickDots('enemy');
     if (dotTxt) this.log(dotTxt, 'log-gain');
-    if (e.hp <= 0) return;
+    if (e.hp <= 0) { this.planIntent(); return; }
     if (StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze')) {
       const frozen = StatusFx.has(e.fx, 'freeze');
       this.log(`${e.name} 被【${frozen ? '冰封' : '束缚'}】困住，这一回合动弹不得！`, 'log-gain');
       e.fx = StatusFx.removeKinds(e.fx, ['stun', 'freeze']);
+      this.planIntent();
       await this.wait(400);
       return;
     }
@@ -782,60 +945,29 @@ const Battle = {
       Ambience.sfx('rage');
       await this.wait(500);
     }
-    // v18 敌方 AI 状态机：根据血量/状态/技能池做决策
-    const rageBonus = e.raged ? 8 : 0;
-    const hpPct = e.hp / e.hpMax;
-    const hasSkill = e.skills && e.skills.length > 0;
-    // 玩家状态检测
-    const playerHasDebuff = StatusFx.has(B.myFx, 'defdown') || StatusFx.has(B.myFx, 'weaken') || StatusFx.has(B.myFx, 'slow');
-    const playerLowHp = p.hp < st.maxHp * 0.4;
-    const playerBuffed = StatusFx.has(B.myFx, 'atkup') || StatusFx.has(B.myFx, 'defup') || StatusFx.has(B.myFx, 'agiup');
-    // 收集可用技能类型
-    const healSkill = hasSkill ? e.skills.find(s => s.kind === 'heal') : null;
-    const guardSkill = hasSkill ? e.skills.find(s => s.kind === 'guard') : null;
-    const debuffSkill = hasSkill ? e.skills.find(s => ['defdown', 'slow', 'weaken', 'poison', 'burn', 'bleed'].includes(s.kind)) : null;
-    const controlSkill = hasSkill ? e.skills.find(s => ['stun', 'freeze'].includes(s.kind)) : null;
-    const drainSkill = hasSkill ? e.skills.find(s => s.kind === 'drain') : null;
-    const roarSkill = hasSkill ? e.skills.find(s => s.kind === 'roar') : null;
-    // 决策树
-    if (e.charging) {
+    // v18 敌方 AI 状态机已抽为 enemyDecide()（v20）；此处执行【意图预演】承诺的下一手——
+    // 玩家在面板上看到的就是敌人即将打出的招，防御/破招/遁走的博弈由此成立
+    const act = B.intent || this.enemyDecide();
+    B.intent = null;
+    if (act.kind === 'finisher') {
       // 蓄力完成：杀招
       e.charging = false;
       this.log(`${e.name} 蓄势已满，<b>杀招</b>轰然落下！`, 'log-crit');
       this.enemyStrike(st, 2.1, true);
-    } else if (hpPct < 0.25 && healSkill && Utils.chance(70)) {
-      // 濒死：优先治疗
-      this.enemySkill(st, healSkill);
-    } else if (hpPct < 0.35 && guardSkill && !e.guardRounds && Utils.chance(60)) {
-      // 残血：开防御
-      this.enemySkill(st, guardSkill);
-    } else if (playerBuffed && debuffSkill && Utils.chance(50 + rageBonus)) {
-      // 玩家有增益：驱散/削弱
-      this.enemySkill(st, debuffSkill);
-    } else if (playerLowHp && drainSkill && Utils.chance(50 + rageBonus)) {
-      // 玩家残血：吸血斩杀
-      this.enemySkill(st, drainSkill);
-    } else if (!playerLowHp && controlSkill && !StatusFx.has(B.myFx, 'stun') && Utils.chance(35 + rageBonus)) {
-      // 控制技能
-      this.enemySkill(st, controlSkill);
-    } else if (hpPct < 0.5 && !e.raged && roarSkill && Utils.chance(45 + rageBonus)) {
-      // 半血增伤
-      this.enemySkill(st, roarSkill);
-    } else if (hasSkill && Utils.chance(50 + rageBonus)) {
-      // 技能池随机
-      const total = e.skills.reduce((s, x) => s + (x.w || 1), 0);
-      let r = Math.random() * total, sk = e.skills[e.skills.length - 1];
-      for (const s of e.skills) { r -= (s.w || 1); if (r <= 0) { sk = s; break; } }
-      this.enemySkill(st, sk);
-    } else if (Utils.chance((e.elite ? 30 : 20) + rageBonus) && !e.charging) {
-      // 蓄力
+    } else if (act.kind === 'skill') {
+      this.enemySkill(st, act.sk);
+    } else if (act.kind === 'charge') {
       e.charging = true;
       this.log(`${e.name} 妖气翻涌、筋肉隆起——它正在<b>蓄力</b>，下回合将施展杀招！`, 'log-warn');
       this.pushFloat('enemy', '蓄力', 'miss');
     } else {
-      // 普攻
-      const heavy = Utils.chance((e.elite ? 35 : 25) + Math.floor(rageBonus / 2));
+      const heavy = !!act.heavy;
       this.enemyStrike(st, heavy ? 1.55 : 1, heavy);
+    }
+    // v20 精英词缀·群狼：驰援撕咬
+    if (this.eFx(B, 'e_wolf') && e.hp > 0 && p.hp > 0 && Utils.chance(15)) {
+      this.log(`【群狼·驰援】一头幼狼应声扑出，狠狠咬了你一口！`, 'log-warn');
+      this.enemyStrike(st, 0.6, false, '幼狼撕咬');
     }
     // 回合数递减
     if (B.buffs.defRounds > 0) { B.buffs.defRounds--; if (B.buffs.defRounds === 0) B.buffs.defPower = 0; }
@@ -844,6 +976,7 @@ const Battle = {
     B.myFx = StatusFx.decayKinds(B.myFx, ['defdown', 'slow', 'weaken', 'atkup', 'defup', 'agiup', 'critup']);
     e.fx = StatusFx.decayKinds(e.fx, ['defdown', 'slow']);
     B.defending = false;
+    this.planIntent();   // v20：预演下一手，供玩家回合读招
   },
 
   /** v13：敌方专属技能结算（毒/焰/血/破防/迟滞/虚弱/束缚/吸血/摄魂/铁壁/咆哮/自愈） */
@@ -985,12 +1118,32 @@ const Battle = {
     if (blocked) text += '（你举功格挡，卸去大半力道）';
     if (shieldPct > 0) text += '（金光卸力）';
     if (guarded) text += '（金丹护体，震开两成巨力）';
+    // v20 精英词缀·瘟疫 / 裂魂
+    if (this.eFx(B, 'e_plague') && p.hp > 0 && Utils.chance(25)) {
+      const kind = Utils.pick(['poison', 'burn', 'bleed']);
+      StatusFx.add(B.myFx, { kind, pct: 2.5, rounds: 2 });
+      text += `<br>【瘟疫】${(StatusFx.DEFS[kind] || {}).name || '蚀毒'}入体——每回合将损血！`;
+    }
+    if (this.eFx(B, 'e_soul') && p.hp > 0 && st.maxMp > 0) {
+      const mpLost = Math.max(1, Math.round(st.maxMp * 0.2));
+      p.mp = Math.max(0, p.mp - mpLost);
+      text += `<br>【裂魂】阴冷之力摄走你 ${mpLost} 点灵力。`;
+    }
+    // v20 反击：防御姿态下被命中，两成五几率顺势还一手（五成攻）
+    if (B.defending && p.hp > 0 && e.hp > 0 && Utils.chance(25)) {
+      const cDmg = Math.max(1, Math.round(Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(e)) * Utils.randF(0.9, 1.1)));
+      e.hp = Math.max(0, e.hp - cDmg);
+      if (B.stats) { B.stats.out += cDmg; if (B.stats.src) B.stats.src.counter += cDmg; }
+      this.pushFloat('enemy', `-${cDmg}`, 'dmg');
+      text += `<br>【反击】你借力卸势、顺势还招——${e.name} 受 <b>${cDmg}</b> 点伤害！`;
+    }
     // v19 词缀·反伤/荆棘
     const thorns = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p).thorns : 0;
     if (thorns > 0 && e.hp > 0 && p.hp > 0) {
       const back = Math.max(1, Math.round(dmg * thorns));
       e.hp = Math.max(0, e.hp - back);
       this.pushFloat('enemy', `-${back}`, 'dmg');
+      if (B.stats && B.stats.src) B.stats.src.thorns += back;
       text += `<br>【词缀·反伤】荆棘归鞘——${e.name} 反受 <b>${back}</b> 点伤害。`;
     }
     this.log(text, crit ? 'log-crit' : 'log-battle');
@@ -1004,6 +1157,13 @@ const Battle = {
       const mat = Utils.pick(GameData.matsByTier(e.dropTier));
       Bag.addItem(mat, qty);
       drops.push(`${GameData.ITEMS[mat].name} ×${qty}`);
+    }
+    // v20 精英词缀·守财：死后掉落翻倍（额外一次材料掷取）
+    if (e._fxGold && Utils.chance(60)) {
+      const qty = Utils.chance(20) ? 2 : 1;
+      const mat = Utils.pick(GameData.matsByTier(e.dropTier));
+      Bag.addItem(mat, qty);
+      drops.push(`${GameData.ITEMS[mat].name} ×${qty}（守财遗财）`);
     }
     // v19 丹方残页：精英 12% / 普通妖兽 3%
     if (Utils.chance(e.elite ? 12 : 3)) {
@@ -1036,6 +1196,29 @@ const Battle = {
     const B = this.active;
     const p = Game.player;
     B.over = true;
+    // v20 多波遭遇：妖群未绝 → 半额结算本波，立即接战下一波（仅普通战斗）
+    if (B.ctx.waveIds && (B.waveIdx || 0) < B.ctx.waveIds.length - 1
+      && !B.ctx.spar && !B.ctx.story && !B.ctx.dungeon && !B.ctx.npcId && !B.ctx.weType && !B.ctx.sectDanger) {
+      B.over = false;
+      const waveExp = Math.round(B.enemy.expGain * 0.5);
+      Cultivate.addExp(p, waveExp);
+      p.counters.wins++;
+      Log.add(`你击溃了第 ${B.waveIdx + 1} 波妖群（修为 +${Utils.fmtNum(waveExp)}）——喘息未定，第 ${B.waveIdx + 2} 波已扑到眼前！`, 'warn');
+      B.waveIdx++;
+      const e2 = buildMonster(B.ctx.waveIds[B.waveIdx]);
+      e2.hp = e2.hpMax; e2.fx = []; e2.guardRounds = 0; e2.guardPower = 0; e2.raged = false; e2.charging = false;
+      if (B.ctx.wx && B.ctx.wx.night) e2.atk = Math.round(e2.atk * 1.1);
+      B.enemy = e2;
+      B.enemyFxIds = [];
+      if (e2.elite) this.rollEliteFx(B); else B.enemyFxIds = [];
+      B.intent = null;
+      Anim.drop('bt-ehp');
+      this.log(`⚔ 第 ${B.waveIdx + 1} 波——<b class="grade-0">${e2.name}</b>（${e2.realmLabel}${e2.elite ? ' · 精英' : ''}${e2.tplName ? ' · ' + e2.tplName : ''}）杀入战团！`, 'warn');
+      this.render();
+      B.busy = false;
+      this.autoNext();
+      return;
+    }
     const st = Stat.compute(p);
     // §24 切磋：点到为止，不取性命不掠财物
     if (B.ctx.spar) {
@@ -1066,7 +1249,7 @@ const Battle = {
     // 阵道：秘境遗迹收益+20%；邪修：吞噬精元，额外汲取两成修为
     const arrBonus = (B.ctx.mapId === 'ruins' && p.dao === 'array') ? 1.2 : 1;
     const expGain = Math.round(B.enemy.expGain * arrBonus);
-    const stoneGain = Math.round(B.enemy.stoneGain * arrBonus * (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 5 ? 1.5 : 1));   // v10 魔君境
+    const stoneGain = Math.round(B.enemy.stoneGain * arrBonus * (B.enemy._fxGold ? 1.5 : 1) * (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 5 ? 1.5 : 1));   // v10 魔君境；v20 守财
     Cultivate.addExp(p, expGain);
     Bag.addStones(stoneGain);
     this.log(`战利品：修为 +${Utils.fmtNum(expGain)}，灵石 +${Utils.fmtNum(stoneGain)}${arrBonus > 1 ? '（阵道造诣，于遗迹所获更丰）' : ''}${st.luck >= 8 && Utils.chance(15) ? '（福缘深厚，额外掉落灵石一袋）' : ''}`, 'log-gain');
@@ -1113,12 +1296,16 @@ const Battle = {
     if (B.stats) {
       const el = document.getElementById('battle-box');
       if (el && !document.getElementById('battle-modal').className.includes('hidden')) {
+        const SRC_NAMES = { attack: '普攻', skill: '法诀/符', ult: '必杀', beast: '灵兽', dot: '毒火', thorns: '反伤', counter: '反击' };
+        const srcTxt = Object.entries(B.stats.src || {}).filter(([, v]) => v > 0)
+          .sort((a, b) => b[1] - a[1]).map(([k, v]) => `${SRC_NAMES[k] || k} ${Utils.fmtNum(v)}`).join(' · ');
         const box = document.createElement('div');
         box.className = 'bt-summary';
         box.innerHTML = `<div class="bt-sum-title">✦ 战 斗 结 算 ✦</div>
           <div class="tip-line">· 历时 <b>${B.turn || 1}</b> 回合 ｜ 最高连击 <b>×${B.stats.maxCombo}</b></div>
           <div class="tip-line">· 共造成 <b>${Utils.fmtNum(B.stats.out)}</b> 伤害，承受 <b>${Utils.fmtNum(B.stats.in)}</b> 伤害</div>
-          <div class="tip-line">· 终局真元 ${B.zhenyuan || 0}/6</div>`;
+          ${srcTxt ? `<div class="tip-line">· 伤害构成：${srcTxt}</div>` : ''}
+          <div class="tip-line">· 终局真元 ${B.zhenyuan || 0}/${B.zmax || 6}</div>`;
         el.appendChild(box);
         setTimeout(() => { box.remove(); }, 2600);
       }
@@ -1234,8 +1421,11 @@ const Battle = {
 
     let sub = '';
     if (B.menu === 'skill') {
-      const skills = Object.entries(p.gongfa)
-        .filter(([id]) => GameData.ITEMS[id] && GameData.ITEMS[id].skill)
+      // v20 出战技能盘：p.battleDeck 配置后仅展示盘内法诀（未配置或盘内皆未修则回落全部）
+      const pool = Object.entries(p.gongfa).filter(([id]) => GameData.ITEMS[id] && GameData.ITEMS[id].skill);
+      const deck = (Array.isArray(p.battleDeck) ? p.battleDeck : []).filter(id => p.gongfa[id] && GameData.ITEMS[id] && GameData.ITEMS[id].skill);
+      const eff = deck.length ? pool.filter(([id]) => deck.includes(id)) : pool;
+      const skills = (eff.length ? eff : pool)
         .map(([id, g]) => {
           const def = GameData.ITEMS[id];
           const sk = def.skill;
@@ -1277,6 +1467,7 @@ const Battle = {
     // v13 自动战斗 / 速度 / 驯服（妖兽残血可驯）
     const ctlBtns = [
       `<button class="btn btn-sm ${B.auto ? 'btn-primary' : ''}" data-action="bt-auto" ${B.over ? 'disabled' : ''}>${B.auto ? '◼ 停止自动' : '▶ 自动战斗'}</button>`,
+      `<button class="btn btn-sm" data-action="bt-autocfg" title="自动战斗策略">⚙策略</button>`,
       `<button class="btn btn-sm" data-action="bt-speed" title="战斗速度">速度 ${speedLabels[this.speed] || '×1'}</button>`,
     ].join('');
     const canTame = !!(B.enemy.id && !B.enemy.elite && B.enemy.species !== 'human' && B.enemy.species !== 'construct'
@@ -1288,7 +1479,7 @@ const Battle = {
     document.getElementById('battle-box').innerHTML = `
       <div class="battle-head">— 修 罗 场 —</div>
       <div class="bt-side side-enemy ${e.raged ? 'raged' : ''}" data-species="${e.species || 'beast'}">
-        <div class="bt-name-row"><span class="bt-name enemy"><button class="bt-info-btn" data-action="bt-info" title="查看情报">🔍</button>${e.name}${e.elite ? ' <span class="tag danger">精英</span>' : ''}${(B.enemyFxIds || []).length ? ' ' + B.enemyFxIds.map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `<span class="tag danger" title="${d.desc}">◆${d.name}</span>` : ''; }).join('') : ''}${e.raged ? ' <span class="tag danger">狂暴</span>' : ''}${e._raged2 ? ' <span class="tag danger">血性</span>' : ''}${e._phase2 ? ' <span class="tag danger">狂乱</span>' : ''}${e.charging ? ' <span class="tag danger">蓄力杀招</span>' : ''}${StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze') ? ' <span class="tag">被缚</span>' : ''}</span><span class="bt-realm">${e.realmLabel} · 攻${this.enAtk(e)} 防${this.enDef(e)}</span></div>
+        <div class="bt-name-row"><span class="bt-name enemy"><button class="bt-info-btn" data-action="bt-info" title="查看情报">🔍</button>${e.name}${e.elite ? ' <span class="tag danger">精英</span>' : ''}${e.tplName ? ` <span class="tag tpl" title="习性模板：${(GameData.MONSTER_TEMPLATES.find(t => t.id === e.tpl) || {}).desc || ''}">${e.tplName}</span>` : ''}${(B.waveIds && B.waveIds.length > 1) ? ` <span class="tag warn">第 ${B.waveIdx + 1}/${B.waveIds.length} 波</span>` : ''}${B.intent && !B.over ? ` <span class="tag intent-tag" title="意图预演：据此选择防御、破招或遁走">下一手 · ${this.intentLabel(B.intent)}</span>` : ''}${(B.enemyFxIds || []).length ? ' ' + B.enemyFxIds.map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `<span class="tag danger" title="${d.desc}">◆${d.name}</span>` : ''; }).join('') : ''}${e.raged ? ' <span class="tag danger">狂暴</span>' : ''}${e._raged2 ? ' <span class="tag danger">血性</span>' : ''}${e._phase2 ? ' <span class="tag danger">狂乱</span>' : ''}${e.charging ? ' <span class="tag danger">蓄力杀招</span>' : ''}${StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze') ? ' <span class="tag">被缚</span>' : ''}</span><span class="bt-realm">${e.realmLabel} · 攻${this.enAtk(e)} 防${this.enDef(e)}</span></div>
         <div class="bt-figure enemy-fig" aria-hidden="true"></div>
         <div class="fx-tags">${StatusFx.tagsHtml(e.fx)}</div>
         <div class="bar"><div class="bar-fill hp${e.raged ? ' rage' : ''}" style="width:${ePct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-ehp" data-nv="${e.hp}">${e.hp}</span> / ${e.hpMax}</span></div>
@@ -1300,7 +1491,7 @@ const Battle = {
         <div class="bar" title="气血 ${p.hp} / ${st.maxHp}"><div class="bar-fill hp${hpPct <= 30 ? ' low' : ''}" style="width:${hpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-hp" data-nv="${p.hp}">${p.hp}</span> / ${st.maxHp}</span></div>
         <div class="bar" title="灵力 ${p.mp} / ${st.maxMp}"><div class="bar-fill mp" style="width:${mpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-mp" data-nv="${p.mp}">${p.mp}</span> / ${st.maxMp}</span></div>
         <div class="bar morale-bar" title="战意：连击提升，受挫回落（每点 +0.4% 伤害）"><div class="bar-fill morale" style="width:${B.morale || 0}%"></div><span class="bar-text">战意 ${B.morale || 0}${(B.morale || 0) >= 100 ? '（伤害 +40%）' : ''}</span></div>
-        <div class="bar morale-bar" title="真元：普攻命中+1，会心+2，防御+1（用于职业必杀）"><div class="bar-fill" style="width:${(B.zhenyuan || 0) / 6 * 100}%;background:linear-gradient(90deg,#5a6ac7,#a04ab0)"></div><span class="bar-text">真元 ${B.zhenyuan || 0}/6</span></div>
+        <div class="bar morale-bar" title="真元：普攻命中+1，会心+2，防御+1（用于职业必杀；道境三重上限扩至8）"><div class="bar-fill" style="width:${(B.zhenyuan || 0) / (B.zmax || 6) * 100}%;background:linear-gradient(90deg,#5a6ac7,#a04ab0)"></div><span class="bar-text">真元 ${B.zhenyuan || 0}/${B.zmax || 6}</span></div>
         <div class="fx-tags">${StatusFx.tagsHtml(B.myFx)}</div>
       </div>
       <div id="bt-log"></div>

@@ -113,6 +113,7 @@ const BeastSys = {
     const dmg = Math.max(1, Math.round(st.atk * (0.22 + b.level * 0.03) * (1 + b.power * 0.02) * (b.evolved ? 1.3 : 1) * Utils.randF(0.8, 1.2)));   // v19 进化 ×1.3
     B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
     B.hitShake = true;
+    if (B.stats) { B.stats.out += dmg; if (B.stats.src) B.stats.src.beast += dmg; }   // v20 伤害构成统计
     B.pushFloat('enemy', `-${dmg}`, 'dmg');
     // v18：灵兽技能实效化——施加真实技能效果（毒/流血/减益等）
     let skillNote = '';

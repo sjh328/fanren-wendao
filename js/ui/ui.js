@@ -1039,6 +1039,23 @@ const UI = {
         <div class="gf-actions"><button class="btn btn-sm btn-primary" data-action="act-learn" data-item="${id}">学 习</button></div>
       </div>`;
     }).join('');
+    // v20 出战技能盘：战斗中法诀菜单只出盘内招式（至多四招；空盘=全部）
+    const deck = Array.isArray(p.battleDeck) ? p.battleDeck : [];
+    const deckRows = Object.entries(p.gongfa).filter(([id]) => (GameData.ITEMS[id] || {}).skill).map(([id, g]) => {
+      const def = GameData.ITEMS[id];
+      const inDeck = deck.includes(id);
+      return `
+      <div class="gf-row">
+        <div class="gf-info">
+          <div class="gf-name">${this.gradeSpan(def.name, def.grade)} <span class="gf-lv">第${g.level}层 · 神通【${def.skill.name}】</span></div>
+        </div>
+        <div class="gf-actions"><button class="btn btn-sm ${inDeck ? 'btn-primary' : ''}" data-action="act-deck-toggle" data-gf="${id}">${inDeck ? '✓ 已入盘' : '入 盘'}</button></div>
+      </div>`;
+    }).join('');
+    const deckCard = `
+      <div class="card"><div class="card-title">✦ 出战技能盘 <span class="tag">${deck.length}/4</span></div>
+      <div class="card-desc">战斗中的「法诀」菜单只出手盘内招式——择四招随身，临阵不乱。空盘时全部法诀皆可用。</div>
+      ${deckRows || '<div class="tip-line">尚未修习带神通的法诀。</div>'}</div>`;
     // v19 道韵协同
     const dyRows = (GameData.DAO_YUN || []).map(dy => {
       const on = dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3);
@@ -1047,6 +1064,7 @@ const UI = {
     }).join('');
     return `
       <div class="card"><div class="card-title">✦ 已修功法</div>${learned || '<div class="tip-line">尚未修习任何功法。</div>'}</div>
+      ${deckCard}
       ${learnRows ? `<div class="card"><div class="card-title">✦ 待学典籍（背包中）</div>${learnRows}</div>` : ''}
       <div class="card"><div class="card-title">✦ 道韵协同（双功法修至三层以上，共鸣生韵）</div>${dyRows}</div>`;
   },

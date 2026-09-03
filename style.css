@@ -2294,3 +2294,17 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
 .story-figure-big .sfb-text { text-align: left; max-width: 60%; }
 .story-figure-big .sfb-name { font-size: 1.35em; font-weight: 700; color: var(--fig-c); letter-spacing: 6px; margin-bottom: 8px; }
 .story-figure-big .sfb-art { font-style: italic; color: var(--text-dim, #6a635a); line-height: 1.9; }
+
+/* ==================== v20 战斗 2.0：意图预演 / 习性模板 / 多波 ==================== */
+.tag.intent-tag {
+  color: #4a2a7a; background: rgba(124, 92, 176, 0.12);
+  border: 1px solid rgba(124, 92, 176, 0.45);
+  font-weight: 700; letter-spacing: 1px;
+  animation: intentPulse 2.2s ease-in-out infinite;
+}
+@keyframes intentPulse { 0%, 100% { opacity: 0.85; } 50% { opacity: 1; } }
+.tag.tpl {
+  color: #6a5a2a; background: rgba(168, 134, 42, 0.10);
+  border: 1px solid rgba(168, 134, 42, 0.4);
+}
+.bt-summary .tip-line { text-align: left; }

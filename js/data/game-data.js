@@ -570,7 +570,7 @@ const GameData = {
     { id: 'dy_wangchen', name: '绝尘飞仙', need: ['gf_wangchen', 'gf_feixian'], fx: { dodge: 3 }, desc: '问尘与飞仙相合：身法轻灵，闪避 +3%' },
   ],
 
-  /* ---------- v19 精英词缀（精英怪随机 1~2 条，战斗前可见） ---------- */
+  /* ---------- v19→v20 精英词缀（精英怪随机 1~2 条，战斗前可见；mutex 互斥对不同时出现） ---------- */
   ELITE_AFFIXES: [
     { id: 'e_leech',  name: '汲血', desc: '攻击回复自身三成伤害的气血' },
     { id: 'e_thorns', name: '魔棘', desc: '受击反弹一成五伤害' },
@@ -578,7 +578,27 @@ const GameData = {
     { id: 'e_wall',   name: '坚甲', desc: '防御 +25%' },
     { id: 'e_rage2',  name: '血性', desc: '狂暴后可再度狂暴一次' },
     { id: 'e_reborn', name: '不灭', desc: '濒死时以三成气血复活一次' },
+    /* ---- v20 词缀扩池 ---- */
+    { id: 'e_plague', name: '瘟疫', desc: '攻击时两成五几率附带随机蚀毒/灼烧/流血' },
+    { id: 'e_soul',   name: '裂魂', desc: '命中后摄走你两成灵力' },
+    { id: 'e_mirror', name: '镜像', desc: '你每获得一项增益，其攻击便涨 8%' },
+    { id: 'e_tstorm', name: '雷皮', desc: '受法诀与符箓伤害 +30%，但自身攻击 -30%' },
+    { id: 'e_gold',   name: '守财', desc: '攻防气血 +20%，死后掉落翻倍' },
+    { id: 'e_wolf',   name: '群狼', desc: '每回合一成五几率唤来一头幼兽撕咬' },
   ],
+  /** v20 精英词缀互斥对（同义/失衡组合不同时出现） */
+  ELITE_AFFIX_MUTEX: [['e_swift', 'e_wall'], ['e_leech', 'e_gold'], ['e_rage2', 'e_reborn'], ['e_plague', 'e_soul']],
+
+  /* ---------- v20 怪物习性模板（buildMonster 随机附加，战斗情报卡可见） ---------- */
+  MONSTER_TEMPLATES: [
+    { id: 'swift',   name: '速攻', hp: 0.85, atk: 1.0,  def: 1.0,  spd: 1.25, crit: 0,  desc: '身法极快，先手难防' },
+    { id: 'iron',    name: '铁壁', hp: 1.15, atk: 0.85, def: 1.4,  spd: 0.85, crit: 0,  desc: '甲坚皮厚，硬碰吃亏' },
+    { id: 'berserk', name: '狂战', hp: 1.0,  atk: 1.2,  def: 0.9,  spd: 1.0,  crit: 0,  desc: '攻势狂暴，宜速战速决' },
+    { id: 'cunning', name: '狡诈', hp: 0.95, atk: 1.05, def: 1.0,  spd: 1.1,  crit: 6,  desc: '出手刁钻，暴击频仍' },
+    { id: 'tough',   name: '坚韧', hp: 1.3,  atk: 0.95, def: 1.05, spd: 0.9,  crit: 0,  desc: '气血绵长，持久难缠' },
+  ],
+  /** 模板掷取权重（none 为无模板普通个体） */
+  MONSTER_TEMPLATE_WEIGHTS: { none: 55, swift: 9, iron: 9, berserk: 9, cunning: 9, tough: 9 },
 
   /* ---------- v19 职业必杀技盘（真元 0~6：普攻命中+1，会心+2，防御+1） ---------- */
   BATTLE_SKILLS: {

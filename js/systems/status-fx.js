@@ -7,20 +7,26 @@ const buildMonster = (id, delta = 0) => {
   const rp = Utils.clamp(d.power + delta, 0, 60);
   const realmIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
   const e = !!d.elite;
+  // v20 习性模板：同一妖兽不同个体养成不同打法（无模板为主，五种习性均摊）
+  const tplId = Utils.pickWeighted(GameData.MONSTER_TEMPLATE_WEIGHTS);
+  const tpl = GameData.MONSTER_TEMPLATES.find(t => t.id === tplId) || null;
+  const m = (v, k) => Math.round(v * ((tpl && tpl[k]) || 1));
   return {
     id,
     name: d.name,
     elite: e,
     power: rp,
     species: d.species || 'beast',
+    tpl: tpl ? tpl.id : null,
+    tplName: tpl ? tpl.name : null,
     skills: (d.skills || []).map(s => ({ ...s })),
     realmLabel: GameData.REALM_NAMES[realmIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
-    hpMax: Math.round((55 + Math.pow(rp, 1.6) * 5) * (d.hp || 1) * (e ? 1.7 : 1)),
-    atk: Math.round((6 + rp * 2.6) * (d.atk || 1) * (e ? 1.35 : 1)),
-    def: Math.round((3 + rp * 1.6) * (d.def || 1)),
-    spd: Math.round((6 + rp * 0.9) * (d.spd || 1)),
+    hpMax: m(Math.round((55 + Math.pow(rp, 1.6) * 5) * (d.hp || 1) * (e ? 1.7 : 1)), 'hp'),
+    atk: m(Math.round((6 + rp * 2.6) * (d.atk || 1) * (e ? 1.35 : 1)), 'atk'),
+    def: m(Math.round((3 + rp * 1.6) * (d.def || 1)), 'def'),
+    spd: m(Math.round((6 + rp * 0.9) * (d.spd || 1)), 'spd'),
     dodge: d.dodge || 0,
-    crit: e ? 10 : 4,
+    crit: (e ? 10 : 4) + ((tpl && tpl.crit) || 0),
     expGain: Math.round(22 * GameData.eco(realmIdx) * (e ? 2.2 : 1)),
     stoneGain: Math.round(Utils.rand(10, 20) * GameData.stoneEco(realmIdx) * (d.stoneMul || 1) * (e ? 2.5 : 1)),
     dropTier: Math.min(4, Math.floor(realmIdx / 2) + 1),
