@@ -102,7 +102,21 @@ const rows = await page.evaluate(() => {   // v20：返回 { out, combat, bonusR
     const a1 = Stat.compute(p1);
     bonusRows.push({ name: '装备+10&词缀 vs 裸装', atk0: a0.atk, atk1: a1.atk, hp0: a0.maxHp, hp1: a1.maxHp });
   }
-  return { out, combat, bonusRows };
+
+  // v20 灵石收支：日均收入估算 vs 主要 sink 单价
+  const stoneRows = [];
+  for (let r = 0; r <= 9; r++) {
+    const eco = GameData.stoneEco(r);
+    const battleIn = Math.round(15 * eco * 3);        // 三战
+    const bountyIn = Math.round(60 * eco);            // 悬赏一桩
+    const dayIn = battleIn + bountyIn + Math.round(20 * eco);
+    const sinkSeclude = Math.round(30 * eco);          // 闭关一轮
+    const sinkRush = Math.round(120 * Math.pow(3.8, Math.min(4, r)));   // 聚灵加速（封顶4境系数）
+    const sinkEnhance = Math.round((120 + 5 * 90) * (1 + 3 * 0.8) * Math.pow(2.4, r));   // 强化+5
+    stoneRows.push({ realm: GameData.REALM_NAMES[r], dayIn, sinkSeclude, sinkRush, sinkEnhance });
+  }
+
+  return { out, combat, bonusRows, stoneRows };
 });
 const sim = rows; await browser.close();
 
@@ -132,6 +146,10 @@ md += `\n## v20 战斗曲线（标准玩家 vs 同境普通怪，30 场蒙特卡
 for (const c of sim.combat) md += `| ${c.realm} | ${c.avgTurns} | ${c.winPct}% |\n`;
 md += `\n## v20 加成汇总（满配 vs 裸装，防滚雪球监控）\n\n| 项 | 攻击 | 气血 |\n|---|---|---|\n`;
 for (const b of sim.bonusRows) md += `| ${b.name} | ${b.atk0} → ${b.atk1}（×${(b.atk1 / Math.max(1, b.atk0)).toFixed(2)}） | ${b.hp0} → ${b.hp1}（×${(b.hp1 / Math.max(1, b.hp0)).toFixed(2)}） |\n`;
+
+md += `\n## v20 灵石收支（日均收入 vs 主要 sink 单价）\n\n| 境界 | 日均收入 | 闭关一轮 | 聚灵加速 | 强化+5 |\n|---|---|---|---|---|\n`;
+for (const st of sim.stoneRows) md += `| ${st.realm} | ${st.dayIn.toLocaleString()} | ${st.sinkSeclude.toLocaleString()} | ${st.sinkRush.toLocaleString()} | ${st.sinkEnhance.toLocaleString()} |\n`;
+
 
 fs.mkdirSync('docs', { recursive: true });
 fs.writeFileSync('docs/balance-v19.md', md, 'utf8');

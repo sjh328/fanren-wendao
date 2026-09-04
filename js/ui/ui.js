@@ -1160,17 +1160,19 @@ const UI = {
       { id: 'talisman', name: '符箓' }, { id: 'all', name: '全部' },
     ];
     const items = Object.keys(p.bag).filter(id => Game.bagTab === 'all' || GameData.ITEMS[id].type === Game.bagTab);
-    // v4：按品质（凡/灵/玄/地/天/仙）优先降序，同品质再按类别归类
-    items.sort((a, b) => {
-      const da = GameData.ITEMS[a], db = GameData.ITEMS[b];
-      const qa = da.grade ?? da.tier ?? 0, qb = db.grade ?? db.tier ?? 0;
-      return (qb - qa) || da.type.localeCompare(db.type) || da.name.localeCompare(db.name);
+    // v4：按品质降序；v20：排序选项（品质/类型/名字）
+    const dI = id => GameData.ITEMS[id];
+    if (Game.bagSort === 'type') items.sort((a, b) => dI(a).type.localeCompare(dI(b).type) || (dI(b).grade ?? dI(b).tier ?? 0) - (dI(a).grade ?? dI(a).tier ?? 0) || dI(a).name.localeCompare(dI(b).name));
+    else if (Game.bagSort === 'name') items.sort((a, b) => dI(a).name.localeCompare(dI(b).name));
+    else items.sort((a, b) => {
+      const qa = dI(a).grade ?? dI(a).tier ?? 0, qb = dI(b).grade ?? dI(b).tier ?? 0;
+      return (qb - qa) || dI(a).type.localeCompare(dI(b).type) || dI(a).name.localeCompare(dI(b).name);
     });
     const rows = items.map(id => {
       const def = GameData.ITEMS[id];
       const gq = def.grade ?? def.tier ?? 0;   // v4：品质档（材料按 tier 折算）
       let btns = '';
-      if (def.type === 'pill') btns = `<button class="btn btn-sm" data-action="act-use" data-item="${id}">服用</button>`;
+      if (def.type === 'pill') btns = `<button class="btn btn-sm" data-action="act-use" data-item="${id}">服用</button>${p.bag[id] > 1 && (def.use || {}).exp ? `<button class="btn btn-sm" data-action="act-use-multi" data-item="${id}" title="连服五枚（丹毒将满自动停）">×5</button>` : ''}`;
       if (def.type === 'gongfa') btns = `<button class="btn btn-sm" data-action="act-learn" data-item="${id}">学习</button>`;
       if (def.type === 'artifact') {
         const isOn = Object.values(p.equipped).some(e => e && Utils.eqId(e) === id);
@@ -1186,7 +1188,10 @@ const UI = {
     }).join('');
     // v4：一键减负——凡品快捷出售；v13：当前分类批量丢弃
     const catName = (types.find(t => t.id === Game.bagTab) || { name: '全部' }).name;
+    const sortBtns = [['quality', '品质'], ['type', '类型'], ['name', '名字']].map(([k, label]) =>
+      `<button class="btn btn-sm ${Game.bagSort === k ? 'btn-primary' : ''}" data-action="bag-sort" data-sort="${k}">${label}</button>`).join('');
     const quick = `<div class="bag-quick">
+      <div class="bag-sort-row" style="margin-bottom:4px">${sortBtns}</div>
       ${ShopSys.commonSaleList().length ? `<button class="btn btn-sm" data-action="act-sell-common">一键出售凡品</button>` : ''}
       ${items.length ? `<button class="btn btn-sm btn-danger" data-action="act-drop-cat" data-cat="${Game.bagTab}">清空「${catName}」</button>` : ''}
     </div>`;

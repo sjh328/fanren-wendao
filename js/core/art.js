@@ -88,12 +88,26 @@ const Art = {
     };
     const item = items[dao] || '<path d="M50 40 L68 24" stroke-width="3" fill="none"/>';
     const color = '#4a5568';
+    const tier = this.playerTier(typeof Game !== 'undefined' ? Game.player : null);
+    const decor = this.playerDecor(tier);
     return `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="${color}" stroke="${color}">
       <circle cx="40" cy="22" r="8"/>
       <path d="M26 62 L28 36 Q40 28 52 36 L54 62 Z"/>
       <path d="M50 36 ${item.startsWith('<path') ? '' : ''}" />
       ${item}
-    </g></svg>`;
+    </g>${decor}</svg>`;
+  },
+  /** v20 主角立绘三档：凡阶（素袍）/ 仙阶（灵光披风·合体起）/ 飞升后（仙羽光环） */
+  playerTier(p) {
+    if (!p) return 0;
+    if (p.flags && p.flags.ascended) return 2;
+    if (p.realmIdx >= 6) return 1;
+    return 0;
+  },
+  playerDecor(tier) {
+    if (tier === 2) return '<path d="M24 62 Q44 50 64 62" stroke="#9a742e" stroke-width="2" fill="none" opacity="0.85"/><circle cx="40" cy="16" r="3" fill="#e8d28a" stroke="none" opacity="0.9"/>';
+    if (tier === 1) return '<path d="M26 60 Q44 48 62 60" stroke="#2f6fce" stroke-width="2.4" fill="none" opacity="0.8"/>';
+    return '';
   },
   /** v20 Boss 专属立绘：帝渊（丹炉魔纹）/ 玄影客（无面披风）/ 心魔（色系反转剪影） */
   BOSS_ART: {

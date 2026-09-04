@@ -63,6 +63,10 @@ try {
   }
   pass('S0 新档创建与开篇演出走完');
 
+  // v20 加固：引导结束后会弹「三分钟上手清单」——直接关掉，避免遮罩拦截后续坐标点击
+  await page.evaluate(() => { if (UI._popupResolve) UI.popupChoose(-1); document.getElementById('popup-modal')?.classList.add('hidden'); });
+  await sleep(200);
+
   /* ================= S1 世界观圣经与角色注册表 ================= */
   const s1 = await page.evaluate(() => ({
     lore: !!(GameData.LORE && GameData.LORE.bloodRiver && GameData.LORE.timeline && GameData.LORE.factions),

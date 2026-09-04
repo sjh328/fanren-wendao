@@ -229,6 +229,8 @@ const PlayerFactory = {
           if (bst.trip && !isFinite(Number(bst.trip.until))) bst.trip = null;
         }
         for (const k of Object.keys(out.attrs)) out.attrs[k] = Utils.clamp(out.attrs[k], 0, 12);
+        out.rushDay = isFinite(Number(out.rushDay)) ? Number(out.rushDay) : null;
+        out._daoCultDay = isFinite(Number(out._daoCultDay)) ? Number(out._daoCultDay) : null;
       },
     ];
     // 基础：fresh 模板 + 展开合并

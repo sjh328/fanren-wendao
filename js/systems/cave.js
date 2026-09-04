@@ -80,6 +80,25 @@ const CaveSys = {
     Log.add(`【洞府访客】${ev.text}`, 'info');
     Game.afterAction();
   },
+  /** v20 聚灵加速：花灵石点燃聚灵阵，当日修炼效率 ×1.5（日限一次） */
+  async spiritRush() {
+    const p = Game.player;
+    if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
+    const today = Math.floor(p.day || 0);
+    if (p.rushDay === today) { UI.toast('聚灵阵今日已点燃，明日再来'); return; }
+    const cost = Math.round(120 * GameData.stoneEco(Math.min(4, p.realmIdx)));
+    const ok = await UI.popup({
+      title: '聚灵加速',
+      html: `燃烧灵石为聚灵阵供能——<b>今日修炼效率 ×1.5</b>（每轮修炼约 \${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 1.5))} 修为）。<br>需灵石 <span class="hl">\${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 日限一次；闭关与自动修炼同样受益。</span>`,
+      options: [{ text: '点燃聚灵阵', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    p.rushDay = today;
+    Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -\${Utils.fmtNum(cost)}）`, 'system');
+    Story.chron('点燃聚灵阵（日修加速）');
+    Game.afterAction();
+  },
   /** v20 灵泉：每日首次入洞府自动涌出灵石（日界防重） */
   springDaily(p) {
     if (!p.cave || !p.cave.builds || !p.cave.builds.spring) return;

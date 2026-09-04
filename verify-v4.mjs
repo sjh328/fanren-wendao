@@ -94,6 +94,10 @@ try {
   }
   pass('T0 开局进入游戏（存档位三）');
 
+  // v20 加固：引导结束后会弹「三分钟上手清单」——直接关掉，避免遮罩拦截后续坐标点击
+  await page.evaluate(() => { if (UI._popupResolve) UI.popupChoose(-1); document.getElementById('popup-modal')?.classList.add('hidden'); });
+  await sleep(200);
+
   /* ---------- U1 按钮按压/悬浮样式规则存在 ---------- */
   const ruleText = await page.evaluate(() => {
     const out = [];

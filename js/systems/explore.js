@@ -69,6 +69,9 @@ const Explore = {
           for (let w = 1; w < n; w++) waveIds.push(Utils.pickWeighted(map.pool));
           bctx.waveIds = waveIds;
         }
+        // v20 新手保底：首场战斗敌方削弱两成（counters.battles===0 视为首战）
+        const firstFightMercy = (p.counters.battles || 0) === 0;
+        if (firstFightMercy) bctx.mercy = 0.8;   // v20 首战保底
         Battle.start(monsterId, bctx);
         return; // 战斗结束后自行结算
       }

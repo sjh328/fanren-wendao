@@ -2337,3 +2337,18 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
 @keyframes fxSpark { 0% { opacity: 1; transform: scale(0.9); } 100% { opacity: 0; transform: scale(1.25); } }
 @keyframes fxFrost { from { opacity: 1; } to { opacity: 0; } }
 @keyframes fxHalo { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+
+/* ==================== v20 移动端 480px 复核 ==================== */
+@media (max-width: 480px) {
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 38px; padding: 6px 10px; }
+  .tab-btn { min-height: 44px; }
+  .popup-box { max-width: 94vw; max-height: 86vh; overflow: auto; }
+  .battle-box { max-height: 88vh; overflow: auto; }
+  .bt-actions .btn { min-height: 44px; padding: 8px 10px; }
+  .stat-detail { padding: 2px 4px; }
+  .bag-quick .btn { min-height: 40px; }
+  .amb-panel { right: 4px; left: auto; width: min(92vw, 300px); }
+  #log-wrap .log-tools .log-tool { min-height: 34px; }
+}

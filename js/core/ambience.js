@@ -39,6 +39,30 @@ const Ambience = {
         UI.toast(`界面字号：${{ 100: '标准', 110: '大', 122: '特大' }[v] || v + '%'}`);
       });
     }
+    // v20 设置中心：数字滚动/浮动数字开关 + 日志密度
+    const anim = document.getElementById('amb-anim');
+    if (anim) {
+      anim.checked = (Save.read('amb') || {}).anim !== false;   // 默认开
+      this.applyAnimPref(anim.checked);
+      anim.addEventListener('click', e => {
+        this.applyAnimPref(e.target.checked);
+        const pref = Save.read('amb') || {};
+        pref.anim = e.target.checked;
+        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        UI.toast(e.target.checked ? '数字动效：开' : '数字动效：关（性能模式）');
+      });
+    }
+    const dens = document.getElementById('amb-logdens');
+    if (dens) {
+      dens.value = (Save.read('amb') || {}).logDens || 'all';
+      dens.addEventListener('change', e => {
+        const pref = Save.read('amb') || {};
+        pref.logDens = e.target.value;
+        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        if (typeof Log !== 'undefined') Log.density = e.target.value;
+        UI.toast(e.target.value === 'lite' ? '日志密度：精简' : '日志密度：全量');
+      });
+    }
     // v13 设置中心：战斗速度
     const spd = document.getElementById('amb-speed');
     if (spd) {
@@ -58,6 +82,11 @@ const Ambience = {
       };
       document.addEventListener('pointerdown', kick);
     }
+  },
+  /** v20 数字动效开关：关闭时 Anim.scan 直接定格、战斗浮动数字不入队 */
+  applyAnimPref(on) {
+    this.animOn = !!on;
+    if (typeof Anim !== 'undefined') Anim.enabled = this.animOn;
   },
   /** v19 字号档位 */
   applyFontScale(v) {

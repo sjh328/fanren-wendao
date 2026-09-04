@@ -4,6 +4,7 @@ const Game = {
   slot: null,
   activeTab: 'cultivate',
   bagTab: 'all',
+  bagSort: 'quality',   // v20 背包排序：quality 品质 / type 类型 / name 名字
 
   init() {
     UI.cache();
@@ -273,6 +274,7 @@ const Game = {
       }
     },
     'bag-tab': (d) => { Game.bagTab = d.bagtab; UI.renderBag(); },
+    'bag-sort': (d) => { Game.bagSort = d.sort; UI.renderBag(); },   // v20 背包排序
     /* --- v4 日志工具 / 一键减负 --- */
     'log-pause': () => Log.togglePause(),
     'log-clear': () => Log.clear(),
@@ -328,6 +330,7 @@ const Game = {
     'act-learn': (d) => GongfaSys.learn(d.item),
     /* --- 背包物品 --- */
     'act-use': (d) => Bag.use(d.item),
+    'act-use-multi': (d) => Bag.useMulti(d.item, 5),   // v20 丹药批量服用
     'act-equip': (d) => Bag.equip(d.item),
     'act-unequip': (d) => Bag.unequip(d.slot),
     'act-drop': (d) => Bag.drop(d.item),
@@ -413,6 +416,7 @@ const Game = {
     'act-forge': (d) => ForgeSys.forge(d.recipe),
     /* --- v13 洞府 / 灵兽 --- */
     'act-cave-up': () => CaveSys.upgrade(),
+    'act-spirit-rush': () => CaveSys.spiritRush(),   // v20 聚灵加速
     'act-cave-plant': (d) => CaveSys.plant(Number(d.i)),
     'act-cave-harvest': (d) => CaveSys.harvest(Number(d.i)),
     'act-cave-water': (d) => CaveSys.water(Number(d.i)),

@@ -12,8 +12,11 @@ const Cultivate = {
     if (p.dao === 'array' && DaoSys.tierLevel(p) >= 2) g *= 1.1;   // v10 阵道六境·聚灵境
     if (typeof Art !== 'undefined' && Art.seasonOf(p) === 0) g *= 1.1;   // v20 孟春灵潮：修炼 +10%
     if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) g *= 1.2;   // v20 天下大事·灵潮
+    if (p.rushDay === Math.floor(p.day || 0)) g *= 1.5;   // v20 聚灵加速
     return g;
   },
+  /** v20 聚灵加速：当日 ×1.5（洞府点燃，日限一次） */
+  rushMul(p) { return (p.rushDay === Math.floor(p.day || 0)) ? 1.5 : 1; },
   /** v20 闭关效率：隆冬蛰伏 +10% */
   secludeMul(p) { return (typeof Art !== 'undefined' && Art.seasonOf(p) === 3) ? 1.1 : 1; },
   gainMult() {

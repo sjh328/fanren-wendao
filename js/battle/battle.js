@@ -11,6 +11,12 @@ const Battle = {
     const st = Stat.compute(p);
     if (p.hp <= 0) p.hp = 1;
     const enemy = ctx.enemy || buildMonster(monsterId);
+    // v20 首战保底：敌方整体削弱（ctx.mercy < 1）
+    if (ctx.mercy && ctx.mercy < 1) {
+      enemy.hpMax = Math.round(enemy.hpMax * ctx.mercy);
+      enemy.atk = Math.round(enemy.atk * ctx.mercy);
+      this.log('【初入江湖】对方见你面生，未出全力——这是一场善意的较量。', 'log-system');
+    }
     // §23 魔域狂化：气血/攻击/收益同步放大
     if (ctx.worldMul) {
       enemy.hpMax = Math.round(enemy.hpMax * ctx.worldMul);
@@ -1603,7 +1609,7 @@ const Battle = {
     // v18：主角剪影立绘
     const mfig = document.querySelector('#battle-box .me-fig');
     if (mfig) mfig.innerHTML = Art.player(p.dao);
-    if (B.floats.length) {
+    if (B.floats.length && (typeof Ambience === 'undefined' || Ambience.animOn !== false)) {   // v20 性能模式可关浮动数字
       const usedPositions = [];
       for (const f of B.floats) {
         const host = f.side === 'enemy' ? eside : mside;

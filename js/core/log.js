@@ -8,6 +8,7 @@ const Log = {
   paused: false,     // v4：暂停自动滚动
   pinTimer: null,    // v4：金色置顶条计时器
   filter: null,      // v20：类型过滤（null=全部）
+  density: 'all',    // v20：all / lite（略去见闻）
   TYPES: { info: '见闻', gain: '收获', loss: '损失', battle: '战斗', system: '系统', realm: '境界', event: '事件', warn: '警训', story: '剧情' },
   init() {
     this.el = document.getElementById('log');
@@ -24,7 +25,7 @@ const Log = {
   },
   /** text 支持 HTML；type: info/gain/loss/battle/system/realm/event/warn/crit */
   add(text, type = 'info') {
-    if (!this.el) return;
+    if (!this.el || this.skim(type)) return;
     const p = Game.player;
     const year = p ? Math.floor(p.day / 365) + 1 : 1;
     const div = document.createElement('div');
@@ -41,6 +42,8 @@ const Log = {
     // v14：折叠态提示新日志
     this.pokeBadge();
   },
+  /** v20 日志密度：lite 模式下略去 info（见闻/氛围）类，降低刷屏 */
+  skim(type) { return this.density === 'lite' && (type === 'info'); },
   /** v20 日志类型过滤：null=全部，否则仅显示该类型 */
   setFilter(type) {
     this.filter = type;

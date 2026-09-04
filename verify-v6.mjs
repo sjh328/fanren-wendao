@@ -109,6 +109,10 @@ try {
     await sleep(100);
   }
   pass('T0 开局进入游戏（存档位三）');
+
+  // v20 加固：引导结束后会弹「三分钟上手清单」——直接关掉，避免遮罩拦截后续坐标点击
+  await page.evaluate(() => { if (UI._popupResolve) UI.popupChoose(-1); document.getElementById('popup-modal')?.classList.add('hidden'); });
+  await sleep(200);
   // v15：主线预完结 + 中段预标记，关掉开局剧情弹窗，避免阻断后续测试点击
   await page.evaluate(() => {
     const p = Game.player;

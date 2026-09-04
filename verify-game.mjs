@@ -138,6 +138,9 @@ try {
   }
   (await page.$eval('#tutorial', el => el.className)).includes('hidden') ? pass('T3 引导可走完关闭') : fail('T3 引导关闭', '');
   await drainStory(page);   // v11+ 新档自动播放第一章开篇，须清掉卷轴
+  // v20 加固：引导结束弹「三分钟上手清单」——关掉再继续
+  await page.evaluate(() => { if (UI._popupResolve) UI.popupChoose(0); document.getElementById('popup-modal')?.classList.add('hidden'); });
+  await sleep(200);
   await shot(page, 'main_ui');
 
   /* ---------- T4 修炼 ---------- */

@@ -8,6 +8,7 @@
 const Anim = {
   cache: {},   // nk -> 当前已显示的值（跨渲染保持滚动连续性）
   raf: {},     // nk -> 动画帧句柄
+  enabled: true,   // v20：设置中心可关（关=直接定格）
   fmtOf(el) { return el.dataset.fmt === 'fmt' ? (v => Utils.fmtNum(Math.round(v))) : (v => String(Math.round(v))); },
   /** 扫描容器内所有 .num-anim，启动/续接滚动动画 */
   scan(root) {
@@ -18,6 +19,7 @@ const Anim = {
       if (!key || !isFinite(target)) return;
       const from = (key in this.cache) ? this.cache[key] : target;
       const fmt = this.fmtOf(el);
+      if (!this.enabled) { this.cache[key] = target; el.textContent = fmt(target); return; }   // v20 性能模式
       if (Math.abs(target - from) < 0.5) {   // 值未变：直接定格，避免抖动
         this.cache[key] = target;
         el.textContent = fmt(target);

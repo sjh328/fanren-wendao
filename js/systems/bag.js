@@ -55,6 +55,28 @@ const Bag = {
     if (s.high) parts.push(`上品 ${Utils.fmtNum(s.high)}`);
     return parts.join(' · ');
   },
+  /** v20 丹药批量服用：连服 N 枚（丹毒将满或数量不足自动停） */
+  useMulti(itemId, n = 5) {
+    const p = Game.player;
+    const def = GameData.ITEMS[itemId];
+    if (!def || def.type !== 'pill') return;
+    n = Utils.clamp(Math.floor(Number(n)) || 5, 1, 99);
+    let used = 0;
+    while (used < n && this.count(itemId) > 0) {
+      const st = Stat.compute(p);
+      const cap = Stat.poisonCap(p);
+      const gain = (def.poison || 0) * (1 - st.poisonReduce / 100);
+      if (def.poison && p.poison + gain > cap) { UI.toast('丹毒将满，自动停服'); break; }
+      this.removeItem(itemId, 1);
+      Pill.apply(p, def, true);
+      used++;
+      if (p.dead) break;
+    }
+    if (used) {
+      Time.add(used);
+      if (!p.dead) { Log.add(`你一口气连服 ${def.name} ×${used}。`, 'gain'); Game.afterAction(); }
+    } else UI.toast('丹毒将满，不宜再服');
+  },
   use(itemId) {
     const p = Game.player;
     const def = GameData.ITEMS[itemId];
@@ -118,11 +140,14 @@ const Bag = {
       const oldEnh = cur && typeof cur === 'object' ? (cur.enhance || 0) : ((p.enhanced || {})[curId] || 0);
       const inhOre = Math.ceil(oldEnh * 1.5);
       const canInh = oldEnh > 0 && Bag.count('m_xuantie') >= inhOre;
+      // v20 推荐标记：攻击2倍/防御1.5倍/气血0.3倍/暴击闪避1倍加权估分
+      const score = b => Object.entries(b || {}).reduce((acc, [k, v]) => acc + ({ atk: v * 2, atkPct: v * 2, def: v * 1.5, defPct: v * 1.5, hp: v * 0.3, hpPct: v * 0.3, mp: v * 0.2, mpPct: v * 0.2, spd: v, spdPct: v, crit: v, dodge: v, block: v * 0.5, cult: v, stonePct: v, luck: v * 2 }[k] ?? 0), 0);
+      const newBetter = score(def.bonus) > score(curDef.bonus) * (1 + oldEnh * 0.1);
       const ok = await UI.popup({
         title: '装备对比',
-        html: `<div class="stat-line"><span>当前</span><b>${curDef.name}${oldEnh ? ' +' + oldEnh : ''}</b></div>
+        html: `<div class="stat-line"><span>当前${newBetter ? '' : ' <span class="tag safe">推荐</span>'}</span><b>${curDef.name}${oldEnh ? ' +' + oldEnh : ''}</b></div>
           <div class="tip-line">· ${fmt(curDef.bonus)}</div>
-          <div class="stat-line" style="margin-top:4px"><span>换上</span><b>${def.name}</b></div>
+          <div class="stat-line" style="margin-top:4px"><span>换上${newBetter ? ' <span class="tag safe">推荐</span>' : ''}</span><b>${def.name}</b></div>
           <div class="tip-line">· ${fmt(def.bonus)}</div>
           ${oldEnh > 0 ? `<div class="tip-line" style="margin-top:4px">· <b>传承</b>：旧装备随炉而化，新装备承其 ${Math.ceil(oldEnh * 0.6)} 级强化（需玄铁矿 ×${inhOre}）</div>` : ''}`,
         options: [

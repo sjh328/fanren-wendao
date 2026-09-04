@@ -96,6 +96,7 @@ const Utils = {
 const Anim = {
   cache: {},   // nk -> 当前已显示的值（跨渲染保持滚动连续性）
   raf: {},     // nk -> 动画帧句柄
+  enabled: true,   // v20：设置中心可关（关=直接定格）
   fmtOf(el) { return el.dataset.fmt === 'fmt' ? (v => Utils.fmtNum(Math.round(v))) : (v => String(Math.round(v))); },
   /** 扫描容器内所有 .num-anim，启动/续接滚动动画 */
   scan(root) {
@@ -106,6 +107,7 @@ const Anim = {
       if (!key || !isFinite(target)) return;
       const from = (key in this.cache) ? this.cache[key] : target;
       const fmt = this.fmtOf(el);
+      if (!this.enabled) { this.cache[key] = target; el.textContent = fmt(target); return; }   // v20 性能模式
       if (Math.abs(target - from) < 0.5) {   // 值未变：直接定格，避免抖动
         this.cache[key] = target;
         el.textContent = fmt(target);
@@ -224,12 +226,26 @@ const Art = {
     };
     const item = items[dao] || '<path d="M50 40 L68 24" stroke-width="3" fill="none"/>';
     const color = '#4a5568';
+    const tier = this.playerTier(typeof Game !== 'undefined' ? Game.player : null);
+    const decor = this.playerDecor(tier);
     return `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="${color}" stroke="${color}">
       <circle cx="40" cy="22" r="8"/>
       <path d="M26 62 L28 36 Q40 28 52 36 L54 62 Z"/>
       <path d="M50 36 ${item.startsWith('<path') ? '' : ''}" />
       ${item}
-    </g></svg>`;
+    </g>${decor}</svg>`;
+  },
+  /** v20 主角立绘三档：凡阶（素袍）/ 仙阶（灵光披风·合体起）/ 飞升后（仙羽光环） */
+  playerTier(p) {
+    if (!p) return 0;
+    if (p.flags && p.flags.ascended) return 2;
+    if (p.realmIdx >= 6) return 1;
+    return 0;
+  },
+  playerDecor(tier) {
+    if (tier === 2) return '<path d="M24 62 Q44 50 64 62" stroke="#9a742e" stroke-width="2" fill="none" opacity="0.85"/><circle cx="40" cy="16" r="3" fill="#e8d28a" stroke="none" opacity="0.9"/>';
+    if (tier === 1) return '<path d="M26 60 Q44 48 62 60" stroke="#2f6fce" stroke-width="2.4" fill="none" opacity="0.8"/>';
+    return '';
   },
   /** v20 Boss 专属立绘：帝渊（丹炉魔纹）/ 玄影客（无面披风）/ 心魔（色系反转剪影） */
   BOSS_ART: {
@@ -419,6 +435,30 @@ const Ambience = {
         UI.toast(`界面字号：${{ 100: '标准', 110: '大', 122: '特大' }[v] || v + '%'}`);
       });
     }
+    // v20 设置中心：数字滚动/浮动数字开关 + 日志密度
+    const anim = document.getElementById('amb-anim');
+    if (anim) {
+      anim.checked = (Save.read('amb') || {}).anim !== false;   // 默认开
+      this.applyAnimPref(anim.checked);
+      anim.addEventListener('click', e => {
+        this.applyAnimPref(e.target.checked);
+        const pref = Save.read('amb') || {};
+        pref.anim = e.target.checked;
+        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        UI.toast(e.target.checked ? '数字动效：开' : '数字动效：关（性能模式）');
+      });
+    }
+    const dens = document.getElementById('amb-logdens');
+    if (dens) {
+      dens.value = (Save.read('amb') || {}).logDens || 'all';
+      dens.addEventListener('change', e => {
+        const pref = Save.read('amb') || {};
+        pref.logDens = e.target.value;
+        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        if (typeof Log !== 'undefined') Log.density = e.target.value;
+        UI.toast(e.target.value === 'lite' ? '日志密度：精简' : '日志密度：全量');
+      });
+    }
     // v13 设置中心：战斗速度
     const spd = document.getElementById('amb-speed');
     if (spd) {
@@ -438,6 +478,11 @@ const Ambience = {
       };
       document.addEventListener('pointerdown', kick);
     }
+  },
+  /** v20 数字动效开关：关闭时 Anim.scan 直接定格、战斗浮动数字不入队 */
+  applyAnimPref(on) {
+    this.animOn = !!on;
+    if (typeof Anim !== 'undefined') Anim.enabled = this.animOn;
   },
   /** v19 字号档位 */
   applyFontScale(v) {
@@ -2133,145 +2178,145 @@ const GameData = {
       spar: ['「接我一招再说。」', '「你比上月快了三分。」'],
       discuss: ['「剑非杀人器。记住这句。」', '「师父死在一场被安排的比剑上——此事，只告诉过你。」', '「剑修的孤独，你若懂——便不算白交你这朋友。」'],
       realm: ['「又进一境。别停在半路。」', '「高处风大，站稳。」', '「又进一境。剑钝了可以磨，心钝了——来找我。」'],
-      hostile: ['「拔剑。」', '「此仇，剑上见。」'] },
+      hostile: ['「拔剑。」', '「此仇，剑上见。」', '「剑已出鞘——说吧，遗言。」'] },
     n2:  { greet: ['「道友来访，有失远迎。」', '「炉上刚好煎着新茶。」', '「你来了——药已煎好，趁热喝。」'],
       gift: ['「这如何使得……多谢道友。」', '「礼我收下，心意我记下了。」', '「这药材成色极好，我先收下了。」'],
       spar: ['「点到为止哦。」', '「你旧伤没好利索，我让着三分。」'],
       discuss: ['「药有药性，人有人心——都急不得。」', '「谷中那本账簿，我已交给了长老会。」', '「丹道一途，救人易，救心难。」'],
       realm: ['「恭喜。记得来配副固本的药。」', '「境界高了，丹毒更凶——慎服丹。」', '「境界高了，更要按时喝我配的茶。别嫌唠叨。」'],
-      hostile: ['「……何必呢。」', '「药能医病，医不了贪嗔。」'] },
+      hostile: ['「……何必呢。」', '「药能医病，医不了贪嗔。」', '「药可救不了你这次的病。」'] },
     n3:  { greet: ['「有朋自远方来。」', '「正翻到你说过的那卷书。」', '「坐，我沏了新墨……不对，新茶。」'],
       gift: ['「却之不恭。」', '「书生无以为报，抄书一卷相赠。」', '「礼尚往来，来日方长。」'],
       spar: ['「笔阵，勉强算兵器么？」', '「败得心服口服。」'],
       discuss: ['「史书写的是胜者——但注脚里藏着真相。」', '「藏经阁残卷的抄本，你何时来取？」', '「读书人的三件事：明理、知耻、不忘本。」'],
       realm: ['「可喜可贺，当浮一大白……以茶代酒。」', '「他日史书里，会有你的名字。」', '「他日史书落笔，今日当为注脚。恭喜。」'],
-      hostile: ['「君子动口……罢了，动手吧。」', '「士可杀，不可辱。」'] },
+      hostile: ['「君子动口……罢了，动手吧。」', '「士可杀，不可辱。」', '「斯文败类，也配谈笔？」'] },
     n4:  { greet: ['「说。」', '「又是你。」', '「……坐。别碰我的刀。」'],
       gift: ['「拿回去。」（还是收了）', '「……欠你一次。」', '「放这儿吧。」'],
       spar: ['「三招之内见真章。」', '「你的刀，慢了。」'],
       discuss: ['「刀出鞘就要见血——不然别拔。」', '「我仇家遍地，你别沾边。」', '「仇家越多，刀越快——这是刀客的道理。」'],
       realm: ['「境界是拿来杀人的，不是拿来庆贺的。」', '「……快了。快追上我了。」', '「……境界这东西，刀一样，快了就行。」'],
-      hostile: ['「刀下不留活口。」', '「你很勇。可惜。」'] },
+      hostile: ['「刀下不留活口。」', '「你很勇。可惜。」', '「正好。我的刀也饿了。」'] },
     n5:  { greet: ['「稀客稀客，快请坐。」', '「我就知道你今日会来。」', '「老规矩，二楼雅间。」'],
       gift: ['「哟，会做人。」', '「这礼……我记在账上了。」', '「识货！这份礼拿得出手。」'],
       spar: ['「赔我袖子！这可是蜀锦！」', '「算你赢——这一局的茶钱你出。」'],
       discuss: ['「你查黑玉令？巧了，我也在查。」', '「资金链的最后一环，在太衍宗的库房里。」', '「消息这行，七分真三分留——你算那七分。」'],
       realm: ['「大喜事！烟雨楼今日酒水半价。」', '「将来你的传记我来写——包挣钱。」', '「大喜！烟雨楼记你一功——回头给你折个账。」'],
-      hostile: ['「你砸我招牌？」', '「江湖再见——最好别再见。」'] },
+      hostile: ['「你砸我招牌？」', '「江湖再见——最好别再见。」', '「砸烟雨楼的场子？账本记你一辈子。」'] },
     n6:  { greet: ['「哈哈哈，来的正好！」', '「兄弟！饿不饿？锅里还有！」', '「啥也别说了，先干一碗！」'],
       gift: ['「哈哈，那我就不客气了！」', '「下回我请你吃烤全羊！」', '「哈哈，兄弟客气！」'],
       spar: ['「来来来，让你三招——好吧不让了！」', '「痛快！再来！」'],
       discuss: ['「俺不懂大道理，就懂『朋友』俩字。」', '「你说往东，俺绝不往西。」', '「练拳先练胆，交人先交心。」'],
       realm: ['「好小子！晚上加个菜！」', '「以后谁敢欺负你，报俺名字！」', '「好小子！回来喝酒，酒钱俺出！」'],
-      hostile: ['「你动俺兄弟？」', '「打完这场，恩断义绝！」'] },
+      hostile: ['「你动俺兄弟？」', '「打完这场，恩断义绝！」', '「兄弟反目？那就打完再做陌生人！」'] },
     n7:  { greet: ['「你来了。」', '「一曲未终，恕不远迎。」', '「为我抚一曲？……罢了，我自己来。」'],
       gift: ['「有心了。」', '「此物与琴相配，多谢。」', '「琴弦正缺一段红绦……有心。」'],
       spar: ['「琴音为号，剑光为拍。」', '「你的剑，合我曲中第三拍。」'],
       discuss: ['「《雪衣》那支曲子，弹的是雪葬故人。」', '「曲终意未尽——你听懂了几分？」', '「曲高者和寡，幸有你听。」'],
       realm: ['「琴剑同源，恭喜。」', '「他日雪落时，为你再抚一曲。」', '「琴弦为你松了半分——这是琴师的贺礼。」'],
-      hostile: ['「搅了雅兴。」', '「琴声可以杀人，信么？」'] },
+      hostile: ['「搅了雅兴。」', '「琴声可以杀人，信么？」', '「这一曲，是送葬的。」'] },
     n8:  { greet: ['「道友可是带了什么好买卖？」', '「早——今日行情看涨。」', '「自己人，柜台后头请。」'],
       gift: ['「好东西，值这个价。」', '「这份人情，抵五百灵石。」', '「这礼，合我掌柜的账。」'],
       spar: ['「打赢了，打八折。」', '「唉，血亏。算了算了。」'],
       discuss: ['「万宝商会的账，能洗白也能洗黑。」', '「你要查的那笔旧账——本钱不小啊。」', '「生意经第一条：和气；第二条：记账。」'],
       realm: ['「大喜！商会奉上一份贺仪。」', '「境界就是本钱——记得来我这投资。」', '「境界就是本钱！这份贺仪，商会包了。」'],
-      hostile: ['「砸场子？先赔钱。」', '「商道无情，你也别怪我。」'] },
+      hostile: ['「砸场子？先赔钱。」', '「商道无情，你也别怪我。」', '「商道无情——先赔了这单再走。」'] },
     n9:  { greet: ['「唔……你身上有件有趣的东西。」', '「别踩我符阵！」', '「来得正好，帮我按住这张纸。」'],
       gift: ['「有意思，有意思。」', '「此物可入符……谢了。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「先声明，我符里掺了痒粉。」', '「咳，手滑。算你赢。」'],
       discuss: ['「三百年前我卖过一张符——买主，是血河的人。」', '「烧掉的每一张符，我都记得。」', '「画符如做人：一笔错，满盘输。」'],
       realm: ['「境界涨了，笔也该换换了。」', '「替我瞧瞧：这道纹，直也不直？」', '「老夫掐指一算——嗯，该请你喝酒了。」'],
-      hostile: ['「来，尝尝痒粉。」', '「老夫的符，可不认旧情。」'] },
+      hostile: ['「来，尝尝痒粉。」', '「老夫的符，可不认旧情。」', '「痒粉伺候——痒死你。」'] },
     n10: { greet: ['「请坐，茶在壶里。」', '「阵成了一角，你来得巧。」', '「不必多礼——看棋？」'],
       gift: ['「心意领了。」', '「此物可作阵眼，收下了。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「棋盘即战场。」', '「你赢了半子——只半子。」'],
       discuss: ['「困杀大阵的残图，我补出了三笔。」', '「阵理即天理，强求不得。」', '「阵成之日，天地无言——大巧若拙，方是布阵的至境。」'],
       realm: ['「境界如布阵，步步为营。」', '「待你困龙锁天之日，我为你掌灯。」', '「境界如阵，步步为营。这一步，落得好。」'],
-      hostile: ['「入阵者，不问来意。」', '「困你三息，够了。」'] },
+      hostile: ['「入阵者，不问来意。」', '「困你三息，够了。」', '「入阵。困你到道心俱碎。」'] },
     n11: { greet: ['「施主安好。」', '「气色好了些——药按时吃了么？」', '「来得正好，后山又送来伤员。」'],
       gift: ['「功德无量。」', '「此物转赠伤员，替他们谢过。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「医者也讲武德——点到即止。」', '「你的旧伤没好透，我让你双手。」'],
       discuss: ['「人心也是病，得慢慢治。」', '「红尘炼心——你炼到哪一重了？」', '「救人一命，胜修十年——这不是虚言，是一笔实账。」'],
       realm: ['「善哉。境界高者，更当慈悲。」', '「往后跌打损伤，都找我。」', '「善哉。境界高一分，慈悲便要宽一分。」'],
-      hostile: ['「冤冤相报……唉。」', '「我不还手，但也不让开。」'] },
+      hostile: ['「冤冤相报……唉。」', '「我不还手，但也不让开。」', '「我不还手。但你也别想过去。」'] },
     n12: { greet: ['「哟，还记得我呢？」', '「嘘——我刚从太衍宗『借』东西回来。」', '「想要什么消息？先说好，不赊账。」'],
       gift: ['「懂规矩！」', '「下次偷……借东西时，想着你。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「抓得到我再说。」', '「哎呀，脚滑。算你赢。」'],
       discuss: ['「玄玑真人的密室，我进去了——三炷香的时间。」', '「他密室里挂着的，是黑玉令的拓片。」', '「天下的锁，锁得住笨贼，锁不住有心人。」'],
       realm: ['「又高一层？那我偷东西得更小心了。」', '「恭喜欢迎——礼我顺手替你拿来了。」', '「又高一层？那我偷东西的手，得更稳了。」'],
-      hostile: ['「你坏我好事。」', '「追我？先练十年轻功。」'] },
+      hostile: ['「你坏我好事。」', '「追我？先练十年轻功。」', '「偷你偷到倾家荡产——说话算话。」'] },
     n13: { greet: ['「你胆子不小。」', '「月光正好——说吧，什么事。」', '「又是你。看来我们命里有纠缠。」'],
       gift: ['「你这是在讨好我？」', '「收下了。别指望我还礼。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「伤到你，可不包治。」', '「……你进步了。有点意思。」'],
       discuss: ['「血河余孽的销赃路，我带你走一遭。」', '「魔道也讲信誉——至少我讲。」', '「月圆看人最准——你眼底的光，比三年前亮了。」'],
       realm: ['「魔随道长，恭喜。」', '「月圆之夜，我请你喝酒。」', '「魔随道长。月圆之夜，酒我请。」'],
-      hostile: ['「犯我者，虽远必诛。」', '「给你三息，逃命的机会。」'] },
+      hostile: ['「犯我者，虽远必诛。」', '「给你三息，逃命的机会。」', '「月光下埋人，最干净。」'] },
     n14: { greet: ['「师兄师姐！」', '「你什么时候再教我剑呀？」', '「哥哥又凶我了，你评评理！」'],
       gift: ['「哇！给我的？」', '「我要告诉哥哥去……不对，谢谢你！」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「看招！燕子三抄水！」', '「呜，又输了。再来一次！」'],
       discuss: ['「哥哥其实很关心你，他就是嘴硬。」', '「藏经阁后巷有只猫，我带你去摸！」', '「等我练成万剑诀，第一个演给你看！」'],
       realm: ['「哇——好厉害！回头教教我嘛。」', '「以后我也能这么厉害吗？」', '「哇——好厉害！什么时候教我呀？」'],
-      hostile: ['「你、你欺负人！」', '「我哥不会放过你的！」'] },
+      hostile: ['「你、你欺负人！」', '「我哥不会放过你的！」', '「欺负到我头上，我哥可不拦我了！」'] },
     n15: { greet: ['「三枚灵石，包你满意。」', '「打探消息？老价钱。」', '「哎哟贵客——今日打折，九十九枚。」'],
       gift: ['「够意思！」', '「这礼……按市价可抵十条消息。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「君子动口不动手……好吧，接招！」', '「认输认输！本钱都输光了。」'],
       discuss: ['「血河的旧闻？三枚灵石。……看你诚心，两枚。」', '「黑风寨的账，坊市人人都有一份。」', '「消息这行有句话：知道得越多，睡得越少。」'],
       realm: ['「大吉大利！今日消息免费。」', '「您这样的人物，将来用得着小弟。」', '「大吉大利！今日起，您的消息一律九五折。」'],
-      hostile: ['「断人财路，如杀人父母！」', '「这架，我记账上了！」'] },
+      hostile: ['「断人财路，如杀人父母！」', '「这架，我记账上了！」', '「断我财路？这条消息卖你仇家了！」'] },
     n16: { greet: ['「好！痛快！」', '「来，掰个腕子！」', '「谷里新酿的酒，走一坛？」'],
       gift: ['「够爽快！」', '「回谷给你捎两块好矿石！」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「接俺一拳试试！」', '「好硬！俺服了！」'],
       discuss: ['「矿洞底下那东西，又动了。」', '「磐岩谷的门，永远为你开着。」', '「山就摆在那儿——你怕它，它压你；你扛它，它服你。」'],
       realm: ['「好汉子！这坛酒敬你！」', '「以后矿塌了，找俺！」', '「好汉子！这坛酒敬你——喝完再练！」'],
-      hostile: ['「俺最恨阴诡之徒！」', '「拳头底下见真章！」'] },
+      hostile: ['「俺最恨阴诡之徒！」', '「拳头底下见真章！」', '「阴诡之徒——尝尝裂山拳！」'] },
     n17: { greet: ['「你来了。」', '「星图刚推到一半，稍候。」', '「……坐。别踩到阵基。」'],
       gift: ['「多谢。」', '「此物合星阵之理，收下。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「星辰为子，请。」', '「你快了半拍——下次再来。」'],
       discuss: ['「血河故道的星轨，三百年没动过。」', '「塔顶的手记，只给你一个人看过。」', '「星轨无言，可错一分，人间便是百年。」'],
       realm: ['「星随道转，恭喜。」', '「雷台护阵之约，我记着。」', '「星随道转。雷台之约，我记着。」'],
-      hostile: ['「星罚将至。」', '「布阵——你走不出三步。」'] },
+      hostile: ['「星罚将至。」', '「布阵——你走不出三步。」', '「星罚落处，尔等形神俱灭。」'] },
     n18: { greet: ['「幸会幸会。」', '「正读《剑经》第三卷，请指教。」', '「青萍剑谱抄本，道友可要一观？」'],
       gift: ['「却之不恭。」', '「回赠小作一篇，聊表谢意。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「以剑会友，请。」', '「好剑法——输得心悦诚服。」'],
       discuss: ['「剑理通文理，都讲一个『势』字。」', '「我想把青萍剑法写成话本……你出资么？」', '「起承转合——收势最难，收心更难。」'],
       realm: ['「可喜可贺，改日登门道贺。」', '「他日话本开篇，必写道友。」', '「可喜可贺！改日必当赋诗相赠。」'],
-      hostile: ['「斯文扫地……那就请了。」', '「青萍三叠——得罪了。」'] },
+      hostile: ['「斯文扫地……那就请了。」', '「青萍三叠——得罪了。」', '「青萍三叠——最后一式送你上路。」'] },
     n19: { greet: ['「哎呀，什么风把您吹来了？」', '「您眼力真好，就剩最后一件了。」', '「老熟人了——内部价，内部价。」'],
       gift: ['「您太客气了！」', '「这礼重的……账我给您抹了。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「和气生财，和气生财！——接招！」', '「服了服了，本钱还您。」'],
       discuss: ['「商会的眼线遍布坊市——您想听谁的？」', '「那批黑货过秤时，我多看了两眼。」', '「买卖做的是长久——今天让三分利，明天他替你守门。」'],
       realm: ['「大喜大喜！小店全场八折！」', '「您高升了，可别忘了我。」', '「大喜大喜！小店全场八折——仅此一日！」'],
-      hostile: ['「这是砸我饭碗啊！」', '「和气……和气没了！」'] },
+      hostile: ['「这是砸我饭碗啊！」', '「和气……和气没了！」', '「砸我招牌？和气没了，来硬的！」'] },
     n20: { greet: ['「俺嘴笨，不会说话……」', '「坐！垫子是俺新编的。」', '「你来了，俺就放心了。」'],
       gift: ['「俺、俺收了啊！」', '「回头俺给你捶背！」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「俺出手重，你挡着点。」', '「俺输了，输得不冤。」'],
       discuss: ['「谷里那件老物件，就认你这个明白人。」', '「俺认死的理，九牛拉不回——你对俺，没使过牛。」', '「俺不识几个字，可俺认死理：理直了，就大胆往前走。」'],
       realm: ['「好样的！俺说给大伙儿听去！」', '「你越来越有长老样了！」', '「好样的！俺这就说给全谷听去！」'],
-      hostile: ['「你、你阴俺？」', '「俺认死理：这种人不教训不行！」'] },
+      hostile: ['「你、你阴俺？」', '「俺认死理：这种人不教训不行！」', '「俺认死的理：教训你这种人不犯法！」'] },
     n21: { greet: ['「你来了，我算到了。」', '「昨夜星轨有变——原来应在你身上。」', '「请。棋枰已备。」'],
       gift: ['「顺天意，收下了。」', '「此物应星象，妙。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「以棋道入剑，请指教。」', '「这一局，我算漏了你。」'],
       discuss: ['「雷台之日，星示大凶——但也示了一条生路。」', '「气数如棋，落子无悔。」', '「棋手落子，终究是人，不是天。」'],
       realm: ['「天数又添一子，恭喜。」', '「你的星，越来越亮了。」', '「天数又添一子。你的星，愈来愈亮了。」'],
-      hostile: ['「天数有变——不能留你。」', '「星落之地，即是你的坟。」'] },
+      hostile: ['「天数有变——不能留你。」', '「星落之地，即是你的坟。」', '「天数已定——今日你命当绝。」'] },
     n22: { greet: ['「哟，想死还是想活？」', '「这么晚来——带酒了吗？」', '「省着点命，我还有事找你。」'],
       gift: ['「讨好我？」', '「……收下。算你识趣。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「打坏了脸，你赔？」', '「手底下，有点真章。」'],
       discuss: ['「第二份名单烧了——我自由了。」', '「血河的人认得我的脸，你也快了。」', '「这行当的规矩：留三分余地下注，留七分狠活保命。」'],
       realm: ['「境界越高，命越硬——好事。」', '「改日我请你喝最烈的酒。」', '「境界越高，命越硬——好事。改日请你喝最烈的酒。」'],
-      hostile: ['「弄脏我的衣裳了。」', '「你的死相，我替你想好了。」'] },
+      hostile: ['「弄脏我的衣裳了。」', '「你的死相，我替你想好了。」', '「你的死相，我昨天就想好了。」'] },
     n23: { greet: ['「酒！酒呢！」', '「打了个酒嗝——你、你说。」', '「陪我喝一碗，有话跟你说。」'],
       gift: ['「好酒！好酒！」', '「这、这瓶留着过年！」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「醉、醉拳——哈！」', '「你、你赢了……再来！」'],
       discuss: ['「水、水底下那位……三百年了。」', '「别、别信水面上的倒影。」', '「醉、醉里看水最真——水底下，才是真身。」'],
       realm: ['「喝、喝大了？你飞那么高！」', '「好！这碗敬你！」', '「喝、喝大了？你飞那么高！这碗敬你！」'],
-      hostile: ['「酒、酒钱还没给呢！」', '「别、别逼俺醒酒！」'] },
+      hostile: ['「酒、酒钱还没给呢！」', '「别、别逼俺醒酒！」', '「别、别逼俺醒酒——醒了你会死。」'] },
     n24: { greet: ['「路见不平，拔刀相助。」', '「又见面了——可有不平事？」', '「今年雁，比去年早归了七日。」'],
       gift: ['「大恩不言谢。」', '「此物赠侠士，物得其所。」', '「唔，此物上有股灵气——收了。」'],
       spar: ['「请——雁翎刀，三招。」', '「好功夫！雁都为你盘旋了。」'],
       discuss: ['「我故乡的雁，年年还回血河故道。」', '「今年秋天，我带你回去看看。」', '「侠字怎么写？人肩上担着的事——放下容易，担着难。」'],
       realm: ['「侠之大者，恭喜。」', '「改日并肩，再战三百回合！」', '「侠之大者。改日并肩，再战三百回合！」'],
-      hostile: ['「为此不义，拔刀！」', '「今日留你——天理难容，但我留。」'] },
+      hostile: ['「为此不义，拔刀！」', '「今日留你——天理难容，但我留。」', '「为此不义，拔刀！——今日留不得你。」'] },
   },
 
   /** 剧情引擎 who 解析：'@id' → CHARACTERS */
@@ -3803,6 +3848,7 @@ const Log = {
   paused: false,     // v4：暂停自动滚动
   pinTimer: null,    // v4：金色置顶条计时器
   filter: null,      // v20：类型过滤（null=全部）
+  density: 'all',    // v20：all / lite（略去见闻）
   TYPES: { info: '见闻', gain: '收获', loss: '损失', battle: '战斗', system: '系统', realm: '境界', event: '事件', warn: '警训', story: '剧情' },
   init() {
     this.el = document.getElementById('log');
@@ -3819,7 +3865,7 @@ const Log = {
   },
   /** text 支持 HTML；type: info/gain/loss/battle/system/realm/event/warn/crit */
   add(text, type = 'info') {
-    if (!this.el) return;
+    if (!this.el || this.skim(type)) return;
     const p = Game.player;
     const year = p ? Math.floor(p.day / 365) + 1 : 1;
     const div = document.createElement('div');
@@ -3836,6 +3882,8 @@ const Log = {
     // v14：折叠态提示新日志
     this.pokeBadge();
   },
+  /** v20 日志密度：lite 模式下略去 info（见闻/氛围）类，降低刷屏 */
+  skim(type) { return this.density === 'lite' && (type === 'info'); },
   /** v20 日志类型过滤：null=全部，否则仅显示该类型 */
   setFilter(type) {
     this.filter = type;
@@ -4206,6 +4254,8 @@ const PlayerFactory = {
           if (bst.trip && !isFinite(Number(bst.trip.until))) bst.trip = null;
         }
         for (const k of Object.keys(out.attrs)) out.attrs[k] = Utils.clamp(out.attrs[k], 0, 12);
+        out.rushDay = isFinite(Number(out.rushDay)) ? Number(out.rushDay) : null;
+        out._daoCultDay = isFinite(Number(out._daoCultDay)) ? Number(out._daoCultDay) : null;
       },
     ];
     // 基础：fresh 模板 + 展开合并
@@ -4528,8 +4578,11 @@ const Cultivate = {
     if (p.dao === 'array' && DaoSys.tierLevel(p) >= 2) g *= 1.1;   // v10 阵道六境·聚灵境
     if (typeof Art !== 'undefined' && Art.seasonOf(p) === 0) g *= 1.1;   // v20 孟春灵潮：修炼 +10%
     if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) g *= 1.2;   // v20 天下大事·灵潮
+    if (p.rushDay === Math.floor(p.day || 0)) g *= 1.5;   // v20 聚灵加速
     return g;
   },
+  /** v20 聚灵加速：当日 ×1.5（洞府点燃，日限一次） */
+  rushMul(p) { return (p.rushDay === Math.floor(p.day || 0)) ? 1.5 : 1; },
   /** v20 闭关效率：隆冬蛰伏 +10% */
   secludeMul(p) { return (typeof Art !== 'undefined' && Art.seasonOf(p) === 3) ? 1.1 : 1; },
   gainMult() {
@@ -4943,6 +4996,28 @@ const Bag = {
     if (s.high) parts.push(`上品 ${Utils.fmtNum(s.high)}`);
     return parts.join(' · ');
   },
+  /** v20 丹药批量服用：连服 N 枚（丹毒将满或数量不足自动停） */
+  useMulti(itemId, n = 5) {
+    const p = Game.player;
+    const def = GameData.ITEMS[itemId];
+    if (!def || def.type !== 'pill') return;
+    n = Utils.clamp(Math.floor(Number(n)) || 5, 1, 99);
+    let used = 0;
+    while (used < n && this.count(itemId) > 0) {
+      const st = Stat.compute(p);
+      const cap = Stat.poisonCap(p);
+      const gain = (def.poison || 0) * (1 - st.poisonReduce / 100);
+      if (def.poison && p.poison + gain > cap) { UI.toast('丹毒将满，自动停服'); break; }
+      this.removeItem(itemId, 1);
+      Pill.apply(p, def, true);
+      used++;
+      if (p.dead) break;
+    }
+    if (used) {
+      Time.add(used);
+      if (!p.dead) { Log.add(`你一口气连服 ${def.name} ×${used}。`, 'gain'); Game.afterAction(); }
+    } else UI.toast('丹毒将满，不宜再服');
+  },
   use(itemId) {
     const p = Game.player;
     const def = GameData.ITEMS[itemId];
@@ -5006,11 +5081,14 @@ const Bag = {
       const oldEnh = cur && typeof cur === 'object' ? (cur.enhance || 0) : ((p.enhanced || {})[curId] || 0);
       const inhOre = Math.ceil(oldEnh * 1.5);
       const canInh = oldEnh > 0 && Bag.count('m_xuantie') >= inhOre;
+      // v20 推荐标记：攻击2倍/防御1.5倍/气血0.3倍/暴击闪避1倍加权估分
+      const score = b => Object.entries(b || {}).reduce((acc, [k, v]) => acc + ({ atk: v * 2, atkPct: v * 2, def: v * 1.5, defPct: v * 1.5, hp: v * 0.3, hpPct: v * 0.3, mp: v * 0.2, mpPct: v * 0.2, spd: v, spdPct: v, crit: v, dodge: v, block: v * 0.5, cult: v, stonePct: v, luck: v * 2 }[k] ?? 0), 0);
+      const newBetter = score(def.bonus) > score(curDef.bonus) * (1 + oldEnh * 0.1);
       const ok = await UI.popup({
         title: '装备对比',
-        html: `<div class="stat-line"><span>当前</span><b>${curDef.name}${oldEnh ? ' +' + oldEnh : ''}</b></div>
+        html: `<div class="stat-line"><span>当前${newBetter ? '' : ' <span class="tag safe">推荐</span>'}</span><b>${curDef.name}${oldEnh ? ' +' + oldEnh : ''}</b></div>
           <div class="tip-line">· ${fmt(curDef.bonus)}</div>
-          <div class="stat-line" style="margin-top:4px"><span>换上</span><b>${def.name}</b></div>
+          <div class="stat-line" style="margin-top:4px"><span>换上${newBetter ? ' <span class="tag safe">推荐</span>' : ''}</span><b>${def.name}</b></div>
           <div class="tip-line">· ${fmt(def.bonus)}</div>
           ${oldEnh > 0 ? `<div class="tip-line" style="margin-top:4px">· <b>传承</b>：旧装备随炉而化，新装备承其 ${Math.ceil(oldEnh * 0.6)} 级强化（需玄铁矿 ×${inhOre}）</div>` : ''}`,
         options: [
@@ -5523,6 +5601,25 @@ const CaveSys = {
     const ev = Utils.pick(events);
     ev.fn();
     Log.add(`【洞府访客】${ev.text}`, 'info');
+    Game.afterAction();
+  },
+  /** v20 聚灵加速：花灵石点燃聚灵阵，当日修炼效率 ×1.5（日限一次） */
+  async spiritRush() {
+    const p = Game.player;
+    if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
+    const today = Math.floor(p.day || 0);
+    if (p.rushDay === today) { UI.toast('聚灵阵今日已点燃，明日再来'); return; }
+    const cost = Math.round(120 * GameData.stoneEco(Math.min(4, p.realmIdx)));
+    const ok = await UI.popup({
+      title: '聚灵加速',
+      html: `燃烧灵石为聚灵阵供能——<b>今日修炼效率 ×1.5</b>（每轮修炼约 \${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 1.5))} 修为）。<br>需灵石 <span class="hl">\${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 日限一次；闭关与自动修炼同样受益。</span>`,
+      options: [{ text: '点燃聚灵阵', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    p.rushDay = today;
+    Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -\${Utils.fmtNum(cost)}）`, 'system');
+    Story.chron('点燃聚灵阵（日修加速）');
     Game.afterAction();
   },
   /** v20 灵泉：每日首次入洞府自动涌出灵石（日界防重） */
@@ -6503,6 +6600,9 @@ const Explore = {
           for (let w = 1; w < n; w++) waveIds.push(Utils.pickWeighted(map.pool));
           bctx.waveIds = waveIds;
         }
+        // v20 新手保底：首场战斗敌方削弱两成（counters.battles===0 视为首战）
+        const firstFightMercy = (p.counters.battles || 0) === 0;
+        if (firstFightMercy) bctx.mercy = 0.8;   // v20 首战保底
         Battle.start(monsterId, bctx);
         return; // 战斗结束后自行结算
       }
@@ -9748,6 +9848,12 @@ const Battle = {
     const st = Stat.compute(p);
     if (p.hp <= 0) p.hp = 1;
     const enemy = ctx.enemy || buildMonster(monsterId);
+    // v20 首战保底：敌方整体削弱（ctx.mercy < 1）
+    if (ctx.mercy && ctx.mercy < 1) {
+      enemy.hpMax = Math.round(enemy.hpMax * ctx.mercy);
+      enemy.atk = Math.round(enemy.atk * ctx.mercy);
+      this.log('【初入江湖】对方见你面生，未出全力——这是一场善意的较量。', 'log-system');
+    }
     // §23 魔域狂化：气血/攻击/收益同步放大
     if (ctx.worldMul) {
       enemy.hpMax = Math.round(enemy.hpMax * ctx.worldMul);
@@ -11340,7 +11446,7 @@ const Battle = {
     // v18：主角剪影立绘
     const mfig = document.querySelector('#battle-box .me-fig');
     if (mfig) mfig.innerHTML = Art.player(p.dao);
-    if (B.floats.length) {
+    if (B.floats.length && (typeof Ambience === 'undefined' || Ambience.animOn !== false)) {   // v20 性能模式可关浮动数字
       const usedPositions = [];
       for (const f of B.floats) {
         const host = f.side === 'enemy' ? eside : mside;
@@ -11443,6 +11549,17 @@ const Tutorial = {
     } catch (e) { /* ignore */ }
     if (Game.player) {
       Game.player.flags.tutorialDone = true;
+      // v20 三分钟上手清单：引导结束后给一张速览卡
+      UI.popup({
+        title: '✦ 三分钟上手清单',
+        html: `<div class="tip-line">· <b>修炼</b>攒修为，圆满后冲关；练气→筑基无天劫，金丹起有三策博弈。</div>
+          <div class="tip-line">· <b>游历</b>探地图搏机缘，遇敌注意敌方「下一手」意图——蓄力就防御或破招。</div>
+          <div class="tip-line">· <b>坊市</b>买丹药法宝；丹毒将满（左栏提示）就停口或服解毒丹。</div>
+          <div class="tip-line">· 筑基后解锁 <b>洞府/宗门/江湖</b>：种田、领任务、结交修士（可结为道侣）。</div>
+          <div class="tip-line">· 每章主线完结送残玉共鸣（全属性+1.5%），跟主线走不吃亏。</div>
+          <div class="tip-line">· 卡住了就点左栏「当前建议」——它会告诉你下一步。</div>`,
+        options: [{ text: '踏上仙途', value: true, primary: true }],
+      });
       Save.autoSave();
     }
   },
@@ -13577,17 +13694,19 @@ const UI = {
       { id: 'talisman', name: '符箓' }, { id: 'all', name: '全部' },
     ];
     const items = Object.keys(p.bag).filter(id => Game.bagTab === 'all' || GameData.ITEMS[id].type === Game.bagTab);
-    // v4：按品质（凡/灵/玄/地/天/仙）优先降序，同品质再按类别归类
-    items.sort((a, b) => {
-      const da = GameData.ITEMS[a], db = GameData.ITEMS[b];
-      const qa = da.grade ?? da.tier ?? 0, qb = db.grade ?? db.tier ?? 0;
-      return (qb - qa) || da.type.localeCompare(db.type) || da.name.localeCompare(db.name);
+    // v4：按品质降序；v20：排序选项（品质/类型/名字）
+    const dI = id => GameData.ITEMS[id];
+    if (Game.bagSort === 'type') items.sort((a, b) => dI(a).type.localeCompare(dI(b).type) || (dI(b).grade ?? dI(b).tier ?? 0) - (dI(a).grade ?? dI(a).tier ?? 0) || dI(a).name.localeCompare(dI(b).name));
+    else if (Game.bagSort === 'name') items.sort((a, b) => dI(a).name.localeCompare(dI(b).name));
+    else items.sort((a, b) => {
+      const qa = dI(a).grade ?? dI(a).tier ?? 0, qb = dI(b).grade ?? dI(b).tier ?? 0;
+      return (qb - qa) || dI(a).type.localeCompare(dI(b).type) || dI(a).name.localeCompare(dI(b).name);
     });
     const rows = items.map(id => {
       const def = GameData.ITEMS[id];
       const gq = def.grade ?? def.tier ?? 0;   // v4：品质档（材料按 tier 折算）
       let btns = '';
-      if (def.type === 'pill') btns = `<button class="btn btn-sm" data-action="act-use" data-item="${id}">服用</button>`;
+      if (def.type === 'pill') btns = `<button class="btn btn-sm" data-action="act-use" data-item="${id}">服用</button>${p.bag[id] > 1 && (def.use || {}).exp ? `<button class="btn btn-sm" data-action="act-use-multi" data-item="${id}" title="连服五枚（丹毒将满自动停）">×5</button>` : ''}`;
       if (def.type === 'gongfa') btns = `<button class="btn btn-sm" data-action="act-learn" data-item="${id}">学习</button>`;
       if (def.type === 'artifact') {
         const isOn = Object.values(p.equipped).some(e => e && Utils.eqId(e) === id);
@@ -13603,7 +13722,10 @@ const UI = {
     }).join('');
     // v4：一键减负——凡品快捷出售；v13：当前分类批量丢弃
     const catName = (types.find(t => t.id === Game.bagTab) || { name: '全部' }).name;
+    const sortBtns = [['quality', '品质'], ['type', '类型'], ['name', '名字']].map(([k, label]) =>
+      `<button class="btn btn-sm ${Game.bagSort === k ? 'btn-primary' : ''}" data-action="bag-sort" data-sort="${k}">${label}</button>`).join('');
     const quick = `<div class="bag-quick">
+      <div class="bag-sort-row" style="margin-bottom:4px">${sortBtns}</div>
       ${ShopSys.commonSaleList().length ? `<button class="btn btn-sm" data-action="act-sell-common">一键出售凡品</button>` : ''}
       ${items.length ? `<button class="btn btn-sm btn-danger" data-action="act-drop-cat" data-cat="${Game.bagTab}">清空「${catName}」</button>` : ''}
     </div>`;
@@ -13914,6 +14036,7 @@ const Game = {
   slot: null,
   activeTab: 'cultivate',
   bagTab: 'all',
+  bagSort: 'quality',   // v20 背包排序：quality 品质 / type 类型 / name 名字
 
   init() {
     UI.cache();
@@ -14183,6 +14306,7 @@ const Game = {
       }
     },
     'bag-tab': (d) => { Game.bagTab = d.bagtab; UI.renderBag(); },
+    'bag-sort': (d) => { Game.bagSort = d.sort; UI.renderBag(); },   // v20 背包排序
     /* --- v4 日志工具 / 一键减负 --- */
     'log-pause': () => Log.togglePause(),
     'log-clear': () => Log.clear(),
@@ -14238,6 +14362,7 @@ const Game = {
     'act-learn': (d) => GongfaSys.learn(d.item),
     /* --- 背包物品 --- */
     'act-use': (d) => Bag.use(d.item),
+    'act-use-multi': (d) => Bag.useMulti(d.item, 5),   // v20 丹药批量服用
     'act-equip': (d) => Bag.equip(d.item),
     'act-unequip': (d) => Bag.unequip(d.slot),
     'act-drop': (d) => Bag.drop(d.item),
@@ -14323,6 +14448,7 @@ const Game = {
     'act-forge': (d) => ForgeSys.forge(d.recipe),
     /* --- v13 洞府 / 灵兽 --- */
     'act-cave-up': () => CaveSys.upgrade(),
+    'act-spirit-rush': () => CaveSys.spiritRush(),   // v20 聚灵加速
     'act-cave-plant': (d) => CaveSys.plant(Number(d.i)),
     'act-cave-harvest': (d) => CaveSys.harvest(Number(d.i)),
     'act-cave-water': (d) => CaveSys.water(Number(d.i)),
