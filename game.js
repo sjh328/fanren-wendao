@@ -701,6 +701,19 @@ const Achieve = {
     { id: 'c3', cat: 'battle', name: '越境斩敌', desc: '以低于敌方的境界取胜', reward: { fortune: 12 }, test: p => (p.counters.upsetWins || 0) >= 1 },
     { id: 'c4', cat: 'exp', name: '驯兽大师', desc: '驯服五种不同种族的灵兽', reward: { stones: 1500 }, test: p => (p.counters.tameSpecies || 0) >= 5 },
     { id: 'c5', cat: 'exp', name: '秘境征服者', desc: '通关全部十座秘境', reward: { fortune: 15 }, test: p => (p.counters.dungeonClears || 0) >= 10 },
+    /* ---- v20 经营与挑战成就（+12） ---- */
+    { id: 'v1', cat: 'exp', name: '丹炉百炼', desc: '炼丹成丹一百炉', reward: { stones: 3000 }, prog: p => `${Math.min(100, (p.counters.craftsOk || 0))}/100`, test: p => (p.counters.craftsOk || 0) >= 100 },
+    { id: 'v2', cat: 'exp', name: '画符千张', desc: '累计画符五十轮', reward: { stones: 2000 }, prog: p => `${Math.min(50, (p.counters.talRounds || 0))}/50`, test: p => (p.counters.talRounds || 0) >= 50 },
+    { id: 'v3', cat: 'exp', name: '灵田大丰', desc: '收获作物三十次', reward: { stones: 2000 }, prog: p => `${Math.min(30, (p.counters.harvests || 0))}/30`, test: p => (p.counters.harvests || 0) >= 30 },
+    { id: 'v4', cat: 'exp', name: '斗兽十连胜', desc: '斗兽场累计十胜', reward: { fortune: 8 }, prog: p => `${Math.min(10, (p.counters.arenaWins || 0))}/10`, test: p => (p.counters.arenaWins || 0) >= 10 },
+    { id: 'v5', cat: 'battle', name: '无伤渡劫', desc: '渡劫成功时气血满盈', reward: { fortune: 12 }, test: p => (p.flags && p.flags.tribFullHp) || false },
+    { id: 'v6', cat: 'battle', name: '残血翻盘', desc: '气血低于一成时反败为胜', reward: { fortune: 10 }, test: p => (p.counters.lowHpWins || 0) >= 1 },
+    { id: 'v7', cat: 'battle', name: '一夜屠魔', desc: '单场战斗输出逾自身攻击百倍', reward: { fortune: 10 }, test: p => (p.counters.bigOut || 0) >= 1 },
+    { id: 'v8', cat: 'battle', name: '破招行家', desc: '破招打断蓄力十次', reward: { stones: 2500 }, prog: p => `${Math.min(10, (p.counters.breaks || 0))}/10`, test: p => (p.counters.breaks || 0) >= 10 },
+    { id: 'v9', cat: 'reinc', name: '宿命轮回', desc: '历经五世轮回', reward: { fortune: 20 }, prog: p => `${Math.min(5, p.reinc ? (p.reinc.lives || 0) : 0)}/5`, test: p => p.reinc && (p.reinc.lives || 0) >= 5 },
+    { id: 'v10', cat: 'reinc', name: '印记如星', desc: '累计十枚轮回印记', reward: { fortune: 18 }, prog: p => `${Math.min(10, p.reinc ? (p.reinc.marks || 0) : 0)}/10`, test: p => p.reinc && (p.reinc.marks || 0) >= 10 },
+    { id: 'v11', cat: 'dao', name: '道韵全通', desc: '同时激活四条道韵', reward: { fortune: 12 }, test: p => (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) >= 4 },
+    { id: 'v12', cat: 'dao', name: '奥义宗师', desc: '三部功法修至大成', reward: { fortune: 10 }, test: p => Object.entries(p.gongfa || {}).filter(([id, g]) => GameData.ITEMS[id] && g.level >= GongfaSys.maxLevel(GameData.ITEMS[id])).length >= 3 },
   ],
   /** 每次行动收尾时检查：解锁则发奖并播报 */
   check() {
@@ -3969,7 +3982,18 @@ write(key, player) {
 const PlayerFactory = {
   rollAttrs() {
     const roll = () => Math.min(10, Utils.rand(2, 9) + (Utils.chance(18) ? Utils.rand(1, 2) : 0));
-    return { gen: roll(), comp: roll(), luck: roll(), body: roll() };
+    const a = { gen: roll(), comp: roll(), luck: roll(), body: roll() };
+    // v20 传承树十层「逆天改命」：转世重掷三次取四维总和最优
+    if (Game.player && Game.player.rerollBest) {
+      let best = a, bestSum = a.gen + a.comp + a.luck + a.body;
+      for (let i = 0; i < 2; i++) {
+        const c = { gen: roll(), comp: roll(), luck: roll(), body: roll() };
+        const s = c.gen + c.comp + c.luck + c.body;
+        if (s > bestSum) { best = c; bestSum = s; }
+      }
+      return best;
+    }
+    return a;
   },
   rating(sum) {
     if (sum >= 32) return '天纵奇才，万中无一';
@@ -4275,6 +4299,8 @@ const Stat = {
       if (!dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3)) continue;
       for (const [k, v] of Object.entries(dy.fx)) total[k] = (total[k] || 0) + v;
     }
+    // v20 传承树九层「道韵残响」：转世继承的上一世最强道韵（保存于 p.reinc.echo）
+    if (p.reinc && p.reinc.echo) for (const [k, v] of Object.entries(p.reinc.echo)) total[k] = (total[k] || 0) + v;
     // v20 功法大成奥义：修至满层解锁专属被动
     for (const [id, g] of Object.entries(p.gongfa)) {
       const def = GameData.ITEMS[id];
@@ -5628,6 +5654,7 @@ const CaveSys = {
     Bag.addItem(plot.crop, qty);
     Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}${typeof Art !== 'undefined' && Art.seasonOf(p) === 2 ? '（季秋丰收）' : ''}。`, 'gain');
     plots[idx] = null;
+    p.counters.harvests = (p.counters.harvests || 0) + 1;   // v20 成就计数
     Game.afterAction();
   },
   renderPlots(p) {
@@ -7735,6 +7762,7 @@ const Tribulation = {
     // 渡劫结果
     if (Utils.chance(chance)) {
       p.realmIdx++; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(p.realmIdx, 0) - 1); p.insight = 0; p.expOverflow = 0;
+      if (p.hp >= st.maxHp * 0.999) { p.flags = p.flags || {}; p.flags.tribFullHp = true; }   // v20 无伤渡劫成就
       p.breakStreak = 0;   // v8 挫而愈坚：成功即清零
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;
@@ -9657,6 +9685,12 @@ const ReincarnationSys = {
     legacy.kept = kept || null;
     legacy.grudges = grudges;
     this.writeLegacy(legacy);
+    // v20 道韵残响：传承树九层保留上一世最强的一条已激活道韵
+    let echo = null;
+    if (oldP.flags && oldP.flags.daoYunEcho) {
+      const active = (typeof Stat !== 'undefined' && Stat.activeDaoYun) ? Stat.activeDaoYun(oldP) : [];
+      if (active.length) echo = active[active.length - 1].fx;
+    }
     // 新身
     const attrs = PlayerFactory.rollAttrs();
     if (origin) for (const [k, v] of Object.entries(origin.mods)) attrs[k] = Utils.clamp(attrs[k] + v, 1, 10);
@@ -9670,6 +9704,7 @@ const ReincarnationSys = {
       if (origin.tameSkill) p2.tameSkill = Math.max(p2.tameSkill || 0, origin.tameSkill);   // v19：驯手心得
     }
     p2.reinc = { lives: legacy.lives, marks: legacy.marks, compPct: 10, grudges: grudges };
+    if (echo) p2.reinc.echo = echo;   // v20 道韵残响
     // v18 传承树：每3枚印记解锁一层天赋
     const treeTier = Math.floor((legacy.marks || 0) / 3);
     if (treeTier >= 1) p2.stones.low += Math.round(origin ? origin.start.stones || 0 : 0); // 初始灵石翻倍
@@ -9681,6 +9716,9 @@ const ReincarnationSys = {
     if (treeTier >= 6) p2.reputation = (p2.reputation || 0) + 30;   // 名门之后：初始声望
     if (treeTier >= 7) p2.fortune = (p2.fortune || 0) + 10;   // 福泽绵长：初始气运
     if (treeTier >= 8) p2.bag['m_gupian'] = (p2.bag['m_gupian'] || 0) + 1;   // 骨血传玉：自带一枚上古碎片
+    // v20 传承树九、十层
+    if (treeTier >= 9) p2.flags.daoYunEcho = true;   // 道韵残响：转世保留一条已激活道韵（Stat 消费）
+    if (treeTier >= 10) p2.rerollBest = true;   // 逆天改命：创角四维重掷三次取最优
     if (kept) p2.bag[kept] = 1;
     for (const gid of grudges) {
       const s = p2.npcs[gid];
@@ -11012,6 +11050,8 @@ const Battle = {
       return;
     }
     this.log(`${B.enemy.name} 轰然倒地！你获得了胜利！`, 'log-system');
+    if (p.hp < st.maxHp * 0.1) p.counters.lowHpWins = (p.counters.lowHpWins || 0) + 1;   // v20 残血翻盘
+    if (B.stats.out > st.atk * 100) p.counters.bigOut = (p.counters.bigOut || 0) + 1;   // v20 一夜屠魔
     p.counters.wins++;
     if (B.enemy.elite) p.counters.killsElite = (p.counters.killsElite || 0) + 1;   // v6 成就计数
     // v19 剧情战：轻奖励、必入戏（主线战不受普通掉落与败绩规则影响）
@@ -12216,6 +12256,37 @@ const QuestSys = {
     return `${railHtml}${mainHtml}<div class="shop-section-title">◈ 奇遇录 · 支线</div>${sideRows}`;
   },
 
+  /** v20 问道录 · 百科词条（LORE 词条化，随剧情推进解锁） */
+  LORE_KEYS: [
+    { id: 'intro', need: null, title: '血河之殇' },
+    { id: 'bloodRiver', need: 'c1_end', title: '血河宗' },
+    { id: 'jade', need: 'c1_mid', title: '引魂玉' },
+    { id: 'xuanying', need: 'c2_open', title: '玄影客' },
+    { id: 'tally', need: 'c3_end', title: '黑玉令' },
+    { id: 'bloodRiver.truth', need: 'c5_end', title: '万魂丹与叛炉者' },
+    { id: 'gupian', need: 'c6_mid', title: '上古炼魂石' },
+    { id: 'ferryman', need: 'c7_open', title: '渡船人' },
+    { id: 'timeline', need: 'c5_open', title: '大事时间线' },
+    { id: 'factions', need: 'c7_end', title: '六大势力立场' },
+  ],
+  openLore() {
+    const p = Game.player;
+    const seen = (p.story && p.story.seen) || {};
+    const rows = this.LORE_KEYS.map(e => {
+      const unlocked = !e.need || !!seen[e.need];
+      let body;
+      if (!unlocked) body = '<div class="tip-line" style="color:var(--text-faint)">——尚未揭晓。推进主线，自会知晓。——</div>';
+      else {
+        const val = e.id.includes('.') ? e.id.split('.').reduce((o, k) => (o || {})[k], GameData.LORE) : GameData.LORE[e.id];
+        body = Array.isArray(val)
+          ? val.map(x => `<div class="tip-line">· ${typeof x === 'string' ? x : `${x.y || ''} ${x.t || x.name || ''}：${x.desc || x.stance || ''}`}</div>`).join('')
+          : `<div class="card-desc">${val || '（佚失）'}</div>`;
+      }
+      return `<div class="card"><div class="card-title">${unlocked ? '✦' : '🔒'} ${e.title}</div>${body}</div>`;
+    }).join('');
+    UI.popup({ title: '📖 百科 · 血河旧事', html: `<div class="tip-line" style="margin-bottom:6px">词条随主线推进逐步解锁——真相，要一步一步挖。</div>${rows}`, options: [{ text: '合 上', value: true, primary: true }] });
+  },
+
   /** v15 问道录：章节剧情回顾（已看过的开篇/中段/章末可重读） */
   CHOICE_LABELS: {
     c1_end: { vengeance: '带着遗志入世，此仇必报', caution: '带着告诫入世，只信亲眼所见', clarity: '带着牵挂入世，不为恨所吞' },
@@ -12231,14 +12302,16 @@ const QuestSys = {
   /** v19 问道录 2.0：剧情回顾 / 人物志 / 大事年表 / 抉择树（四页签） */
   openArchive(tab = 'story') {
     const p = Game.player;
-    const tabs = [['story', '📜 剧情回顾'], ['figures', '👤 人物志'], ['chron', '🗓 大事年表'], ['choices', '⚖ 抉择树']];
+    const tabs = [['story', '📜 剧情回顾'], ['figures', '👤 人物志'], ['chron', '🗓 大事年表'], ['choices', '⚖ 抉择树'], ['lore', '📖 百科']];
     const tabHtml = `<div class="action-row" style="margin:0 0 8px">${tabs.map(([k, label]) =>
       `<button class="btn btn-sm ${k === tab ? 'btn-primary' : ''}" data-action="quest-archive-tab" data-tab="${k}">${label}</button>`).join('')}</div>`;
     let body = '';
     if (tab === 'figures') body = this.archiveFigures(p);
     else if (tab === 'chron') body = this.archiveChron(p);
     else if (tab === 'choices') body = this.archiveChoices(p);
+    else if (tab === 'lore') body = '';
     else body = this.archiveStory(p);
+    if (tab === 'lore') { UI.closePopup(); this.openLore(); return; }
     UI.popup({ title: '📜 问道录', html: tabHtml + body, options: [{ text: '合 上', value: true, primary: true }] });
   },
   /** 页签：剧情回顾 */

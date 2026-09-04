@@ -5,7 +5,18 @@
 const PlayerFactory = {
   rollAttrs() {
     const roll = () => Math.min(10, Utils.rand(2, 9) + (Utils.chance(18) ? Utils.rand(1, 2) : 0));
-    return { gen: roll(), comp: roll(), luck: roll(), body: roll() };
+    const a = { gen: roll(), comp: roll(), luck: roll(), body: roll() };
+    // v20 传承树十层「逆天改命」：转世重掷三次取四维总和最优
+    if (Game.player && Game.player.rerollBest) {
+      let best = a, bestSum = a.gen + a.comp + a.luck + a.body;
+      for (let i = 0; i < 2; i++) {
+        const c = { gen: roll(), comp: roll(), luck: roll(), body: roll() };
+        const s = c.gen + c.comp + c.luck + c.body;
+        if (s > bestSum) { best = c; bestSum = s; }
+      }
+      return best;
+    }
+    return a;
   },
   rating(sum) {
     if (sum >= 32) return '天纵奇才，万中无一';

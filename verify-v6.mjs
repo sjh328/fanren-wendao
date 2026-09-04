@@ -193,7 +193,7 @@ try {
   await page.click('[data-action="act-codex"]');
   await sleep(300);
   const a2 = await text(page, '#popup-body');
-  /成就 \d+\/35/.test(a2) && a2.includes('初试锋芒') && a2.includes('已达成') && a2.includes('气运')
+  /成就 \d+\/\d+/.test(a2) && a2.includes('初试锋芒') && a2.includes('已达成') && a2.includes('气运')
     ? pass('A1 成就列表弹窗（进度/奖励/达成态）')
     : fail('A1 成就列表', a2.slice(0, 80));
   await shot(page, 'achv_list');
@@ -360,6 +360,9 @@ try {
     document.getElementById('dao-modal').classList.add('hidden');
     if (Game.player) Game.player.pendingDao = false;
   });
+  // v20：渡劫收尾可能触发章节追认剧情（supR），故事卷轴会拦截坐标点击——统一合卷
+  await page.evaluate(() => { if (typeof Story !== 'undefined' && Story.active()) Story.close(); document.getElementById('story-modal')?.classList.add('hidden'); });
+  await sleep(200);
 
   /* ================= S3 存档导出导入 ================= */
   await page.evaluate(() => { Game.player.name = '.export.name测试'; UI.renderAll(); });

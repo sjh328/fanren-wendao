@@ -1313,6 +1313,8 @@ const Battle = {
       return;
     }
     this.log(`${B.enemy.name} 轰然倒地！你获得了胜利！`, 'log-system');
+    if (p.hp < st.maxHp * 0.1) p.counters.lowHpWins = (p.counters.lowHpWins || 0) + 1;   // v20 残血翻盘
+    if (B.stats.out > st.atk * 100) p.counters.bigOut = (p.counters.bigOut || 0) + 1;   // v20 一夜屠魔
     p.counters.wins++;
     if (B.enemy.elite) p.counters.killsElite = (p.counters.killsElite || 0) + 1;   // v6 成就计数
     // v19 剧情战：轻奖励、必入戏（主线战不受普通掉落与败绩规则影响）

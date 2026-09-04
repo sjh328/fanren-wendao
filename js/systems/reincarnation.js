@@ -65,6 +65,12 @@ const ReincarnationSys = {
     legacy.kept = kept || null;
     legacy.grudges = grudges;
     this.writeLegacy(legacy);
+    // v20 道韵残响：传承树九层保留上一世最强的一条已激活道韵
+    let echo = null;
+    if (oldP.flags && oldP.flags.daoYunEcho) {
+      const active = (typeof Stat !== 'undefined' && Stat.activeDaoYun) ? Stat.activeDaoYun(oldP) : [];
+      if (active.length) echo = active[active.length - 1].fx;
+    }
     // 新身
     const attrs = PlayerFactory.rollAttrs();
     if (origin) for (const [k, v] of Object.entries(origin.mods)) attrs[k] = Utils.clamp(attrs[k] + v, 1, 10);
@@ -78,6 +84,7 @@ const ReincarnationSys = {
       if (origin.tameSkill) p2.tameSkill = Math.max(p2.tameSkill || 0, origin.tameSkill);   // v19：驯手心得
     }
     p2.reinc = { lives: legacy.lives, marks: legacy.marks, compPct: 10, grudges: grudges };
+    if (echo) p2.reinc.echo = echo;   // v20 道韵残响
     // v18 传承树：每3枚印记解锁一层天赋
     const treeTier = Math.floor((legacy.marks || 0) / 3);
     if (treeTier >= 1) p2.stones.low += Math.round(origin ? origin.start.stones || 0 : 0); // 初始灵石翻倍
@@ -89,6 +96,9 @@ const ReincarnationSys = {
     if (treeTier >= 6) p2.reputation = (p2.reputation || 0) + 30;   // 名门之后：初始声望
     if (treeTier >= 7) p2.fortune = (p2.fortune || 0) + 10;   // 福泽绵长：初始气运
     if (treeTier >= 8) p2.bag['m_gupian'] = (p2.bag['m_gupian'] || 0) + 1;   // 骨血传玉：自带一枚上古碎片
+    // v20 传承树九、十层
+    if (treeTier >= 9) p2.flags.daoYunEcho = true;   // 道韵残响：转世保留一条已激活道韵（Stat 消费）
+    if (treeTier >= 10) p2.rerollBest = true;   // 逆天改命：创角四维重掷三次取最优
     if (kept) p2.bag[kept] = 1;
     for (const gid of grudges) {
       const s = p2.npcs[gid];

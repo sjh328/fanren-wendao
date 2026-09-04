@@ -545,6 +545,37 @@ const QuestSys = {
     return `${railHtml}${mainHtml}<div class="shop-section-title">◈ 奇遇录 · 支线</div>${sideRows}`;
   },
 
+  /** v20 问道录 · 百科词条（LORE 词条化，随剧情推进解锁） */
+  LORE_KEYS: [
+    { id: 'intro', need: null, title: '血河之殇' },
+    { id: 'bloodRiver', need: 'c1_end', title: '血河宗' },
+    { id: 'jade', need: 'c1_mid', title: '引魂玉' },
+    { id: 'xuanying', need: 'c2_open', title: '玄影客' },
+    { id: 'tally', need: 'c3_end', title: '黑玉令' },
+    { id: 'bloodRiver.truth', need: 'c5_end', title: '万魂丹与叛炉者' },
+    { id: 'gupian', need: 'c6_mid', title: '上古炼魂石' },
+    { id: 'ferryman', need: 'c7_open', title: '渡船人' },
+    { id: 'timeline', need: 'c5_open', title: '大事时间线' },
+    { id: 'factions', need: 'c7_end', title: '六大势力立场' },
+  ],
+  openLore() {
+    const p = Game.player;
+    const seen = (p.story && p.story.seen) || {};
+    const rows = this.LORE_KEYS.map(e => {
+      const unlocked = !e.need || !!seen[e.need];
+      let body;
+      if (!unlocked) body = '<div class="tip-line" style="color:var(--text-faint)">——尚未揭晓。推进主线，自会知晓。——</div>';
+      else {
+        const val = e.id.includes('.') ? e.id.split('.').reduce((o, k) => (o || {})[k], GameData.LORE) : GameData.LORE[e.id];
+        body = Array.isArray(val)
+          ? val.map(x => `<div class="tip-line">· ${typeof x === 'string' ? x : `${x.y || ''} ${x.t || x.name || ''}：${x.desc || x.stance || ''}`}</div>`).join('')
+          : `<div class="card-desc">${val || '（佚失）'}</div>`;
+      }
+      return `<div class="card"><div class="card-title">${unlocked ? '✦' : '🔒'} ${e.title}</div>${body}</div>`;
+    }).join('');
+    UI.popup({ title: '📖 百科 · 血河旧事', html: `<div class="tip-line" style="margin-bottom:6px">词条随主线推进逐步解锁——真相，要一步一步挖。</div>${rows}`, options: [{ text: '合 上', value: true, primary: true }] });
+  },
+
   /** v15 问道录：章节剧情回顾（已看过的开篇/中段/章末可重读） */
   CHOICE_LABELS: {
     c1_end: { vengeance: '带着遗志入世，此仇必报', caution: '带着告诫入世，只信亲眼所见', clarity: '带着牵挂入世，不为恨所吞' },
@@ -560,14 +591,16 @@ const QuestSys = {
   /** v19 问道录 2.0：剧情回顾 / 人物志 / 大事年表 / 抉择树（四页签） */
   openArchive(tab = 'story') {
     const p = Game.player;
-    const tabs = [['story', '📜 剧情回顾'], ['figures', '👤 人物志'], ['chron', '🗓 大事年表'], ['choices', '⚖ 抉择树']];
+    const tabs = [['story', '📜 剧情回顾'], ['figures', '👤 人物志'], ['chron', '🗓 大事年表'], ['choices', '⚖ 抉择树'], ['lore', '📖 百科']];
     const tabHtml = `<div class="action-row" style="margin:0 0 8px">${tabs.map(([k, label]) =>
       `<button class="btn btn-sm ${k === tab ? 'btn-primary' : ''}" data-action="quest-archive-tab" data-tab="${k}">${label}</button>`).join('')}</div>`;
     let body = '';
     if (tab === 'figures') body = this.archiveFigures(p);
     else if (tab === 'chron') body = this.archiveChron(p);
     else if (tab === 'choices') body = this.archiveChoices(p);
+    else if (tab === 'lore') body = '';
     else body = this.archiveStory(p);
+    if (tab === 'lore') { UI.closePopup(); this.openLore(); return; }
     UI.popup({ title: '📜 问道录', html: tabHtml + body, options: [{ text: '合 上', value: true, primary: true }] });
   },
   /** 页签：剧情回顾 */

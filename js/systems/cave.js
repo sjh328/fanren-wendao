@@ -209,6 +209,7 @@ const CaveSys = {
     Bag.addItem(plot.crop, qty);
     Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}${typeof Art !== 'undefined' && Art.seasonOf(p) === 2 ? '（季秋丰收）' : ''}。`, 'gain');
     plots[idx] = null;
+    p.counters.harvests = (p.counters.harvests || 0) + 1;   // v20 成就计数
     Game.afterAction();
   },
   renderPlots(p) {

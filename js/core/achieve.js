@@ -49,6 +49,19 @@ const Achieve = {
     { id: 'c3', cat: 'battle', name: '越境斩敌', desc: '以低于敌方的境界取胜', reward: { fortune: 12 }, test: p => (p.counters.upsetWins || 0) >= 1 },
     { id: 'c4', cat: 'exp', name: '驯兽大师', desc: '驯服五种不同种族的灵兽', reward: { stones: 1500 }, test: p => (p.counters.tameSpecies || 0) >= 5 },
     { id: 'c5', cat: 'exp', name: '秘境征服者', desc: '通关全部十座秘境', reward: { fortune: 15 }, test: p => (p.counters.dungeonClears || 0) >= 10 },
+    /* ---- v20 经营与挑战成就（+12） ---- */
+    { id: 'v1', cat: 'exp', name: '丹炉百炼', desc: '炼丹成丹一百炉', reward: { stones: 3000 }, prog: p => `${Math.min(100, (p.counters.craftsOk || 0))}/100`, test: p => (p.counters.craftsOk || 0) >= 100 },
+    { id: 'v2', cat: 'exp', name: '画符千张', desc: '累计画符五十轮', reward: { stones: 2000 }, prog: p => `${Math.min(50, (p.counters.talRounds || 0))}/50`, test: p => (p.counters.talRounds || 0) >= 50 },
+    { id: 'v3', cat: 'exp', name: '灵田大丰', desc: '收获作物三十次', reward: { stones: 2000 }, prog: p => `${Math.min(30, (p.counters.harvests || 0))}/30`, test: p => (p.counters.harvests || 0) >= 30 },
+    { id: 'v4', cat: 'exp', name: '斗兽十连胜', desc: '斗兽场累计十胜', reward: { fortune: 8 }, prog: p => `${Math.min(10, (p.counters.arenaWins || 0))}/10`, test: p => (p.counters.arenaWins || 0) >= 10 },
+    { id: 'v5', cat: 'battle', name: '无伤渡劫', desc: '渡劫成功时气血满盈', reward: { fortune: 12 }, test: p => (p.flags && p.flags.tribFullHp) || false },
+    { id: 'v6', cat: 'battle', name: '残血翻盘', desc: '气血低于一成时反败为胜', reward: { fortune: 10 }, test: p => (p.counters.lowHpWins || 0) >= 1 },
+    { id: 'v7', cat: 'battle', name: '一夜屠魔', desc: '单场战斗输出逾自身攻击百倍', reward: { fortune: 10 }, test: p => (p.counters.bigOut || 0) >= 1 },
+    { id: 'v8', cat: 'battle', name: '破招行家', desc: '破招打断蓄力十次', reward: { stones: 2500 }, prog: p => `${Math.min(10, (p.counters.breaks || 0))}/10`, test: p => (p.counters.breaks || 0) >= 10 },
+    { id: 'v9', cat: 'reinc', name: '宿命轮回', desc: '历经五世轮回', reward: { fortune: 20 }, prog: p => `${Math.min(5, p.reinc ? (p.reinc.lives || 0) : 0)}/5`, test: p => p.reinc && (p.reinc.lives || 0) >= 5 },
+    { id: 'v10', cat: 'reinc', name: '印记如星', desc: '累计十枚轮回印记', reward: { fortune: 18 }, prog: p => `${Math.min(10, p.reinc ? (p.reinc.marks || 0) : 0)}/10`, test: p => p.reinc && (p.reinc.marks || 0) >= 10 },
+    { id: 'v11', cat: 'dao', name: '道韵全通', desc: '同时激活四条道韵', reward: { fortune: 12 }, test: p => (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) >= 4 },
+    { id: 'v12', cat: 'dao', name: '奥义宗师', desc: '三部功法修至大成', reward: { fortune: 10 }, test: p => Object.entries(p.gongfa || {}).filter(([id, g]) => GameData.ITEMS[id] && g.level >= GongfaSys.maxLevel(GameData.ITEMS[id])).length >= 3 },
   ],
   /** 每次行动收尾时检查：解锁则发奖并播报 */
   check() {

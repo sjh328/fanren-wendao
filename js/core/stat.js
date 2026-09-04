@@ -18,6 +18,8 @@ const Stat = {
       if (!dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3)) continue;
       for (const [k, v] of Object.entries(dy.fx)) total[k] = (total[k] || 0) + v;
     }
+    // v20 传承树九层「道韵残响」：转世继承的上一世最强道韵（保存于 p.reinc.echo）
+    if (p.reinc && p.reinc.echo) for (const [k, v] of Object.entries(p.reinc.echo)) total[k] = (total[k] || 0) + v;
     // v20 功法大成奥义：修至满层解锁专属被动
     for (const [id, g] of Object.entries(p.gongfa)) {
       const def = GameData.ITEMS[id];
