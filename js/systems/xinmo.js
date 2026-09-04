@@ -34,7 +34,7 @@ const XinmoSys = {
     const pw = rp;
     const rIdx = Utils.clamp(Math.floor(pw / 4), 0, 9);
     const enemy = {
-      id: null, name: '心魔化身', elite: true, power: pw, species: 'ghost',
+      id: null, name: '心魔化身', elite: true, power: pw, species: 'ghost', bossArt: 'xinmo',
       realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(pw % 4, 0, 3)],
       hpMax: Math.round((55 + Math.pow(pw, 1.6) * 5) * 1.7 * 0.9),
       atk: Math.round((6 + pw * 2.6) * 1.35 * 0.9),

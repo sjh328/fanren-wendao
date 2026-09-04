@@ -144,6 +144,7 @@ const Story = {
       const scale = f.scale || 1;
       enemy = {
         id: null, name: f.name || '神秘敌人', elite: !!f.elite, power: pw,
+        bossArt: f.bossArt || null,   // v20 Boss 专属立绘
         realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(pw % 4, 0, 3)],
         hpMax: Math.round((55 + Math.pow(pw, 1.6) * 5) * (f.elite ? 1.7 : 1) * scale),
         atk: Math.round((6 + pw * 2.6) * (f.elite ? 1.35 : 1) * scale),

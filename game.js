@@ -231,6 +231,37 @@ const Art = {
       ${item}
     </g></svg>`;
   },
+  /** v20 Boss 专属立绘：帝渊（丹炉魔纹）/ 玄影客（无面披风）/ 心魔（色系反转剪影） */
+  BOSS_ART: {
+    diYuan: `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="#5a1f1a" stroke="#5a1f1a">
+      <path d="M20 64 L23 40 Q34 30 44 31 L58 32 Q66 33 70 42 L72 64 Z"/>
+      <circle cx="42" cy="22" r="9" fill="#2a1210"/>
+      <path d="M33 20 Q35 10 42 10 Q49 10 51 20 Q47 15 42 15 Q37 15 33 20 Z" fill="#1a0c0a"/>
+      <circle cx="38" cy="23" r="1.4" fill="#e8a04a" stroke="none"/><circle cx="46" cy="23" r="1.4" fill="#e8a04a" stroke="none"/>
+      <path d="M56 44 q6 6 2 12 q-4 -2 -2 -12" fill="#a03a2a" stroke="none"/>
+      <ellipse cx="30" cy="52" rx="4" ry="6" fill="#a03a2a" stroke="none" opacity="0.7"/>
+      </g>
+      <ellipse cx="30" cy="60" rx="10" ry="3" fill="#a03a2a" opacity="0.35"/>
+      </svg>`,
+    xuanYing: `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="#3a3040" stroke="#3a3040">
+      <path d="M24 64 Q22 38 30 30 Q38 20 46 22 Q56 24 62 34 L68 64 Z"/>
+      <circle cx="46" cy="21" r="8" fill="#1e1a24"/>
+      <path d="M40 18 Q48 14 54 19 L58 26 Q48 22 40 24 Z" fill="#14101a"/>
+      </g>
+      <circle cx="44" cy="22" r="1.2" fill="#7c5cb0" stroke="none"/>
+      <path d="M24 64 Q20 46 26 36 L34 64 Z" fill="#241c30" stroke="none" opacity="0.8"/>
+      </svg>`,
+    xinmo: `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="#1e1a24" stroke="#1e1a24">
+      <circle cx="40" cy="22" r="8"/>
+      <path d="M26 62 L28 36 Q40 28 52 36 L54 62 Z"/>
+      </g>
+      <circle cx="37" cy="22" r="1.3" fill="#c05a6a" stroke="none"/><circle cx="44" cy="22" r="1.3" fill="#c05a6a" stroke="none"/>
+      <path d="M56 40 Q66 30 74 24" stroke="#c05a6a" stroke-width="2.5" fill="none"/>
+      <path d="M20 30 Q14 40 20 50" stroke="#7c5cb0" stroke-width="1.6" fill="none" opacity="0.7"/>
+      </svg>`,
+  },
+  /** v20 Boss 立绘取用（战斗渲染按 enemy.bossArt 键取用） */
+  boss(key) { return this.BOSS_ART[key] || null; },
   /** v19：常驻修士的程序化肖像参数（宗门定袍色，性情定持物与发色——二十四人全覆盖） */
   SECT_ROBE: { qingyun: '#5a7a9a', danxia: '#6a9a7a', wanbao: '#9a8a5a', panyan: '#8a6a4a', zhoutian: '#4a6a9a' },
   TEMPER_LOOK: {
@@ -505,9 +536,34 @@ const Ambience = {
       // v18：格挡——沉闷撞击
       this.tone(160, t, 0.15, { type: 'square', gain: 0.10 });
       this.tone(80, t + 0.03, 0.2, { type: 'sawtooth', gain: 0.06 });
+    } else if (kind === 'tab') {
+      // v20：页签切换轻嗒
+      this.tone(660, t, 0.05, { type: 'sine', gain: 0.06 });
+    } else if (kind === 'coin') {
+      // v20：买卖成交
+      this.tone(988, t, 0.08, { type: 'triangle', gain: 0.10 });
+      this.tone(1319, t + 0.06, 0.14, { type: 'triangle', gain: 0.08 });
+    } else if (kind === 'plant') {
+      // v20：播种/浇水/收获三连音
+      this.tone(392, t, 0.1, { type: 'sine', gain: 0.10 });
+      this.tone(523, t + 0.08, 0.12, { type: 'sine', gain: 0.10 });
+      this.tone(659, t + 0.18, 0.3, { type: 'sine', gain: 0.12 });
+    } else if (kind === 'bell') {
+      // v20：节庆钟声
+      [523, 659, 784].forEach((f, i) => this.tone(f, t + i * 0.35, 1.6, { type: 'sine', gain: 0.14, dest: this.musicBus }));
+      this.tone(262, t, 2.2, { type: 'sine', gain: 0.10 });
+    } else if (kind === 'intent') {
+      // v20：意图预警短促音
+      this.tone(220, t, 0.12, { type: 'square', gain: 0.09 });
+      this.tone(330, t + 0.1, 0.1, { type: 'square', gain: 0.07 });
+    } else if (kind === 'inherit') {
+      // v20：传承/炼化融合音
+      this.tone(262, t, 0.8, { type: 'sawtooth', gain: 0.06 });
+      this.tone(392, t + 0.25, 0.8, { type: 'triangle', gain: 0.10 });
+      this.tone(523, t + 0.5, 1.2, { type: 'sine', gain: 0.14 });
     }
   },
-  /** 生成式古琴背景乐：五声音阶随机游走 + 弦底长音，疏落淡远 */
+  /** 生成式古琴背景乐：五声音阶随机游走 + 弦底长音，疏落淡远（v20 六情境） */
   startMusic() {
     if (!this.ensureCtx() || this.musicTimer) return;
     this.musicStep = 0;
@@ -516,19 +572,21 @@ const Ambience = {
       const t = this.ctx.currentTime + 0.02;
       this.musicStep++;
       const P = this.PENTA;
-      if (this.musicStep % 8 === 1) this.tone(P[0] / (mood === 'battle' || mood === 'boss' ? 2 : 2), t, mood === 'battle' ? 2.2 : 3.2, { type: 'sine', gain: 0.20, dest: this.musicBus });
-      const density = { battle: 78, boss: 85, story: 42, calm: 62 }[mood] || 62;
+      if (this.musicStep % 8 === 1) this.tone(P[0] / 2, t, mood === 'battle' || mood === 'boss' ? 2.2 : 3.2, { type: 'sine', gain: 0.20, dest: this.musicBus });
+      const density = { battle: 78, boss: 85, story: 42, calm: 62, secret: 52, market: 70 }[mood] || 62;
       if (Utils.chance(density)) {
-        const lift = (mood === 'battle' && Utils.chance(40)) || (mood === 'boss' && Utils.chance(55));
-        const damp = mood === 'story' && Utils.chance(60);
+        const lift = (mood === 'battle' && Utils.chance(40)) || (mood === 'boss' && Utils.chance(55)) || (mood === 'market' && Utils.chance(30));
+        const damp = (mood === 'story' || mood === 'secret') && Utils.chance(60);
         const f = P[Math.floor(Math.random() * P.length)] * (lift ? 2 : damp ? 0.5 : 1);
-        this.tone(f, t, mood === 'battle' ? 1.1 : 1.6, { type: 'triangle', gain: 0.30, dest: this.musicBus });
+        const dur = { battle: 1.1, boss: 1.1, story: 1.6, calm: 1.6, secret: 1.9, market: 1.2 }[mood] || 1.6;
+        this.tone(f, t, dur, { type: mood === 'market' ? 'triangle' : mood === 'secret' ? 'sine' : 'triangle', gain: 0.30, dest: this.musicBus });
         if (Utils.chance(30)) this.tone(f * 2, t + 0.03, 0.8, { type: 'sine', gain: 0.10, dest: this.musicBus });
         if (mood === 'boss' && Utils.chance(35)) this.tone(f * 1.5, t + 0.06, 0.5, { type: 'square', gain: 0.08, dest: this.musicBus });   // 小二度摩擦，杀气
+        if (mood === 'secret' && Utils.chance(20)) this.tone(f * 0.5, t + 0.1, 2.2, { type: 'sine', gain: 0.08, dest: this.musicBus });   // 秘境低音氤氲
       }
     };
     tick();
-    const tempo = { battle: 460, boss: 400, story: 760, calm: 640 }[this.mood || 'calm'];
+    const tempo = { battle: 460, boss: 400, story: 760, calm: 640, secret: 700, market: 520 }[this.mood || 'calm'];
     this.musicTimer = setInterval(tick, tempo);
   },
   /** v19 情境配乐：战斗急促（短音阶+高八度倾向），平静舒缓 */
@@ -2697,7 +2755,7 @@ c8_end: { id: 'c8_end', title: '第八章 · 终 · 决战前夜', scenes: [
   { t: 'montage', text: '这十日你没有虚度。\n沈青崖替你淬剑，红绡替你标图，姬冰颜替你布阵；你把两世的功法从头推演一遍，把残玉里借来的每一分力都演练到收放由心。\n整军，备武——磨的其实是自己这把刀。', days: 10 },
   { t: 'narr', text: '决战前夜，你没有修炼。\n你把想见的人都见了一遍，把想说的话都说了一遍——修士的道途太长，长到很多话一放就是几百年。' },
   { t: 'narr', text: '三更，烛火无风自灭。\n院子里落进一道人影，玄衣如墨，眉眼与传闻中的玄影客一般无二——「三百年的差事，今夜交割。主人等着收账，你这颗主魂，得先验验成色。」' },
-  { t: 'battle', foe: { name: '玄影客', power: 30, species: 'human', elite: true }, label: '决战前夜 · 影身截杀', text: '墨色刀光先至，雷声后动。\n它每一步都踩在你旧年破绽上——三百年的眼睛，不是白长的。', win: ['影身寸寸崩解——三百年的人间眼睛，今夜闭上了。'], lose: ['影身退入夜色：「雷台见。」——它把最后一战留给了它的主人。'], flagWin: 'k8_shadow_slain' },
+  { t: 'battle', foe: { name: '玄影客', power: 30, species: 'human', elite: true, bossArt: 'xuanYing' }, label: '决战前夜 · 影身截杀', text: '墨色刀光先至，雷声后动。\n它每一步都踩在你旧年破绽上——三百年的眼睛，不是白长的。', win: ['影身寸寸崩解——三百年的人间眼睛，今夜闭上了。'], lose: ['影身退入夜色：「雷台见。」——它把最后一战留给了它的主人。'], flagWin: 'k8_shadow_slain' },
   { t: 'choice', text: '最后一杯酒敬给这场决战。你如何托付身后事？', options: [
     { text: '立誓同去——「要死一起死，要活一起活」', value: 'together', flag: 'k8_together' },
     { text: '托付后事——若我不归，请替我看一眼血河故道的春天', value: 'entrust' },
@@ -2733,9 +2791,9 @@ c9_mid: { id: 'c9_mid', title: '第九章 · 血煞渐醒', scenes: [
 c9_end: { id: 'c9_end', title: '终章 · 雷海了断', scenes: [
   { t: 'narr', text: '第九道天雷落下时，你引动残玉中前世全部的血煞，与宗主的魔身同缚雷心。\n雷光吞没一切的刹那，你听见三百年来的执念，在雷心里烧成了灰。' },
   { t: 'narr', text: '雷心深处，魔身裂开一道缝——缝里走出另一个「宗主」。\n它由万魂怨念拧成，眉眼空无一物，袖口却垂着九十九条锁魂链的残环。真身未出，先遣万魂——这是帝渊三百年前围猎时的老规矩。' },
-  { t: 'battle', foe: { name: '宗主分身·万魂影', power: 32, species: 'human', elite: true }, label: '雷海·第一阵', text: '万魂影不与你拆招。它张开手臂，把九千九百九十九道怨念当箭雨泼下来。\n雷海为幕，天地为局——你退无可退，唯有一往。', win: ['万魂影散作漫天萤火，萤火里传出九千九百九十九声叹息。\n它们不是你的敌人——它们只是被困得太久的魂，散尽之前，替你让开了通往雷心的最后一步。'], lose: ['你被万魂怨念掀下雷云，肋骨断了两根。\n残玉在你怀里烫得像一颗心脏，替你撑住了追击落下前的半息——第一阵未能全胜，但路，已经趟出来了。'], flagWin: 'k9_p1' },
+  { t: 'battle', foe: { name: '宗主分身·万魂影', power: 32, species: 'human', elite: true, bossArt: 'xuanYing' }, label: '雷海·第一阵', text: '万魂影不与你拆招。它张开手臂，把九千九百九十九道怨念当箭雨泼下来。\n雷海为幕，天地为局——你退无可退，唯有一往。', win: ['万魂影散作漫天萤火，萤火里传出九千九百九十九声叹息。\n它们不是你的敌人——它们只是被困得太久的魂，散尽之前，替你让开了通往雷心的最后一步。'], lose: ['你被万魂怨念掀下雷云，肋骨断了两根。\n残玉在你怀里烫得像一颗心脏，替你撑住了追击落下前的半息——第一阵未能全胜，但路，已经趟出来了。'], flagWin: 'k9_p1' },
   { t: 'narr', text: '第一阵过，雷海忽然静了。\n静得能听见血河故道的水声倒卷——三百年了，那口炉子终于浮出水面，与魔身合为一体。真正的帝渊，踏着自己养了三百年的河，来了。' },
-  { t: 'battle', foe: { name: '血河宗主·帝渊', power: 36, species: 'human', elite: true, scale: 1.15 }, label: '雷心·第二阵', text: '「小家伙，你经脉里一半的修为，本座都认得——那是我看着长起来的。」\n帝渊抬手，血河故道之水应声成龙，缠绕上他的臂膀。', win: ['魔身寸寸崩解——万魂丹炉的锁魂链应声尽断。'], lose: ['你力竭跪雷——关键时刻残玉中两世之力合流，替你挡下最后一击。'], flagWin: 'k9_p2' },
+  { t: 'battle', foe: { name: '血河宗主·帝渊', power: 36, species: 'human', elite: true, scale: 1.15, bossArt: 'diYuan' }, label: '雷心·第二阵', text: '「小家伙，你经脉里一半的修为，本座都认得——那是我看着长起来的。」\n帝渊抬手，血河故道之水应声成龙，缠绕上他的臂膀。', win: ['魔身寸寸崩解——万魂丹炉的锁魂链应声尽断。'], lose: ['你力竭跪雷——关键时刻残玉中两世之力合流，替你挡下最后一击。'], flagWin: 'k9_p2' },
   { t: 'dialog', who: '@c_zongzhu', title: '雷心 · 魔身崩解', text: '……为什么。\n我算尽了天时地利人心……唯独没算到，恨意烧到最后，剩下的会是……释然……' },
   { t: 'narr', text: '宗主长叹一声，魔身寸寸崩解。\n万魂丹炉的锁魂链应声尽断——九千九百九十九道流光自血河故道冲天而起，如逆流的星河，散入人间。' },
   { t: 'choice', text: '雷光将熄，宗主最后一缕残魂飘到你面前。你如何了断这三百年因果？', options: [
@@ -7283,7 +7341,7 @@ const XinmoSys = {
     const pw = rp;
     const rIdx = Utils.clamp(Math.floor(pw / 4), 0, 9);
     const enemy = {
-      id: null, name: '心魔化身', elite: true, power: pw, species: 'ghost',
+      id: null, name: '心魔化身', elite: true, power: pw, species: 'ghost', bossArt: 'xinmo',
       realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(pw % 4, 0, 3)],
       hpMax: Math.round((55 + Math.pow(pw, 1.6) * 5) * 1.7 * 0.9),
       atk: Math.round((6 + pw * 2.6) * 1.35 * 0.9),
@@ -9747,6 +9805,7 @@ const Battle = {
     if (startFx.shield > 0) {
       StatusFx.add(B.myFx, { kind: 'shield', pct: Math.round(startFx.shield * 100), rounds: 2 });
       this.log('法宝灵光自发——一层金光罩住周身。', 'log-system');
+      this.fxShow('gold-halo');   // v20 状态特效
     }
     if (ctx.firstStrike || ctx.ambush) {
       this.log(ctx.ambush ? '仇家蓄谋已久，抢先出手！' : '对方修为高深，抢先出手！', 'warn');
@@ -10410,7 +10469,8 @@ const Battle = {
             if (Utils.chance(resist)) {
               this.log(`【${def.name}】寒气罩落，却被 ${B.enemy.name} 以妖力震碎——未能封住其身形！`, 'log-warn');
             } else {
-              this.applyEnemyFx(B.enemy, { kind: 'freeze', rounds: def.rounds || 1 }, `【${def.name}】寒气封形——${B.enemy.name} 被冰封，下一回合无法动弹！`);
+              Battle.fxShow('ice-frost');
+            this.applyEnemyFx(B.enemy, { kind: 'freeze', rounds: def.rounds || 1 }, `【${def.name}】寒气封形——${B.enemy.name} 被冰封，下一回合无法动弹！`);
             }
           }
         } else if (def.buff) {
@@ -10699,12 +10759,14 @@ const Battle = {
       poison: () => {
         this.enemyStrike(st, 0.8, false, `${sk.name}命中`);
         StatusFx.add(B.myFx, { kind: 'poison', pct: sk.pct || 3, rounds: sk.rounds || 3 });
+        this.fxShow('poison-mist');   // v20 绿雾特效
         this.log(`【${sk.name}】毒液入体——你中毒了！每回合将损血，持续 ${sk.rounds || 3} 回合。`, 'log-loss');
         Ambience.sfx('poison');
       },
       burn: () => {
         this.enemyStrike(st, 0.9, false);
         StatusFx.add(B.myFx, { kind: 'burn', pct: sk.pct || 3.5, rounds: sk.rounds || 2 });
+        this.fxShow('burn-spark');   // v20 火星特效
         this.log(`【${sk.name}】烈焰缠身——你被灼烧了！每回合将损血，持续 ${sk.rounds || 2} 回合。`, 'log-loss');
       },
       bleed: () => {
@@ -11232,9 +11294,9 @@ const Battle = {
     // v7：浮动伤害/治疗数字 + 敌方受击震动（战斗即时反馈）
     const eside = document.querySelector('#battle-box .side-enemy');
     const mside = document.querySelector('#battle-box .side-me');
-    // v13：敌方剪影立绘
+    // v13：敌方剪影立绘（v20 Boss 专属立绘优先：宗主/玄影客/心魔化身）
     const efig = document.querySelector('#battle-box .enemy-fig');
-    if (efig) efig.innerHTML = Art.monster(e.species || 'beast', !!e.elite);
+    if (efig) efig.innerHTML = (e.bossArt && Art.boss(e.bossArt)) || Art.monster(e.species || 'beast', !!e.elite);
     // v18：主角剪影立绘
     const mfig = document.querySelector('#battle-box .me-fig');
     if (mfig) mfig.innerHTML = Art.player(p.dao);
@@ -11491,6 +11553,7 @@ const Story = {
       const scale = f.scale || 1;
       enemy = {
         id: null, name: f.name || '神秘敌人', elite: !!f.elite, power: pw,
+        bossArt: f.bossArt || null,   // v20 Boss 专属立绘
         realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(pw % 4, 0, 3)],
         hpMax: Math.round((55 + Math.pow(pw, 1.6) * 5) * (f.elite ? 1.7 : 1) * scale),
         atk: Math.round((6 + pw * 2.6) * (f.elite ? 1.35 : 1) * scale),
@@ -14033,7 +14096,12 @@ const Game = {
     'act-tab': (d) => {
       const lock = Guide.tabLocked(d.tab);   // v6：分步解锁
       if (lock) { UI.toast(`尚未解锁 —— ${lock}`); return; }
+      if (Game.activeTab !== d.tab && typeof Ambience !== 'undefined' && Ambience.sfxOn) Ambience.sfx('tab');   // v20 切页轻音
       Game.activeTab = d.tab; UI.renderTabs(); UI.renderTabContent();
+      // v20 情境 BGM：进秘境页/坊市页切换氛围（战斗/剧情情境各自接管）
+      if (typeof Ambience !== 'undefined' && Ambience.musicOn && !Battle.active && !Story.active()) {
+        Ambience.setMood(d.tab === 'map' && this.player && this.player.dungeon ? 'secret' : d.tab === 'shop' ? 'market' : 'calm');
+      }
       // 面板切换平滑过渡：短暂加动效类，避免生硬跳变
       const box = UI.el['tab-content'];
       if (box) {

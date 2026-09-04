@@ -106,6 +106,7 @@ const Battle = {
     if (startFx.shield > 0) {
       StatusFx.add(B.myFx, { kind: 'shield', pct: Math.round(startFx.shield * 100), rounds: 2 });
       this.log('法宝灵光自发——一层金光罩住周身。', 'log-system');
+      this.fxShow('gold-halo');   // v20 状态特效
     }
     if (ctx.firstStrike || ctx.ambush) {
       this.log(ctx.ambush ? '仇家蓄谋已久，抢先出手！' : '对方修为高深，抢先出手！', 'warn');
@@ -769,7 +770,8 @@ const Battle = {
             if (Utils.chance(resist)) {
               this.log(`【${def.name}】寒气罩落，却被 ${B.enemy.name} 以妖力震碎——未能封住其身形！`, 'log-warn');
             } else {
-              this.applyEnemyFx(B.enemy, { kind: 'freeze', rounds: def.rounds || 1 }, `【${def.name}】寒气封形——${B.enemy.name} 被冰封，下一回合无法动弹！`);
+              Battle.fxShow('ice-frost');
+            this.applyEnemyFx(B.enemy, { kind: 'freeze', rounds: def.rounds || 1 }, `【${def.name}】寒气封形——${B.enemy.name} 被冰封，下一回合无法动弹！`);
             }
           }
         } else if (def.buff) {
@@ -1058,12 +1060,14 @@ const Battle = {
       poison: () => {
         this.enemyStrike(st, 0.8, false, `${sk.name}命中`);
         StatusFx.add(B.myFx, { kind: 'poison', pct: sk.pct || 3, rounds: sk.rounds || 3 });
+        this.fxShow('poison-mist');   // v20 绿雾特效
         this.log(`【${sk.name}】毒液入体——你中毒了！每回合将损血，持续 ${sk.rounds || 3} 回合。`, 'log-loss');
         Ambience.sfx('poison');
       },
       burn: () => {
         this.enemyStrike(st, 0.9, false);
         StatusFx.add(B.myFx, { kind: 'burn', pct: sk.pct || 3.5, rounds: sk.rounds || 2 });
+        this.fxShow('burn-spark');   // v20 火星特效
         this.log(`【${sk.name}】烈焰缠身——你被灼烧了！每回合将损血，持续 ${sk.rounds || 2} 回合。`, 'log-loss');
       },
       bleed: () => {
@@ -1591,9 +1595,9 @@ const Battle = {
     // v7：浮动伤害/治疗数字 + 敌方受击震动（战斗即时反馈）
     const eside = document.querySelector('#battle-box .side-enemy');
     const mside = document.querySelector('#battle-box .side-me');
-    // v13：敌方剪影立绘
+    // v13：敌方剪影立绘（v20 Boss 专属立绘优先：宗主/玄影客/心魔化身）
     const efig = document.querySelector('#battle-box .enemy-fig');
-    if (efig) efig.innerHTML = Art.monster(e.species || 'beast', !!e.elite);
+    if (efig) efig.innerHTML = (e.bossArt && Art.boss(e.bossArt)) || Art.monster(e.species || 'beast', !!e.elite);
     // v18：主角剪影立绘
     const mfig = document.querySelector('#battle-box .me-fig');
     if (mfig) mfig.innerHTML = Art.player(p.dao);

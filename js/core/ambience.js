@@ -156,9 +156,34 @@ const Ambience = {
       // v18：格挡——沉闷撞击
       this.tone(160, t, 0.15, { type: 'square', gain: 0.10 });
       this.tone(80, t + 0.03, 0.2, { type: 'sawtooth', gain: 0.06 });
+    } else if (kind === 'tab') {
+      // v20：页签切换轻嗒
+      this.tone(660, t, 0.05, { type: 'sine', gain: 0.06 });
+    } else if (kind === 'coin') {
+      // v20：买卖成交
+      this.tone(988, t, 0.08, { type: 'triangle', gain: 0.10 });
+      this.tone(1319, t + 0.06, 0.14, { type: 'triangle', gain: 0.08 });
+    } else if (kind === 'plant') {
+      // v20：播种/浇水/收获三连音
+      this.tone(392, t, 0.1, { type: 'sine', gain: 0.10 });
+      this.tone(523, t + 0.08, 0.12, { type: 'sine', gain: 0.10 });
+      this.tone(659, t + 0.18, 0.3, { type: 'sine', gain: 0.12 });
+    } else if (kind === 'bell') {
+      // v20：节庆钟声
+      [523, 659, 784].forEach((f, i) => this.tone(f, t + i * 0.35, 1.6, { type: 'sine', gain: 0.14, dest: this.musicBus }));
+      this.tone(262, t, 2.2, { type: 'sine', gain: 0.10 });
+    } else if (kind === 'intent') {
+      // v20：意图预警短促音
+      this.tone(220, t, 0.12, { type: 'square', gain: 0.09 });
+      this.tone(330, t + 0.1, 0.1, { type: 'square', gain: 0.07 });
+    } else if (kind === 'inherit') {
+      // v20：传承/炼化融合音
+      this.tone(262, t, 0.8, { type: 'sawtooth', gain: 0.06 });
+      this.tone(392, t + 0.25, 0.8, { type: 'triangle', gain: 0.10 });
+      this.tone(523, t + 0.5, 1.2, { type: 'sine', gain: 0.14 });
     }
   },
-  /** 生成式古琴背景乐：五声音阶随机游走 + 弦底长音，疏落淡远 */
+  /** 生成式古琴背景乐：五声音阶随机游走 + 弦底长音，疏落淡远（v20 六情境） */
   startMusic() {
     if (!this.ensureCtx() || this.musicTimer) return;
     this.musicStep = 0;
@@ -167,19 +192,21 @@ const Ambience = {
       const t = this.ctx.currentTime + 0.02;
       this.musicStep++;
       const P = this.PENTA;
-      if (this.musicStep % 8 === 1) this.tone(P[0] / (mood === 'battle' || mood === 'boss' ? 2 : 2), t, mood === 'battle' ? 2.2 : 3.2, { type: 'sine', gain: 0.20, dest: this.musicBus });
-      const density = { battle: 78, boss: 85, story: 42, calm: 62 }[mood] || 62;
+      if (this.musicStep % 8 === 1) this.tone(P[0] / 2, t, mood === 'battle' || mood === 'boss' ? 2.2 : 3.2, { type: 'sine', gain: 0.20, dest: this.musicBus });
+      const density = { battle: 78, boss: 85, story: 42, calm: 62, secret: 52, market: 70 }[mood] || 62;
       if (Utils.chance(density)) {
-        const lift = (mood === 'battle' && Utils.chance(40)) || (mood === 'boss' && Utils.chance(55));
-        const damp = mood === 'story' && Utils.chance(60);
+        const lift = (mood === 'battle' && Utils.chance(40)) || (mood === 'boss' && Utils.chance(55)) || (mood === 'market' && Utils.chance(30));
+        const damp = (mood === 'story' || mood === 'secret') && Utils.chance(60);
         const f = P[Math.floor(Math.random() * P.length)] * (lift ? 2 : damp ? 0.5 : 1);
-        this.tone(f, t, mood === 'battle' ? 1.1 : 1.6, { type: 'triangle', gain: 0.30, dest: this.musicBus });
+        const dur = { battle: 1.1, boss: 1.1, story: 1.6, calm: 1.6, secret: 1.9, market: 1.2 }[mood] || 1.6;
+        this.tone(f, t, dur, { type: mood === 'market' ? 'triangle' : mood === 'secret' ? 'sine' : 'triangle', gain: 0.30, dest: this.musicBus });
         if (Utils.chance(30)) this.tone(f * 2, t + 0.03, 0.8, { type: 'sine', gain: 0.10, dest: this.musicBus });
         if (mood === 'boss' && Utils.chance(35)) this.tone(f * 1.5, t + 0.06, 0.5, { type: 'square', gain: 0.08, dest: this.musicBus });   // 小二度摩擦，杀气
+        if (mood === 'secret' && Utils.chance(20)) this.tone(f * 0.5, t + 0.1, 2.2, { type: 'sine', gain: 0.08, dest: this.musicBus });   // 秘境低音氤氲
       }
     };
     tick();
-    const tempo = { battle: 460, boss: 400, story: 760, calm: 640 }[this.mood || 'calm'];
+    const tempo = { battle: 460, boss: 400, story: 760, calm: 640, secret: 700, market: 520 }[this.mood || 'calm'];
     this.musicTimer = setInterval(tick, tempo);
   },
   /** v19 情境配乐：战斗急促（短音阶+高八度倾向），平静舒缓 */

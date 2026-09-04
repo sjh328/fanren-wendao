@@ -95,6 +95,37 @@ const Art = {
       ${item}
     </g></svg>`;
   },
+  /** v20 Boss 专属立绘：帝渊（丹炉魔纹）/ 玄影客（无面披风）/ 心魔（色系反转剪影） */
+  BOSS_ART: {
+    diYuan: `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="#5a1f1a" stroke="#5a1f1a">
+      <path d="M20 64 L23 40 Q34 30 44 31 L58 32 Q66 33 70 42 L72 64 Z"/>
+      <circle cx="42" cy="22" r="9" fill="#2a1210"/>
+      <path d="M33 20 Q35 10 42 10 Q49 10 51 20 Q47 15 42 15 Q37 15 33 20 Z" fill="#1a0c0a"/>
+      <circle cx="38" cy="23" r="1.4" fill="#e8a04a" stroke="none"/><circle cx="46" cy="23" r="1.4" fill="#e8a04a" stroke="none"/>
+      <path d="M56 44 q6 6 2 12 q-4 -2 -2 -12" fill="#a03a2a" stroke="none"/>
+      <ellipse cx="30" cy="52" rx="4" ry="6" fill="#a03a2a" stroke="none" opacity="0.7"/>
+      </g>
+      <ellipse cx="30" cy="60" rx="10" ry="3" fill="#a03a2a" opacity="0.35"/>
+      </svg>`,
+    xuanYing: `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="#3a3040" stroke="#3a3040">
+      <path d="M24 64 Q22 38 30 30 Q38 20 46 22 Q56 24 62 34 L68 64 Z"/>
+      <circle cx="46" cy="21" r="8" fill="#1e1a24"/>
+      <path d="M40 18 Q48 14 54 19 L58 26 Q48 22 40 24 Z" fill="#14101a"/>
+      </g>
+      <circle cx="44" cy="22" r="1.2" fill="#7c5cb0" stroke="none"/>
+      <path d="M24 64 Q20 46 26 36 L34 64 Z" fill="#241c30" stroke="none" opacity="0.8"/>
+      </svg>`,
+    xinmo: `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="#1e1a24" stroke="#1e1a24">
+      <circle cx="40" cy="22" r="8"/>
+      <path d="M26 62 L28 36 Q40 28 52 36 L54 62 Z"/>
+      </g>
+      <circle cx="37" cy="22" r="1.3" fill="#c05a6a" stroke="none"/><circle cx="44" cy="22" r="1.3" fill="#c05a6a" stroke="none"/>
+      <path d="M56 40 Q66 30 74 24" stroke="#c05a6a" stroke-width="2.5" fill="none"/>
+      <path d="M20 30 Q14 40 20 50" stroke="#7c5cb0" stroke-width="1.6" fill="none" opacity="0.7"/>
+      </svg>`,
+  },
+  /** v20 Boss 立绘取用（战斗渲染按 enemy.bossArt 键取用） */
+  boss(key) { return this.BOSS_ART[key] || null; },
   /** v19：常驻修士的程序化肖像参数（宗门定袍色，性情定持物与发色——二十四人全覆盖） */
   SECT_ROBE: { qingyun: '#5a7a9a', danxia: '#6a9a7a', wanbao: '#9a8a5a', panyan: '#8a6a4a', zhoutian: '#4a6a9a' },
   TEMPER_LOOK: {

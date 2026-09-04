@@ -259,7 +259,12 @@ const Game = {
     'act-tab': (d) => {
       const lock = Guide.tabLocked(d.tab);   // v6：分步解锁
       if (lock) { UI.toast(`尚未解锁 —— ${lock}`); return; }
+      if (Game.activeTab !== d.tab && typeof Ambience !== 'undefined' && Ambience.sfxOn) Ambience.sfx('tab');   // v20 切页轻音
       Game.activeTab = d.tab; UI.renderTabs(); UI.renderTabContent();
+      // v20 情境 BGM：进秘境页/坊市页切换氛围（战斗/剧情情境各自接管）
+      if (typeof Ambience !== 'undefined' && Ambience.musicOn && !Battle.active && !Story.active()) {
+        Ambience.setMood(d.tab === 'map' && this.player && this.player.dungeon ? 'secret' : d.tab === 'shop' ? 'market' : 'calm');
+      }
       // 面板切换平滑过渡：短暂加动效类，避免生硬跳变
       const box = UI.el['tab-content'];
       if (box) {
