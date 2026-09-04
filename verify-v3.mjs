@@ -72,6 +72,9 @@ const dismissRollback = async () => {
     if (closed) break;
     await sleep(300);
   }
+  // v20：渡劫收尾触发的章节追认剧情（supR）会开着故事卷轴，坐标点击全被遮罩拦下——统一合卷
+  await page.evaluate(() => { if (typeof Story !== 'undefined' && Story.active()) Story.close(); });
+  await sleep(200);
   await sleep(300);
   // v20 加固：渡劫偷袭（14%）会开启战斗，残留战场会阻断后续兵解流程——统一清理
   await page.evaluate(() => { if (Battle.active) { Battle.active.over = true; Battle.end(); } });
@@ -416,8 +419,10 @@ try {
     const p = await player(page);
     p.world && p.world.pending ? pass('V4 跨年触发百年大事件（事件卡生成）') : fail('V4 事件触发', JSON.stringify(p.world));
     const w = p.world;
-    (w.magicMaps.length > 0 || w.preachUntil > 0 || w.ruinsUntil > 0 || w.warUntil > 0)
-      ? pass('V4 大事件永久改变世界格局（魔域/讲道/秘境/战火其一）') : fail('V4 永久格局', JSON.stringify(w));
+    (w.magicMaps.length > 0 || w.preachUntil > 0 || w.ruinsUntil > 0 || w.warUntil > 0
+      || w.lingchaoUntil > 0 || (w.beastMaps || []).length > 0
+      || ['xianmen', 'meteor'].includes((w.pending || {}).type))
+      ? pass('V4 大事件永久改变世界格局（v20 八类其一）') : fail('V4 永久格局', JSON.stringify(w));
     const logTxt = await text(page, '#log');
     logTxt.includes('天下大事') ? pass('V4 大事件日志播报') : fail('V4 事件日志', logTxt.slice(-80));
     await clickSel(page, '[data-action="act-tab"][data-tab="map"]');

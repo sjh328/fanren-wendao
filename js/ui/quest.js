@@ -242,6 +242,57 @@ const QuestSys = {
       ending: '拓影合入残图，星轨亮起一线——血河故道上空，那颗三百年未曾移动的星，微微颤了一下。姬冰颜难得地侧过头：「多谢。这一颤，我等了十年。」',
       reward: { insight: 8, items: { m_gupian: 1 } },
     },
+    /* ---- v20 支线扩充（NPC 绑定，与个人线互补） ---- */
+    {
+      id: 's13', title: '断弦之谜', minRealm: 2, npc: 'n7',
+      story: '洛雪衣的琴又断了一根弦——这已是本月第三次。她盯着断口看了很久：「断口平整，不是旧损。有人在暗中以音波伤我的琴。」',
+      steps: [
+        { desc: '以武会友（与江湖修士切磋两次）', done: p => (p.counters.spars || 0) >= 2 },
+        { desc: '揖盗擒凶（累计获胜十五场）', done: p => (p.counters.wins || 0) >= 15 },
+      ],
+      ending: '你们在坊市暗角截住了那个以琴音伤琴的同行——一个输不起的琴师。洛雪衣没有动手，只弹了一曲。曲毕，那人当街折了自己的琴。「琴道之争，琴上解决。」',
+      reward: { stones: 6000, fortune: 4 },
+    },
+    {
+      id: 's14', title: '商会的暗账', minRealm: 2, npc: 'n8',
+      story: '秦重楼罕见地一脸愁容：「商会的暗账被人做了手脚——三笔灵石流向对不上。我要一个账房之外的人，帮我核一遍。」',
+      steps: [
+        { desc: '家资殷实（灵石积蓄三万）', done: p => QuestSys.stonesTotal(p) >= 30000 },
+        { desc: '夜探匪巢（黑风寨探索三次）', done: p => ((p.counters.mapExplores || {}).heifeng || 0) >= 3 },
+      ],
+      ending: '账目在黑风寨的一处赃点上对上了——原来是管事里应外合。秦重楼合上账本：「商会欠你一个人情。往后你来买东西，内部价。」',
+      reward: { stones: 10000, items: { pill_yulu: 2 } },
+    },
+    {
+      id: 's15', title: '阵眼之约', minRealm: 4, npc: 'n10',
+      story: '白玉京递来一枚空白的阵石：「试阵如试人。带它下一趟秘境，让它看看你的路数——回来自会知晓它认不认你。」',
+      steps: [
+        { desc: '深入秘境（秘境推进至第五层）', done: p => (p.counters.maxDepth || 0) >= 5 },
+        { desc: '精英授首（累计击败精英妖兽十头）', done: p => (p.counters.killsElite || 0) >= 10 },
+      ],
+      ending: '归来时，空白阵石上浮出了一道细纹——恰与白玉京那座百年大阵的纹路同源。「它认你了。」老人抚掌而笑，「这可是百年头一遭。」',
+      reward: { stones: 8000, items: { m_gupian: 1 } },
+    },
+    {
+      id: 's16', title: '无名名帖', minRealm: 3, npc: 'n12',
+      story: '谢惊鸿托人捎来口信：「有人出高价悬赏『谢惊鸿』的人头。帮我查查——是谁想买一个名字。」',
+      steps: [
+        { desc: '广结善缘（结交四位修士）', done: p => (p.counters.befriends || 0) >= 4 },
+        { desc: '以武会友（与江湖修士切磋四次）', done: p => (p.counters.spars || 0) >= 4 },
+      ],
+      ending: '线索指向一个被偷过传家宝的富商——他要买的人头，其实是一场吓唬。谢惊鸿听完大笑：「早说啊！我还以为多大仇。」他退了赃，事情了了。',
+      reward: { stones: 8000, insight: 4 },
+    },
+    {
+      id: 's17', title: '疏影初成', minRealm: 2, npc: 'n14',
+      story: '沈疏影偷偷找到你：「我自创的剑法缺一场真刀真枪的印证——你陪我打十五场，让我把每一式都喂进实战里。」',
+      steps: [
+        { desc: '百战之资（累计获胜二十五场）', done: p => (p.counters.wins || 0) >= 25 },
+        { desc: '博采众长（修习两部功法）', done: p => (p.counters.learns || 0) >= 2 },
+      ],
+      ending: '第十五场打完，她收剑而立，眉目飞扬：「成了！这套剑活了！」她郑重把第一式演示给你看——剑光如疏影横斜，「《不在人后》。名字也想好了。」',
+      reward: { stones: 5000, items: { pill_zhuji: 1 } },
+    },
   ],
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
   /** v12 每章各目标对应的功能页签（供焦点条「前往」直达） */

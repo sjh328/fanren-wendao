@@ -92,7 +92,7 @@ try {
     const pl = keys.filter(k => k.startsWith('pl_')).length;
     return { total: keys.length, scenes, battle, investigate, montage, flagScene, reqChoice, mid2, pl };
   });
-  s2.total >= 59 && s2.pl === 30 ? pass(`S2 剧情脚本 ${s2.total} 段（主线 36 + 个人线 30），共 ${s2.scenes} 场`) : fail('S2 脚本库', JSON.stringify(s2));
+  s2.total >= 59 && s2.pl === 48 ? pass(`S2 剧情脚本 ${s2.total} 段（主线 36 + 个人线 48·v20 补六人），共 ${s2.scenes} 场`) : fail('S2 脚本库', JSON.stringify(s2));
   s2.battle >= 6 && s2.investigate >= 2 && s2.montage >= 2 ? pass(`S2 新场景类型（剧情战 ${s2.battle}/推理 ${s2.investigate}/岁月 ${s2.montage}）`) : fail('S2 场景类型', JSON.stringify({ b: s2.battle, i: s2.investigate, m: s2.montage }));
   s2.mid2 >= 2 && s2.flagScene >= 9 ? pass(`S2 反派暗线插章 mid2 ×${s2.mid2}（其余章反派戏份内嵌）+ 旗标分支场景 ${s2.flagScene} 处`) : fail('S2 mid2', JSON.stringify({ mid2: s2.mid2, flag: s2.flagScene }));
   s2.reqChoice >= 4 ? pass('S2 尾声按当年抉择分支（reqChoice）') : fail('S2 reqChoice', String(s2.reqChoice));
@@ -151,7 +151,7 @@ try {
     const gate = PersonalSys.next(p, nid) === null;   // 关系不达标不可触发
     return { n: ids.length, actsOk, applied, gate, anyAvail: PersonalSys.anyAvailable(p) };
   });
-  s5.n === 10 && s5.actsOk ? pass('S5 个人线 10 位 NPC × 三幕，奖励与永久加成齐备') : fail('S5 个人线数据', JSON.stringify(s5));
+  s5.n === 16 && s5.actsOk ? pass('S5 个人线 16 位 NPC × 三幕（v20 补全六人），奖励与永久加成齐备') : fail('S5 个人线数据', JSON.stringify(s5));
   s5.applied && s5.gate ? pass('S5 个人线永久加成入 Stat + 关系档门槛生效') : fail('S5 加成', JSON.stringify(s5));
 
   /* ================= S6 词缀系统实装 ================= */

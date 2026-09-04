@@ -271,6 +271,7 @@ const NpcSys = {
     s.met = true;
     s.rel = Utils.clamp(s.rel + (won ? 5 : 2), -100, 100);
     this.mem(p, id, 'spar', won ? '切磋获胜' : '切磋落败');   // v19 记忆
+    if (won) s.sparWins = (s.sparWins || 0) + 1; else s.sparLoses = (s.sparLoses || 0) + 1;   // v20 切磋段位
   },
   /** NPC 之敌（战斗用） */
   buildEnemy(p, id) {
@@ -527,6 +528,14 @@ const NpcSys = {
     Game.afterAction();
   },
   /** v19 赠礼：备礼相赠增进交情（关系愈深，增益愈小——相交贵在知心） */
+  /** v20 送礼偏好（类别：pill 丹药 / material 灵材 / artifact 法宝 / talisman 符箓） */
+  NPC_LIKES: {
+    n1: 'artifact', n2: 'pill', n3: 'material', n4: 'artifact', n5: 'artifact', n6: 'material',
+    n7: 'talisman', n8: 'artifact', n9: 'talisman', n10: 'material', n11: 'pill', n12: 'artifact',
+    n13: 'pill', n14: 'artifact', n15: 'material', n16: 'material', n17: 'talisman', n18: 'material',
+    n19: 'artifact', n20: 'material', n21: 'talisman', n22: 'pill', n23: 'pill', n24: 'artifact',
+  },
+  LIKE_NAMES: { pill: '丹药', material: '灵材', artifact: '法宝', talisman: '符箓' },
   async gift(id) {
     const p = Game.player;
     const d = this.def(id);
@@ -535,23 +544,112 @@ const NpcSys = {
     if (!s.met) { UI.toast('素未谋面，何谈赠礼'); return; }
     if (Battle.active) return;
     const cost = Math.round(30 * GameData.stoneEco(s.realmIdx));
+    const like = this.NPC_LIKES[id];
+    const catName = this.LIKE_NAMES[like] || '';
+    const likeItemId = like ? Object.keys(p.bag).find(k => GameData.ITEMS[k] && GameData.ITEMS[k].type === like) : null;
+    const likeCost = cost * 2;
     const tier = this.tierOf(Math.max(0, s.rel));
     const midautumn = typeof FestivalSys !== 'undefined' && FestivalSys.is(p, 'zhongqiu');
     const gain0 = { known: Utils.rand(3, 6), friend: Utils.rand(2, 4), bosom: Utils.rand(1, 3), sworn: 1 }[tier.id] || 2;
-    const gain = midautumn ? gain0 * 2 : gain0;   // v20 中秋：情谊加倍
-    const ok = await UI.popup({
+    const choice = await UI.popup({
       title: `赠礼 · ${d.name}`,
-      html: `${this.dialogText(d.temper, 'greeting')}<br>备一份投其所好的礼，可增进交情。需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">关系愈深，礼愈难打动人——相交贵在知心。</span>`,
-      options: [{ text: '奉上礼物', value: true, primary: true }, { text: '作罢', value: false }],
+      html: `${this.dialogText(d.temper, 'greeting')}<br><span class="tip-line">TA 平素喜好：${catName || '随缘'}——投其所好，事半功倍。</span><br><span class="tip-line">关系愈深，礼愈难打动人——相交贵在知心。${midautumn ? '<b>今日中秋：情谊加倍！</b>' : ''}</span>`,
+      options: [
+        { text: `寻常贺礼（${Utils.fmtNum(cost)}灵石）`, value: 'normal', primary: true },
+        { text: `投其所好·${catName}（${Utils.fmtNum(likeCost)}灵石${likeItemId ? '' : '·未备' + catName}）`, value: 'like' },
+        { text: '作罢', value: false },
+      ],
     });
-    if (!ok) return;
-    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    if (!choice) return;
+    let gain = gain0;
+    let likeNote = '';
+    if (choice === 'like') {
+      if (!likeItemId) { UI.toast(`需先备一份${catName}在包中`); return; }
+      if (!Bag.spendStones(likeCost)) { UI.toast('灵石不足'); return; }
+      const itemName = GameData.ITEMS[likeItemId].name;
+      Bag.removeItem(likeItemId, 1);
+      gain = Math.round(gain * 1.5) + (midautumn ? gain0 : 0);
+      likeNote = `——${itemName} 送到了心坎上`;
+    } else {
+      if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+      if (midautumn) gain *= 2;
+    }
     const before = this.tierOf(Math.max(0, s.rel)).name;
     s.rel = Utils.clamp(s.rel + gain, -100, 100);
     this.mem(p, id, 'gift', '赠礼之谊');
     const after = this.tierOf(Math.max(0, s.rel)).name;
-    Log.add(`你向 ${d.name} 奉上礼物。${this.lineFor(p, id, 'gift') || this.dialogText(d.temper, 'gift')}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
+    Log.add(`你向 ${d.name} 奉上礼物${likeNote}。${this.lineFor(p, id, 'gift') || this.dialogText(d.temper, 'gift')}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
     if (after !== before) Ambience.sfx('rare');
+    Game.afterAction();
+  },
+  /** v20 道侣共修：每三十日一次双修机缘；偶发心愿 */
+  async companionCheck(p) {
+    if (!p || !p.partner || Battle.active) return;
+    const s = this.state(p, p.partner);
+    if (!s || !s.alive) return;
+    const today = Math.floor(p.day || 0);
+    const last = p._daoCultDay == null ? -999 : p._daoCultDay;
+    if (today - last < 30) return;
+    p._daoCultDay = today;
+    const d = this.def(p.partner);
+    const gain = Math.round(70 * GameData.eco(p.realmIdx) * (0.8 + d.talent * 0.08) * 2);
+    Cultivate.addExp(p, gain);
+    s.rel = Utils.clamp(s.rel + 2, -100, 100);
+    this.mem(p, p.partner, 'chat', '双修机缘');
+    Log.add(`【双修】你与 ${d.name} 席地对坐，两道真气交缠共进——修为 +${Utils.fmtNum(gain)}。（交情 +2）`, 'gain');
+    if (Utils.chance(30)) await this.companionWish(p, d, s);
+  },
+  async companionWish(p, d, s) {
+    const wishes = [
+      { text: '寻一味灵药', need: { m_lingcao: 2 }, rel: 8, ok: () => KarmaSys.addFortune(1) },
+      { text: '听你说说外头的见闻', need: null, rel: 5, ok: () => { p.insight = Math.min(100, (p.insight || 0) + 3); } },
+      { text: '陪TA饮一壶好茶', cost: Math.round(50 * GameData.stoneEco(s.realmIdx)), rel: 6, ok: null },
+    ];
+    const w = Utils.pick(wishes);
+    const needTxt = w.need ? Object.entries(w.need).map(([k, n]) => `${(GameData.ITEMS[k] || {}).name}×${n}`).join('、')
+      : (w.cost ? `${Utils.fmtNum(w.cost)} 灵石` : '只需陪伴');
+    const ok = await UI.popup({
+      title: `道侣心愿 · ${d.name}`,
+      html: `${this.dialogText(d.temper, 'greeting')}<br>TA 今年的心愿：<b>${w.text}</b>（需 ${needTxt}）`,
+      options: [{ text: '了却心愿', value: true, primary: true }, { text: '来日再补', value: false }],
+    });
+    if (!ok) {
+      s.rel = Utils.clamp(s.rel - 2, -100, 100);
+      Log.add(`${d.name} 念了念今年的心愿，看了你一眼，没说什么。（交情 -2）`, 'warn');
+      Game.afterAction();
+      return;
+    }
+    if (w.need) {
+      for (const [k, n] of Object.entries(w.need)) if (Bag.count(k) < n) { UI.toast('物件不齐，心愿暂且记下'); return; }
+      for (const [k, n] of Object.entries(w.need)) Bag.removeItem(k, n);
+    } else if (w.cost) {
+      if (!Bag.spendStones(w.cost)) { UI.toast('灵石不足，心愿暂且记下'); return; }
+    }
+    s.rel = Utils.clamp(s.rel + w.rel, -100, 100);
+    this.mem(p, p.partner, 'story', `了却心愿：${w.text}`);
+    if (w.ok) w.ok();
+    KarmaSys.addFortune(1);
+    Log.add(`你了却了 ${d.name} 的心愿——TA 笑得像捡到了整个春天。（交情 +${w.rel}，气运 +1）`, 'gain');
+    Story.chron(`道侣心愿：${w.text}`);
+    Game.afterAction();
+  },
+  /** v20 切磋段位：三胜之后可请其指点 */
+  canLearnFrom(p, id) {
+    const s = this.state(p, id);
+    return s && s.alive && (s.sparWins || 0) >= 3 && !s.tutored;
+  },
+  learnFrom(id) {
+    const p = Game.player;
+    const d = this.def(id);
+    const s = this.state(p, id);
+    if (!this.canLearnFrom(p, id)) return;
+    const insight = 12 + s.realmIdx * 3;
+    s.tutored = true;
+    p.insight = Math.min(100, (p.insight || 0) + insight);
+    this.mem(p, id, 'chat', '三胜倾囊相授');
+    Time.add(3);
+    Log.add(`${d.name} 与你三度交手，終认你可堪造就——将压箱底的体悟倾囊相授！（突破感悟 +${insight}）`, 'gain');
+    UI.toast(`感悟 +${insight}`);
     Game.afterAction();
   },
   /** v19 论道：以时间为束，换修为与感悟（关系愈深，倾囊相授） */

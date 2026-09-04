@@ -124,7 +124,7 @@ try {
       sidesN: QuestSys.SIDES.length,
     };
   });
-  f6.lines24 === 24 && f6.dupDiscuss === 0 && f6.sidesN === 12
+  f6.lines24 === 24 && f6.dupDiscuss === 0 && f6.sidesN === 17
     ? pass('F6 文案与台词修瑕：24 人矩阵齐、论道句无重复填充、支线 12 则')
     : fail('F6 台词/文案', JSON.stringify(f6));
 
@@ -395,7 +395,9 @@ try {
     const base = en.atk;
     Battle.speed = 3;
     await Battle.start(null, { enemy: en, wx: { night: true, sky: 'fog' }, mapName: '天时测试' });
-    const boosted = en.atk === Math.round(base * 1.15);
+    // v20 修正：r≥1 时「灵压」先 ×0.9，夜战再 ×1.15——期望值按序复算
+    const expected = Game.player.realmIdx >= 1 ? Math.round(Math.round(base * 0.9) * 1.15) : Math.round(base * 1.15);
+    const boosted = en.atk === expected;
     const fog = Battle.active && Battle.active.fogDodge === 5;
     const logs = Battle.active ? Battle.active.logs.map(l => String(l.html)).join('|') : '';
     const nightOk = logs.includes('夜战');
@@ -451,6 +453,93 @@ try {
     return { n: keys.length, ok: keys.every(k => { const m = GameData.MONSTERS[k]; return m.skills && m.skills.length && m.species && GameData.CODEX_INTRO[k]; }) };
   });
   d5.n >= 3 && d5.ok ? pass('D5 夜行妖兽：三只夜怪注册完整（技能/种族/图录）') : fail('D5 夜怪', JSON.stringify(d5));
+
+  /* ================= E 江湖组（阶段四） ================= */
+  // E1 个人线 16 人：数据齐备 + 三幕脚本接线 + 门槛生效
+  const e1 = await page.evaluate(() => {
+    const n = Object.keys(GameData.PERSONAL).length;
+    const ok = Object.entries(GameData.PERSONAL).every(([id, def]) =>
+      def.acts.length === 3 && def.acts.every(a => GameData.STORIES[a.key] && GameData.STORIES[a.key].scenes.length >= 3) && def.fx);
+    const gate = PersonalSys.next(Object.assign(Game.player, { personal: {}, realmIdx: 0 }), 'n1') === null;   // 境界不足
+    return { n, ok, gate };
+  });
+  e1.n === 16 && e1.ok && e1.gate ? pass('E1 个人线补全：16 人 × 三幕脚本齐备，境界门槛生效') : fail('E1 个人线', JSON.stringify(e1));
+
+  // E2 道侣共修：三十日一修，修为入账
+  const e2 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.npcs = NpcSys.freshNpcs();
+    p.partner = 'n2';
+    p.npcs.n2.alive = true; p.npcs.n2.met = true; p.npcs.n2.talent = 4;
+    p._daoCultDay = null; p.day = 100;
+    const exp0 = Guide.totalExp(p);
+    const oc = Utils.chance; Utils.chance = () => false;   // 屏蔽心愿分支
+    await NpcSys.companionCheck(p);
+    Utils.chance = oc;
+    const got = Guide.totalExp(p) - exp0;
+    const marked = p._daoCultDay === 100;
+    // 三十日内不重复触发
+    p.day = 110;
+    await NpcSys.companionCheck(p);
+    const notTwice = p._daoCultDay === 100;
+    p.partner = null; p.npcs = NpcSys.freshNpcs(); p.day = 10;
+    return { got, marked, notTwice };
+  });
+  e2.got > 0 && e2.marked && e2.notTwice ? pass('E2 道侣共修：双修修为入账、三十日一修不重复') : fail('E2 共修', JSON.stringify(e2));
+
+  // E3 送礼偏好：投其所好消耗对应类别物品、交情增益更大
+  const e3 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.npcs = NpcSys.freshNpcs();
+    p.partner = null;
+    p.npcs.n2.alive = true; p.npcs.n2.met = true; p.npcs.n2.rel = 20;
+    p.bag['pill_juqi'] = 1; p.stones.low += 100000;
+    const origPopup = UI.popup.bind(UI);
+    let choseLike = false;
+    UI.popup = async (o) => {
+      const like = (o.options || []).find(x => x.value === 'like');
+      if (like && (o.title || '').includes('赠礼')) { choseLike = true; return 'like'; }
+      return origPopup(o);
+    };
+    await NpcSys.gift('n2');
+    UI.popup = origPopup;
+    const consumed = !p.bag['pill_juqi'];
+    const rel = p.npcs.n2.rel;
+    const memOk = (p.npcs.n2.mem || []).some(m => m.t === 'gift');
+    p.npcs = NpcSys.freshNpcs();
+    return { choseLike, consumed, rel, memOk };
+  });
+  e3.choseLike && e3.consumed && e3.rel > 0 && e3.memOk
+    ? pass('E3 送礼偏好：投其所好消耗丹药、交情增益入档')
+    : fail('E3 送礼', JSON.stringify(e3));
+
+  // E4 切磋段位：三胜解锁指点
+  const e4 = await page.evaluate(() => {
+    const p = Game.player;
+    p.npcs = NpcSys.freshNpcs();
+    p.npcs.n1.alive = true; p.npcs.n1.met = true; p.npcs.n1.realmIdx = 1;
+    const before = NpcSys.canLearnFrom(p, 'n1');
+    p.npcs.n1.sparWins = 3;
+    const after = NpcSys.canLearnFrom(p, 'n1');
+    const ins0 = p.insight || 0;
+    NpcSys.learnFrom('n1');
+    const tutored = p.npcs.n1.tutored === true;
+    const gained = (p.insight || 0) > ins0;
+    p.npcs = NpcSys.freshNpcs();
+    return { before, after, tutored, gained };
+  });
+  !e4.before && e4.after && e4.tutored && e4.gained
+    ? pass('E4 切磋段位：三胜解锁「请其指点」，感悟入账')
+    : fail('E4 段位', JSON.stringify(e4));
+
+  // E5 支线 17 则与台词矩阵补遗
+  const e5 = await page.evaluate(() => {
+    const sides = QuestSys.SIDES.length;
+    let realmOk = true;
+    for (const l of Object.values(GameData.NPC_LINES)) if (!l.realm || l.realm.length < 3) realmOk = false;
+    return { sides, realmOk };
+  });
+  e5.sides === 17 && e5.realmOk ? pass('E5 支线 17 则 / 24 人 realm 台词 ≥3 句') : fail('E5 支线台词', JSON.stringify(e5));
 
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');
