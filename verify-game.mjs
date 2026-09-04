@@ -252,8 +252,9 @@ try {
     battleClosed ? pass('T7 战斗流程（法诀/防御/丹药/普攻/遁走）完整结束') : fail('T7 战斗结束', 'modal未关闭');
     await shot(page, 'battle_end');
     // v20 加固：改读内存 Log.entries（#log 折叠态下 innerText 偶发取空）并纳入多波『击溃』关键词
-    const logTxt = await page.evaluate(() => (Log.entries || []).join('|'));
-    /战利品|击败|击溃|遁走|重伤/.test(logTxt) ? pass('T7 战斗结算日志') : fail('T7 战斗结算日志', logTxt.slice(-80));
+    // v20 加固：败北时主日志无结算关键词——并入战斗回顾留档（Battle.lastLogs）一并断言
+    const logTxt = await page.evaluate(() => (Log.entries || []).join('|') + '|' + (Battle.lastLogs || []).map(l => String(l.html)).join('|'));
+    /战利品|击败|击溃|遁走|重伤|轰然倒地/.test(logTxt) ? pass('T7 战斗结算日志') : fail('T7 战斗结算日志', logTxt.slice(-80));
 
   }
 

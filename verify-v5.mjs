@@ -165,11 +165,15 @@ try {
     p.insight = 100; p.dao = null; p.karma = 0; p.fortune = 0;
     UI.renderAll();
   });
+  // v20 加固：前置章节追认剧情可能开着故事卷轴，拦截坐标点击——统一合卷
+  await page.evaluate(() => { if (typeof Story !== 'undefined' && Story.active()) Story.close(); document.getElementById('story-modal')?.classList.add('hidden'); });
+  await sleep(200);
   await page.click('[data-action="act-breakthrough"]');
   await sleep(500);
   const tribVisible = await page.$eval('#tribulation-modal', el => !el.className.includes('hidden')).catch(() => false);
   tribVisible ? pass('B1 天劫弹窗弹出') : fail('B1 天劫弹窗', '未弹出');
-  await page.click('[data-action="trib-strategy"][data-strategy="hide"]');
+  // v20 加固：覆盖层竞态下坐标点击会抛 not clickable——DOM 直点兜底
+  await page.evaluate(() => { const b = document.querySelector('[data-action="trib-strategy"][data-strategy="hide"]'); if (b) b.click(); });
   // 演出在结算阶段出现：轮询捕捉
   let showSeen = null;
   for (let i = 0; i < 24 && !showSeen; i++) {
@@ -194,7 +198,10 @@ try {
   }
 
   /* ================= A1 氛围音效 ================= */
-  await page.click('#amb-toggle');
+  // v20 加固：同上，合卷后再点设置
+  await page.evaluate(() => { if (typeof Story !== 'undefined' && Story.active()) Story.close(); document.getElementById('story-modal')?.classList.add('hidden'); });
+  await sleep(200);
+  await page.evaluate(() => { document.getElementById('amb-toggle').click(); });
   await sleep(200);
   const panelVis = await page.$eval('#amb-panel', el => !el.className.includes('hidden'));
   panelVis ? pass('A1 音控按钮弹出设置面板') : fail('A1 面板', '未弹出');

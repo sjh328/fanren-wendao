@@ -1,6 +1,7 @@
 # 凡人问道 · 文字修仙
 
 网页版文字修仙放置游戏。零依赖、纯前端：HTML + CSS + 原生 JavaScript，美术为程序化 SVG，音效为 Web Audio 合成。
+当前版本 **v20「入微」**（v19 血肉之上的全方位打磨：读招战斗/养成纵深/世界日历/江湖 16 人/经济审计归零），详见 `UPDATE_NOTES_V20.md`。
 
 ## 仓库与同步
 
@@ -25,29 +26,30 @@ node server.mjs     # http://localhost:8341/index.html
 测试为 puppeteer-core 驱动真实 Chrome 的 E2E 回归（需先启动 `node server.mjs`，并保证本机装有 Chrome）：
 
 ```bash
-npm run test:all    # 九套脚本全量回归（330+ 断言，随版本增长）
-npm run test:v8     # 单独运行某一版本专项
+npm run test:all    # 九套脚本全量回归（340+ 断言，随版本增长）
+npm run test:v10    # 单独运行某一版本专项
 ```
 
 ## 代码结构（v19 阶段十起：模块化源码 + 单体产物）
 
 ```
-js/          ★ 开发源码（48 个模块，按 scripts/modules.json 顺序拼接）
+js/          ★ 开发源码（49 个模块，按 scripts/modules.json 顺序拼接）
   core/      基建：utils/anim/art/narrative/ambience/meta/achieve/guide/autocult/codex
              /log/save/player-factory/stat/time
   data/      game-data.js（静态数据 + 剧情脚本库）
-  systems/   玩法系统 25+：cultivate/gongfa/bag/forge/cave/beast/shop/sect/explore
+  systems/   玩法系统 30+：cultivate/gongfa/bag/forge/cave/beast/shop/sect/explore
              /dao/karma/daoxin/auction/xinmo/craft/tribulation/world/bounty/black
-             /rank/npc/dungeon/reincarnation/status-fx…
-  battle/    battle.js（战斗）
+             /rank/npc/dungeon/reincarnation/status-fx/festival…
+  battle/    battle.js（战斗：意图预演/破招反击/必杀成长/多波）
   ui/        tutorial/story/quest/ui/start-screen
   game.js    Game 主控（动作分发/初始化）
 game.js      ★ 构建产物（由 js/ 拼接生成，逐字节可复现；index.html 引用不变）
 style.css    宣纸水墨主题（按版本增量分区块）
-index.html   唯一入口（引用 game.js?v=N，改版时递增 N 清缓存）
+index.html   唯一入口（引用 game.js?v=34，改版时递增 N 清缓存）
 server.mjs   本地静态服务器（:8341，no-cache）
 verify-*.mjs puppeteer E2E 回归脚本（npm test:xxx）
-scripts/     build.mjs（安全构建：缺失即失败→语法校验→备份→写盘）
+scripts/     build.mjs（安全构建）· balance-sim.mjs（数值拟合）· price-audit.mjs（经济审计）
+             · split.mjs（切分工具）
 attic/       归档区（gitignore）：v18 半成品模块化遗留，见 attic/README.md
 ```
 

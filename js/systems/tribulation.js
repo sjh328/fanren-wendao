@@ -140,8 +140,8 @@ const Tribulation = {
     await Utils.sleep(800);
     // 渡劫结果
     if (Utils.chance(chance)) {
+      if (p.hp >= Stat.compute(p).maxHp * 0.999) { p.flags = p.flags || {}; p.flags.tribFullHp = true; }   // v20 无伤渡劫成就（判定须在回血前，且先于 st 声明避免 TDZ）
       p.realmIdx++; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(p.realmIdx, 0) - 1); p.insight = 0; p.expOverflow = 0;
-      if (p.hp >= st.maxHp * 0.999) { p.flags = p.flags || {}; p.flags.tribFullHp = true; }   // v20 无伤渡劫成就
       p.breakStreak = 0;   // v8 挫而愈坚：成功即清零
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;
