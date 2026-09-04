@@ -15,18 +15,32 @@ const AuctionSys = {
     { item: 'fruit_tianji', base: 22000 },   // v20 天机果（先天破桎）
   ],
   PERIOD: 60,
+  /** v20 神秘拍品：一成几率拍的是未鉴定之物（低价购入，鉴定为 1~5 品任意物） */
+  MYSTERY_POOL: [
+    { id: 'pill_juqi', grade: 0 }, { id: 'm_lingcao', grade: 1 }, { id: 'tal_huoshe', grade: 1 },
+    { id: 'w_qinggang', grade: 1 }, { id: 'pill_pojing', grade: 2 }, { id: 'z_qiankun', grade: 2 },
+    { id: 'gf_tiangang', grade: 2 }, { id: 'm_gupian', grade: 4 }, { id: 'pill_taichu', grade: 4 },
+    { id: 'fruit_tianji', grade: 4 }, { id: 'w_zhuxian', grade: 3 }, { id: 'gf_jianxin', grade: 5 },
+  ],
   state(p) {
     const day = Math.floor(p.day || 0);
     if (!p.auction || p.auction.until < day) {
-      const lot = this.LOT_POOL[Utils.hashStr('auction@' + day) % this.LOT_POOL.length];
-      p.auction = { item: lot.item, base: Math.round(lot.base * GameData.stoneEco(Math.min(4, p.realmIdx)) / GameData.stoneEco(2)), until: day + this.PERIOD };
+      const mystery = Utils.chance(10);
+      if (mystery) {
+        // 神秘拍品：底价按中位拍品折半，鉴定期满揭晓
+        p.auction = { item: 'mystery', base: Math.round(4000 * GameData.stoneEco(Math.min(4, p.realmIdx)) / GameData.stoneEco(2)), until: day + this.PERIOD };
+      } else {
+        const lot = this.LOT_POOL[Utils.hashStr('auction@' + day) % this.LOT_POOL.length];
+        p.auction = { item: lot.item, base: Math.round(lot.base * GameData.stoneEco(Math.min(4, p.realmIdx)) / GameData.stoneEco(2)), until: day + this.PERIOD };
+      }
     }
     return p.auction;
   },
   async bid(mode) {
     const p = Game.player;
     const a = this.state(p);
-    const def = GameData.ITEMS[a.item];
+    const isMystery = a.item === 'mystery';
+    const def = isMystery ? { name: '未鉴定·蒙尘古匣', desc: '匣上封皮剥落，看不出内里乾坤——可能是废纸，也可能是仙家至宝。' } : GameData.ITEMS[a.item];
     // 三档：稳健 ×1.15 必成九成五 / 激进 ×0.9 六成 / 天价 ×1.6 必成
     const opts = {
       steady: { mul: 1.15, rate: 95, label: '稳健出价' },
@@ -46,10 +60,24 @@ const AuctionSys = {
     if (!Bag.spendStones(price)) { UI.toast('灵石不足'); return; }
     const win = Utils.chance(opts.rate);
     if (win) {
-      Bag.addItem(a.item, 1);
-      Log.add(`拍卖行落槌——【<b>${def.name}</b>】归你所有！（出价 ${Utils.fmtNum(price)} 灵石）`, 'gain');
-      UI.announce('✦ 竞拍得手 · ' + def.name + ' ✦', 'gold');
-      Story.chron(`拍卖行竞得「${def.name}」`);
+      if (isMystery) {
+        // 鉴定：权重向低品倾斜，仙缘罕见
+        const pool = this.MYSTERY_POOL;
+        const total = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2, 0);
+        let r = Math.random() * total, hit = pool[pool.length - 1];
+        for (const x of pool) { r -= (6 - Math.min(5, x.grade)) * 2; if (r <= 0) { hit = x; break; } }
+        Bag.addItem(hit.id, 1);
+        const gd = GameData.ITEMS[hit.id];
+        Log.add(`古匣开启——${(6 - Math.min(5, hit.grade)) >= 5 ? '匣中竟是' : '竟是一册'}【<b>${gd.name}</b>】！（${(gd.desc || '').slice(0, 26)}…）`, hit.grade >= 3 ? 'gain' : 'info');
+        if (hit.grade >= 3) { UI.announce('✦ 古匣生辉 · ' + gd.name + ' ✦', 'gold'); Ambience.sfx('rare'); }
+        else UI.toast('古匣鉴成：' + gd.name);
+        Story.chron(`拍卖行购得神秘古匣，鉴出「${gd.name}」`);
+      } else {
+        Bag.addItem(a.item, 1);
+        Log.add(`拍卖行落槌——【<b>${def.name}</b>】归你所有！（出价 ${Utils.fmtNum(price)} 灵石）`, 'gain');
+        UI.announce('✦ 竞拍得手 · ' + def.name + ' ✦', 'gold');
+        Story.chron(`拍卖行竞得「${def.name}」`);
+      }
       p.auction.until = 0;   // 本期拍品易主，刷新下一件
       Ambience.sfx('auction');   // v19 落槌音
     } else {

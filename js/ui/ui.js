@@ -750,6 +750,8 @@ const UI = {
     // v13 悬赏任务板
     const B = BountySys.stateOf(p);
     const r = BountySys.rewards(p);
+    const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
+    const repTag = repBonus > 1 ? ` <span class="tag safe" title="声望加成：${Math.round((repBonus - 1) * 100)}%">声望赏格 ×${repBonus}</span>` : '';
     const bountyRows = B.list.map((t, i) => {
       if (!t) return `
       <div class="shop-row">
@@ -766,8 +768,8 @@ const UI = {
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${t.name} ${done ? '<span class="tag safe">已达成</span>' : `<span class="tag">进度 ${t.progress}/${t.need}</span>`}</div>
-          <div class="gf-desc">${t.desc} · 赏格：灵石 ${Utils.fmtNum(r.stones)}${p.sect ? `、贡献 ${r.contrib}` : ''}</div>
+          <div class="gf-name">${t.name} ${done ? '<span class="tag safe">已达成</span>' : `<span class="tag">进度 ${t.progress}/${t.need}</span>`}${(t === B.list.find(x => x)) ? repTag : ''}</div>
+          <div class="gf-desc">${t.desc} · 赏格：灵石 ${Utils.fmtNum(Math.round(r.stones * (t.chain ? 1 + t.chain * 0.6 : 1)))}${p.sect ? `、贡献 ${Math.round(r.contrib * (t.chain ? 1 + t.chain * 0.6 : 1))}` : ''}</div>
         </div>
         <div class="gf-actions">${btn}</div>
       </div>`;
@@ -876,9 +878,10 @@ const UI = {
       ${forgeRows}`;
     // v19 拍卖行
     const lot = AuctionSys.state(p);
-    const lotDef = GameData.ITEMS[lot.item];
+    const isMystery = lot.item === 'mystery';
+    const lotDef = isMystery ? { name: '未鉴定·蒙尘古匣', grade: 2, desc: '匣上封皮剥落，看不出内里乾坤——可能是废纸，也可能是仙家至宝（一成几率出现，鉴定期待）。' } : GameData.ITEMS[lot.item];
     const auctionSection = `
-      <div class="shop-section-title">◈ 拍卖行（每六十日一件稀有拍品）<span class="tag warn">拍期余 ${lot.until - Math.floor(p.day)} 日</span></div>
+      <div class="shop-section-title">◈ 拍卖行（每六十日一件稀有拍品${isMystery ? ' · 本期为<span class="neg">神秘古匣</span>' : ''}）<span class="tag warn">拍期余 ${lot.until - Math.floor(p.day)} 日</span></div>
       <div class="shop-row">
         <div class="gf-info">
           <div class="gf-name">${this.gradeSpan(lotDef.name, lotDef.grade)} <span class="tag">底价 ${Utils.fmtNum(lot.base)} 灵石</span></div>

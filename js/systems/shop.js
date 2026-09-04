@@ -8,7 +8,10 @@ const ShopSys = {
     const p = Game.player;
     const disc = Stat.compute(p).shopDiscount + (typeof SectSys !== 'undefined' && SectSys.commandActive && SectSys.commandActive(p, 'market') ? 5 : 0);   // v19 长老令·开市
     // v5：叠加坊市行情（每 30 日一茬，±20% 内波动），宗门折扣与战时涨价照旧
-    return Math.max(1, Math.round((def.price || 0) * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId)));
+    // v20 修瑕：ecoPrice（符箓时价）同步作用于买价——此前只涨卖价，构成「低买高卖」印钞循环
+    let base = def.price || 0;
+    if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
+    return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId)));
   },
   sellPrice(itemId) {
     const p = Game.player;
