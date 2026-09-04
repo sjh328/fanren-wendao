@@ -6,7 +6,7 @@
 <meta name="description" content="凡人问道 —— 网页版文字修仙游戏">
 <link rel="icon" href="data:,">
 <title>凡人问道 · 文字修仙</title>
-<link rel="stylesheet" href="style.css?v=34">
+<link rel="stylesheet" href="style.css?v=35">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
@@ -74,6 +74,7 @@
               </select>
             </div>
             <label class="opt-line"><input type="checkbox" id="amb-anim"> 数字滚动与浮动战斗数字</label>
+            <label class="opt-line"><input type="checkbox" id="amb-tw"> 剧情逐字演出（打字机效果）</label>
             <div class="amb-vol-row">日志密度
               <select id="amb-logdens">
                 <option value="all">全量</option>
@@ -122,13 +123,23 @@
         <div class="panel menu-panel">
           <div class="panel-title">✦ 菜单</div>
           <div class="menu-btns">
-            <button class="btn btn-sm" data-action="act-save-open">存档 / 读档</button>
-            <button class="btn btn-sm" data-action="act-codex">成就 · 图鉴</button>
-            <button class="btn btn-sm" data-action="act-figures">👤 人物志</button>
-            <button class="btn btn-sm" data-action="act-battle-review">⚔ 战斗回顾</button>
-            <button class="btn btn-sm" data-action="act-career">📜 生涯</button>
-            <button class="btn btn-sm" data-action="act-help">玩法说明</button>
-            <button class="btn btn-sm btn-danger" data-action="act-newgame">回到开始界面</button>
+            <div class="menu-group">
+              <div class="menu-group-label">记档</div>
+              <div class="menu-group-btns">
+                <button class="btn btn-sm" data-action="act-codex">成就 · 图鉴</button>
+                <button class="btn btn-sm" data-action="act-figures">👤 人物志</button>
+                <button class="btn btn-sm" data-action="act-battle-review">⚔ 战斗回顾</button>
+                <button class="btn btn-sm" data-action="act-career">📜 生涯</button>
+              </div>
+            </div>
+            <div class="menu-group">
+              <div class="menu-group-label">系统</div>
+              <div class="menu-group-btns">
+                <button class="btn btn-sm" data-action="act-save-open">存档 / 读档</button>
+                <button class="btn btn-sm" data-action="act-help">玩法说明</button>
+                <button class="btn btn-sm btn-danger" data-action="act-newgame">回到开始界面</button>
+              </div>
+            </div>
           </div>
         </div>
       </aside>
@@ -179,6 +190,6 @@
   <div id="toast"></div>
   <div id="announce"></div>
 </div>
-<script src="game.js?v=34"></script>
+<script src="game.js?v=35"></script>
 </body>
 </html>

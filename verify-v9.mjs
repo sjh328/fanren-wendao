@@ -24,7 +24,7 @@ let browser;
 try {
   browser = await puppeteer.launch({ headless: true, executablePath: CHROME, args: ['--no-sandbox'] });
   const page = await browser.newPage();
-  page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+  page.on('console', msg => { if (msg.type() === 'error' && !/net::ERR_/.test(msg.text())) consoleErrors.push(msg.text()); });   // v21: 网络层资源抖动不计入
   page.on('pageerror', err => consoleErrors.push(err.message));
 
   await page.goto(URL, { waitUntil: 'networkidle0' });

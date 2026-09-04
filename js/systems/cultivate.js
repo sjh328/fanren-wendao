@@ -117,6 +117,7 @@ const Cultivate = {
       }
     }
     this.addExp(p, gain);
+    UI.float(`修为 +${Utils.fmtNum(gain)}${evNote ? ' ' + evNote.replace(/[（）]/g, ' ') : ''}`);   // v21 行动浮字
     Time.add(3);
     if (p.dead) return;
     if (p.dao === 'array') DaoSys.gain(p, 1);   // v16 阵道：聚灵
@@ -166,14 +167,37 @@ const Cultivate = {
     if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
     Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
     this.addExp(p, gain);
+    UI.float(`修为 +${Utils.fmtNum(gain)} · 丹毒 -12`);   // v21 行动浮字
     p.poison = Math.max(0, p.poison - 12);
     Time.add(30);
     if (p.dead) return;
+    let advanced = false;
     if (p.layer === 3 && p.exp >= GameData.layerNeed(p.realmIdx, 3)) {
       await Utils.sleep(400);
       await this.breakthrough(10);
+      advanced = true;   // 冲关 / 天劫自有一幕演出，不再另弹结算
     }
     Game.afterAction();
+    if (!advanced) this.settleReport({ rounds: 1, exp: gain, days: 30, advanced: 0, from: null, to: this.realmLabel(p) });   // v21 结算报告
+  },
+  /** v21：闭关结算报告——出关一纸小账，进益历历在目 */
+  realmLabel(p) { return GameData.REALM_NAMES[p.realmIdx] + GameData.LAYER_NAMES[p.layer]; },
+  settleReport(rep) {
+    const p = Game.player;
+    if (!p || p.dead) return;
+    const rows = [
+      [`闭关轮次`, `${rep.rounds} 轮`],
+      [`修为进益`, `<b class="hl">+${Utils.fmtNum(Math.round(rep.exp))}</b>`],
+      [`丹毒化解`, `<b style="color:var(--ok)">-${rep.rounds * 12}</b>`],
+      [`历时`, `${Utils.fmtNum(rep.days)} 日`],
+    ];
+    if (rep.advanced > 0) rows.push([`境界变迁`, `<b class="hl">${rep.from} → ${this.realmLabel(p)}</b>${rep.advanced > 1 ? `（${rep.advanced} 次进阶）` : ''}`]);
+    UI.popup({
+      title: '出 关 · 结 算',
+      html: `<div class="seclude-report">${rows.map(([k, v]) => `<div class="sr-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+        <div class="tip-line" style="text-align:center">· 推门而出，天地一新。</div>`,
+      options: [{ text: '出关大吉', value: true, primary: true }],
+    });
   },
   /** v4：连续闭关——每轮三十日，修为迈进新的小境界（进层或大境界突破成功）即自动出关；
    *  灵石不济、寿元将尽或达成上限轮数时亦会中止。 */
@@ -181,6 +205,7 @@ const Cultivate = {
     let p = Game.player;
     Log.add('你拂尘入室，立誓非至进境，不出此关。', 'system');
     let rounds = 0;
+    const rep = { rounds: 0, exp: 0, days: 0, advanced: 0, from: this.realmLabel(p) };   // v21 结算报告累计
     while (rounds++ < 120) {
       if (!p || p.dead || Game.player !== p) return;   // 兵解/回溯等更换玩家对象时，旧循环立即作废
       const beforeLayer = p.layer, beforeRealm = p.realmIdx;
@@ -195,6 +220,7 @@ const Cultivate = {
       if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
       Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（第${rounds}轮 · 修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
       this.addExp(p, gain);
+      rep.rounds++; rep.exp += gain; rep.days += 30;
       p.poison = Math.max(0, p.poison - 12);
       Time.add(30);
       if (p.dead || Game.player !== p) return;
@@ -207,6 +233,7 @@ const Cultivate = {
       }
       // 已至下一小境界 → 自动出关
       if (p.layer !== beforeLayer || p.realmIdx !== beforeRealm) {
+        rep.advanced++;
         Log.add('修为已然进阶，你推门而出，只觉天地一新——此番闭关，功成。', 'system');
         UI.toast('闭关有成 · 已至新的小境界');
         break;
@@ -214,6 +241,7 @@ const Cultivate = {
       await Utils.sleep(120);   // 留出渲染与日志滚动的时间
     }
     Game.afterAction();
+    if (rep.rounds > 0) this.settleReport(rep);   // v21 结算报告
   },
   /** 突破成算（大境界渡劫基准）：感悟/悟性/气运/孽障/大道/根基/挫而愈坚 皆计入 */
   breakthroughChance(p, bonus = 0) {

@@ -413,7 +413,21 @@ body::after {
   vertical-align: 2px;
 }
 
-.top-info { color: var(--text-dim); font-size: 12.5px; letter-spacing: 1px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.top-info { color: var(--text-dim); font-size: 12.5px; letter-spacing: 1px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+/* v21 顶栏资源条：灵石 / 战力 / 章程 徽章化 */
+.res-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 20px;
+  border: 1px solid rgba(150, 112, 46, 0.35);
+  background: rgba(255, 253, 244, 0.7);
+  color: var(--text-dim); font-size: 12px; letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+.res-chip b, .res-chip .num-anim { color: var(--gold-bright); font-weight: bold; }
+.res-chip i { font-style: normal; color: var(--text-faint); }
+.res-stone { border-color: rgba(150, 112, 46, 0.5); }
+.res-chapter { color: #7a5a1e; }
+.res-chapter::before { content: '❖'; font-size: 10px; margin-right: 2px; }
 .top-info .save-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 5px rgba(88, 138, 62, 0.6); margin-right: 4px; vertical-align: 1px; transition: background 0.18s ease; }
 
 #layout {
@@ -679,6 +693,103 @@ body::after {
 .shop-section-title::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(150, 112, 46, 0.35), transparent); }
 .price { color: var(--gold-bright); font-size: 12.5px; }
 .price.lack, .price .lack { color: var(--danger); }
+
+/* ---------- v21 中央双列栅格：短卡片页签并排铺满，消灭留白 ---------- */
+@media (min-width: 1280px) {
+  #tab-content.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; align-content: start; }
+  #tab-content.grid2 > .card { margin-bottom: 0; }
+  #tab-content.grid2 > .span2 { grid-column: 1 / -1; }
+}
+/* ---------- v21 仙途十境路线图 ---------- */
+.rp-track { display: flex; align-items: flex-start; gap: 2px; padding: 6px 2px 2px; }
+.rp-node { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 44px; flex: 0 0 auto; }
+.rp-dot {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 2px solid var(--border-light);
+  background: rgba(255, 253, 244, 0.9);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.rp-node.done .rp-dot { background: linear-gradient(160deg, #cdbb92, #a5946a); border-color: #a5946a; }
+.rp-node.cur .rp-dot {
+  border-color: var(--rp-c, var(--gold));
+  background: radial-gradient(circle at 35% 30%, #fff8e6, var(--rp-c, var(--gold)));
+  box-shadow: 0 0 10px var(--rp-c, var(--gold));
+  animation: rpPulse 1.8s ease-in-out infinite;
+}
+@keyframes rpPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.28); } }
+.rp-name { font-family: var(--font-kai); font-size: 12.5px; letter-spacing: 1px; color: var(--text-faint); white-space: nowrap; }
+.rp-node.done .rp-name { color: var(--text-dim); }
+.rp-node.cur .rp-name { color: var(--gold-bright); font-weight: bold; }
+.rp-layer { font-size: 10.5px; color: var(--text-faint); min-height: 14px; }
+.rp-node.cur .rp-layer { color: var(--rp-c, var(--gold)); }
+.rp-line { flex: 1 1 0; height: 2px; margin-top: 6px; background: linear-gradient(90deg, #cdbb92, #e2d7b8); border-radius: 1px; min-width: 10px; }
+
+/* ---------- v21 行动浮字 ---------- */
+.float-text {
+  position: fixed; z-index: 320; pointer-events: none;
+  transform: translateX(-50%);
+  font-family: var(--font-kai); font-size: 17px; font-weight: bold; letter-spacing: 1px;
+  text-shadow: 0 1px 0 rgba(255, 250, 235, 0.9), 0 0 8px rgba(255, 250, 235, 0.6);
+  animation: floatUp 1.4s ease-out forwards;
+  white-space: nowrap;
+}
+@keyframes floatUp {
+  0% { opacity: 0; margin-top: 0; }
+  12% { opacity: 1; }
+  100% { opacity: 0; margin-top: -56px; }
+}
+
+/* ---------- v21 卡片进场 stagger 与弹窗过渡（性能模式 anim-off 豁免） ---------- */
+@media (min-width: 1280px) {
+  body:not(.anim-off) #tab-content.grid2 > .card { animation: cardIn 0.3s ease both; }
+  body:not(.anim-off) #tab-content.grid2 > .card:nth-child(2n) { animation-delay: 0.05s; }
+  body:not(.anim-off) #tab-content.grid2 > .card:nth-child(3n) { animation-delay: 0.1s; }
+}
+@keyframes cardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+body:not(.anim-off) .modal:not(.hidden) { animation: modalFade 0.2s ease; }
+body:not(.anim-off) .modal:not(.hidden) .popup-box,
+body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s ease; }
+@keyframes modalFade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes boxIn { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: none; } }
+
+/* ---------- v21 今日修行聚合卡 ---------- */
+.daily-count { font-size: 12px; color: var(--text-dim); font-weight: normal; }
+.daily-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 4px; border-bottom: 1px dashed rgba(176, 160, 118, 0.35);
+  font-size: 12.5px;
+}
+.daily-row:last-of-type { border-bottom: none; }
+.daily-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--border-light); }
+.daily-row.ok .daily-dot { background: var(--ok); box-shadow: 0 0 5px rgba(88, 138, 62, 0.55); }
+.daily-row.warn .daily-dot { background: #c04b4b; box-shadow: 0 0 6px rgba(192, 75, 75, 0.7); animation: dotPulse 1.4s ease-in-out infinite; }
+.daily-row.todo .daily-dot { background: #cdbb92; }
+.daily-label { font-family: var(--font-kai); color: var(--text); letter-spacing: 1px; flex: 0 0 62px; }
+.daily-stat { flex: 1 1 auto; color: var(--text-dim); }
+.daily-row.warn .daily-stat { color: #a03830; }
+.daily-row.ok .daily-stat { color: var(--ok); }
+/* ---------- v21 闭关结算报告 ---------- */
+.seclude-report { padding: 4px 8px; }
+.sr-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 20px;
+  padding: 7px 2px; font-size: 13.5px;
+  border-bottom: 1px dashed rgba(176, 160, 118, 0.4);
+}
+.sr-row:last-child { border-bottom: none; }
+.sr-row span { color: var(--text-dim); letter-spacing: 2px; }
+.sr-row b { font-variant-numeric: tabular-nums; }
+
+/* v21 建议前往按钮 */
+.guide-tip { display: flex; align-items: center; gap: 6px; }
+.guide-tip .guide-tip-text { flex: 1 1 auto; }
+.guide-tip .guide-go, .daily-row .guide-go { flex: 0 0 auto; min-height: 24px; padding: 2px 8px; font-size: 11.5px; letter-spacing: 1px; }
+
+/* v21 菜单分组：记档 / 系统 两区 */
+.menu-group { margin-bottom: 8px; }
+.menu-group:last-child { margin-bottom: 0; }
+.menu-group-label { font-size: 11px; color: var(--text-faint); letter-spacing: 3px; margin: 2px 0 5px; display: flex; align-items: center; gap: 6px; }
+.menu-group-label::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(150, 112, 46, 0.3), transparent); }
+.menu-group-btns { display: flex; flex-direction: column; gap: 6px; }
 
 /* ---------- 日志（v14：默认折叠为一行，展开后 38% 高——内容区回归主导） ---------- */
 #log-wrap {
@@ -1083,7 +1194,17 @@ body::after {
 .rank-no.top2 { background: linear-gradient(135deg, #c8c8c8, #9a9a9a); color: #fff; }
 .rank-no.top3 { background: linear-gradient(135deg, #d9a06b, #b0714a); color: #fff; }
 .rank-name { font-family: var(--font-kai); letter-spacing: 1px; flex: 1; }
-.rank-pow { font-size: 12px; color: var(--text-dim); }
+.rank-pow { font-size: 12px; color: var(--text-dim); white-space: nowrap; }
+/* v21 榜行补血：关系 / 战力条 / 层差 */
+.rank-rel { font-style: normal; font-size: 11px; color: var(--text-faint); margin-left: 4px; }
+.rank-row.me .rank-rel { color: var(--gold-bright); }
+.rank-bar {
+  flex: 0 1 160px; height: 5px; border-radius: 3px;
+  background: rgba(120, 104, 66, 0.18); overflow: hidden;
+}
+.rank-bar > span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #cdbb92, #96702e); transition: width 0.3s ease; }
+.rank-row.me .rank-bar > span { background: linear-gradient(90deg, #e8c56a, #c9962e); }
+.rank-gap { font-style: normal; display: block; font-size: 10.5px; color: var(--text-faint); text-align: right; }
 
 /* ---------- v13 洞府灵田进度条 ---------- */
 .plot-row .bar { margin: 4px 0 2px; }
@@ -1176,7 +1297,7 @@ body::after {
   .game-title { letter-spacing: 10px; text-indent: 10px; }
   .menu-btns { grid-template-columns: 1fr; }
   .bt-sub { grid-template-columns: 1fr; }
-  .top-info span:nth-child(3) { display: none; }
+  .top-info .top-meta2 { display: none; }
 }
 
 @media (max-width: 480px) {
@@ -1184,6 +1305,8 @@ body::after {
   .slot-card { flex-direction: column; align-items: stretch; }
   .slot-btns { justify-content: flex-end; }
   .bt-actions .btn { min-width: 70px; font-size: 13px; padding: 8px 6px; }
+  .top-title { font-size: 16px !important; letter-spacing: 2px; white-space: nowrap; }   /* v21：防标题折行 */
+  .res-chip { padding: 2px 7px; font-size: 11px; }
 }
 
 /* ======================================================================
@@ -1418,6 +1541,9 @@ body::after {
     linear-gradient(165deg, rgba(160, 56, 48, 0.9), rgba(160, 56, 48, 0.35) 50%, rgba(160, 56, 48, 0.85)) border-box;
 }
 .announce-item.out { opacity: 0; transform: translateY(-14px) scale(0.96); }
+/* v21：剧情 / 战斗 / 弹窗进行中，公告改到顶栏下方小字号播放，不遮中央演出 */
+#announce.at-top { justify-content: flex-start; padding-top: 58px; gap: 8px; }
+#announce.at-top .announce-item { font-size: 15px; letter-spacing: 3px; padding: 8px 22px; box-shadow: 0 6px 18px rgba(96, 76, 40, 0.22); }
 @keyframes announceIn {
   from { opacity: 0; transform: scale(1.22); filter: blur(2px); }
   to { opacity: 1; transform: none; filter: none; }
@@ -1588,7 +1714,7 @@ body::after {
 
 /* ---------- 窄屏：音控面板保持贴右 ---------- */
 @media (max-width: 860px) {
-  .top-info span:nth-child(2) { display: none; }
+  .top-info .top-meta2 { display: none; }   /* v21：小屏只留日期，隐去寿元/存档文案 */
   .amb-panel { width: 220px; }
 }
 
@@ -2049,6 +2175,27 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
 .story-opt:hover { border-color: var(--gold); transform: translateY(-1px); box-shadow: 0 3px 10px rgba(150, 112, 46, 0.15); }
 .story-opt:active { transform: translateY(1px); }
 .story-opt:first-child { border-color: var(--gold-dim); background: linear-gradient(180deg, #f0e6c8, #e4d5ae); }
+/* v21 抉择卡：甲乙丙编号 + 前尘所选标记 + 因果注脚 */
+.story-opt { display: flex; align-items: center; gap: 10px; }
+.story-opt-seq {
+  flex: 0 0 auto;
+  width: 26px; height: 26px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; letter-spacing: 0;
+  color: var(--gold-bright);
+  border: 1px solid rgba(150, 112, 46, 0.45);
+  background: rgba(255, 253, 244, 0.8);
+}
+.story-opt-text { flex: 1 1 auto; }
+.story-opt-tag {
+  flex: 0 0 auto;
+  font-size: 11px; letter-spacing: 1px;
+  padding: 2px 8px; border-radius: 10px;
+  color: #6a5a3e;
+  border: 1px dashed var(--gold-dim);
+  background: rgba(210, 190, 140, 0.25);
+}
+.story-choice-note { margin-top: 10px; font-size: 11.5px; color: var(--text-faint); letter-spacing: 1px; text-align: center; }
 
 /* 结算 */
 .story-reward { text-align: center; padding: 14px 0; }

@@ -448,6 +448,17 @@ const Ambience = {
         UI.toast(e.target.checked ? '数字动效：开' : '数字动效：关（性能模式）');
       });
     }
+    // v21 设置中心：剧情逐字演出（默认开）
+    const tw = document.getElementById('amb-tw');
+    if (tw) {
+      tw.checked = (Save.read('amb') || {}).typewriter !== false;
+      tw.addEventListener('click', e => {
+        const pref = Save.read('amb') || {};
+        pref.typewriter = e.target.checked;
+        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        UI.toast(e.target.checked ? '剧情逐字演出：开' : '剧情逐字演出：关（即刻全显）');
+      });
+    }
     const dens = document.getElementById('amb-logdens');
     if (dens) {
       dens.value = (Save.read('amb') || {}).logDens || 'all';
@@ -483,6 +494,7 @@ const Ambience = {
   applyAnimPref(on) {
     this.animOn = !!on;
     if (typeof Anim !== 'undefined') Anim.enabled = this.animOn;
+    try { document.body.classList.toggle('anim-off', !this.animOn); } catch (e) {}   // v21 入场/过渡动画同受性能开关门控
   },
   /** v19 字号档位 */
   applyFontScale(v) {
@@ -821,33 +833,38 @@ LOCKS: {
     if (!p || !L) return null;
     return this.stage(p) >= L.stage ? null : L.hint;
   },
-  /** 当前建议：按优先级取前三条 */
+  /** 当前建议：按优先级取前三条；v21 返回 {text, go}，go=可直达页签（无则纯提示） */
   tips(p) {
     const t = [];
     const st = Stat.compute(p);
     const need = GameData.layerNeed(p.realmIdx, p.layer);
     const full = p.layer === 3 && p.exp >= need;
-    if (full && p.realmIdx < 9) t.push(`修为已至圆满，可冲击 <b>${GameData.REALM_NAMES[p.realmIdx + 1]}</b> 期瓶颈（预估成算 ${Cultivate.breakthroughChance(p, p.realmIdx + 1 < GameData.TRIB_START ? 15 : 0).toFixed(0)}%）`);
-    else if (full && p.realmIdx === 9 && !p.flags.ascended) t.push('真仙圆满，仙门已开——可白日飞升');
-    if (p.realmIdx >= 1 && !p.dao) t.push('大道未定，如无舵之舟——宜叩问大道');
+    if (full && p.realmIdx < 9) t.push({ text: `修为已至圆满，可冲击 <b>${GameData.REALM_NAMES[p.realmIdx + 1]}</b> 期瓶颈（预估成算 ${Cultivate.breakthroughChance(p, p.realmIdx + 1 < GameData.TRIB_START ? 15 : 0).toFixed(0)}%）`, go: 'cultivate' });
+    else if (full && p.realmIdx === 9 && !p.flags.ascended) t.push({ text: '真仙圆满，仙门已开——可白日飞升', go: 'cultivate' });
+    if (p.realmIdx >= 1 && !p.dao) t.push({ text: '大道未定，如无舵之舟——宜叩问大道', go: 'cultivate' });
     // v11 主线目标提示（置顶）
     const qc = QuestSys.CHAPTERS[QuestSys.currentChapterIdx(p)];
     if (qc) {
       const undone = qc.steps.find(st => !QuestSys.stepDone(st, p, qc.supR));
-      if (undone) t.splice(Math.min(1, t.length), 0, `<b>主线·${qc.title}</b>：${undone.desc}`);
+      if (undone) t.splice(Math.min(1, t.length), 0, { text: `<b>主线·${qc.title}</b>：${undone.desc}`, go: 'quest' });
     }
-    if (AutoCult.active) t.push(`自动修炼中（${AutoCult.rounds} 轮，修为 +${Utils.fmtNum(Math.max(0, this.totalExp(p) - AutoCult.startExp))}），可随时停止`);
-    if ((p.karma || 0) >= 100) t.push('孽障缠身，可于修炼页<b>斩三尸</b>');
-    else if ((p.karma || 0) >= 60) t.push('孽障渐高，仇家窥伺于后——宜谨言慎行');
+    if (AutoCult.active) t.push({ text: `自动修炼中（${AutoCult.rounds} 轮，修为 +${Utils.fmtNum(Math.max(0, this.totalExp(p) - AutoCult.startExp))}），可随时停止`, go: 'cultivate' });
+    if ((p.karma || 0) >= 100) t.push({ text: '孽障缠身，可于修炼页<b>斩三尸</b>', go: 'cultivate' });
+    else if ((p.karma || 0) >= 60) t.push({ text: '孽障渐高，仇家窥伺于后——宜谨言慎行' });
     const cap = Stat.poisonCap(p);   // v20：上限单源化
-    if (p.poison > cap * 0.75) t.push('丹毒将满，宜服解毒丹或停药休养');
-    if (p.hp < st.maxHp * 0.3) t.push('气血衰微，宜打坐调息或服丹补满');
-    if (p.canReincarnate) t.push('兵解转世之机已现——或可重开一世');
-    if (p.world && p.world.pending) t.push('天下大势正待抉择，可于游历页参与');
-    if (NpcSys.grudgeCount(p) > 0) t.push('有宿敌伺机报复——宜化解仇怨或早做备战');
+    if (p.poison > cap * 0.75) t.push({ text: '丹毒将满，宜服解毒丹或停药休养', go: 'cultivate' });
+    if (p.hp < st.maxHp * 0.3) t.push({ text: '气血衰微，宜打坐调息或服丹补满', go: 'cultivate' });
+    if (p.canReincarnate) t.push({ text: '兵解转世之机已现——或可重开一世', go: 'cultivate' });
+    if (p.world && p.world.pending) t.push({ text: '天下大势正待抉择，可于游历页参与', go: 'map' });
+    if (NpcSys.grudgeCount(p) > 0) t.push({ text: '有宿敌伺机报复——宜化解仇怨或早做备战', go: 'jianghu' });
+    // v21 日常仪式提醒：黄历 / 灵田 / 悬赏
+    if (p.signDay !== Math.floor(p.day || 0)) t.push({ text: '今日黄历尚未求签——一签定小机缘', go: 'map' });
+    const ripe = ((p.cave && p.cave.plots) || []).filter(pl => pl && pl.seed && (Math.floor(p.day || 0) - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
+    if (ripe > 0) t.push({ text: `灵田有 <b>${ripe}</b> 块作物已然成熟——请及时采收`, go: 'cave' });
+    if ((p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need)) t.push({ text: '悬赏目标已然达成——可去坊市领取赏格', go: 'shop' });   // v21: 领后置空条目判空
     if (!t.length) {
-      if (p.exp >= need * 0.8 && !full) t.push(`修为将满（${Math.round(p.exp / need * 100)}%），再积攒片刻便可冲关`);
-      else t.push('修炼积攒修为，或外出历练搏杀机缘');
+      if (p.exp >= need * 0.8 && !full) t.push({ text: `修为将满（${Math.round(p.exp / need * 100)}%），再积攒片刻便可冲关`, go: 'cultivate' });
+      else t.push({ text: '修炼积攒修为，或外出历练搏杀机缘', go: 'cultivate' });
     }
     return t.slice(0, 4);   // v11：容纳主线目标提示
   },
@@ -4683,6 +4700,7 @@ const Cultivate = {
       }
     }
     this.addExp(p, gain);
+    UI.float(`修为 +${Utils.fmtNum(gain)}${evNote ? ' ' + evNote.replace(/[（）]/g, ' ') : ''}`);   // v21 行动浮字
     Time.add(3);
     if (p.dead) return;
     if (p.dao === 'array') DaoSys.gain(p, 1);   // v16 阵道：聚灵
@@ -4732,14 +4750,37 @@ const Cultivate = {
     if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
     Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
     this.addExp(p, gain);
+    UI.float(`修为 +${Utils.fmtNum(gain)} · 丹毒 -12`);   // v21 行动浮字
     p.poison = Math.max(0, p.poison - 12);
     Time.add(30);
     if (p.dead) return;
+    let advanced = false;
     if (p.layer === 3 && p.exp >= GameData.layerNeed(p.realmIdx, 3)) {
       await Utils.sleep(400);
       await this.breakthrough(10);
+      advanced = true;   // 冲关 / 天劫自有一幕演出，不再另弹结算
     }
     Game.afterAction();
+    if (!advanced) this.settleReport({ rounds: 1, exp: gain, days: 30, advanced: 0, from: null, to: this.realmLabel(p) });   // v21 结算报告
+  },
+  /** v21：闭关结算报告——出关一纸小账，进益历历在目 */
+  realmLabel(p) { return GameData.REALM_NAMES[p.realmIdx] + GameData.LAYER_NAMES[p.layer]; },
+  settleReport(rep) {
+    const p = Game.player;
+    if (!p || p.dead) return;
+    const rows = [
+      [`闭关轮次`, `${rep.rounds} 轮`],
+      [`修为进益`, `<b class="hl">+${Utils.fmtNum(Math.round(rep.exp))}</b>`],
+      [`丹毒化解`, `<b style="color:var(--ok)">-${rep.rounds * 12}</b>`],
+      [`历时`, `${Utils.fmtNum(rep.days)} 日`],
+    ];
+    if (rep.advanced > 0) rows.push([`境界变迁`, `<b class="hl">${rep.from} → ${this.realmLabel(p)}</b>${rep.advanced > 1 ? `（${rep.advanced} 次进阶）` : ''}`]);
+    UI.popup({
+      title: '出 关 · 结 算',
+      html: `<div class="seclude-report">${rows.map(([k, v]) => `<div class="sr-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+        <div class="tip-line" style="text-align:center">· 推门而出，天地一新。</div>`,
+      options: [{ text: '出关大吉', value: true, primary: true }],
+    });
   },
   /** v4：连续闭关——每轮三十日，修为迈进新的小境界（进层或大境界突破成功）即自动出关；
    *  灵石不济、寿元将尽或达成上限轮数时亦会中止。 */
@@ -4747,6 +4788,7 @@ const Cultivate = {
     let p = Game.player;
     Log.add('你拂尘入室，立誓非至进境，不出此关。', 'system');
     let rounds = 0;
+    const rep = { rounds: 0, exp: 0, days: 0, advanced: 0, from: this.realmLabel(p) };   // v21 结算报告累计
     while (rounds++ < 120) {
       if (!p || p.dead || Game.player !== p) return;   // 兵解/回溯等更换玩家对象时，旧循环立即作废
       const beforeLayer = p.layer, beforeRealm = p.realmIdx;
@@ -4761,6 +4803,7 @@ const Cultivate = {
       if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
       Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（第${rounds}轮 · 修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
       this.addExp(p, gain);
+      rep.rounds++; rep.exp += gain; rep.days += 30;
       p.poison = Math.max(0, p.poison - 12);
       Time.add(30);
       if (p.dead || Game.player !== p) return;
@@ -4773,6 +4816,7 @@ const Cultivate = {
       }
       // 已至下一小境界 → 自动出关
       if (p.layer !== beforeLayer || p.realmIdx !== beforeRealm) {
+        rep.advanced++;
         Log.add('修为已然进阶，你推门而出，只觉天地一新——此番闭关，功成。', 'system');
         UI.toast('闭关有成 · 已至新的小境界');
         break;
@@ -4780,6 +4824,7 @@ const Cultivate = {
       await Utils.sleep(120);   // 留出渲染与日志滚动的时间
     }
     Game.afterAction();
+    if (rep.rounds > 0) this.settleReport(rep);   // v21 结算报告
   },
   /** 突破成算（大境界渡劫基准）：感悟/悟性/气运/孽障/大道/根基/挫而愈坚 皆计入 */
   breakthroughChance(p, bonus = 0) {
@@ -8425,12 +8470,24 @@ const RankSys = {
     const rows = this.board(p);
     const myIdx = rows.findIndex(r => r.id === 'me');
     const top = this.isTop(p);
-    const rowsHtml = rows.slice(0, 10).map((r, i) => `
+    const myPower = p.realmIdx * 4 + p.layer;
+    const topPower = Math.max(1, rows[0].power);
+    // v21：榜行补血——关系标签 + 战力对比条 + 层差，扫一眼即知对手含金量
+    const rowsHtml = rows.slice(0, 10).map((r, i) => {
+      const st = r.id === 'me' ? null : p.npcs[r.id];
+      const relTxt = st ? NpcSys.relLabel(p, r.id) : '';
+      const gap = r.power - myPower;
+      const gapTxt = r.id === 'me' ? '此即是你'
+        : !st || !st.alive ? '' : (gap > 0 ? `高 ${gap} 小层` : gap < 0 ? `低 ${-gap} 小层` : '与你并肩');
+      const w = Math.round(Utils.clamp(r.power / topPower * 100, 5, 100));
+      return `
       <div class="rank-row ${r.id === 'me' ? 'me' : ''}">
         <span class="rank-no ${i < 3 ? 'top' + (i + 1) : ''}">${i + 1}</span>
-        <span class="rank-name">${Utils.esc(r.name)}</span>
-        <span class="rank-pow">${GameData.REALM_NAMES[Math.min(9, Math.floor(r.power / 4))]}${GameData.LAYER_NAMES[Utils.clamp(r.power % 4, 0, 3)]}</span>
-      </div>`).join('');
+        <span class="rank-name">${Utils.esc(r.name)}${relTxt ? ` <i class="rank-rel">${relTxt}</i>` : ''}</span>
+        <span class="rank-bar"><span style="width:${w}%"></span></span>
+        <span class="rank-pow">${GameData.REALM_NAMES[Math.min(9, Math.floor(r.power / 4))]}${GameData.LAYER_NAMES[Utils.clamp(r.power % 4, 0, 3)]}<i class="rank-gap">${gapTxt}</i></span>
+      </div>`;
+    }).join('');
     return `
     <div class="card">
       <div class="card-title">✦ 天骄榜 ${top ? '<span class="tag warn">天下第一 · 全属性 +2%</span>' : `<span class="tag">你的排名 · 第 ${myIdx + 1} 位</span>`}</div>
@@ -9891,6 +9948,7 @@ const Battle = {
     this.speed = this.speed || this.loadSpeed();
     p.counters.battles++;
     document.getElementById('battle-modal').classList.remove('hidden');
+    if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 公告让位
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood(ctx.boss ? 'boss' : 'battle');   // v19 情境配乐（守关 Boss 独立情境）
     this.log(`⚔ 于${ctx.mapName || '荒野'}遭遇 <b class="grade-0">${enemy.name}</b>（${enemy.realmLabel}${enemy.elite ? ' · 精英' : ''}）！`, 'warn');
     if (enemy._storyBark) this.log(enemy._storyBark, 'log-event');   // v19 剧情战入场台词
@@ -11307,6 +11365,7 @@ const Battle = {
     const box = document.getElementById('battle-box');
     if (box) box.innerHTML = '';
     document.getElementById('battle-modal').classList.add('hidden');
+    if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 公告归位
     this.active = null;
     Game.afterAction();
   },
@@ -11598,6 +11657,14 @@ const Story = {
       document.getElementById('app').appendChild(modal);
     }
     modal.classList.remove('hidden');
+    if (!modal._twWired) {
+      modal._twWired = true;
+      modal.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action]')) return;   // 按钮走自身动作
+        if (Story.twComplete()) e.stopPropagation();     // 点剧情任意处：先补全本页文字
+      });
+    }
+    if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 正在播放的公告即时上移让位
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('story');   // v19 剧情情境配乐
     this.render();
   },
@@ -11661,6 +11728,7 @@ const Story = {
   next() {
     const c = this.cur;
     if (!c) return;
+    if (this.twComplete()) return;   // v21 逐字未完：首次点击先补全本页
     const prev = c.scenes[c.idx];
     if (prev && prev.t === 'montage' && prev.days) Time.add(prev.days);   // 岁月流逝过场
     c.idx++;
@@ -11721,11 +11789,17 @@ const Story = {
     }
     if (sc.bark) enemy._storyBark = sc.bark;
     this._battling = true;
+    // v21：剧情暂隐让位战斗（战斗弹窗 z100 低于剧情 z135，不隐藏会盖住战斗操作）
+    const sm = document.getElementById('story-modal');
+    if (sm) sm.classList.add('hidden');
     Battle.start(null, { enemy, mapName: sc.label || '剧情之地', story: {
       onEnd: (win) => {
         this._battling = false;
         const cc = this.cur;
         if (!cc) return;
+        // v21：战斗毕，剧情浮层归位再续演
+        const sm2 = document.getElementById('story-modal');
+        if (sm2) sm2.classList.remove('hidden');
         const lines = win ? (sc.win || ['尘埃落定，你立于不败之地。'])
                           : (sc.lose || ['你力竭倒地——但故事，还未到终章。']);
         cc.scenes.splice(cc.idx + 1, 0, { t: 'narr', text: lines.join('\n') });
@@ -11738,9 +11812,11 @@ const Story = {
   finish() {
     const c = this.cur;
     this.cur = null;
+    this.twComplete();   // v21 清理逐字计时器
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 剧情毕归平静
     const modal = document.getElementById('story-modal');
     if (modal) modal.classList.add('hidden');
+    if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 关层后公告归位
     if (c && c.onEnd) { const fn = c.onEnd; c.onEnd = null; fn(); }
     // 队列中的下一段剧情自动衔接
     const next = this.q.shift();
@@ -11772,10 +11848,18 @@ const Story = {
         </div>
       </div>`;
     } else if (sc.t === 'choice' || sc.t === 'investigate') {
+      // v21：抉择卡升级——甲/乙/丙编号、前尘所选标记（回顾重读时）
+      const SEQ = ['甲', '乙', '丙', '丁'];
+      const prevChoice = this.choiceOf(c.id);
       body = `
       <div class="story-text story-choice-lead">${sc.t === 'investigate' ? '「细察」' : ''}${sc.text}</div>
       <div class="story-choices">${sc.options.map((o, i) =>
-        `<button class="story-opt" data-action="story-choice" data-story-choice="${i}">${o.text}</button>`).join('')}</div>`;
+        `<button class="story-opt ${prevChoice === o.value ? 'story-opt-prev' : ''}" data-action="story-choice" data-story-choice="${i}">
+          <span class="story-opt-seq">${SEQ[i] || i + 1}</span>
+          <span class="story-opt-text">${o.text}</span>
+          ${prevChoice === o.value ? '<span class="story-opt-tag">前尘所选</span>' : ''}
+        </button>`).join('')}</div>
+      <div class="story-choice-note">· 抉择即因果——此念将记入问道录，并影响日后际遇。</div>`;
     } else if (sc.t === 'figure') {
       // v19 剧情大图：关键章人物横幅（chr: '@c_xxx'，art: 底衬题词）
       const chr = GameData.char(sc.chr || '');
@@ -11822,6 +11906,53 @@ const Story = {
       ${c.readonly ? '<button class="story-close-x" data-action="story-close" title="关闭">✕</button>' : ''}`;
     // 旁白渐显
     box.querySelectorAll('.story-p').forEach((el, i) => { el.style.animationDelay = (i * 0.18) + 's'; });
+    // v21 打字机逐字演出（旁白 / 对话；设置或性能模式下直接全显）
+    if (sc.t === 'narr' || sc.t === 'dialog' || sc.t === undefined || (sc.t === 'montage')) {
+      const twEls = [...box.querySelectorAll('.story-text, .story-p')];
+      if (twEls.length) this.typewrite(twEls);
+    }
+  },
+  /** v21：逐字显现——点击剧情区或翻页即刻补全；偏好存于 amb 设置（typewriter:false 关） */
+  _twList: null,   // [{ node, full }] 打字中的文本节点表
+  _twTimer: 0,
+  _twDone: true,
+  twPrefs() { return (typeof Save !== 'undefined' && Save.read('amb')) || {}; },
+  typewrite(els) {
+    if (this.twPrefs().typewriter === false) return;
+    if (typeof Anim !== 'undefined' && !Anim.enabled) return;
+    if (this.cur && this.cur.readonly) return;   // 回顾重读：即刻全显
+    if (navigator.webdriver) return;   // 自动化回归 / 无障碍浏览：跳过逐字，保文本即时可断言
+    const list = [];
+    els.forEach(el => {
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      while (w.nextNode()) { const n = w.currentNode; if (n.nodeValue && n.nodeValue.trim()) list.push({ node: n, full: n.nodeValue }); }
+    });
+    if (!list.length) return;
+    this._twList = list;
+    this._twDone = false;
+    list.forEach(x => { x.node.nodeValue = ''; });
+    let i = 0, ci = 0;
+    const CH_PER_TICK = 3;   // 每帧 3 字：千字长文亦十秒内完
+    const step = () => {
+      if (this._twDone) return;
+      for (let k = 0; k < CH_PER_TICK && i < list.length; k++) {
+        ci++;
+        if (ci > list[i].full.length) { i++; ci = 0; continue; }
+        list[i].node.nodeValue = list[i].full.slice(0, ci);
+      }
+      if (i < list.length) this._twTimer = requestAnimationFrame(step);
+      else this._twDone = true;
+    };
+    this._twTimer = requestAnimationFrame(step);
+  },
+  /** v21：立即补全当前页文字（翻页 / 点击剧情区时调用）；返回是否确有补全动作 */
+  twComplete() {
+    if (this._twDone) return false;
+    this._twDone = true;
+    if (this._twTimer) cancelAnimationFrame(this._twTimer);
+    (this._twList || []).forEach(x => { x.node.nodeValue = x.full; });
+    this._twList = null;
+    return true;
   },
 };
 
@@ -12611,9 +12742,19 @@ const UI = {
   /* ---------- 顶部信息 ---------- */
   renderTop() {
     const p = Game.player;
+    const st = Stat.compute(p);
+    // v21：顶栏资源条——灵石三档 + 战力 + 主线章程，全局常驻一眼可读
+    const stone = (nk, v) => `<span class="num-anim" data-nk="${nk}" data-fmt="fmt" data-nv="${v}">${Utils.fmtNum(v)}</span>`;
+    const stoneChip = `<span class="res-chip res-stone" title="灵石 · 下品 / 中品 / 上品">◈ ${stone('stones.low', p.stones.low)}`
+      + (p.stones.mid ? ` <i>·</i> ${stone('stones.mid', p.stones.mid)}` : '')
+      + (p.stones.high ? ` <i>·</i> ${stone('stones.high', p.stones.high)}` : '') + `</span>`;
+    const chIdx = QuestSys.currentChapterIdx(p);
+    const chapter = `<span class="res-chip res-chapter" title="主线进度 · 问道九章">卷 ${chIdx + 1} / ${QuestSys.CHAPTERS.length} 章</span>`;
     this.setHTML(this.el['top-info'], `
-      <span>${Time.labelLong(p)}</span><span>${p.age}岁 / 寿元${Stat.compute(p).lifespan}</span>
-      <span><span class="save-dot"></span>已自动存档</span>`);
+      ${chapter}${stoneChip}
+      <span class="res-chip" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</span>
+      <span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${p.age}岁 / 寿元${st.lifespan}</span>
+      <span class="top-meta2"><span class="save-dot"></span>已自动存档</span>`);
   },
 
   /* ---------- 左侧状态面板（v14：身份卡 → 核心条 → 属性网格 → 道行状态 → 建议） ---------- */
@@ -12684,9 +12825,6 @@ const UI = {
         <div class="stat-line"><span>格挡</span><b class="stat-detail" data-stat="block" title="点击查看构成" style="cursor:pointer">${st.block.toFixed(0)}% 🔍</b></div>
         <div class="stat-line"><span>战力</span><b class="hl" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</b></div>
       </div>
-      <div class="stone-row"><span>下品灵石</span><b><span class="num-anim" data-nk="stones.low" data-fmt="fmt" data-nv="${p.stones.low}">${Utils.fmtNum(p.stones.low)}</span></b></div>
-      ${p.stones.mid ? `<div class="stone-row"><span>中品灵石</span><b><span class="num-anim" data-nk="stones.mid" data-fmt="fmt" data-nv="${p.stones.mid}">${Utils.fmtNum(p.stones.mid)}</span></b></div>` : ''}
-      ${p.stones.high ? `<div class="stone-row"><span>上品灵石</span><b><span class="num-anim" data-nk="stones.high" data-fmt="fmt" data-nv="${p.stones.high}">${Utils.fmtNum(p.stones.high)}</span></b></div>` : ''}
       <div class="sec-title">道行状态</div>
       ${chipsHtml}
       ${DaoxinSys.statusHtml(p)}
@@ -12696,7 +12834,7 @@ const UI = {
       ${p.reinc ? `<div class="stat-line"><span>前世</span><b class="hl">第${p.reinc.lives}世 · 印记${p.reinc.marks || 0}（全属性+${p.reinc.marks || 0}%）</b></div>` : ''}
       <div class="guide-box">
         <div class="guide-title">✦ 当前建议</div>
-        ${Guide.tips(p).map(t => `<div class="guide-tip">· ${t}</div>`).join('')}
+        ${Guide.tips(p).map(t => `<div class="guide-tip"><span class="guide-tip-text">· ${t.text}</span>${t.go ? `<button class="btn btn-sm guide-go" data-action="act-tab" data-tab="${t.go}">前往 ›</button>` : ''}</div>`).join('')}
       </div>
     `);
   },
@@ -12795,6 +12933,9 @@ const UI = {
       sect: () => this.renderSectTab(),
       gongfa: () => this.renderGongfaTab(),
     }[Game.activeTab];
+    // v21：宽屏双列栅格——独立卡片构成的页签并排铺满，消灭大片留白
+    // （问道页自带主线+详情双栏结构，不适用外层栅格）
+    this.el['tab-content'].classList.toggle('grid2', ['cultivate', 'cave'].includes(Game.activeTab));
     this.setHTML(this.el['tab-content'], fn ? fn() : '');
   },
 
@@ -12892,7 +13033,23 @@ const UI = {
         <div class="action-row"><button class="btn btn-danger btn-glow" data-action="act-reincarnate">兵 解 转 世</button></div>
       </div>`;
     }
+    // v21：仙途十境一览——来路与前程一图可读
+    const rpNode = (r) => {
+      const state = p.realmIdx > r ? 'done' : (p.realmIdx === r ? 'cur' : '');
+      const layer = p.realmIdx > r ? '圆满' : (p.realmIdx === r ? GameData.LAYER_NAMES[p.layer] : '');
+      return `<div class="rp-node ${state}" title="${GameData.REALM_NAMES[r]}${layer ? ' · ' + layer : ''}">
+        <span class="rp-dot" style="${p.realmIdx === r ? `--rp-c:${GameData.REALM_AURA[r] || '#c9a86a'}` : ''}"></span>
+        <span class="rp-name">${GameData.REALM_NAMES[r]}</span>
+        <span class="rp-layer">${layer}</span>
+      </div>`;
+    };
+    const rpTrack = Array.from({ length: 10 }, (_, r) => rpNode(r))
+      .join('<span class="rp-line"></span>');
     return `
+      <div class="card span2 realm-path-card">
+        <div class="card-title">✦ 仙途 <span style="font-size:12px;color:var(--text-dim)">十境三十六层 · 步步登天</span></div>
+        <div class="rp-track">${rpTrack}</div>
+      </div>
       <div class="card card-main">
         <div class="card-title">✦ 修行 <span style="font-size:12px;color:var(--text-dim)">当前层尚需修为 ${Utils.fmtNum(Math.max(0, need - p.exp))}</span></div>
         <div class="card-desc">当前每轮修炼约得修为 <b class="hl">${Utils.fmtNum(est)}</b>（悟性 ${p.attrs.comp}，功法加成 ${st.cultPct}%）。</div>
@@ -12913,7 +13070,40 @@ const UI = {
         </div>
         ${AutoCult.active ? `<div class="tip-line" style="color:#e8c56a">· 自动修炼中：目标${AutoCult.target.label}，已获修为 +${Utils.fmtNum(Math.max(0, Guide.totalExp(p) - AutoCult.startExp))}。</div>` : ''}
         <div class="tip-line">· 修炼与闭关是修为的主要来源；丹药见效快，但丹毒超标会损伤根基。<br>· 每逢圆满（第4层）修为攒满，即可冲击下一个大境界。</div>
-      </div>${extra}`;
+      </div>${this.renderDailyCard()}${extra}`;
+  },
+
+  /* ---------- v21 今日修行聚合卡：日常仪式一卡总览，一键直达 ---------- */
+  renderDailyCard() {
+    const p = Game.player;
+    const today = Math.floor(p.day || 0);
+    const rows = [];
+    const signed = p.signDay === today;
+    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}` : '今日未求签', go: 'map' });
+    const rush = p.rushDay === today;
+    rows.push({ state: rush ? 'ok' : 'todo', label: '聚灵加速', stat: rush ? '已点燃 · 修炼 ×1.5' : '阵未点燃', go: p.cave ? 'cave' : '' });
+    const plots = (p.cave && p.cave.plots) || [];
+    const ripe = plots.filter(pl => pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
+    const growing = plots.filter(pl => pl && pl.seed).length;
+    rows.push({ state: ripe > 0 ? 'warn' : (growing > 0 ? 'ok' : 'todo'), label: '灵田', stat: plots.length ? (ripe > 0 ? `${ripe} 块已熟宜采收` : `${growing} 块生长中`) : '今日未播种', go: p.cave ? 'cave' : '' });
+    const bl = (p.bounties && p.bounties.list) || [];
+    const claimable = bl.filter(bt => bt && bt.progress >= bt.need).length;   // v21: 领后置空条目判空
+    rows.push({ state: claimable > 0 ? 'warn' : (bl.length ? 'ok' : 'todo'), label: '悬赏板', stat: claimable > 0 ? `${claimable} 张可领赏` : (bl.length ? '进行中' : '未接悬赏'), go: 'shop' });
+    const fest = FestivalSys.today(p);
+    if (fest) rows.push({ state: 'warn', label: '节庆', stat: `${fest.name} · 只此一日`, go: 'map' });
+    const done = rows.filter(r => r.state === 'ok').length;
+    return `
+      <div class="card daily-card">
+        <div class="card-title">✦ 今日修行 <span class="daily-count">${done} / ${rows.length} 事</span></div>
+        ${rows.map(r => `
+          <div class="daily-row ${r.state}">
+            <span class="daily-dot"></span>
+            <span class="daily-label">${r.label}</span>
+            <span class="daily-stat">${r.stat}</span>
+            ${r.go ? `<button class="btn btn-sm guide-go" data-action="act-tab" data-tab="${r.go}">前往 ›</button>` : ''}
+          </div>`).join('')}
+        <div class="tip-line">· 日常诸事不强制——但积少成多，皆是道途资粮。</div>
+      </div>`;
   },
 
   /* ---------- v13 洞府页签（聚灵阵 / 灵田 / 兽栏） ---------- */
@@ -13731,9 +13921,6 @@ const UI = {
     </div>`;
     const bagHtml = `
       <div class="panel-title">✦ 乾坤袋</div>
-      <div class="stone-row"><span>下品灵石</span><b><span class="num-anim" data-nk="stones.low" data-fmt="fmt" data-nv="${p.stones.low}">${Utils.fmtNum(p.stones.low)}</span></b></div>
-      ${p.stones.mid ? `<div class="stone-row"><span>中品灵石</span><b><span class="num-anim" data-nk="stones.mid" data-fmt="fmt" data-nv="${p.stones.mid}">${Utils.fmtNum(p.stones.mid)}</span></b></div>` : ''}
-      ${p.stones.high ? `<div class="stone-row"><span>上品灵石</span><b><span class="num-anim" data-nk="stones.high" data-fmt="fmt" data-nv="${p.stones.high}">${Utils.fmtNum(p.stones.high)}</span></b></div>` : ''}
       <div class="bag-tabs">${types.map(t => `<button class="bag-tab ${Game.bagTab === t.id ? 'active' : ''}" data-action="bag-tab" data-bagtab="${t.id}">${t.name}</button>`).join('')}</div>
       ${quick}
       <div class="bag-list">${rows || '<div class="bag-empty">—— 空空如也 ——</div>'}</div>`;
@@ -13772,6 +13959,7 @@ const UI = {
       this.el['popup-btns'].innerHTML = this._popupOptions.map((o, i) =>
         `<button class="btn ${o.primary ? 'btn-primary' : ''}" data-action="pop-choice" data-i="${i}">${o.text}</button>`).join('');
       this.el['popup-modal'].classList.remove('hidden');
+      if (this.syncAnnouncePos) this.syncAnnouncePos();   // v21 公告让位
       this.el['popup-modal'].setAttribute('role', 'dialog');
       this.el['popup-modal'].setAttribute('aria-modal', 'true');
       this.el['popup-modal'].setAttribute('aria-label', title || '提示');
@@ -13783,6 +13971,7 @@ const UI = {
     const val = this._popupOptions[i] ? this._popupOptions[i].value : undefined;
     this._popupResolve = null;
     this.el['popup-modal'].classList.add('hidden');
+    if (this.syncAnnouncePos) this.syncAnnouncePos();   // v21 公告归位
     r(val);
   },
   /** 无选择地关闭当前弹窗 */
@@ -13949,6 +14138,28 @@ const UI = {
     setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity .4s'; }, 1600);
     setTimeout(() => div.remove(), 2100);
   },
+  /** v21：行动浮字——所得在触发按钮上方飘起渐散（数字动效关闭时不显示） */
+  float(text, color = 'var(--exp)', anchor) {
+    if (!Anim.enabled) return;
+    const host = anchor || document.querySelector('[data-action="act-cultivate"]') || this.el['tab-content'];
+    if (!host || !host.getBoundingClientRect) return;
+    const r = host.getBoundingClientRect();
+    const div = document.createElement('div');
+    div.className = 'float-text';
+    div.style.left = Math.round(r.left + r.width / 2) + 'px';
+    div.style.top = Math.round(r.top + 4) + 'px';
+    div.style.color = color;
+    div.textContent = text;
+    document.getElementById('app').appendChild(div);
+    setTimeout(() => div.remove(), 1500);
+  },
+  /** v21：剧情 / 战斗 / 弹窗进行中，公告移至顶栏下方播放，不再遮住中央演出文字 */
+  syncAnnouncePos() {
+    const wrap = document.getElementById('announce');
+    if (!wrap) return;
+    const anyModal = [...document.querySelectorAll('.modal')].some(m => !m.classList.contains('hidden'));
+    wrap.classList.toggle('at-top', anyModal);
+  },
   /** v4：关键事件居中淡入公告（境界突破 / 稀有物品 / 战斗胜负），2 秒后自动消散 */
   announce(text, kind = 'gold') {
     let wrap = document.getElementById('announce');
@@ -13957,6 +14168,8 @@ const UI = {
       wrap.id = 'announce';
       document.getElementById('app').appendChild(wrap);
     }
+    // v21：先按当前弹窗状态定位（剧情打开前一瞬发出的公告也会随开层即时上移）
+    this.syncAnnouncePos();
     const div = document.createElement('div');
     div.className = 'announce-item' + (kind === 'gold' ? '' : ' ' + kind);
     div.textContent = text;

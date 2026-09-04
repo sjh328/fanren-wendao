@@ -30,12 +30,24 @@ const RankSys = {
     const rows = this.board(p);
     const myIdx = rows.findIndex(r => r.id === 'me');
     const top = this.isTop(p);
-    const rowsHtml = rows.slice(0, 10).map((r, i) => `
+    const myPower = p.realmIdx * 4 + p.layer;
+    const topPower = Math.max(1, rows[0].power);
+    // v21：榜行补血——关系标签 + 战力对比条 + 层差，扫一眼即知对手含金量
+    const rowsHtml = rows.slice(0, 10).map((r, i) => {
+      const st = r.id === 'me' ? null : p.npcs[r.id];
+      const relTxt = st ? NpcSys.relLabel(p, r.id) : '';
+      const gap = r.power - myPower;
+      const gapTxt = r.id === 'me' ? '此即是你'
+        : !st || !st.alive ? '' : (gap > 0 ? `高 ${gap} 小层` : gap < 0 ? `低 ${-gap} 小层` : '与你并肩');
+      const w = Math.round(Utils.clamp(r.power / topPower * 100, 5, 100));
+      return `
       <div class="rank-row ${r.id === 'me' ? 'me' : ''}">
         <span class="rank-no ${i < 3 ? 'top' + (i + 1) : ''}">${i + 1}</span>
-        <span class="rank-name">${Utils.esc(r.name)}</span>
-        <span class="rank-pow">${GameData.REALM_NAMES[Math.min(9, Math.floor(r.power / 4))]}${GameData.LAYER_NAMES[Utils.clamp(r.power % 4, 0, 3)]}</span>
-      </div>`).join('');
+        <span class="rank-name">${Utils.esc(r.name)}${relTxt ? ` <i class="rank-rel">${relTxt}</i>` : ''}</span>
+        <span class="rank-bar"><span style="width:${w}%"></span></span>
+        <span class="rank-pow">${GameData.REALM_NAMES[Math.min(9, Math.floor(r.power / 4))]}${GameData.LAYER_NAMES[Utils.clamp(r.power % 4, 0, 3)]}<i class="rank-gap">${gapTxt}</i></span>
+      </div>`;
+    }).join('');
     return `
     <div class="card">
       <div class="card-title">✦ 天骄榜 ${top ? '<span class="tag warn">天下第一 · 全属性 +2%</span>' : `<span class="tag">你的排名 · 第 ${myIdx + 1} 位</span>`}</div>

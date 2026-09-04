@@ -32,6 +32,14 @@ const Story = {
       document.getElementById('app').appendChild(modal);
     }
     modal.classList.remove('hidden');
+    if (!modal._twWired) {
+      modal._twWired = true;
+      modal.addEventListener('click', (e) => {
+        if (e.target.closest('[data-action]')) return;   // 按钮走自身动作
+        if (Story.twComplete()) e.stopPropagation();     // 点剧情任意处：先补全本页文字
+      });
+    }
+    if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 正在播放的公告即时上移让位
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('story');   // v19 剧情情境配乐
     this.render();
   },
@@ -95,6 +103,7 @@ const Story = {
   next() {
     const c = this.cur;
     if (!c) return;
+    if (this.twComplete()) return;   // v21 逐字未完：首次点击先补全本页
     const prev = c.scenes[c.idx];
     if (prev && prev.t === 'montage' && prev.days) Time.add(prev.days);   // 岁月流逝过场
     c.idx++;
@@ -155,11 +164,17 @@ const Story = {
     }
     if (sc.bark) enemy._storyBark = sc.bark;
     this._battling = true;
+    // v21：剧情暂隐让位战斗（战斗弹窗 z100 低于剧情 z135，不隐藏会盖住战斗操作）
+    const sm = document.getElementById('story-modal');
+    if (sm) sm.classList.add('hidden');
     Battle.start(null, { enemy, mapName: sc.label || '剧情之地', story: {
       onEnd: (win) => {
         this._battling = false;
         const cc = this.cur;
         if (!cc) return;
+        // v21：战斗毕，剧情浮层归位再续演
+        const sm2 = document.getElementById('story-modal');
+        if (sm2) sm2.classList.remove('hidden');
         const lines = win ? (sc.win || ['尘埃落定，你立于不败之地。'])
                           : (sc.lose || ['你力竭倒地——但故事，还未到终章。']);
         cc.scenes.splice(cc.idx + 1, 0, { t: 'narr', text: lines.join('\n') });
@@ -172,9 +187,11 @@ const Story = {
   finish() {
     const c = this.cur;
     this.cur = null;
+    this.twComplete();   // v21 清理逐字计时器
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 剧情毕归平静
     const modal = document.getElementById('story-modal');
     if (modal) modal.classList.add('hidden');
+    if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 关层后公告归位
     if (c && c.onEnd) { const fn = c.onEnd; c.onEnd = null; fn(); }
     // 队列中的下一段剧情自动衔接
     const next = this.q.shift();
@@ -206,10 +223,18 @@ const Story = {
         </div>
       </div>`;
     } else if (sc.t === 'choice' || sc.t === 'investigate') {
+      // v21：抉择卡升级——甲/乙/丙编号、前尘所选标记（回顾重读时）
+      const SEQ = ['甲', '乙', '丙', '丁'];
+      const prevChoice = this.choiceOf(c.id);
       body = `
       <div class="story-text story-choice-lead">${sc.t === 'investigate' ? '「细察」' : ''}${sc.text}</div>
       <div class="story-choices">${sc.options.map((o, i) =>
-        `<button class="story-opt" data-action="story-choice" data-story-choice="${i}">${o.text}</button>`).join('')}</div>`;
+        `<button class="story-opt ${prevChoice === o.value ? 'story-opt-prev' : ''}" data-action="story-choice" data-story-choice="${i}">
+          <span class="story-opt-seq">${SEQ[i] || i + 1}</span>
+          <span class="story-opt-text">${o.text}</span>
+          ${prevChoice === o.value ? '<span class="story-opt-tag">前尘所选</span>' : ''}
+        </button>`).join('')}</div>
+      <div class="story-choice-note">· 抉择即因果——此念将记入问道录，并影响日后际遇。</div>`;
     } else if (sc.t === 'figure') {
       // v19 剧情大图：关键章人物横幅（chr: '@c_xxx'，art: 底衬题词）
       const chr = GameData.char(sc.chr || '');
@@ -256,6 +281,53 @@ const Story = {
       ${c.readonly ? '<button class="story-close-x" data-action="story-close" title="关闭">✕</button>' : ''}`;
     // 旁白渐显
     box.querySelectorAll('.story-p').forEach((el, i) => { el.style.animationDelay = (i * 0.18) + 's'; });
+    // v21 打字机逐字演出（旁白 / 对话；设置或性能模式下直接全显）
+    if (sc.t === 'narr' || sc.t === 'dialog' || sc.t === undefined || (sc.t === 'montage')) {
+      const twEls = [...box.querySelectorAll('.story-text, .story-p')];
+      if (twEls.length) this.typewrite(twEls);
+    }
+  },
+  /** v21：逐字显现——点击剧情区或翻页即刻补全；偏好存于 amb 设置（typewriter:false 关） */
+  _twList: null,   // [{ node, full }] 打字中的文本节点表
+  _twTimer: 0,
+  _twDone: true,
+  twPrefs() { return (typeof Save !== 'undefined' && Save.read('amb')) || {}; },
+  typewrite(els) {
+    if (this.twPrefs().typewriter === false) return;
+    if (typeof Anim !== 'undefined' && !Anim.enabled) return;
+    if (this.cur && this.cur.readonly) return;   // 回顾重读：即刻全显
+    if (navigator.webdriver) return;   // 自动化回归 / 无障碍浏览：跳过逐字，保文本即时可断言
+    const list = [];
+    els.forEach(el => {
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      while (w.nextNode()) { const n = w.currentNode; if (n.nodeValue && n.nodeValue.trim()) list.push({ node: n, full: n.nodeValue }); }
+    });
+    if (!list.length) return;
+    this._twList = list;
+    this._twDone = false;
+    list.forEach(x => { x.node.nodeValue = ''; });
+    let i = 0, ci = 0;
+    const CH_PER_TICK = 3;   // 每帧 3 字：千字长文亦十秒内完
+    const step = () => {
+      if (this._twDone) return;
+      for (let k = 0; k < CH_PER_TICK && i < list.length; k++) {
+        ci++;
+        if (ci > list[i].full.length) { i++; ci = 0; continue; }
+        list[i].node.nodeValue = list[i].full.slice(0, ci);
+      }
+      if (i < list.length) this._twTimer = requestAnimationFrame(step);
+      else this._twDone = true;
+    };
+    this._twTimer = requestAnimationFrame(step);
+  },
+  /** v21：立即补全当前页文字（翻页 / 点击剧情区时调用）；返回是否确有补全动作 */
+  twComplete() {
+    if (this._twDone) return false;
+    this._twDone = true;
+    if (this._twTimer) cancelAnimationFrame(this._twTimer);
+    (this._twList || []).forEach(x => { x.node.nodeValue = x.full; });
+    this._twList = null;
+    return true;
   },
 };
 

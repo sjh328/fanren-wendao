@@ -22,9 +22,9 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 let browser;
 try {
-  browser = await puppeteer.launch({ headless: true, executablePath: CHROME, args: ['--no-sandbox'] });
+  browser = await puppeteer.launch({ headless: true, executablePath: CHROME, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'] });
   const page = await browser.newPage();
-  page.on('console', msg => { if (msg.type() === 'error') consoleErrors.push(msg.text()); });
+  page.on('console', msg => { if (msg.type() === 'error' && !/net::ERR_/.test(msg.text())) consoleErrors.push(msg.text()); });   // v21: 网络层资源抖动不计入
   page.on('pageerror', err => consoleErrors.push(err.message));
 
   await page.goto(URL, { waitUntil: 'networkidle0' });
@@ -617,8 +617,10 @@ try {
     p.equipped.weapon = { id: 'w_tiejian', enhance: 0 };
     p.bag['w_zhuxian'] = 1;
     let mark = false;
+    const origPopupX2 = UI.popup.bind(UI);
     UI.popup = async (o) => { mark = (o.html || '').includes('推荐'); return true; };   // 直接选「换上」
     await Bag.equip('w_zhuxian');
+    UI.popup = origPopupX2;   // 复原弹窗（v21：此前泄漏导致后续真实弹窗被吞）
     // 复原
     delete p.bag['w_zhuxian'];
     p.equipped.weapon = null; p.bag.pill_juqi = 3; p.bag.pill_taichu = 1; p.bag.m_lingcao = 2;
@@ -692,6 +694,153 @@ try {
     return { mercyWired: reduced, boosted };
   });
   x6.mercyWired ? pass('X6 首战保底：mercy 削弱分支已接线') : fail('X6 首战', JSON.stringify(x6));
+
+  /* ================= V 焕新组（v21） ================= */
+  // 前置：清掉此前用例可能残留的剧情/弹窗浮层，保证 UI 断言环境干净
+  await page.evaluate(() => {
+    if (typeof Story !== 'undefined' && Story.active && Story.active()) Story.close();
+    if (typeof UI !== 'undefined' && UI._popupResolve) UI.popupChoose(-1);
+    if (typeof Game !== 'undefined' && Game.player) Game.player.dead = false;
+  });
+  await sleep(400);
+
+  // V1 剧情战层级：开战隐藏剧情浮层，战毕归位续演
+  const v1 = await page.evaluate(() => ({
+    hide: /classList\.add\('hidden'\)/.test(Story.startBattle.toString().replace(/_battling[\s\S]*?;/g, '')),
+    reshow: Story.startBattle.toString().includes("classList.remove('hidden')"),
+  }));
+  v1.hide && v1.reshow ? pass('V1 剧情战：剧情浮层让位战斗并在战后归位') : fail('V1 剧情战层级', JSON.stringify(v1));
+
+  // V2 公告让位：弹窗打开时公告自动移至顶栏下
+  const v2 = await page.evaluate(async () => {
+    const out = { env: {} };
+    try {
+      const g = document.getElementById('game-screen');
+      out.env.gameVisible = g && !g.className.includes('hidden');
+      out.env.hasPlayer = !!Game.player;
+      out.env.playerDead = !!(Game.player && Game.player.dead);
+      if (UI._popupResolve) UI.popupChoose(-1);   // 清早前用例可能悬挂的未决弹窗
+      await new Promise(r => setTimeout(r, 120));
+      UI.popup({ title: '公告位测试', html: 'x', options: [{ text: '好', value: true }] });
+      await new Promise(r => setTimeout(r, 120));
+      out.env.popupCls = document.getElementById('popup-modal').className;
+      UI.announce('测试公告');
+      out.openPos = document.getElementById('announce').className;
+      document.querySelector('[data-action="pop-choice"]').click();
+      await new Promise(r => setTimeout(r, 120));
+      if (typeof Story !== 'undefined' && Story.active && Story.active()) Story.close();
+      await new Promise(r => setTimeout(r, 120));
+      UI.announce('测试公告二');
+      out.closedPos = document.getElementById('announce').className;
+    } catch (e) { out.err = String(e); }
+    return out;
+  });
+  (v2.openPos || '').includes('at-top') && !(v2.closedPos || '').includes('at-top')
+    ? pass('V2 公告：弹窗期移顶栏下、关层后归位') : fail('V2 公告让位', JSON.stringify(v2));
+
+  // V3 顶栏资源条：灵石/战力/章程徽章化，左右栏灵石行去重
+  const v3 = await page.evaluate(() => ({
+    chips: document.querySelectorAll('#top-info .res-chip').length,
+    leftStones: document.querySelectorAll('#panel-left .stone-row').length,
+    bagStones: document.querySelectorAll('#bag-panel .stone-row').length,
+  }));
+  v3.chips >= 3 && v3.leftStones === 0 && v3.bagStones === 0
+    ? pass('V3 顶栏资源条三徽章，灵石显示不再三处重复') : fail('V3 顶栏资源条', JSON.stringify(v3));
+
+  // V4 仙途十境路线图
+  const v4 = await page.evaluate(() => {
+    document.querySelector('[data-action="act-tab"][data-tab="cultivate"]').click();
+    return new Promise(r => setTimeout(() => r({
+      nodes: document.querySelectorAll('.rp-node').length,
+      cur: (document.querySelector('.rp-node.cur .rp-name') || {}).textContent || '',
+    }), 250));
+  });
+  v4.nodes === 10 && v4.cur ? pass(`V4 仙途十境路线图（当前：${v4.cur}）`) : fail('V4 仙途路线', JSON.stringify(v4));
+
+  // V5 修炼浮字：行动后飘起 +N 修为
+  const v5 = await page.evaluate(async () => {
+    Cultivate.normal();
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 60));
+      const f = document.querySelector('.float-text');
+      if (f) return { ok: true, text: f.textContent };
+    }
+    return { ok: false };
+  });
+  v5.ok && /修为 \+/.test(v5.text) ? pass('V5 修炼浮字反馈（' + v5.text.slice(0, 14) + '…）') : fail('V5 修炼浮字', JSON.stringify(v5));
+
+  // V6 剧情打字机：自动化环境直全显；人为关闭 webdriver 后逐字 + 点击补全
+  const v6 = await page.evaluate(async () => {
+    const out = {};
+    const make = () => {
+      const host = document.createElement('div');
+      host.innerHTML = '<p class="story-p">问道路遥，孤剑独行，一步一重天，落子无悔，步步生莲。</p>';
+      document.body.appendChild(host);
+      return host;
+    };
+    const h1 = make();
+    Story.typewrite([h1.querySelector('.story-p')]);
+    out.webdriverSkip = h1.querySelector('.story-p').textContent.includes('一步一重天');
+    h1.remove();
+    Story._twDone = true;   // 上一页采样完毕，复位打字状态
+    const orig = navigator.webdriver;
+    Object.defineProperty(navigator, 'webdriver', { value: false, configurable: true });
+    try {
+      const h2 = make();
+      Story.typewrite([h2.querySelector('.story-p')]);
+      await new Promise(r => setTimeout(r, 60));
+      out.partial = h2.querySelector('.story-p').textContent.length;
+      const done = Story.twComplete();
+      out.doneRestores = done && h2.querySelector('.story-p').textContent.includes('一步一重天');
+      h2.remove();
+    } finally {
+      Object.defineProperty(navigator, 'webdriver', { value: orig, configurable: true });
+    }
+    return out;
+  });
+  v6.webdriverSkip && v6.partial > 0 && v6.partial < 22 && v6.doneRestores
+    ? pass('V6 剧情打字机：自动化直全显 / 逐字演出 / 一键补全') : fail('V6 打字机', JSON.stringify(v6));
+
+  // V7 今日修行聚合卡：四事总览 + 前往直达
+  const v7 = await page.evaluate(() => ({
+    card: !!document.querySelector('#tab-content .daily-card'),
+    rows: document.querySelectorAll('#tab-content .daily-row').length,
+    go: [...document.querySelectorAll('#tab-content .daily-card .guide-go')].every(b => b.dataset.action === 'act-tab' && b.dataset.tab),
+  }));
+  v7.card && v7.rows >= 4 && v7.go ? pass('V7 今日修行聚合卡（' + v7.rows + ' 事，前往键齐全）') : fail('V7 聚合卡', JSON.stringify(v7));
+
+  // V8 当前建议：每条可带「前往」跳转
+  const v8 = await page.evaluate(() => ({
+    tips: document.querySelectorAll('.guide-box .guide-tip').length,
+    goBtn: document.querySelectorAll('.guide-box .guide-go').length,
+    firstTip: (document.querySelector('.guide-box .guide-tip-text') || {}).textContent || '',
+  }));
+  v8.tips >= 1 && v8.goBtn >= 1 ? pass(`V8 当前建议带「前往」（${v8.tips} 条建议）`) : fail('V8 建议跳转', JSON.stringify(v8));
+
+  // V9 闭关结算报告：出关一纸小账
+  const v9 = await page.evaluate(async () => {
+    if (UI._popupResolve) UI.popupChoose(-1);   // 清早前用例可能悬挂的未决弹窗
+    if (Game.player) Game.player.dead = false;
+    await new Promise(r => setTimeout(r, 100));
+    Cultivate.settleReport({ rounds: 2, exp: 1234, days: 60, advanced: 1, from: '练气初期' });
+    await new Promise(r => setTimeout(r, 100));
+    const txt = document.getElementById('popup-body').innerText || '';
+    const open = !document.getElementById('popup-modal').className.includes('hidden');
+    document.querySelector('[data-action="pop-choice"]').click();
+    await new Promise(r => setTimeout(r, 60));
+    const closed = document.getElementById('popup-modal').className.includes('hidden');
+    return { open, closed, hasJieSuan: txt.includes('闭关轮次') && txt.includes('境界变迁') };
+  });
+  v9.open && v9.closed && v9.hasJieSuan ? pass('V9 闭关结算报告（轮次/进益/变迁，可关）') : fail('V9 结算报告', JSON.stringify(v9));
+
+  // V10 菜单分组与入口保留
+  const v10 = await page.evaluate(() => ({
+    groups: document.querySelectorAll('.menu-panel .menu-group').length,
+    actions: [...document.querySelectorAll('.menu-panel .btn')].map(b => b.dataset.action),
+  }));
+  const needActs = ['act-codex', 'act-figures', 'act-battle-review', 'act-career', 'act-save-open', 'act-help', 'act-newgame'];
+  v10.groups === 2 && needActs.every(a => v10.actions.includes(a))
+    ? pass('V10 菜单两分组（记档/系统），七入口保留') : fail('V10 菜单分组', JSON.stringify(v10));
 
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');

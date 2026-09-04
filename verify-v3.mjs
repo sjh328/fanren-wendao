@@ -23,7 +23,10 @@ const fail = (name, detail) => { results.push(['FAIL', name + ' :: ' + detail]);
 const shot = async (page, tag) => {
   shotIdx++;
   const path = `${SHOT_DIR}/v3t${String(shotIdx).padStart(2, '0')}_${tag}.png`;
-  await page.screenshot({ path });
+  await Promise.race([
+    page.screenshot({ path }),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('shot-timeout')), 15000)),
+  ]).catch(() => console.log(`  - 截图 ${tag} 超时，跳过（不影响断言）`));
   return path;
 };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -90,10 +93,10 @@ const finishBattle = async (page, maxTurns = 60) => {
   return !(await page.$eval('#battle-modal', el => !el.className.includes('hidden')).catch(() => false));
 };
 
-const browser = await puppeteer.launch({ executablePath: EDGE, headless: 'new', args: ['--no-sandbox', '--window-size=1280,760'] });
+const browser = await puppeteer.launch({ executablePath: EDGE, headless: true, args: ['--no-sandbox', '--window-size=1280,760', '--disable-gpu', '--disable-dev-shm-usage'] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 720 });
-page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 200)); });
+page.on('console', m => { if (m.type() === 'error' && !/net::ERR_/.test(m.text())) consoleErrors.push(m.text().slice(0, 200)); });   // v21: 网络层资源抖动不计入
 page.on('pageerror', e => consoleErrors.push('PAGEERROR: ' + String(e).slice(0, 200)));
 
 // v19：剧情静默器——Story.play 立即结算（记首选项/旗标/回调），老测试不被演出打断

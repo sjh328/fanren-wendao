@@ -54,6 +54,7 @@ const Battle = {
     this.speed = this.speed || this.loadSpeed();
     p.counters.battles++;
     document.getElementById('battle-modal').classList.remove('hidden');
+    if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 公告让位
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood(ctx.boss ? 'boss' : 'battle');   // v19 情境配乐（守关 Boss 独立情境）
     this.log(`⚔ 于${ctx.mapName || '荒野'}遭遇 <b class="grade-0">${enemy.name}</b>（${enemy.realmLabel}${enemy.elite ? ' · 精英' : ''}）！`, 'warn');
     if (enemy._storyBark) this.log(enemy._storyBark, 'log-event');   // v19 剧情战入场台词
@@ -1470,6 +1471,7 @@ const Battle = {
     const box = document.getElementById('battle-box');
     if (box) box.innerHTML = '';
     document.getElementById('battle-modal').classList.add('hidden');
+    if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 公告归位
     this.active = null;
     Game.afterAction();
   },

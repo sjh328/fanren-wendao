@@ -1,7 +1,8 @@
 # 凡人问道 · 文字修仙
 
 网页版文字修仙放置游戏。零依赖、纯前端：HTML + CSS + 原生 JavaScript，美术为程序化 SVG，音效为 Web Audio 合成。
-当前版本 **v20「入微」**（v19 血肉之上的全方位打磨：读招战斗/养成纵深/世界日历/江湖 16 人/经济审计归零），详见 `UPDATE_NOTES_V20.md`。
+当前版本 **v21「焕新」**（v20 完整度之上的全方位质感升级：剧情战层级修复 / 顶栏资源条 / 仙途十境图 /
+打字机剧情 / 今日修行聚合 / 闭关结算——详见 `UPDATE_NOTES_V21.md`）。
 
 ## 仓库与同步
 
@@ -26,7 +27,7 @@ node server.mjs     # http://localhost:8341/index.html
 测试为 puppeteer-core 驱动真实 Chrome 的 E2E 回归（需先启动 `node server.mjs`，并保证本机装有 Chrome）：
 
 ```bash
-npm run test:all    # 九套脚本全量回归（340+ 断言，随版本增长）
+npm run test:all    # 九套脚本全量回归（350+ 断言，随版本增长）
 npm run test:v10    # 单独运行某一版本专项
 ```
 
@@ -45,7 +46,7 @@ js/          ★ 开发源码（49 个模块，按 scripts/modules.json 顺序�
   game.js    Game 主控（动作分发/初始化）
 game.js      ★ 构建产物（由 js/ 拼接生成，逐字节可复现；index.html 引用不变）
 style.css    宣纸水墨主题（按版本增量分区块）
-index.html   唯一入口（引用 game.js?v=34，改版时递增 N 清缓存）
+index.html   唯一入口（引用 game.js?v=35，改版时递增 N 清缓存）
 server.mjs   本地静态服务器（:8341，no-cache）
 verify-*.mjs puppeteer E2E 回归脚本（npm test:xxx）
 scripts/     build.mjs（安全构建）· balance-sim.mjs（数值拟合）· price-audit.mjs（经济审计）

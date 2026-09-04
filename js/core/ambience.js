@@ -52,6 +52,17 @@ const Ambience = {
         UI.toast(e.target.checked ? '数字动效：开' : '数字动效：关（性能模式）');
       });
     }
+    // v21 设置中心：剧情逐字演出（默认开）
+    const tw = document.getElementById('amb-tw');
+    if (tw) {
+      tw.checked = (Save.read('amb') || {}).typewriter !== false;
+      tw.addEventListener('click', e => {
+        const pref = Save.read('amb') || {};
+        pref.typewriter = e.target.checked;
+        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        UI.toast(e.target.checked ? '剧情逐字演出：开' : '剧情逐字演出：关（即刻全显）');
+      });
+    }
     const dens = document.getElementById('amb-logdens');
     if (dens) {
       dens.value = (Save.read('amb') || {}).logDens || 'all';
@@ -87,6 +98,7 @@ const Ambience = {
   applyAnimPref(on) {
     this.animOn = !!on;
     if (typeof Anim !== 'undefined') Anim.enabled = this.animOn;
+    try { document.body.classList.toggle('anim-off', !this.animOn); } catch (e) {}   // v21 入场/过渡动画同受性能开关门控
   },
   /** v19 字号档位 */
   applyFontScale(v) {
