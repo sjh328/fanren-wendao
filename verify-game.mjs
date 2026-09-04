@@ -673,6 +673,8 @@ try {
     const t14 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
     (!t14.bag.gf_tiangang && !t14.gongfa.gf_tiangang) ? pass('T14 体修无法购买玄级功法') : fail('T14 体修功法限制', '竟被买下');
     await page.evaluate(() => { Game.player.stones.low = 100000; });   // v19：垫足灵石消除行情随机性
+    // v20 加固：种子合并会残留此前学过的沧海剑诀——显式清掉，保证购买路径可断言
+    await page.evaluate(() => { delete Game.player.gongfa.gf_canghai; delete Game.player.bag.gf_canghai; UI.renderAll(); });
     await clickSel(page, '[data-action="act-buy"][data-item="gf_canghai"]'); // 凡级功法应可买
     await sleep(400);
     let t14b = await page.evaluate(() => Game.player.bag.gf_canghai || 0);   // v19：读内存玩家

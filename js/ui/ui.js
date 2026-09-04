@@ -140,13 +140,15 @@ const UI = {
       <div class="attr-mini">
         <span>根骨 <b>${p.attrs.gen}</b></span><span>悟性 <b>${p.attrs.comp}</b></span><span>福缘 <b>${p.attrs.luck}</b></span><span>体魄 <b>${p.attrs.body}</b></span>
       </div>
+      <div class="stat-line"><span>气血构成</span><b class="stat-detail" data-stat="maxHp" title="点击查看构成" style="cursor:pointer">🔍 明细</b></div>
       <div class="stat-grid">
-        <div class="stat-line"><span>攻击</span><b>${st.atk}</b></div>
-        <div class="stat-line"><span>防御</span><b>${st.def}</b></div>
-        <div class="stat-line"><span>身法</span><b>${st.speed}</b></div>
-        <div class="stat-line"><span>暴击</span><b>${st.crit.toFixed(0)}%</b></div>
-        <div class="stat-line"><span>闪避</span><b>${st.dodge.toFixed(0)}%</b></div>
-        <div class="stat-line"><span>格挡</span><b>${st.block.toFixed(0)}%</b></div>
+        <div class="stat-line"><span>攻击</span><b class="stat-detail" data-stat="atk" title="点击查看构成" style="cursor:pointer">${st.atk} 🔍</b></div>
+        <div class="stat-line"><span>防御</span><b class="stat-detail" data-stat="def" title="点击查看构成" style="cursor:pointer">${st.def} 🔍</b></div>
+        <div class="stat-line"><span>身法</span><b class="stat-detail" data-stat="speed" title="点击查看构成" style="cursor:pointer">${st.speed} 🔍</b></div>
+        <div class="stat-line"><span>暴击</span><b class="stat-detail" data-stat="crit" title="点击查看构成" style="cursor:pointer">${st.crit.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>闪避</span><b class="stat-detail" data-stat="dodge" title="点击查看构成" style="cursor:pointer">${st.dodge.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>格挡</span><b class="stat-detail" data-stat="block" title="点击查看构成" style="cursor:pointer">${st.block.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>战力</span><b class="hl" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</b></div>
       </div>
       <div class="stone-row"><span>下品灵石</span><b><span class="num-anim" data-nk="stones.low" data-fmt="fmt" data-nv="${p.stones.low}">${Utils.fmtNum(p.stones.low)}</span></b></div>
       ${p.stones.mid ? `<div class="stone-row"><span>中品灵石</span><b><span class="num-anim" data-nk="stones.mid" data-fmt="fmt" data-nv="${p.stones.mid}">${Utils.fmtNum(p.stones.mid)}</span></b></div>` : ''}
@@ -1108,6 +1110,45 @@ const UI = {
       ${deckCard}
       ${learnRows ? `<div class="card"><div class="card-title">✦ 待学典籍（背包中）</div>${learnRows}</div>` : ''}
       <div class="card"><div class="card-title">✦ 道韵协同（双功法修至三层以上，共鸣生韵）</div>${dyRows}</div>`;
+  },
+
+  /** v20 属性构成明细弹窗（.stat-detail 点击触发，Game 全局委托捕获） */
+  statDetail(statKey) {
+    const p = Game.player;
+    if (!p) return;
+    const NAMES = { atk: '攻击', def: '防御', maxHp: '气血上限', maxMp: '灵力上限', speed: '身法', crit: '暴击', dodge: '闪避', block: '格挡', cultPct: '修炼效率', stonePct: '灵石获取' };
+    const bd = Stat.breakdown(p, statKey);
+    const rows = bd.src.map(x => `<div class="stat-line"><span>${x.name}</span><b>${x.v > 0 && !['atk', 'def', 'maxHp', 'maxMp', 'speed'].includes(statKey) ? '+' : ''}${Math.round(x.v * 10) / 10}</b></div>`).join('');
+    UI.popup({
+      title: `构成 · ${NAMES[statKey] || statKey}`,
+      html: `${rows || '<div class="tip-line">暂无加成来源。</div>'}
+        <div class="stat-line est-final" style="margin-top:6px"><span>当前合计</span><b class="hl">${['crit', 'dodge', 'block'].includes(statKey) ? bd.final.toFixed(1) + '%' : Utils.fmtNum(bd.final)}</b></div>
+        <div class="tip-line">· 综合战力：⚔ ${Utils.fmtNum(Stat.power(p))}（攻防血速暴闪格加权）</div>`,
+      options: [{ text: '收 起', value: true, primary: true }],
+    });
+  },
+
+  /* ---------- v20 生涯统计 ---------- */
+  careerBody() {
+    const p = Game.player;
+    const c = p.counters || {};
+    const stones = c.stonesEarned || 0;
+    const days = Math.floor(p.day || 0);
+    const wins = c.wins || 0, battles = c.battles || 0;
+    const winRate = battles ? Math.round(wins / battles * 100) : 0;
+    const rows = [
+      ['道途历时', `${days} 日（第${Math.floor(days / 365) + 1}年）`],
+      ['战斗', `${battles} 战 ${wins} 胜（胜率 ${winRate}%）· 精英 ${c.killsElite || 0} · 秘境守关 ${c.bossKills || 0}`],
+      ['历练', `探索 ${c.explores || 0} 次 · 最深秘境第 ${c.maxDepth || 0} 层`],
+      ['百艺', `炼丹 ${c.craftsOk || 0}/${c.crafts || 0} 成 · 服丹 ${c.pills || 0} · 学艺 ${c.learns || 0}`],
+      ['红尘', `抉择 ${c.dilemmas || 0} 次 · 结交 ${c.befriends || 0} 人 · 切磋 ${c.spars || 0} 场`],
+      ['斗兽', `${c.arenaWins || 0} 场胜`],
+      ['碎片', `累计收取上古法宝碎片 ${c.gupianGot || 0} 枚`],
+    ];
+    return rows.map(([k, v]) => `<div class="stat-line"><span>${k}</span><b>${v}</b></div>`).join('');
+  },
+  careerModal() {
+    UI.popup({ title: '📜 生涯统计', html: this.careerBody(), options: [{ text: '合 上', value: true, primary: true }] });
   },
 
   /* ---------- 右侧背包 ---------- */

@@ -64,6 +64,15 @@ const Game = {
       const dao = document.getElementById('dao-modal');
       if (dao && !dao.classList.contains('hidden')) dao.classList.add('hidden');
     });
+    // v20 页签快捷键：Q 修炼 / W 问道 / E 洞府 / R 游历 / T 江湖 / A 坊市 / S 宗门 / D 功法
+    document.addEventListener('keydown', (e) => {
+      if (Story.active() || Battle.active || UI._popupResolve) return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
+      const map = { q: 'cultivate', w: 'quest', e: 'cave', r: 'map', t: 'jianghu', a: 'shop', s: 'sect', d: 'gongfa' };
+      const tab = map[e.key.toLowerCase()];
+      if (tab && !Game.actions['act-tab']) return;
+      if (tab) { const lock = Guide.tabLocked(tab); if (!lock) { Game.actions['act-tab']({ tab }); } }
+    });
     // 关页前自动存档
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && Game.player && !Game.player.dead) Save.autoSave(true);
@@ -262,6 +271,9 @@ const Game = {
     /* --- v4 日志工具 / 一键减负 --- */
     'log-pause': () => Log.togglePause(),
     'log-clear': () => Log.clear(),
+    'log-filter': (d) => Log.setFilter(d.tf || null),   // v20 类型过滤
+    'stat-detail': (d, el) => UI.statDetail(el.dataset.stat),   // v20 属性构成明细
+    'act-career': () => UI.careerModal(),   // v20 生涯统计
     /* --- v14 日志折叠 --- */
     'log-toggle': () => Log.toggleCollapse(),
     'act-sell-common': () => ShopSys.sellCommon(),

@@ -136,4 +136,43 @@ const Stat = {
   afterDef(atk, def) { return atk * (1 - def / (def + (GameData.BALANCE.COMBAT.AFTER_DEF_DENOM || 140))); },
   /** v20 丹毒上限单源化（原公式散落 5 处硬编码）：60 + 体魄×8，炼虚「合道」+20 */
   poisonCap(p) { return 60 + ((p.attrs && p.attrs.body) || 0) * 8 + (p.realmIdx >= 5 ? 20 : 0); },
+  /** v20 综合战力：攻防血三维加权，用于自我衡量/地图校准/宿敌对比 */
+  power(p) {
+    const st = this.compute(p);
+    return Math.round(st.atk * 2 + st.def * 1.5 + st.maxHp * 0.3 + st.speed * 1 + st.crit * 2 + st.dodge * 1.5 + st.block * 0.5);
+  },
+  /** v20 属性明细：列出某项属性的构成来源（逐行标注） */
+  breakdown(p, key) {
+    const st = this.compute(p);
+    const gf = this.gongfaBonus(p);
+    const eq = this.equipBonus(p);
+    const sb = this.sectBonus(p);
+    const dao = (typeof DaoSys !== 'undefined' && DaoSys.bonus) ? DaoSys.bonus(p) : {};
+    const beastPass = (typeof BeastSys !== 'undefined' && BeastSys.passive) ? BeastSys.passive(p) : {};
+    const dx = (typeof DaoxinSys !== 'undefined' && DaoxinSys.bonusOf) ? DaoxinSys.bonusOf(p) : {};
+    const pl = (typeof PersonalSys !== 'undefined' && PersonalSys.bonusOf) ? PersonalSys.bonusOf(p) : {};
+    const pctOf = (obj, k) => obj[k] || 0;
+    const base = {
+      atk: 8 + p.attrs.gen * 2 + (p.realmIdx * 4 + p.layer) * 3,
+      def: 4 + p.attrs.body * 1.2 + (p.realmIdx * 4 + p.layer) * 1.8,
+      maxHp: 90 + p.attrs.body * 15 + Math.pow(p.realmIdx * 4 + p.layer, 1.6) * 6,
+      maxMp: 40 + this.compOf(p) * 8 + (p.realmIdx * 4 + p.layer) * 4,
+      speed: 8 + (p.attrs.gen + p.attrs.body) / 2 + (p.realmIdx * 4 + p.layer) * 0.8,
+      crit: 5 + (p.attrs.luck + (eq.luck || 0)) * 0.6,
+      dodge: 0, block: 8, cultPct: 0, stonePct: 0, luck: p.attrs.luck, pillPct: 0,
+    }[key] || 0;
+    const src = [
+      { name: '基础（先天+境界）', v: base },
+      { name: '功法' + (this.activeDaoYun(p).length ? '（含道韵/奥义）' : ''), v: key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' ? pctOf(gf, key) : key.endsWith('Pct') || key === 'maxHp' || key === 'maxMp' ? (key === 'maxHp' ? pctOf(gf, 'hpPct') : key === 'maxMp' ? pctOf(gf, 'mpPct') : pctOf(gf, key + 'Pct')) : pctOf(gf, key) },
+      { name: '装备（强化/词缀/套装）', v: key === 'maxHp' ? (eq.hp || 0) + pctOf(eq, 'hpPct') : key === 'maxMp' ? (eq.mp || 0) + pctOf(eq, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'luck' ? pctOf(eq, key) : pctOf(eq, key === 'speed' ? 'spd' : key === 'atk' || key === 'def' ? key : key + 'Pct') },
+      { name: '宗门与职位', v: key === 'atk' || key === 'def' ? pctOf(sb, key + 'Pct') : key === 'crit' || key === 'dodge' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' || key === 'luck' ? pctOf(sb, key) : 0 },
+      { name: '大道与道境', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' ? pctOf(dao, key === 'maxHp' ? 'hpPct' : key === 'maxMp' ? 'mpPct' : key + 'Pct') : 0 },
+      { name: '灵兽（含护持）', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(beastPass, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(beastPass, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
+      { name: '道心烙印', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(dx, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(dx, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
+      { name: '个人线', v: key === 'crit' || key === 'dodge' || key === 'pillPct' ? pctOf(pl, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(pl, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
+      { name: '洞府（聚灵/藏宝）', v: key === 'cultPct' ? ((p.cave && p.cave.lv) || 0) * 4 : key === 'stonePct' ? (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3) : 0 },
+      { name: '轮回印记/残玉共鸣/心魔凝练', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed' ? Math.round(base * (((p.reinc ? (p.reinc.marks || 0) * 0.01 : 0) + ((p.jade || 0) * 0.015) + ((p.flags && p.flags.xinmoCleared) || 0) * 0.01 + ((p.benming && p.benming.lv) || 0) * 0.01)) * 100) / 100 : 0 },
+    ].filter(x => Math.abs(x.v) > 0.01);
+    return { final: st[key], src };
+  },
 };

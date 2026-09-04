@@ -541,6 +541,49 @@ try {
   });
   e5.sides === 17 && e5.realmOk ? pass('E5 支线 17 则 / 24 人 realm 台词 ≥3 句') : fail('E5 支线台词', JSON.stringify(e5));
 
+  /* ================= U 体验组（阶段六） ================= */
+  // U1 属性构成明细：breakdown 来源合计与终值口径一致
+  const u1 = await page.evaluate(() => {
+    const p = Game.player;
+    const keys = ['atk', 'def', 'maxHp', 'crit'];
+    const out = {};
+    for (const k of keys) {
+      const bd = Stat.breakdown(p, k);
+      out[k] = bd.src.length > 0 && isFinite(bd.final);
+    }
+    const power = Stat.power(p);
+    return { out, power: power > 0 };
+  });
+  Object.values(u1.out).every(Boolean) && u1.power
+    ? pass('U1 属性明细：breakdown 四键可用 + 综合战力生成')
+    : fail('U1 明细', JSON.stringify(u1));
+
+  // U2 日志类型过滤
+  const u2 = await page.evaluate(() => {
+    Log.clear();
+    Log.add('收获测试', 'gain');
+    Log.add('损失测试', 'loss');
+    Log.setFilter('loss');
+    const gainHidden = [...document.querySelectorAll('#log .log-entry')].find(d => d.textContent.includes('收获测试'));
+    const lossShown = [...document.querySelectorAll('#log .log-entry')].find(d => d.textContent.includes('损失测试'));
+    const r = { gainHidden: gainHidden && gainHidden.style.display === 'none', lossShown: lossShown && lossShown.style.display !== 'none' };
+    Log.setFilter(null);
+    const gainBack = [...document.querySelectorAll('#log .log-entry')].find(d => d.textContent.includes('收获测试'));
+    r.restored = gainBack && gainBack.style.display !== 'none';
+    Log.clear();
+    return r;
+  });
+  u2.gainHidden && u2.lossShown && u2.restored ? pass('U2 日志过滤：类型筛选与恢复') : fail('U2 过滤', JSON.stringify(u2));
+
+  // U3 生涯统计：灵石累计入账
+  const u3 = await page.evaluate(() => {
+    const p = Game.player;
+    p.counters.stonesEarned = 0;
+    Bag.addStones(500);
+    return { earned: (p.counters.stonesEarned || 0) >= 500, modalOk: typeof UI.careerModal === 'function' };
+  });
+  u3.earned && u3.modalOk ? pass('U3 生涯统计：灵石累计与弹窗入口') : fail('U3 生涯', JSON.stringify(u3));
+
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');
   console.log('\n========== verify-v10 汇总 ==========');

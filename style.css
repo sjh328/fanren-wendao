@@ -2308,3 +2308,10 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   border: 1px solid rgba(168, 134, 42, 0.4);
 }
 .bt-summary .tip-line { text-align: left; }
+
+/* ==================== v20 体验升维：日志过滤 / 属性明细 / 生涯 ==================== */
+.log-filters { display: inline-flex; gap: 4px; margin-right: 6px; }
+.log-filters .log-tool { opacity: 0.65; padding: 1px 7px; min-height: 0; font-size: 12px; }
+.log-filters .log-tool.on { opacity: 1; color: var(--gold-bright); border-color: var(--gold); background: var(--gold-soft); }
+.stat-detail { color: var(--gold-bright); }
+.career-row { display: flex; justify-content: space-between; padding: 3px 0; }

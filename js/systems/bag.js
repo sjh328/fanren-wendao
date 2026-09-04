@@ -26,7 +26,9 @@ const Bag = {
     // v18 道心烙印【霸/谋/借】：灵石获取加成
     if (amount > 0 && typeof DaoxinSys !== 'undefined') amount *= DaoxinSys.stoneMult(p);
     if (amount > 0 && typeof PersonalSys !== 'undefined' && PersonalSys.bonusOf) amount *= PersonalSys.bonusOf(p).stoneMult;   // v19 个人线财路
-    p.stones.low += Math.round(amount * (1 + Stat.compute(p).stonePct / 100));
+    const final = Math.round(amount * (1 + Stat.compute(p).stonePct / 100));
+    if (final > 0) p.counters.stonesEarned = (p.counters.stonesEarned || 0) + final;   // v20 生涯统计
+    p.stones.low += final;
     // 自动向上归并，便于展示
     while (p.stones.low >= 100) { const n = Math.floor(p.stones.low / 100); p.stones.mid += n; p.stones.low -= n * 100; }
     while (p.stones.mid >= 100) { const n = Math.floor(p.stones.mid / 100); p.stones.high += n; p.stones.mid -= n * 100; }

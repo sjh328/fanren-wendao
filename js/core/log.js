@@ -7,6 +7,8 @@ const Log = {
   entries: [],
   paused: false,     // v4：暂停自动滚动
   pinTimer: null,    // v4：金色置顶条计时器
+  filter: null,      // v20：类型过滤（null=全部）
+  TYPES: { info: '见闻', gain: '收获', loss: '损失', battle: '战斗', system: '系统', realm: '境界', event: '事件', warn: '警训', story: '剧情' },
   init() {
     this.el = document.getElementById('log');
     // v14：恢复上次折叠偏好（默认折叠，内容区主导）
@@ -28,6 +30,7 @@ const Log = {
     const div = document.createElement('div');
     div.className = `log-entry log-${type}`;
     div.innerHTML = `<span class="t-time">第${year}年</span>${text}`;
+    this.applyFilterTo(div, type);
     this.el.appendChild(div);
     this.entries.push(text);
     if (this.entries.length > 200) this.entries.splice(0, this.entries.length - 200);   // 限长：防长时游玩内存缓慢膨胀
@@ -37,6 +40,31 @@ const Log = {
     if (type === 'realm' || type === 'system') this.showPin(text);
     // v14：折叠态提示新日志
     this.pokeBadge();
+  },
+  /** v20 日志类型过滤：null=全部，否则仅显示该类型 */
+  setFilter(type) {
+    this.filter = type;
+    if (!this.el) return;
+    for (const div of this.el.children) {
+      const m = (div.className.match(/log-(\w+)\s*$/) || [])[1];   // 类名末段才是类型（首个是 log-entry）
+      this.applyFilterTo(div, m);
+    }
+    const head = document.querySelector('.log-filters');
+    if (head) {
+      for (const b of head.querySelectorAll('button')) b.classList.toggle('on', b.dataset.tf === (type || ''));
+    }
+    if (!this.paused) this.el.scrollTop = this.el.scrollHeight;
+  },
+  applyFilterTo(div, type) {
+    if (!this.filter) { div.style.display = ''; return; }
+    const groups = {
+      battle: ['battle'],
+      gain: ['gain', 'realm'],
+      loss: ['loss', 'warn'],
+      story: ['story', 'event'],
+      system: ['system', 'info'],
+    };
+    div.style.display = (groups[this.filter] || [this.filter]).includes(type) ? '' : 'none';
   },
   /** v4：金色日志置顶高亮 3 秒（悬浮于日志区顶部，不挤占布局） */
   showPin(html) {

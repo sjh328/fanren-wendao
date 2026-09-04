@@ -3731,6 +3731,8 @@ const Log = {
   entries: [],
   paused: false,     // v4：暂停自动滚动
   pinTimer: null,    // v4：金色置顶条计时器
+  filter: null,      // v20：类型过滤（null=全部）
+  TYPES: { info: '见闻', gain: '收获', loss: '损失', battle: '战斗', system: '系统', realm: '境界', event: '事件', warn: '警训', story: '剧情' },
   init() {
     this.el = document.getElementById('log');
     // v14：恢复上次折叠偏好（默认折叠，内容区主导）
@@ -3752,6 +3754,7 @@ const Log = {
     const div = document.createElement('div');
     div.className = `log-entry log-${type}`;
     div.innerHTML = `<span class="t-time">第${year}年</span>${text}`;
+    this.applyFilterTo(div, type);
     this.el.appendChild(div);
     this.entries.push(text);
     if (this.entries.length > 200) this.entries.splice(0, this.entries.length - 200);   // 限长：防长时游玩内存缓慢膨胀
@@ -3761,6 +3764,31 @@ const Log = {
     if (type === 'realm' || type === 'system') this.showPin(text);
     // v14：折叠态提示新日志
     this.pokeBadge();
+  },
+  /** v20 日志类型过滤：null=全部，否则仅显示该类型 */
+  setFilter(type) {
+    this.filter = type;
+    if (!this.el) return;
+    for (const div of this.el.children) {
+      const m = (div.className.match(/log-(\w+)\s*$/) || [])[1];   // 类名末段才是类型（首个是 log-entry）
+      this.applyFilterTo(div, m);
+    }
+    const head = document.querySelector('.log-filters');
+    if (head) {
+      for (const b of head.querySelectorAll('button')) b.classList.toggle('on', b.dataset.tf === (type || ''));
+    }
+    if (!this.paused) this.el.scrollTop = this.el.scrollHeight;
+  },
+  applyFilterTo(div, type) {
+    if (!this.filter) { div.style.display = ''; return; }
+    const groups = {
+      battle: ['battle'],
+      gain: ['gain', 'realm'],
+      loss: ['loss', 'warn'],
+      story: ['story', 'event'],
+      system: ['system', 'info'],
+    };
+    div.style.display = (groups[this.filter] || [this.filter]).includes(type) ? '' : 'none';
   },
   /** v4：金色日志置顶高亮 3 秒（悬浮于日志区顶部，不挤占布局） */
   showPin(html) {
@@ -4307,6 +4335,45 @@ const Stat = {
   afterDef(atk, def) { return atk * (1 - def / (def + (GameData.BALANCE.COMBAT.AFTER_DEF_DENOM || 140))); },
   /** v20 丹毒上限单源化（原公式散落 5 处硬编码）：60 + 体魄×8，炼虚「合道」+20 */
   poisonCap(p) { return 60 + ((p.attrs && p.attrs.body) || 0) * 8 + (p.realmIdx >= 5 ? 20 : 0); },
+  /** v20 综合战力：攻防血三维加权，用于自我衡量/地图校准/宿敌对比 */
+  power(p) {
+    const st = this.compute(p);
+    return Math.round(st.atk * 2 + st.def * 1.5 + st.maxHp * 0.3 + st.speed * 1 + st.crit * 2 + st.dodge * 1.5 + st.block * 0.5);
+  },
+  /** v20 属性明细：列出某项属性的构成来源（逐行标注） */
+  breakdown(p, key) {
+    const st = this.compute(p);
+    const gf = this.gongfaBonus(p);
+    const eq = this.equipBonus(p);
+    const sb = this.sectBonus(p);
+    const dao = (typeof DaoSys !== 'undefined' && DaoSys.bonus) ? DaoSys.bonus(p) : {};
+    const beastPass = (typeof BeastSys !== 'undefined' && BeastSys.passive) ? BeastSys.passive(p) : {};
+    const dx = (typeof DaoxinSys !== 'undefined' && DaoxinSys.bonusOf) ? DaoxinSys.bonusOf(p) : {};
+    const pl = (typeof PersonalSys !== 'undefined' && PersonalSys.bonusOf) ? PersonalSys.bonusOf(p) : {};
+    const pctOf = (obj, k) => obj[k] || 0;
+    const base = {
+      atk: 8 + p.attrs.gen * 2 + (p.realmIdx * 4 + p.layer) * 3,
+      def: 4 + p.attrs.body * 1.2 + (p.realmIdx * 4 + p.layer) * 1.8,
+      maxHp: 90 + p.attrs.body * 15 + Math.pow(p.realmIdx * 4 + p.layer, 1.6) * 6,
+      maxMp: 40 + this.compOf(p) * 8 + (p.realmIdx * 4 + p.layer) * 4,
+      speed: 8 + (p.attrs.gen + p.attrs.body) / 2 + (p.realmIdx * 4 + p.layer) * 0.8,
+      crit: 5 + (p.attrs.luck + (eq.luck || 0)) * 0.6,
+      dodge: 0, block: 8, cultPct: 0, stonePct: 0, luck: p.attrs.luck, pillPct: 0,
+    }[key] || 0;
+    const src = [
+      { name: '基础（先天+境界）', v: base },
+      { name: '功法' + (this.activeDaoYun(p).length ? '（含道韵/奥义）' : ''), v: key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' ? pctOf(gf, key) : key.endsWith('Pct') || key === 'maxHp' || key === 'maxMp' ? (key === 'maxHp' ? pctOf(gf, 'hpPct') : key === 'maxMp' ? pctOf(gf, 'mpPct') : pctOf(gf, key + 'Pct')) : pctOf(gf, key) },
+      { name: '装备（强化/词缀/套装）', v: key === 'maxHp' ? (eq.hp || 0) + pctOf(eq, 'hpPct') : key === 'maxMp' ? (eq.mp || 0) + pctOf(eq, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'luck' ? pctOf(eq, key) : pctOf(eq, key === 'speed' ? 'spd' : key === 'atk' || key === 'def' ? key : key + 'Pct') },
+      { name: '宗门与职位', v: key === 'atk' || key === 'def' ? pctOf(sb, key + 'Pct') : key === 'crit' || key === 'dodge' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' || key === 'luck' ? pctOf(sb, key) : 0 },
+      { name: '大道与道境', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' ? pctOf(dao, key === 'maxHp' ? 'hpPct' : key === 'maxMp' ? 'mpPct' : key + 'Pct') : 0 },
+      { name: '灵兽（含护持）', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(beastPass, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(beastPass, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
+      { name: '道心烙印', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(dx, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(dx, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
+      { name: '个人线', v: key === 'crit' || key === 'dodge' || key === 'pillPct' ? pctOf(pl, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(pl, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
+      { name: '洞府（聚灵/藏宝）', v: key === 'cultPct' ? ((p.cave && p.cave.lv) || 0) * 4 : key === 'stonePct' ? (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3) : 0 },
+      { name: '轮回印记/残玉共鸣/心魔凝练', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed' ? Math.round(base * (((p.reinc ? (p.reinc.marks || 0) * 0.01 : 0) + ((p.jade || 0) * 0.015) + ((p.flags && p.flags.xinmoCleared) || 0) * 0.01 + ((p.benming && p.benming.lv) || 0) * 0.01)) * 100) / 100 : 0 },
+    ].filter(x => Math.abs(x.v) > 0.01);
+    return { final: st[key], src };
+  },
 };
 
 /* ======================================================================
@@ -4763,7 +4830,9 @@ const Bag = {
     // v18 道心烙印【霸/谋/借】：灵石获取加成
     if (amount > 0 && typeof DaoxinSys !== 'undefined') amount *= DaoxinSys.stoneMult(p);
     if (amount > 0 && typeof PersonalSys !== 'undefined' && PersonalSys.bonusOf) amount *= PersonalSys.bonusOf(p).stoneMult;   // v19 个人线财路
-    p.stones.low += Math.round(amount * (1 + Stat.compute(p).stonePct / 100));
+    const final = Math.round(amount * (1 + Stat.compute(p).stonePct / 100));
+    if (final > 0) p.counters.stonesEarned = (p.counters.stonesEarned || 0) + final;   // v20 生涯统计
+    p.stones.low += final;
     // 自动向上归并，便于展示
     while (p.stones.low >= 100) { const n = Math.floor(p.stones.low / 100); p.stones.mid += n; p.stones.low -= n * 100; }
     while (p.stones.mid >= 100) { const n = Math.floor(p.stones.mid / 100); p.stones.high += n; p.stones.mid -= n * 100; }
@@ -12352,13 +12421,15 @@ const UI = {
       <div class="attr-mini">
         <span>根骨 <b>${p.attrs.gen}</b></span><span>悟性 <b>${p.attrs.comp}</b></span><span>福缘 <b>${p.attrs.luck}</b></span><span>体魄 <b>${p.attrs.body}</b></span>
       </div>
+      <div class="stat-line"><span>气血构成</span><b class="stat-detail" data-stat="maxHp" title="点击查看构成" style="cursor:pointer">🔍 明细</b></div>
       <div class="stat-grid">
-        <div class="stat-line"><span>攻击</span><b>${st.atk}</b></div>
-        <div class="stat-line"><span>防御</span><b>${st.def}</b></div>
-        <div class="stat-line"><span>身法</span><b>${st.speed}</b></div>
-        <div class="stat-line"><span>暴击</span><b>${st.crit.toFixed(0)}%</b></div>
-        <div class="stat-line"><span>闪避</span><b>${st.dodge.toFixed(0)}%</b></div>
-        <div class="stat-line"><span>格挡</span><b>${st.block.toFixed(0)}%</b></div>
+        <div class="stat-line"><span>攻击</span><b class="stat-detail" data-stat="atk" title="点击查看构成" style="cursor:pointer">${st.atk} 🔍</b></div>
+        <div class="stat-line"><span>防御</span><b class="stat-detail" data-stat="def" title="点击查看构成" style="cursor:pointer">${st.def} 🔍</b></div>
+        <div class="stat-line"><span>身法</span><b class="stat-detail" data-stat="speed" title="点击查看构成" style="cursor:pointer">${st.speed} 🔍</b></div>
+        <div class="stat-line"><span>暴击</span><b class="stat-detail" data-stat="crit" title="点击查看构成" style="cursor:pointer">${st.crit.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>闪避</span><b class="stat-detail" data-stat="dodge" title="点击查看构成" style="cursor:pointer">${st.dodge.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>格挡</span><b class="stat-detail" data-stat="block" title="点击查看构成" style="cursor:pointer">${st.block.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>战力</span><b class="hl" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</b></div>
       </div>
       <div class="stone-row"><span>下品灵石</span><b><span class="num-anim" data-nk="stones.low" data-fmt="fmt" data-nv="${p.stones.low}">${Utils.fmtNum(p.stones.low)}</span></b></div>
       ${p.stones.mid ? `<div class="stone-row"><span>中品灵石</span><b><span class="num-anim" data-nk="stones.mid" data-fmt="fmt" data-nv="${p.stones.mid}">${Utils.fmtNum(p.stones.mid)}</span></b></div>` : ''}
@@ -13322,6 +13393,45 @@ const UI = {
       <div class="card"><div class="card-title">✦ 道韵协同（双功法修至三层以上，共鸣生韵）</div>${dyRows}</div>`;
   },
 
+  /** v20 属性构成明细弹窗（.stat-detail 点击触发，Game 全局委托捕获） */
+  statDetail(statKey) {
+    const p = Game.player;
+    if (!p) return;
+    const NAMES = { atk: '攻击', def: '防御', maxHp: '气血上限', maxMp: '灵力上限', speed: '身法', crit: '暴击', dodge: '闪避', block: '格挡', cultPct: '修炼效率', stonePct: '灵石获取' };
+    const bd = Stat.breakdown(p, statKey);
+    const rows = bd.src.map(x => `<div class="stat-line"><span>${x.name}</span><b>${x.v > 0 && !['atk', 'def', 'maxHp', 'maxMp', 'speed'].includes(statKey) ? '+' : ''}${Math.round(x.v * 10) / 10}</b></div>`).join('');
+    UI.popup({
+      title: `构成 · ${NAMES[statKey] || statKey}`,
+      html: `${rows || '<div class="tip-line">暂无加成来源。</div>'}
+        <div class="stat-line est-final" style="margin-top:6px"><span>当前合计</span><b class="hl">${['crit', 'dodge', 'block'].includes(statKey) ? bd.final.toFixed(1) + '%' : Utils.fmtNum(bd.final)}</b></div>
+        <div class="tip-line">· 综合战力：⚔ ${Utils.fmtNum(Stat.power(p))}（攻防血速暴闪格加权）</div>`,
+      options: [{ text: '收 起', value: true, primary: true }],
+    });
+  },
+
+  /* ---------- v20 生涯统计 ---------- */
+  careerBody() {
+    const p = Game.player;
+    const c = p.counters || {};
+    const stones = c.stonesEarned || 0;
+    const days = Math.floor(p.day || 0);
+    const wins = c.wins || 0, battles = c.battles || 0;
+    const winRate = battles ? Math.round(wins / battles * 100) : 0;
+    const rows = [
+      ['道途历时', `${days} 日（第${Math.floor(days / 365) + 1}年）`],
+      ['战斗', `${battles} 战 ${wins} 胜（胜率 ${winRate}%）· 精英 ${c.killsElite || 0} · 秘境守关 ${c.bossKills || 0}`],
+      ['历练', `探索 ${c.explores || 0} 次 · 最深秘境第 ${c.maxDepth || 0} 层`],
+      ['百艺', `炼丹 ${c.craftsOk || 0}/${c.crafts || 0} 成 · 服丹 ${c.pills || 0} · 学艺 ${c.learns || 0}`],
+      ['红尘', `抉择 ${c.dilemmas || 0} 次 · 结交 ${c.befriends || 0} 人 · 切磋 ${c.spars || 0} 场`],
+      ['斗兽', `${c.arenaWins || 0} 场胜`],
+      ['碎片', `累计收取上古法宝碎片 ${c.gupianGot || 0} 枚`],
+    ];
+    return rows.map(([k, v]) => `<div class="stat-line"><span>${k}</span><b>${v}</b></div>`).join('');
+  },
+  careerModal() {
+    UI.popup({ title: '📜 生涯统计', html: this.careerBody(), options: [{ text: '合 上', value: true, primary: true }] });
+  },
+
   /* ---------- 右侧背包 ---------- */
   renderBag() {
     const p = Game.player;
@@ -13728,6 +13838,15 @@ const Game = {
       const dao = document.getElementById('dao-modal');
       if (dao && !dao.classList.contains('hidden')) dao.classList.add('hidden');
     });
+    // v20 页签快捷键：Q 修炼 / W 问道 / E 洞府 / R 游历 / T 江湖 / A 坊市 / S 宗门 / D 功法
+    document.addEventListener('keydown', (e) => {
+      if (Story.active() || Battle.active || UI._popupResolve) return;
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
+      const map = { q: 'cultivate', w: 'quest', e: 'cave', r: 'map', t: 'jianghu', a: 'shop', s: 'sect', d: 'gongfa' };
+      const tab = map[e.key.toLowerCase()];
+      if (tab && !Game.actions['act-tab']) return;
+      if (tab) { const lock = Guide.tabLocked(tab); if (!lock) { Game.actions['act-tab']({ tab }); } }
+    });
     // 关页前自动存档
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden' && Game.player && !Game.player.dead) Save.autoSave(true);
@@ -13926,6 +14045,9 @@ const Game = {
     /* --- v4 日志工具 / 一键减负 --- */
     'log-pause': () => Log.togglePause(),
     'log-clear': () => Log.clear(),
+    'log-filter': (d) => Log.setFilter(d.tf || null),   // v20 类型过滤
+    'stat-detail': (d, el) => UI.statDetail(el.dataset.stat),   // v20 属性构成明细
+    'act-career': () => UI.careerModal(),   // v20 生涯统计
     /* --- v14 日志折叠 --- */
     'log-toggle': () => Log.toggleCollapse(),
     'act-sell-common': () => ShopSys.sellCommon(),
