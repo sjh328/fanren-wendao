@@ -305,9 +305,13 @@ const Game = {
     'act-codex': () => UI.achvModal(),
     'act-figures': () => QuestSys.openArchive('figures'),
     'act-battle-review': () => {
-      const logs = Battle.lastLogs || [];
-      if (!logs.length) { UI.toast('尚无战斗记录——先去打一场'); return; }
-      UI.popup({ title: '⚔ 战斗回顾 · 上一场', html: `<div style="max-height:52vh;overflow:auto">${logs.map(l => `<div class="tip-line">· ${l}</div>`).join('')}</div>`, options: [{ text: '合 上', value: true, primary: true }] });
+      const hist = Battle.history || [];
+      if (!hist.length) { UI.toast('尚无战斗记录——先去打一场'); return; }
+      // v23：最近三场切换查看（最新一场默认展开）
+      const sec = (h, i, open) => `<details class="fold" ${open ? 'open' : ''}>
+        <summary>第${['一', '二', '三'][i] || i + 1}场 · ${Utils.esc(h.foe || '?')} · ${h.won ? '胜' : '负/遁'}</summary>
+        <div style="max-height:38vh;overflow:auto">${(h.logs || []).map(l => `<div class="tip-line">· ${typeof l === 'string' ? l : l.html}</div>`).join('') || '<div class="tip-line">（无记录）</div>'}</div></details>`;
+      UI.popup({ title: '⚔ 战斗回顾 · 最近三场', html: hist.map((h, i) => sec(h, i, i === 0)).join(''), options: [{ text: '合 上', value: true, primary: true }] });
     },
     'codex-tab': (d) => { UI._achvTab = d.t; if (!UI.el['popup-modal'].classList.contains('hidden')) UI.el['popup-body'].innerHTML = UI.achvBody(); },
     'act-auto-open': () => AutoCult.open(),
@@ -322,6 +326,8 @@ const Game = {
     'act-ascend': () => Cultivate.ascend(),
     /* --- 游历 --- */
     'act-explore': (d) => Explore.go(d.map),
+    'act-explore-multi': (d) => Explore.goMulti(d.map, 5),   // v23 连续探索
+    'act-buy-multi': (d) => ShopSys.buyMulti(d.item, 5),   // v23 批量购买
     /* --- 坊市 --- */
     'act-buy': (d) => ShopSys.buy(d.item),
     'act-sell': (d) => ShopSys.sell(d.item, d.qty === 'all'),

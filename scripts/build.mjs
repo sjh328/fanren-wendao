@@ -36,6 +36,28 @@ try {
   process.exit(1);
 }
 
+// ---- 3.5) v23 CSS 体检：花括号平衡 + 注释闭合（防 v19 式"截断坏块吞规则"复发） ----
+function checkCss() {
+  const cssPath = join(ROOT, 'style.css');
+  if (!existsSync(cssPath)) return;
+  const css = readFileSync(cssPath, 'utf8');
+  const openers = (css.match(/\/\*/g) || []).length;
+  const closers = (css.match(/\*\//g) || []).length;
+  if (openers !== closers) {
+    console.error(`✗ CSS 体检失败：注释不闭合（/* ×${openers} / */ ×${closers}）——拒绝构建`);
+    process.exit(1);
+  }
+  const noComment = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/url\([^)]*\)/g, 'url()');
+  const ob = (noComment.match(/{/g) || []).length;
+  const cb = (noComment.match(/}/g) || []).length;
+  if (ob !== cb) {
+    console.error(`✗ CSS 体检失败：花括号不平衡（{ ×${ob} / } ×${cb}）——拒绝构建`);
+    process.exit(1);
+  }
+  console.log(`✅ CSS 体检通过（注释闭合 · 花括号 { ×${ob} } 平衡）`);
+}
+checkCss();
+
 // ---- 4) 备份 + 覆盖 ----
 if (existsSync(OUT)) {
   mkdirSync(join(ROOT, 'attic'), { recursive: true });

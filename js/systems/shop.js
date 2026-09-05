@@ -36,6 +36,23 @@ const ShopSys = {
     Log.add(`你购得 <b>${def.name}</b>，花费 ${Utils.fmtNum(cost)} 下品灵石。`, 'info');
     Game.afterAction();
   },
+  /** v23 批量购买：逐次按当前市价扣款，灵石不足自动停（功法仍宜单购，此处仅兜底） */
+  buyMulti(itemId, times = 5) {
+    const p = Game.player;
+    const def = GameData.ITEMS[itemId];
+    if (!def) return;
+    let bought = 0, spent = 0;
+    for (let i = 0; i < times; i++) {
+      if (def.type === 'gongfa' && (p.gongfa[itemId] || p.bag[itemId])) break;
+      const cost = this.price(itemId);
+      if (!Bag.spendStones(cost)) break;
+      Bag.addItem(itemId, 1);
+      bought++; spent += cost;
+    }
+    if (!bought) { UI.toast('灵石不足——一件也未买成'); return; }
+    Log.add(`你连买了 ${bought} 件<b>${def.name}</b>，共花费 ${Utils.fmtNum(spent)} 下品灵石。${bought < times ? '（灵石不济，止步于此）' : ''}`, 'info');
+    Game.afterAction();
+  },
   sell(itemId, all = false) {
     const qty = all ? Bag.count(itemId) : 1;
     if (qty <= 0) return;

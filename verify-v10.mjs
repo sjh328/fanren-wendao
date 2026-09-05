@@ -22,7 +22,7 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
 let browser;
 try {
-  browser = await puppeteer.launch({ headless: true, executablePath: CHROME, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'] });
+  browser = await puppeteer.launch({ headless: true, protocolTimeout: 300000, executablePath: CHROME, args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'] });
   const page = await browser.newPage();
   page.on('console', msg => { if (msg.type() === 'error' && !/net::ERR_/.test(msg.text())) consoleErrors.push(msg.text()); });   // v21: 网络层资源抖动不计入
   page.on('pageerror', err => consoleErrors.push(err.message));
@@ -907,7 +907,7 @@ try {
     Game.player.bounties = { day: 0, list: [{ name: '测试悬赏', type: 'kill', target: 'm_lingcao', need: 1, progress: 1, desc: 'x' }] };
     UI.renderTabs();
     const shopDot = !!document.querySelector('.tab-btn[data-tab="shop"] .dot');
-    Game.player.cave = { lv: 1, plots: [{ seed: 's_lingcao', crop: 'm_lingcao', days: 1, plantedDay: Math.floor(Game.player.day) - 5 }], builds: {} };
+    Game.player.cave = { lv: 1, plots: [{ seed: 'seed_lingcao', crop: 'm_lingcao', days: 1, plantedDay: Math.floor(Game.player.day) - 5 }], builds: {} };
     UI.renderTabs();
     const caveDot = !!document.querySelector('.tab-btn[data-tab="cave"] .dot');
     Game.player.bounties = { day: 0, list: [] };
@@ -946,7 +946,7 @@ try {
     const p = Game.player;
     const today = Math.floor(p.day);
     p.signDay = -1;
-    p.cave = { lv: 1, plots: [{ seed: 's_lingcao', crop: 'm_lingcao', days: 1, plantedDay: today - 3 }], builds: {} };
+    p.cave = { lv: 1, plots: [{ seed: 'seed_lingcao', crop: 'm_lingcao', days: 1, plantedDay: today - 3 }], builds: {} };
     p.bounties = { day: Math.floor(p.day), list: [{ name: '测试悬赏', type: 'kill', target: 'm_lingcao', need: 1, progress: 1, desc: 'x', chain: 1 }] };   // 榜单日期=当天，避免 stateOf 日界再生
     Guide.dailyAll();
     await new Promise(r => setTimeout(r, 300));
@@ -1013,7 +1013,7 @@ try {
     const tip = (document.querySelector('.guide-box') || {}).innerText || '';
     delete p.bag.w_tiejian;
     UI.renderStatus();
-    return { ok: tip.includes('新知') };
+    return { ok: tip.includes('新知'), tip: tip.slice(0, 120) };
   });
   w11.ok ? pass('W11 首遇新知提示（法宝未佩戴）') : fail('W11 新知', JSON.stringify(w11));
 
@@ -1089,6 +1089,154 @@ try {
     tabsStatic: getComputedStyle(document.getElementById('tabs')).position !== 'fixed',
   }));
   w15.drawerHidden && w15.tabsStatic ? pass('W15 桌面布局回归（抽屉按钮隐藏/导航复位）') : fail('W15 桌面回归', JSON.stringify(w15));
+
+
+  /* ================= Y 组 · v23「顺手」：批量购买/连续探索/补种/奇市提醒/成就排序/迷你条/三场回顾/CSS体检 ================= */
+  // X1 万宝阁批量购买 ×5
+  const y1 = await page.evaluate(async () => {
+    const p = Game.player;
+    const before = p.bag.pill_juqi || 0;
+    const stones0 = JSON.parse(JSON.stringify(p.stones));
+    p.stones.low = 100000;
+    ShopSys.buyMulti('pill_juqi', 5);
+    const got = (p.bag.pill_juqi || 0) - before;
+    p.stones = { low: 0, mid: 0, high: 0 };   // 三档全空：一件也买不成
+    ShopSys.buyMulti('pill_juqi', 5);
+    const got2 = (p.bag.pill_juqi || 0) - before - got;
+    p.stones = stones0;
+    UI.renderAll();
+    return { got, got2 };
+  });
+  y1.got === 5 && y1.got2 === 0 ? pass('Y1 批量购买×5（足额买满/灵石不足自动停）') : fail('Y1 批量购买', JSON.stringify(y1));
+
+  // X2 连续探索 ×5（遇战斗/剧情/弹窗自动暂停）
+  const y2 = await page.evaluate(async () => {
+    const p = Game.player;
+    const d0 = Math.floor(p.day);
+    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    Explore.goMulti('village', 5);   // 不 await：红尘劫等弹窗会在 go 内部等待玩家抉择
+    let stable = 0, last = -1;
+    for (let i = 0; i < 80; i++) {
+      await sleep(250);
+      if (UI._popupResolve) { const bs = document.querySelectorAll('#popup-btns button'); if (bs.length) bs[bs.length - 1].click(); stable = 0; continue; }
+      if (Battle.active || p.dead) break;
+      const cur = Math.floor(p.day);
+      if (cur - d0 >= 10) break;
+      if (cur === last) { stable++; if (stable >= 8) break; } else { stable = 0; last = cur; }
+    }
+    const delta = Math.floor(p.day) - d0;
+    if (UI._popupResolve) UI.popupChoose(-1);
+    if (Battle.active) { Battle.active.over = true; document.getElementById('battle-modal').classList.add('hidden'); Battle.active = null; }
+    if (p.hp <= 0) p.hp = Math.round(Stat.compute(p).maxHp * 0.5);
+    UI.renderAll();
+    return { delta, even: delta % 2 === 0 };
+  });
+  y2.delta >= 2 && y2.delta <= 10 && y2.even
+    ? pass(`X2 连续探索×5 自动暂停（推进 ${y2.delta} 日，遇战斗/剧情即停）`) : fail('Y2 连续探索', JSON.stringify(y2));
+
+  // X3 一键行权·自动补种
+  const y3 = await page.evaluate(async () => {
+    const p = Game.player;
+    const today = Math.floor(p.day);
+    p.signDay = today; p.rushDay = today;   // 跳过求签/聚灵，专测补种
+    p.cave = { lv: 1, plots: [null, null, null], builds: {} };
+    p.bag.seed_lingcao = 2;
+    p.bounties = { day: today, list: [] };
+    Guide.dailyAll();
+    await new Promise(r => setTimeout(r, 300));
+    const txt = document.getElementById('popup-body').innerText || '';
+    const planted = !!(p.cave.plots[0] && p.cave.plots[0].seed === 'seed_lingcao' && p.cave.plots[1] && !p.cave.plots[2]);
+    const left = p.bag.seed_lingcao || 0;
+    UI.popupChoose(-1);
+    p.cave = null;
+    UI.renderAll();
+    return { planted, left, hasTxt: txt.includes('自动补种') };
+  });
+  y3.planted && y3.hasTxt && y3.left === 0 ? pass('Y3 一键行权自动补种（两田用尽两枚种子）') : fail('Y3 自动补种', JSON.stringify(y3));
+
+  // X4 奇市提醒（黑市开市/拍卖将止）进当前建议
+  const y4 = await page.evaluate(async () => {
+    const p = Game.player;
+    const day0 = p.day;
+    const quest0 = JSON.parse(JSON.stringify(p.quest || {}));
+    p.signDay = Math.floor(day0 / 30) * 30 + 1;    // 抵掉黄历提示
+    p.day = Math.floor(day0 / 30) * 30 + 1;        // 月初一日 → 黑市开市 + 拍卖将止并存
+    p.auction = { item: 'w_sanqing', base: 1000, until: Math.floor(p.day) + 5 };
+    UI.renderStatus();
+    const tip = (document.querySelector('.guide-box') || {}).innerText || '';
+    p.day = day0; p.quest = quest0;
+    delete p.auction;
+    UI.renderStatus();
+    return { black: tip.includes('黑市'), auction: tip.includes('拍卖行'), tip: tip.slice(0, 100) };
+  });
+  y4.black && y4.auction ? pass('Y4 奇市提醒进当前建议（黑市/拍卖）') : fail('Y4 奇市提醒', JSON.stringify(y4));
+
+  // X5 成就页排序：各分类内未完成在前
+  const y5 = await page.evaluate(() => {
+    const div = document.createElement('div');
+    div.innerHTML = UI.achvBody();
+    let ok = true, sections = 0;
+    const seq = [];
+    for (const el of div.querySelectorAll('.shop-section-title, .achv-row')) {
+      seq.push(el.className.includes('shop-section-title') ? 'S' : (el.className.includes(' achv-row on') || el.className.endsWith('achv-row on') ? 'on' : 'off'));
+    }
+    let rows = [];
+    const flush = () => {
+      if (rows.length < 2) { rows = []; return; }
+      sections++;
+      const offs = rows.map((r, i) => r === 'off' ? i : -1).filter(i => i >= 0);
+      const ons = rows.map((r, i) => r === 'on' ? i : -1).filter(i => i >= 0);
+      if (offs.length && ons.length && Math.max(...offs) > Math.min(...ons)) ok = false;
+      rows = [];
+    };
+    for (const kind of seq) { if (kind === 'S') { flush(); continue; } rows.push(kind); }
+    flush();
+    return { ok, sections };
+  });
+  y5.ok && y5.sections >= 2 ? pass(`X5 成就页未完成优先排序（${y5.sections} 个分类）`) : fail('Y5 成就排序', JSON.stringify(y5));
+
+  // X6 移动端顶栏迷你条（元素渲染 + 桌面隐藏）
+  const y6 = await page.evaluate(() => {
+    UI.renderTop();
+    const wrap = document.querySelector('.m-mini-bars');
+    const hp = document.querySelector('.mini-bar.hp i');
+    const exp = document.querySelector('.mini-bar.exp i');
+    return {
+      exists: !!wrap,
+      hpW: hp ? hp.style.width : '',
+      expW: exp ? exp.style.width : '',
+      desktopHidden: getComputedStyle(wrap).display === 'none',
+    };
+  });
+  y6.exists && y6.hpW && y6.expW && y6.desktopHidden
+    ? pass(`X6 顶栏迷你气血/修为条（桌面隐藏，hp ${y6.hpW}）`) : fail('Y6 迷你条', JSON.stringify(y6));
+
+  // X7 战斗回顾最近三场
+  const y7 = await page.evaluate(async () => {
+    Battle.history = [
+      { foe: '甲妖', won: true, logs: [{ html: '甲场记录' }] },
+      { foe: '乙妖', won: false, logs: [{ html: '乙场记录' }] },
+      { foe: '丙妖', won: true, logs: [{ html: '丙场记录' }] },
+    ];
+    Game.actions['act-battle-review']();
+    await new Promise(r => setTimeout(r, 150));
+    const body = document.getElementById('popup-body');
+    const txt = body.innerText;
+    const details = body.querySelectorAll('details');
+    const firstOpen = details[0] && details[0].open;
+    UI.popupChoose(-1);
+    Battle.history = [];
+    return { has3: details.length === 3, names: txt.includes('甲妖') && txt.includes('乙妖') && txt.includes('丙妖'), verdict: txt.includes('胜') && txt.includes('负'), firstOpen };
+  });
+  y7.has3 && y7.names && y7.verdict && y7.firstOpen ? pass('Y7 战斗回顾最近三场（可折叠，最新展开）') : fail('Y7 三场回顾', JSON.stringify(y7));
+
+  // X8 构建期 CSS 体检已接线 + 样式表当前平衡
+  const cssSrc = fs.readFileSync('style.css', 'utf8');
+  const noComment = cssSrc.replace(/\/\*[\s\S]*?\*\//g, '');
+  const ob = (noComment.match(/{/g) || []).length;
+  const cb = (noComment.match(/}/g) || []).length;
+  const buildWired = fs.readFileSync('scripts/build.mjs', 'utf8').includes('CSS 体检');
+  ob === cb && buildWired ? pass(`X8 构建期 CSS 体检（括号平衡 ×${ob}，build.mjs 已接线）`) : fail('Y8 CSS 体检', `ob=${ob} cb=${cb} wired=${buildWired}`);
 
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');

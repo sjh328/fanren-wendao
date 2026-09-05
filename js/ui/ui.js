@@ -85,8 +85,13 @@ const UI = {
       + (p.stones.high ? ` <i>·</i> ${stone('stones.high', p.stones.high)}` : '') + `</span>`;
     const chIdx = QuestSys.currentChapterIdx(p);
     const chapter = `<span class="res-chip res-chapter" title="主线进度 · 问道九章">卷 ${chIdx + 1} / ${QuestSys.CHAPTERS.length} 章</span>`;
+    const needTop = GameData.layerNeed(p.realmIdx, p.layer);
+    // v23 移动端迷你条：抽屉收起也能一眼看血线/修为（桌面隐藏）
+    const miniBars = `<span class="m-mini-bars" title="气血 / 修为">
+      <span class="mini-bar hp"><i style="width:${Utils.clamp(p.hp / st.maxHp * 100, 0, 100)}%"></i></span>
+      <span class="mini-bar exp"><i style="width:${Utils.clamp(p.exp / needTop * 100, 0, 100)}%"></i></span></span>`;
     this.setHTML(this.el['top-info'], `
-      ${chapter}${stoneChip}
+      ${chapter}${stoneChip}${miniBars}
       <span class="res-chip" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</span>
       <span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${p.age}岁 / 寿元${st.lifespan}</span>
       <span class="top-meta2"><span class="save-dot"></span>已自动存档</span>`);
@@ -600,7 +605,10 @@ const UI = {
         <div class="card-title">${m.name}${magic}<span class="tag ${diff.cls}">${diff.text}</span></div>
         <div class="card-desc">${m.desc}${magic ? '<br><span class="neg">魔气狂化：妖魔更强，所获亦丰。</span>' : ''}</div>
         ${wxLine}
-        <div class="action-row"><button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button></div>
+        <div class="action-row">
+          <button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button>
+          <button class="btn" data-action="act-explore-multi" data-map="${m.id}" title="至多五次历练，遇战斗/剧情自动暂停">连续探索 ×5</button>
+        </div>
       </div>`;
       }).join(''),
       realm: () => this.renderDungeonSection(),
@@ -816,6 +824,7 @@ const UI = {
           <div class="gf-actions">
             <span class="price ${afford ? '' : 'lack'}">${Utils.fmtNum(price)}灵石${mkt}</span>
             <button class="btn btn-sm" data-action="act-buy" data-item="${r.item}" ${known ? 'disabled' : ''}>购买</button>
+            ${['pill', 'material', 'seed'].includes(def.type) ? `<button class="btn btn-sm" data-action="act-buy-multi" data-item="${r.item}" title="连买五件，灵石不足自动停">×5</button>` : ''}
           </div>
         </div>`;
       }).join('');
@@ -1508,7 +1517,8 @@ const UI = {
     let body = '';
     if (this._achvTab === 'achv') {
       for (const [cat, label] of Object.entries(Achieve.CATS)) {
-        const defs = Achieve.DEFS.filter(d => d.cat === cat);
+        // v23：未完成（带进度）在前、已完成在后
+        const defs = Achieve.DEFS.filter(d => d.cat === cat).sort((a, b) => (got[a.id] ? 1 : 0) - (got[b.id] ? 1 : 0));
         const rows = defs.map(d => {
           const on = !!got[d.id];
           const prog = (!on && d.prog) ? ` <span style="color:var(--text-faint)">${d.prog(Game.player)}</span>` : '';

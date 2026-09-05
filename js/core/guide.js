@@ -63,6 +63,13 @@ LOCKS: {
     const ripe = ((p.cave && p.cave.plots) || []).filter(pl => pl && pl.seed && (Math.floor(p.day || 0) - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
     if (ripe > 0) t.push({ text: `灵田有 <b>${ripe}</b> 块作物已然成熟——请及时采收`, go: 'cave:farm' });
     if ((p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need)) t.push({ text: '悬赏目标已然达成——可去坊市领取赏格', go: 'shop:bounty' });   // v21: 领后置空条目判空
+    // v23 奇市提醒：黑市开市 / 拍卖将止，错过不再无感
+    if (BlackSys.isOpen(p)) t.push({ text: `暗巷黑市开市中（余 ${BlackSys.daysLeft(p)} 日）——奇货与赌局，福缘者得`, go: 'shop:odd' });
+    {
+      const lot = AuctionSys.state(p);
+      const left = Math.max(0, lot.until - Math.floor(p.day || 0));
+      if (left <= 10) t.push({ text: `拍卖行本期拍品将止（余 ${left} 日）——稳健/激进/天价，各凭眼光`, go: 'shop:odd' });
+    }
     // v22 首遇新知：情境化提示，随条件自解——新系统第一时间被看见（置于紧急事项之后，不挤占优先位）
     if (Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'artifact')
       && !Object.values(p.equipped || {}).every(e => e)) {
@@ -87,7 +94,7 @@ LOCKS: {
       if (p.exp >= need * 0.8 && !full) t.push({ text: `修为将满（${Math.round(p.exp / need * 100)}%），再积攒片刻便可冲关`, go: 'cultivate' });
       else t.push({ text: '修炼积攒修为，或外出历练搏杀机缘', go: 'cultivate' });
     }
-    return t.slice(0, 4);   // v11：容纳主线目标提示
+    return t.slice(0, 5);   // v11 四条 → v23 五条：容纳主线 + 紧急 + 日常 + 新知/奇市提醒
   },
   totalExp(p) {
     let sum = 0;
@@ -123,6 +130,25 @@ LOCKS: {
         if (pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0)) { CaveSys.harvest(i); n++; }
       });
       if (n) done.push(`采收灵田 ×${n}`);
+      // v23 自动补种：空田按持有量最多的种子播满（种子唯一用途即播种）
+      const seeds = Object.keys(p.bag).filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'seed' && p.bag[id] > 0)
+        .sort((a, b) => p.bag[b] - p.bag[a]);
+      if (seeds.length) {
+        let pn = 0;
+        const n2 = CaveSys.plotCount(p);
+        for (let i = 0; i < n2 && p.bag[seeds[0]] > 0; i++) {
+          if (!p.cave.plots[i]) {
+            const sd = GameData.ITEMS[seeds[0]];
+            p.cave.plots[i] = { seed: seeds[0], crop: sd.crop, days: sd.days, plantedDay: Math.floor(p.day) };
+            Bag.removeItem(seeds[0], 1);
+            pn++;
+          }
+        }
+        if (pn) {
+          done.push(`自动补种 ×${pn}（${GameData.ITEMS[seeds[0]].name}）`);
+          Log.add(`你顺手把 ${pn} 块空田都播上了【${GameData.ITEMS[seeds[0]].name}】。`, 'info');
+        }
+      }
     }
     // 4 领取已达成的悬赏——先刷新当日榜单（stateOf 有日界再生），再按当前榜领取
     const B = (typeof BountySys !== 'undefined') ? BountySys.stateOf(p) : null;

@@ -131,6 +131,20 @@ const Explore = {
     }
     Game.afterAction();
   },
+
+  /** v23 连续探索：最多 times 次历练，遇战斗/剧情/弹窗/天下大事自动暂停（处置后可续点） */
+  async goMulti(mapId, times = 5) {
+    const p = Game.player;
+    if (!p || p.dead) return;
+    for (let i = 0; i < times; i++) {
+      if (Battle.active || p.dead) break;
+      if (p.world && p.world.pending) { UI.toast('天下大势正待抉择——先定乾坤，再行历练'); break; }
+      await this.go(mapId);
+      if (Battle.active || Story.active() || UI._popupResolve || p.dead) break;   // 战斗/剧情/弹窗即停
+    }
+    UI.renderAll();
+    Save.autoSave();
+  },
 };
 
 const EventSys = {
@@ -398,4 +412,5 @@ const EventSys = {
       }
     }
   },
+
 };

@@ -2665,6 +2665,17 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   .subtab-btn { min-height: 40px; }
 }
 
+/* ---------- v23 移动端顶栏迷你条（气血/修为，桌面隐藏） ---------- */
+.m-mini-bars { display: none; gap: 4px; align-items: center; }
+.mini-bar {
+  position: relative; width: 44px; height: 6px;
+  border-radius: 4px; background: rgba(70, 56, 24, 0.18); overflow: hidden;
+}
+.mini-bar i { position: absolute; top: 0; bottom: 0; left: 0; display: block; border-radius: 4px; transition: width 0.3s ease; }
+.mini-bar.hp i { background: linear-gradient(180deg, #c9524c, #9e332e); }
+.mini-bar.exp i { background: linear-gradient(180deg, #6f9e58, #486e38); }
+@media (max-width: 860px) { .m-mini-bars { display: inline-flex; } }
+
 /* ---------- 左栏折叠分组（原生 details，分层不折叠常驻项） ---------- */
 .fold { margin: 2px 0 6px; }
 .fold > summary {

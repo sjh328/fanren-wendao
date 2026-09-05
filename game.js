@@ -864,6 +864,13 @@ LOCKS: {
     const ripe = ((p.cave && p.cave.plots) || []).filter(pl => pl && pl.seed && (Math.floor(p.day || 0) - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
     if (ripe > 0) t.push({ text: `灵田有 <b>${ripe}</b> 块作物已然成熟——请及时采收`, go: 'cave:farm' });
     if ((p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need)) t.push({ text: '悬赏目标已然达成——可去坊市领取赏格', go: 'shop:bounty' });   // v21: 领后置空条目判空
+    // v23 奇市提醒：黑市开市 / 拍卖将止，错过不再无感
+    if (BlackSys.isOpen(p)) t.push({ text: `暗巷黑市开市中（余 ${BlackSys.daysLeft(p)} 日）——奇货与赌局，福缘者得`, go: 'shop:odd' });
+    {
+      const lot = AuctionSys.state(p);
+      const left = Math.max(0, lot.until - Math.floor(p.day || 0));
+      if (left <= 10) t.push({ text: `拍卖行本期拍品将止（余 ${left} 日）——稳健/激进/天价，各凭眼光`, go: 'shop:odd' });
+    }
     // v22 首遇新知：情境化提示，随条件自解——新系统第一时间被看见（置于紧急事项之后，不挤占优先位）
     if (Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'artifact')
       && !Object.values(p.equipped || {}).every(e => e)) {
@@ -888,7 +895,7 @@ LOCKS: {
       if (p.exp >= need * 0.8 && !full) t.push({ text: `修为将满（${Math.round(p.exp / need * 100)}%），再积攒片刻便可冲关`, go: 'cultivate' });
       else t.push({ text: '修炼积攒修为，或外出历练搏杀机缘', go: 'cultivate' });
     }
-    return t.slice(0, 4);   // v11：容纳主线目标提示
+    return t.slice(0, 5);   // v11 四条 → v23 五条：容纳主线 + 紧急 + 日常 + 新知/奇市提醒
   },
   totalExp(p) {
     let sum = 0;
@@ -924,6 +931,25 @@ LOCKS: {
         if (pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0)) { CaveSys.harvest(i); n++; }
       });
       if (n) done.push(`采收灵田 ×${n}`);
+      // v23 自动补种：空田按持有量最多的种子播满（种子唯一用途即播种）
+      const seeds = Object.keys(p.bag).filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'seed' && p.bag[id] > 0)
+        .sort((a, b) => p.bag[b] - p.bag[a]);
+      if (seeds.length) {
+        let pn = 0;
+        const n2 = CaveSys.plotCount(p);
+        for (let i = 0; i < n2 && p.bag[seeds[0]] > 0; i++) {
+          if (!p.cave.plots[i]) {
+            const sd = GameData.ITEMS[seeds[0]];
+            p.cave.plots[i] = { seed: seeds[0], crop: sd.crop, days: sd.days, plantedDay: Math.floor(p.day) };
+            Bag.removeItem(seeds[0], 1);
+            pn++;
+          }
+        }
+        if (pn) {
+          done.push(`自动补种 ×${pn}（${GameData.ITEMS[seeds[0]].name}）`);
+          Log.add(`你顺手把 ${pn} 块空田都播上了【${GameData.ITEMS[seeds[0]].name}】。`, 'info');
+        }
+      }
     }
     // 4 领取已达成的悬赏——先刷新当日榜单（stateOf 有日界再生），再按当前榜领取
     const B = (typeof BountySys !== 'undefined') ? BountySys.stateOf(p) : null;
@@ -6274,6 +6300,23 @@ const ShopSys = {
     Log.add(`你购得 <b>${def.name}</b>，花费 ${Utils.fmtNum(cost)} 下品灵石。`, 'info');
     Game.afterAction();
   },
+  /** v23 批量购买：逐次按当前市价扣款，灵石不足自动停（功法仍宜单购，此处仅兜底） */
+  buyMulti(itemId, times = 5) {
+    const p = Game.player;
+    const def = GameData.ITEMS[itemId];
+    if (!def) return;
+    let bought = 0, spent = 0;
+    for (let i = 0; i < times; i++) {
+      if (def.type === 'gongfa' && (p.gongfa[itemId] || p.bag[itemId])) break;
+      const cost = this.price(itemId);
+      if (!Bag.spendStones(cost)) break;
+      Bag.addItem(itemId, 1);
+      bought++; spent += cost;
+    }
+    if (!bought) { UI.toast('灵石不足——一件也未买成'); return; }
+    Log.add(`你连买了 ${bought} 件<b>${def.name}</b>，共花费 ${Utils.fmtNum(spent)} 下品灵石。${bought < times ? '（灵石不济，止步于此）' : ''}`, 'info');
+    Game.afterAction();
+  },
   sell(itemId, all = false) {
     const qty = all ? Bag.count(itemId) : 1;
     if (qty <= 0) return;
@@ -6864,6 +6907,20 @@ const Explore = {
     }
     Game.afterAction();
   },
+
+  /** v23 连续探索：最多 times 次历练，遇战斗/剧情/弹窗/天下大事自动暂停（处置后可续点） */
+  async goMulti(mapId, times = 5) {
+    const p = Game.player;
+    if (!p || p.dead) return;
+    for (let i = 0; i < times; i++) {
+      if (Battle.active || p.dead) break;
+      if (p.world && p.world.pending) { UI.toast('天下大势正待抉择——先定乾坤，再行历练'); break; }
+      await this.go(mapId);
+      if (Battle.active || Story.active() || UI._popupResolve || p.dead) break;   // 战斗/剧情/弹窗即停
+    }
+    UI.renderAll();
+    Save.autoSave();
+  },
 };
 
 const EventSys = {
@@ -7131,6 +7188,7 @@ const EventSys = {
       }
     }
   },
+
 };
 
 /* ======================================================================
@@ -11349,6 +11407,7 @@ const Battle = {
     const B = this.active;
     const p = Game.player;
     B.over = true;
+    B.won = true;   // v23：战斗回顾胜负标记
     // v20 多波遭遇：妖群未绝 → 半额结算本波，立即接战下一波（仅普通战斗）
     if (B.ctx.waveIds && (B.waveIdx || 0) < B.ctx.waveIds.length - 1
       && !B.ctx.spar && !B.ctx.story && !B.ctx.dungeon && !B.ctx.npcId && !B.ctx.weType && !B.ctx.sectDanger && !B.ctx.tourney) {
@@ -11543,7 +11602,14 @@ const Battle = {
   end() {
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 情境配乐
     // v19 战斗回顾：留档最近一场的记录
-    if (this.active) this.lastLogs = (this.active.logs || []).slice(-60);
+    if (this.active) {
+      const logs = (this.active.logs || []).slice(-60);
+      this.lastLogs = logs;   // v19 战斗回顾（兼容保留）
+      // v23：最近三场回顾（会话内存，不进存档）
+      const B2 = this.active;
+      this.history = [{ foe: (B2.enemy && B2.enemy.name) || '?', won: !!B2.won, logs },
+        ...(this.history || [])].slice(0, 3);
+    }
     const B = this.active;
     const p = Game.player;
     // 邪修：杀伐之气萦绕，每场战斗孽障 +1
@@ -12946,8 +13012,13 @@ const UI = {
       + (p.stones.high ? ` <i>·</i> ${stone('stones.high', p.stones.high)}` : '') + `</span>`;
     const chIdx = QuestSys.currentChapterIdx(p);
     const chapter = `<span class="res-chip res-chapter" title="主线进度 · 问道九章">卷 ${chIdx + 1} / ${QuestSys.CHAPTERS.length} 章</span>`;
+    const needTop = GameData.layerNeed(p.realmIdx, p.layer);
+    // v23 移动端迷你条：抽屉收起也能一眼看血线/修为（桌面隐藏）
+    const miniBars = `<span class="m-mini-bars" title="气血 / 修为">
+      <span class="mini-bar hp"><i style="width:${Utils.clamp(p.hp / st.maxHp * 100, 0, 100)}%"></i></span>
+      <span class="mini-bar exp"><i style="width:${Utils.clamp(p.exp / needTop * 100, 0, 100)}%"></i></span></span>`;
     this.setHTML(this.el['top-info'], `
-      ${chapter}${stoneChip}
+      ${chapter}${stoneChip}${miniBars}
       <span class="res-chip" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</span>
       <span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${p.age}岁 / 寿元${st.lifespan}</span>
       <span class="top-meta2"><span class="save-dot"></span>已自动存档</span>`);
@@ -13461,7 +13532,10 @@ const UI = {
         <div class="card-title">${m.name}${magic}<span class="tag ${diff.cls}">${diff.text}</span></div>
         <div class="card-desc">${m.desc}${magic ? '<br><span class="neg">魔气狂化：妖魔更强，所获亦丰。</span>' : ''}</div>
         ${wxLine}
-        <div class="action-row"><button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button></div>
+        <div class="action-row">
+          <button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button>
+          <button class="btn" data-action="act-explore-multi" data-map="${m.id}" title="至多五次历练，遇战斗/剧情自动暂停">连续探索 ×5</button>
+        </div>
       </div>`;
       }).join(''),
       realm: () => this.renderDungeonSection(),
@@ -13677,6 +13751,7 @@ const UI = {
           <div class="gf-actions">
             <span class="price ${afford ? '' : 'lack'}">${Utils.fmtNum(price)}灵石${mkt}</span>
             <button class="btn btn-sm" data-action="act-buy" data-item="${r.item}" ${known ? 'disabled' : ''}>购买</button>
+            ${['pill', 'material', 'seed'].includes(def.type) ? `<button class="btn btn-sm" data-action="act-buy-multi" data-item="${r.item}" title="连买五件，灵石不足自动停">×5</button>` : ''}
           </div>
         </div>`;
       }).join('');
@@ -14369,7 +14444,8 @@ const UI = {
     let body = '';
     if (this._achvTab === 'achv') {
       for (const [cat, label] of Object.entries(Achieve.CATS)) {
-        const defs = Achieve.DEFS.filter(d => d.cat === cat);
+        // v23：未完成（带进度）在前、已完成在后
+        const defs = Achieve.DEFS.filter(d => d.cat === cat).sort((a, b) => (got[a.id] ? 1 : 0) - (got[b.id] ? 1 : 0));
         const rows = defs.map(d => {
           const on = !!got[d.id];
           const prog = (!on && d.prog) ? ` <span style="color:var(--text-faint)">${d.prog(Game.player)}</span>` : '';
@@ -14868,9 +14944,13 @@ const Game = {
     'act-codex': () => UI.achvModal(),
     'act-figures': () => QuestSys.openArchive('figures'),
     'act-battle-review': () => {
-      const logs = Battle.lastLogs || [];
-      if (!logs.length) { UI.toast('尚无战斗记录——先去打一场'); return; }
-      UI.popup({ title: '⚔ 战斗回顾 · 上一场', html: `<div style="max-height:52vh;overflow:auto">${logs.map(l => `<div class="tip-line">· ${l}</div>`).join('')}</div>`, options: [{ text: '合 上', value: true, primary: true }] });
+      const hist = Battle.history || [];
+      if (!hist.length) { UI.toast('尚无战斗记录——先去打一场'); return; }
+      // v23：最近三场切换查看（最新一场默认展开）
+      const sec = (h, i, open) => `<details class="fold" ${open ? 'open' : ''}>
+        <summary>第${['一', '二', '三'][i] || i + 1}场 · ${Utils.esc(h.foe || '?')} · ${h.won ? '胜' : '负/遁'}</summary>
+        <div style="max-height:38vh;overflow:auto">${(h.logs || []).map(l => `<div class="tip-line">· ${typeof l === 'string' ? l : l.html}</div>`).join('') || '<div class="tip-line">（无记录）</div>'}</div></details>`;
+      UI.popup({ title: '⚔ 战斗回顾 · 最近三场', html: hist.map((h, i) => sec(h, i, i === 0)).join(''), options: [{ text: '合 上', value: true, primary: true }] });
     },
     'codex-tab': (d) => { UI._achvTab = d.t; if (!UI.el['popup-modal'].classList.contains('hidden')) UI.el['popup-body'].innerHTML = UI.achvBody(); },
     'act-auto-open': () => AutoCult.open(),
@@ -14885,6 +14965,8 @@ const Game = {
     'act-ascend': () => Cultivate.ascend(),
     /* --- 游历 --- */
     'act-explore': (d) => Explore.go(d.map),
+    'act-explore-multi': (d) => Explore.goMulti(d.map, 5),   // v23 连续探索
+    'act-buy-multi': (d) => ShopSys.buyMulti(d.item, 5),   // v23 批量购买
     /* --- 坊市 --- */
     'act-buy': (d) => ShopSys.buy(d.item),
     'act-sell': (d) => ShopSys.sell(d.item, d.qty === 'all'),

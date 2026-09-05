@@ -1283,6 +1283,7 @@ const Battle = {
     const B = this.active;
     const p = Game.player;
     B.over = true;
+    B.won = true;   // v23：战斗回顾胜负标记
     // v20 多波遭遇：妖群未绝 → 半额结算本波，立即接战下一波（仅普通战斗）
     if (B.ctx.waveIds && (B.waveIdx || 0) < B.ctx.waveIds.length - 1
       && !B.ctx.spar && !B.ctx.story && !B.ctx.dungeon && !B.ctx.npcId && !B.ctx.weType && !B.ctx.sectDanger && !B.ctx.tourney) {
@@ -1477,7 +1478,14 @@ const Battle = {
   end() {
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 情境配乐
     // v19 战斗回顾：留档最近一场的记录
-    if (this.active) this.lastLogs = (this.active.logs || []).slice(-60);
+    if (this.active) {
+      const logs = (this.active.logs || []).slice(-60);
+      this.lastLogs = logs;   // v19 战斗回顾（兼容保留）
+      // v23：最近三场回顾（会话内存，不进存档）
+      const B2 = this.active;
+      this.history = [{ foe: (B2.enemy && B2.enemy.name) || '?', won: !!B2.won, logs },
+        ...(this.history || [])].slice(0, 3);
+    }
     const B = this.active;
     const p = Game.player;
     // 邪修：杀伐之气萦绕，每场战斗孽障 +1
