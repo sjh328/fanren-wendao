@@ -661,9 +661,16 @@ try {
   await sleep(400);
   await clickPopupBtn(0); // 引动天劫
   await sleep(1800);
-  // 位列仙班弹窗 → 继续游历
-  const ascBtns = await page.$$('#popup-btns button');
-  if (ascBtns.length) { await ascBtns[ascBtns.length - 1].click(); await sleep(400); }
+  // v22：飞升含「位列仙班」+「尾声」两段弹窗——轮询逐段点完（以弹窗可见为准，取末按钮，非阻断）
+  for (let i = 0; i < 8; i++) {
+    const open = await page.$eval('#popup-modal', el => !el.className.includes('hidden')).catch(() => false);
+    if (!open) break;
+    const btns = await page.$$('#popup-btns button');
+    if (!btns.length) break;
+    await btns[btns.length - 1].click().catch(() => {});
+    await sleep(700);
+  }
+  await sleep(500);
   const ascended = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player.flags.ascended);
   ascended === true ? pass('T13 飞升成功置仙班') : fail('T13 飞升', 'flags.ascended != true');
   await shot(page, 'ascended');
@@ -697,10 +704,10 @@ try {
   /* ---------- T15 炼丹炉 ---------- */
   await seedAndLoad({ name: '丹修道人', realmIdx: 1, layer: 0, exp: 0, sect: null, dao: null, bag: { m_lingcao: 6 }, stones: { low: 5000, mid: 0, high: 0 } });
   {
-    await clickSel(page, '[data-action="act-tab"][data-tab="shop"]');
+    await clickSel(page, '[data-action="act-tab"][data-tab="shop:craft"]');
     await sleep(300);
     const shopText = await text(page, '#tab-content');
-    shopText.includes('炼丹炉') ? pass('T15 坊市出现炼丹炉') : fail('T15 炼丹炉', '');
+    shopText.includes('炼丹炉') ? pass('T15 坊市·炼制坊出现炼丹炉') : fail('T15 炼丹炉', '');
     await clickSel(page, '[data-action="act-alchemy"][data-recipe="r1"]');
     await sleep(400);
     const t15 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
@@ -710,7 +717,7 @@ try {
   /* ---------- T16 符修画符 + 符箓战斗 ---------- */
   await seedAndLoad({ name: '符修道人', realmIdx: 1, layer: 0, exp: 0, sect: null, dao: 'talisman', bag: {}, stones: { low: 30000, mid: 0, high: 0 } });
   {
-    await clickSel(page, '[data-action="act-tab"][data-tab="shop"]');
+    await clickSel(page, '[data-action="act-tab"][data-tab="shop:craft"]');
     await sleep(300);
     const shopText = await text(page, '#tab-content');
     shopText.includes('符坊') ? pass('T16 符修可见符坊') : fail('T16 符坊', '');
@@ -775,6 +782,8 @@ try {
   /* ---------- T18 邪修：战斗孽障+1 + 吞噬精元 + 面板显示 ---------- */
   await seedAndLoad({ name: '邪修道人', realmIdx: 1, layer: 0, exp: 0, sect: null, dao: 'demonic', karma: 0, fortune: 0, bag: { pill_liaoshang: 5 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 9, comp: 5, luck: 5, body: 9 } });
   {
+    // v22 加固：极速战斗（×3），多波战斗不再挤爆回合预算
+    await page.evaluate(() => { Battle.setSpeed(3); });
     const panel = await text(page, '#panel-left');
     panel.includes('气运') && panel.includes('孽障') && panel.includes('邪修')
       ? pass('T18 面板显示气运/孽障/大道') : fail('T18 面板新属性', panel.slice(0, 60));

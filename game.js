@@ -771,6 +771,8 @@ const Achieve = {
     { id: 'v10', cat: 'reinc', name: '印记如星', desc: '累计十枚轮回印记', reward: { fortune: 18 }, prog: p => `${Math.min(10, p.reinc ? (p.reinc.marks || 0) : 0)}/10`, test: p => p.reinc && (p.reinc.marks || 0) >= 10 },
     { id: 'v11', cat: 'dao', name: '道韵全通', desc: '同时激活四条道韵', reward: { fortune: 12 }, test: p => (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) >= 4 },
     { id: 'v12', cat: 'dao', name: '奥义宗师', desc: '三部功法修至大成', reward: { fortune: 10 }, test: p => Object.entries(p.gongfa || {}).filter(([id, g]) => GameData.ITEMS[id] && g.level >= GongfaSys.maxLevel(GameData.ITEMS[id])).length >= 3 },
+    /* ---- v22 宗门大比 ---- */
+    { id: 'w1', cat: 'battle', name: '大比魁首', desc: '于宗门大比三轮全胜夺魁', reward: { fortune: 10 }, test: p => (p.flags && p.flags.tourneyChamp) || false },
   ],
   /** 每次行动收尾时检查：解锁则发奖并播报 */
   check() {
@@ -838,6 +840,7 @@ LOCKS: {
     const t = [];
     const st = Stat.compute(p);
     const need = GameData.layerNeed(p.realmIdx, p.layer);
+    const cap = Stat.poisonCap(p);   // v20：上限单源化（v22 提前：新知丹毒提示亦用）
     const full = p.layer === 3 && p.exp >= need;
     if (full && p.realmIdx < 9) t.push({ text: `修为已至圆满，可冲击 <b>${GameData.REALM_NAMES[p.realmIdx + 1]}</b> 期瓶颈（预估成算 ${Cultivate.breakthroughChance(p, p.realmIdx + 1 < GameData.TRIB_START ? 15 : 0).toFixed(0)}%）`, go: 'cultivate' });
     else if (full && p.realmIdx === 9 && !p.flags.ascended) t.push({ text: '真仙圆满，仙门已开——可白日飞升', go: 'cultivate' });
@@ -851,17 +854,36 @@ LOCKS: {
     if (AutoCult.active) t.push({ text: `自动修炼中（${AutoCult.rounds} 轮，修为 +${Utils.fmtNum(Math.max(0, this.totalExp(p) - AutoCult.startExp))}），可随时停止`, go: 'cultivate' });
     if ((p.karma || 0) >= 100) t.push({ text: '孽障缠身，可于修炼页<b>斩三尸</b>', go: 'cultivate' });
     else if ((p.karma || 0) >= 60) t.push({ text: '孽障渐高，仇家窥伺于后——宜谨言慎行' });
-    const cap = Stat.poisonCap(p);   // v20：上限单源化
     if (p.poison > cap * 0.75) t.push({ text: '丹毒将满，宜服解毒丹或停药休养', go: 'cultivate' });
     if (p.hp < st.maxHp * 0.3) t.push({ text: '气血衰微，宜打坐调息或服丹补满', go: 'cultivate' });
     if (p.canReincarnate) t.push({ text: '兵解转世之机已现——或可重开一世', go: 'cultivate' });
-    if (p.world && p.world.pending) t.push({ text: '天下大势正待抉择，可于游历页参与', go: 'map' });
+    if (p.world && p.world.pending) t.push({ text: '天下大势正待抉择，可于游历页参与', go: 'map:world' });
     if (NpcSys.grudgeCount(p) > 0) t.push({ text: '有宿敌伺机报复——宜化解仇怨或早做备战', go: 'jianghu' });
-    // v21 日常仪式提醒：黄历 / 灵田 / 悬赏
-    if (p.signDay !== Math.floor(p.day || 0)) t.push({ text: '今日黄历尚未求签——一签定小机缘', go: 'map' });
+    // v21 日常仪式提醒（v22：子页签深链直达）：黄历 / 灵田 / 悬赏
+    if (p.signDay !== Math.floor(p.day || 0)) t.push({ text: '今日黄历尚未求签——一签定小机缘', go: 'map:world' });
     const ripe = ((p.cave && p.cave.plots) || []).filter(pl => pl && pl.seed && (Math.floor(p.day || 0) - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
-    if (ripe > 0) t.push({ text: `灵田有 <b>${ripe}</b> 块作物已然成熟——请及时采收`, go: 'cave' });
-    if ((p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need)) t.push({ text: '悬赏目标已然达成——可去坊市领取赏格', go: 'shop' });   // v21: 领后置空条目判空
+    if (ripe > 0) t.push({ text: `灵田有 <b>${ripe}</b> 块作物已然成熟——请及时采收`, go: 'cave:farm' });
+    if ((p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need)) t.push({ text: '悬赏目标已然达成——可去坊市领取赏格', go: 'shop:bounty' });   // v21: 领后置空条目判空
+    // v22 首遇新知：情境化提示，随条件自解——新系统第一时间被看见（置于紧急事项之后，不挤占优先位）
+    if (Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'artifact')
+      && !Object.values(p.equipped || {}).every(e => e)) {
+      t.push({ text: '<b>新知</b>：乾坤袋中有法宝未佩戴——装备可大幅提升战力', go: '' });
+    }
+    if (p.realmIdx >= ((GameData.SECRET_REALMS[0] || {}).recRealm || 0) && !(p.counters.maxDepth || 0)) {
+      t.push({ text: '<b>新知</b>：你的境界已可探索<b>秘境</b>——九层随机险地，深处藏失传功法', go: 'map:realm' });
+    }
+    if (p.realmIdx >= 1 && ((p.bounties && p.bounties.list) || []).some(bt => bt && bt.progress < bt.need)) {
+      t.push({ text: '<b>新知</b>：坊市悬赏板贴出了新悬赏——猎杀目标游历时自动计入', go: 'shop:bounty' });
+    }
+    if (p.poison > cap * 0.5 && p.poison <= cap * 0.75) {
+      t.push({ text: '<b>新知</b>：丹毒已过半——服丹宜缓，或备几枚解毒丹', go: 'cultivate' });
+    }
+    if (p.sect && p.sect.tourney) {
+      t.push({ text: '<b>新知</b>：<b>宗门大比</b>正酣——登台比武，三连胜可夺魁首', go: 'sect' });
+    }
+    if (Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'gongfa') && !Object.keys(p.gongfa || {}).length) {
+      t.push({ text: '<b>新知</b>：背包有功法典籍未修习——功法页学习可提升修炼效率', go: 'gongfa' });
+    }
     if (!t.length) {
       if (p.exp >= need * 0.8 && !full) t.push({ text: `修为将满（${Math.round(p.exp / need * 100)}%），再积攒片刻便可冲关`, go: 'cultivate' });
       else t.push({ text: '修炼积攒修为，或外出历练搏杀机缘', go: 'cultivate' });
@@ -872,6 +894,55 @@ LOCKS: {
     let sum = 0;
     for (let l = 0; l < p.layer; l++) sum += GameData.layerNeed(p.realmIdx, l);
     return sum + p.exp;
+  },
+  /** v22 一键日常：求签 → 聚灵 → 采收灵田 → 领悬赏，一纸小账回报（无可办则提示） */
+  async dailyAll() {
+    const p = Game.player;
+    if (!p || p.dead) return;
+    const done = [];
+    const today = Math.floor(p.day || 0);
+    // 1 黄历求签
+    if (p.signDay !== today) {
+      DailySign.draw();
+      if (p.signDay === today) done.push('黄历求签');
+    }
+    // 2 聚灵加速（静默执行，省去确认弹窗）
+    if (p.cave && p.rushDay !== today) {
+      const cost = Math.round(120 * GameData.stoneEco(Math.min(4, p.realmIdx)));
+      if (Bag.spendStones(cost)) {
+        p.rushDay = today;
+        Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
+        done.push('聚灵加速');
+      } else {
+        Log.add('聚灵阵静默着——灵石不足，今日便不点了。', 'info');
+      }
+    }
+    // 3 采收成熟灵田
+    if (p.cave && p.cave.plots) {
+      let n = 0;
+      (p.cave.plots || []).forEach((pl, i) => {
+        if (pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0)) { CaveSys.harvest(i); n++; }
+      });
+      if (n) done.push(`采收灵田 ×${n}`);
+    }
+    // 4 领取已达成的悬赏——先刷新当日榜单（stateOf 有日界再生），再按当前榜领取
+    const B = (typeof BountySys !== 'undefined') ? BountySys.stateOf(p) : null;
+    if (B && B.list) {
+      let bn = 0;
+      for (let i = 0; i < B.list.length; i++) {
+        const bt = B.list[i];
+        if (bt && bt.progress >= bt.need) { BountySys.claim(i); bn++; }
+      }
+      if (bn) done.push(`悬赏领赏 ×${bn}`);
+    }
+    if (!done.length) { UI.toast('今日诸事皆已办妥——安心修行便是'); return; }
+    await UI.popup({
+      title: '✦ 一键行权 · 小账',
+      html: done.map(x => `<div class="tip-line">· ${x} ✓</div>`).join('')
+        + '<div class="tip-line" style="margin-top:6px">· 各项收支明细见「游历记载」。</div>',
+      options: [{ text: '收 下', value: true, primary: true }],
+    });
+    Game.afterAction();
   },
 };
 
@@ -4924,18 +4995,31 @@ const Cultivate = {
     Bag.addItem('z_taiji', 1);
     Bag.addStones(Math.round(5000 * GameData.stoneEco(9)));
     Log.add('天道降下仙缘：获赠【太极玉】与巨额灵石！你已飞升证道，仍可留在人界继续游历。', 'gain');
-    await UI.popup({
+    const choice = await UI.popup({
       title: '✦ 位列仙班 ✦',
       html: `恭喜道友 <span class="hl">${Utils.esc(p.name)}</span> 白日飞升，证道成仙！<br><br>凡人之躯，逆天而行，此为大道之始。<br><br>你也可以选择<b>兵解转世</b>，携带仙缘重开一世。`,
       options: [{ text: '继续游历', value: 'stay', primary: true }, { text: '兵解转世', value: 'reinc' }],
-    }).then(choice => {
-      if (choice === 'reinc') {
-        p.canReincarnate = true;
-        Log.add('你于仙门之前驻足回望，选择兵解转世——携一缕仙缘，重入轮回。', 'system');
-        UI.toast('兵解转世之机已现（修炼页可用）');
-      }
     });
+    if (choice === 'reinc') {
+      p.canReincarnate = true;
+      Log.add('你于仙门之前驻足回望，选择兵解转世——携一缕仙缘，重入轮回。', 'system');
+      UI.toast('兵解转世之机已现（修炼页可用）');
+    }
     Game.afterAction();
+    // v22 飞升结语：三百年因果的收笔（一次性，先落盘后演出）
+    if (!p.flags.epilogueDone) {
+      p.flags.epilogueDone = true;
+      await UI.popup({
+        title: '✦ 尾 声 · 仙门之后 ✦',
+        html: `<div class="story-p">雷光散尽的刹那，你眉心那点朱砂微微一烫。</div>
+        <div class="story-p">三百年前，有人以一缕真灵封玉留志；三百年后，有人白衣登仙，替他把没走完的路走完了。</div>
+        <div class="story-p">血河旧案早已昭雪。故人或有转世，或有仙名——而你的名字，自此写进了人界说书人的段子里。</div>
+        <div class="story-p">仙门之后，另有一番天地。这段人间烟火的因果，就留在这里罢。</div>`,
+        options: [{ text: '携道而往', value: true, primary: true }],
+      });
+      Story.chron('飞升 · 尾声');
+      Game.afterAction();
+    }
   },
 };
 
@@ -6481,6 +6565,79 @@ const SectSys = {
         if (t.progress >= t.need) Log.add('宗门修行任务已完成，可回去领取奖励！', 'gain');
       }
     }
+  },
+
+  /* ---------- v22 宗门大比：每五年一届，三轮车轮战，胜负皆有名次 ---------- */
+  TOURNEY_EVERY: 5,
+  TOURNEY_ROUNDS: ['首轮', '次轮', '决胜轮'],
+  TOURNEY_FOES: ['同门师兄', '同门师姐', '首座大师兄'],
+  /** 行动收尾钩子：每逢五年（游戏年）开一届大比 */
+  tourneyCheck(p) {
+    if (!p.sect) return;
+    const y = WorldSys.year(p);
+    if (y <= 0 || y % this.TOURNEY_EVERY !== 0) return;
+    if ((p.sect.lastTourney || 0) >= y) return;
+    if (p.sect.tourney) return;
+    p.sect.tourney = { round: 0, wins: 0 };
+    p.sect.lastTourney = y;
+    Log.add('锣鼓喧天——<b>宗门大比</b>开幕了！三轮车轮战，同门比试点到为止；胜场越多彩头越厚，三连胜者魁首扬名。', 'system');
+    Story.chron('宗门大比开幕');
+    UI.announce('⚔ 宗门大比开幕', 'gold');
+  },
+  /** 生成当轮对手：同门弟子（兽形灵技拟态），一轮强过一轮 */
+  tourneyOpponent(p, round) {
+    const rp = p.realmIdx * 4 + p.layer;
+    const pool = this.taskMonsters(rp + round);
+    const mid = pool.length ? Utils.pick(pool) : Utils.pick(Object.keys(GameData.MONSTERS));
+    const e = buildMonster(mid, Math.max(0, rp + round - GameData.MONSTERS[mid].power));
+    e.name = `${this.TOURNEY_FOES[round] || '同门弟子'}·${Utils.pick(GameData.NAMES)}`;
+    e.elite = false;
+    return e;
+  },
+  /** 登台比武（第 T.round 轮） */
+  tourneyFight() {
+    const p = Game.player;
+    const T = p.sect && p.sect.tourney;
+    if (!T) { UI.toast('当前没有进行中的大比'); return; }
+    if (Battle.active) return;
+    if (T.round >= 3) { UI.toast('三轮已毕'); return; }
+    Battle.start(null, {
+      enemy: this.tourneyOpponent(p, T.round),
+      tourney: true,
+      mapName: `宗门大比 · ${this.TOURNEY_ROUNDS[T.round]}`,
+    });
+  },
+  /** 一轮战罢（胜负皆入此）：发彩头 / 定名次 */
+  onTourneyRound(win) {
+    const p = Game.player;
+    const T = p.sect && p.sect.tourney;
+    if (!T) return;
+    if (win) {
+      T.wins++;
+      T.round++;
+      const stones = Math.round(120 * GameData.stoneEco(p.realmIdx) * (T.wins + 1) / 2);
+      const contrib = 80 + p.realmIdx * 40;
+      p.sect.contrib += contrib;
+      Bag.addStones(stones);
+      KarmaSys.addFortune(2, true);
+      Log.add(`大比${this.TOURNEY_ROUNDS[T.wins - 1] || ''}胜出！彩头：贡献 +${contrib}、灵石 ${Utils.fmtNum(stones)}、气运 +2。`, 'gain');
+      if (T.round >= 3) {
+        p.flags = p.flags || {};
+        p.flags.tourneyChamp = (p.flags.tourneyChamp || 0) + 1;
+        KarmaSys.addFortune(8, true);
+        Log.add('<b>三轮全胜，大比魁首！</b>掌门亲授魁首玉佩，门中扬名——气运 +8。（生涯魁首 ' + p.flags.tourneyChamp + ' 次）', 'realm');
+        Story.chron('宗门大比 · 魁首');
+        UI.announce('⚔ 大比魁首 · 三连胜', 'gold');
+        p.sect.tourney = null;
+      } else {
+        Log.add('下一轮对手已定，且去台下调息片刻。', 'info');
+      }
+    } else {
+      Log.add('大比止步于此——虽未登顶，已胜诸场的彩头尽入囊中。来届再战。', 'warn');
+      Story.chron(`宗门大比 · ${T.wins} 胜止步`);
+      p.sect.tourney = null;
+    }
+    Game.afterAction();
   },
 };
 
@@ -9462,27 +9619,42 @@ const DungeonSys = {
     if (p.realmIdx < R.recRealm) { UI.toast(`需 ${GameData.REALM_NAMES[R.recRealm]}期方可入内`); return; }
     Meta.see('realm', R.id);   // v6 图鉴
     p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS, choices: [], gains: [], stuck: false };
+    this.genRoute(p.dungeon);
     this.genChoices(p.dungeon);
     Log.add(`你寻得入口，踏入 <b>${R.name}</b>——雾气在身后合拢，退路只剩来时那条。`, 'system');
     Game.activeTab = 'map';
+    Game.subTab = Game.subTab || {};
+    Game.subTab.map = 'realm';   // v22 直达游历·秘境分栏
     Game.afterAction();
   },
-  /** 随机节点路线：每层二选一，最深处为守关者 */
-  genChoices(D) {
+  /** v22 预生成整条随机路线（每层二选一，末层守关）——供「前方预览」，亦兼容旧档补齐 */
+  genRoute(D) {
     const R = GameData.SECRET_REALMS[D.realm];
-    if (D.depth >= D.total - 1) { D.choices = ['boss']; D.stuck = false; return; }
-    const w = { ...R.weights };
-    const bias = D.depth * 2;
-    w.battle += bias;                                  // 愈深愈多战
-    w.trap += Math.floor(bias / 2);                    // 愈深愈多陷阱
-    w.treasure = Math.max(6, w.treasure - Math.floor(bias / 3));
-    const types = [];
-    let guard = 0;
-    while (types.length < 2 && guard++ < 30) {
-      const t = Utils.pickWeighted(w);
-      if (!types.includes(t)) types.push(t);
+    const total = D.total || GameData.DUNGEON_TOTAL_LAYERS;
+    const start = D.depth || 0;
+    const route = [];
+    for (let d = 0; d < start; d++) route.push(['battle', 'treasure']);   // 旧档已走过的层：占位补齐
+    for (let d = start; d < total - 1; d++) {
+      const w = { ...R.weights };
+      const bias = d * 2;
+      w.battle += bias;                                  // 愈深愈多战
+      w.trap += Math.floor(bias / 2);                    // 愈深愈多陷阱
+      w.treasure = Math.max(6, w.treasure - Math.floor(bias / 3));
+      const types = [];
+      let guard = 0;
+      while (types.length < 2 && guard++ < 30) {
+        const t = Utils.pickWeighted(w);
+        if (!types.includes(t)) types.push(t);
+      }
+      route.push(types.length ? types : ['battle', 'treasure']);
     }
-    D.choices = types.length ? types : ['battle', 'treasure'];
+    route.push(['boss']);
+    D.route = route;
+  },
+  /** 当前层二选一：从预生成路线中取本层岔口 */
+  genChoices(D) {
+    if (!D.route) this.genRoute(D);
+    D.choices = D.route[D.depth] || ['boss'];
     D.stuck = false;
   },
   makeEnemy(R, depth, forceElite = false) {
@@ -11179,7 +11351,7 @@ const Battle = {
     B.over = true;
     // v20 多波遭遇：妖群未绝 → 半额结算本波，立即接战下一波（仅普通战斗）
     if (B.ctx.waveIds && (B.waveIdx || 0) < B.ctx.waveIds.length - 1
-      && !B.ctx.spar && !B.ctx.story && !B.ctx.dungeon && !B.ctx.npcId && !B.ctx.weType && !B.ctx.sectDanger) {
+      && !B.ctx.spar && !B.ctx.story && !B.ctx.dungeon && !B.ctx.npcId && !B.ctx.weType && !B.ctx.sectDanger && !B.ctx.tourney) {
       B.over = false;
       const waveExp = Math.round(B.enemy.expGain * 0.5);
       Cultivate.addExp(p, waveExp);
@@ -11195,12 +11367,22 @@ const Battle = {
       B.intent = null;
       Anim.drop('bt-ehp');
       this.log(`⚔ 第 ${B.waveIdx + 1} 波——<b class="grade-0">${e2.name}</b>（${e2.realmLabel}${e2.elite ? ' · 精英' : ''}${e2.tplName ? ' · ' + e2.tplName : ''}）杀入战团！`, 'warn');
+      B.busy = false;   // v22 修瑕：先解忙再渲染——原顺序会把 disabled 按钮锁死整场多波战斗（手动战斗卡死）
       this.render();
-      B.busy = false;
       this.autoNext();
       return;
     }
     const st = Stat.compute(p);
+    // v22 宗门大比：同门较技，点到为止，一轮战毕回传大比分
+    if (B.ctx.tourney) {
+      this.log('台上二人收势而立，裁判长老高声唱名。', 'log-system');
+      Cultivate.addExp(p, Math.round(B.enemy.expGain * 0.3));
+      p.counters.spars = (p.counters.spars || 0) + 1;
+      await this.wait(700);
+      SectSys.onTourneyRound(true);
+      this.end(false);
+      return;
+    }
     // §24 切磋：点到为止，不取性命不掠财物
     if (B.ctx.spar) {
       this.log('二人收势而立，抱拳一礼——点到为止。', 'log-system');
@@ -11309,6 +11491,14 @@ const Battle = {
       p.hp = Math.max(1, Math.round(Stat.compute(p).maxHp * 0.2));
       this.end(false);
       Log.add(`你与 ${B.enemy.name} 切磋落败，技不如人，虽无大碍亦有所悟。`, 'info');
+      return;
+    }
+    // v22 宗门大比落败：点到为止，止步仍领已胜彩头
+    if (B.ctx.tourney) {
+      const stT = Stat.compute(p);
+      p.hp = Math.max(1, Math.round(stT.maxHp * 0.3));
+      SectSys.onTourneyRound(false);
+      this.end(false);
       return;
     }
     // §25 秘境陨落：背包三成之物永远留在其中
@@ -11566,10 +11756,10 @@ const Battle = {
 const Tutorial = {
   steps: [
     { icon: '☯', title: '欢迎踏入仙途', text: '这里是弱肉强食的修真界。你将以凡人之躯，一步步修炼至飞升成仙。<br>境界面板、行动操作、背包菜单都在眼前——且听我一一道来。', target: null },
-    { icon: '📜', title: '左侧 · 道途面板', text: '随时查看你的<b>境界修为</b>、气血灵力、先天四维（根骨 / 悟性 / 福缘 / 体魄）与战斗属性。<br>每个境界都有独有的<b>境界特性</b>，择定大道后更可修炼<b>职业道境</b>——皆在此一览。修为攒满即可突破，寿元耗尽则道消身殒，切莫蹉跎岁月。', target: '#panel-left' },
-    { icon: '⚔', title: '中央 · 行动与游历', text: '<b>修炼</b>积攒修为，<b>探索</b>历练搏杀，<b>坊市</b>买卖丹药法器，筑基后可拜入<b>宗门</b>。<br>下方游历记载会记录你的每一步。遇敌时可选普攻、法诀、丹药或遁走。', target: '#panel-center' },
-    { icon: '🎒', title: '右侧 · 背包与存档', text: '丹药、功法、法宝、材料分类收纳。法宝可装备，功法可参悟升级。<br>菜单中可随时存读档（共三档 + 自动存档）。', target: '#panel-right' },
-    { icon: '🕳', title: '最后一句忠告', text: '丹药虽好，丹毒伤身；地图凶险，量力而行。<br>境界不足莫闯险地，否则……重伤事小，道消事大。<br>此外：「游历」页有<b>天下大势</b>与各大境界的<b>秘境</b>，「江湖」页可结交二十四位常驻修士——恩怨情仇，皆是道途。<br><b>祝道友早日飞升！</b>', target: null },
+    { icon: '📜', title: '道途面板 · 你的根骨', text: '这里随时可查<b>境界修为</b>、气血灵力、先天四维（根骨 / 悟性 / 福缘 / 体魄）与战斗属性。<br>修为攒满即可突破，寿元耗尽则道消身殒。<br><span style="color:var(--text-faint)">手机上它收进了顶栏「☰ 道途」，点开即见。</span>', target: '#panel-left' },
+    { icon: '⚔', title: '中央 · 行动与游历', text: '<b>修炼</b>积攒修为，<b>游历</b>历练搏杀，<b>坊市</b>置办丹药法宝，筑基后可拜入<b>宗门</b>。<br>大页签内还有<b>子页签</b>分栏：坊市分万宝阁/炼制坊/祭炼堂/悬赏板/奇市，洞府分洞府/灵田/灵兽，游历分舆图/秘境/天下。<br><span style="color:var(--text-faint)">手机上页签在屏幕底部，一指可达。</span>', target: '#panel-center' },
+    { icon: '🎒', title: '乾坤袋 · 存档与行囊', text: '丹药、功法、法宝、材料分类收纳。法宝可装备，功法可参悟升级。<br>菜单中可随时存读档（共三档 + 自动存档）。<br><span style="color:var(--text-faint)">手机上它收进了顶栏「🎒 乾坤」。</span>', target: '#panel-right' },
+    { icon: '🕳', title: '最后一句忠告', text: '丹药虽好，丹毒伤身；地图凶险，量力而行。<br>境界不足莫闯险地，否则……重伤事小，道消事大。<br>卡住了就点左栏「当前建议」——它会告诉你下一步，还能一键直达。<br><b>祝道友早日飞升！</b>', target: null },
   ],
   idx: 0,
   show(force = false) {
@@ -11587,11 +11777,17 @@ const Tutorial = {
       this.steps.map((_, i) => `<span class="${i === this.idx ? 'on' : ''}"></span>`).join('');
     const next = document.querySelector('[data-action="tut-next"]');
     if (next) next.textContent = this.idx === this.steps.length - 1 ? '踏入仙途' : '下一步';
-    // v18：聚光高亮目标区域
+    // v18：聚光高亮目标区域；v22：目标面板在移动端收进了抽屉——先拉开再高亮
     document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
     if (s.target) {
       const el = document.querySelector(s.target);
-      if (el) el.classList.add('tut-highlight');
+      if (el) {
+        if (window.innerWidth <= 860 && !el.classList.contains('drawer-open')
+          && (el.id === 'panel-left' || el.id === 'panel-right')) {
+          UI.toggleDrawer(el.id === 'panel-left' ? 'left' : 'right');
+        }
+        el.classList.add('tut-highlight');
+      }
     }
   },
   next() {
@@ -12254,17 +12450,17 @@ const QuestSys = {
     },
   ],
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
-  /** v12 每章各目标对应的功能页签（供焦点条「前往」直达） */
+  /** v12 每章各目标对应的功能页签（供焦点条「前往」直达；v22 支持子页签深链 tab:sub） */
   GO: {
-    c1: ['cultivate', 'map', 'map'],
-    c2: ['map', 'map', 'cultivate'],
+    c1: ['cultivate', 'map:atlas', 'map:atlas'],
+    c2: ['map:atlas', 'map:atlas', 'cultivate'],
     c3: ['cultivate', 'sect', 'gongfa'],
-    c4: ['jianghu', 'map', 'map'],
-    c5: ['cultivate', 'shop', 'map'],
-    c6: ['cultivate', 'map', 'map'],
-    c7: ['cultivate', 'map', 'shop'],
+    c4: ['jianghu', 'map:atlas', 'map:atlas'],
+    c5: ['cultivate', 'shop:craft', 'map:atlas'],
+    c6: ['cultivate', 'map:realm', 'map:realm'],
+    c7: ['cultivate', 'map:atlas', 'shop:market'],
     c8: ['cultivate', 'jianghu', 'gongfa'],
-    c9: ['cultivate', 'map', 'cultivate'],
+    c9: ['cultivate', 'map:atlas', 'cultivate'],
   },
   /** v12 有效章节序号：跳过「境界已领先、目标全部自动追认」的章节（正式结算仍在 check 中逐章进行） */
   currentChapterIdx(p) {
@@ -12806,8 +13002,7 @@ const UI = {
       ${idCard}
       ${p.sect ? `<div class="stat-line"><span>宗门</span><b class="hl">${GameData.SECTS.find(s => s.id === p.sect.id).name}${p.sect.faction && GameData.SECT_FACTIONS.find(f => f.id === p.sect.faction) ? ' · ' + GameData.SECT_FACTIONS.find(f => f.id === p.sect.faction).name : ''}</b></div>
         <div class="stat-line"><span>贡献</span><b><span class="num-anim" data-nk="contrib" data-nv="${p.sect.contrib}">${p.sect.contrib}</span></b></div>` : ''}
-      ${eqHtml}
-      ${setHtml}
+      <details class="fold" open><summary>装备法宝</summary>${eqHtml}${setHtml}</details>
       <div class="sec-title">核心属性</div>
       ${coreBar('气血', 'hp', 'hp', p.hp, st.maxHp, st.maxHp, false)}
       ${coreBar('灵力', 'mp', 'mp', p.mp, st.maxMp, st.maxMp, false)}
@@ -12828,8 +13023,8 @@ const UI = {
       <div class="sec-title">道行状态</div>
       ${chipsHtml}
       ${DaoxinSys.statusHtml(p)}
-      ${GameData.REALM_TRAITS[p.realmIdx] ? `<div class="stat-line"><span>境界特性</span><b class="hl" title="${GameData.REALM_TRAITS[p.realmIdx].desc}">${GameData.REALM_TRAITS[p.realmIdx].name}</b></div>
-      <div class="tip-line" style="margin:0 0 4px">· ${GameData.REALM_TRAITS[p.realmIdx].desc}</div>` : ''}
+      ${GameData.REALM_TRAITS[p.realmIdx] ? `<details class="fold"><summary>境界特性 · ${GameData.REALM_TRAITS[p.realmIdx].name}</summary>
+      <div class="tip-line" style="margin:0 0 4px">· ${GameData.REALM_TRAITS[p.realmIdx].desc}</div></details>` : ''}
       ${p.dao ? DaoSys.statusHtml(p) : ''}
       ${p.reinc ? `<div class="stat-line"><span>前世</span><b class="hl">第${p.reinc.lives}世 · 印记${p.reinc.marks || 0}（全属性+${p.reinc.marks || 0}%）</b></div>` : ''}
       <div class="guide-box">
@@ -12853,7 +13048,7 @@ const UI = {
     if (p.layer === 3 && p.exp >= need && p.realmIdx < 9) alert = { text: '修为圆满，可冲击瓶颈', go: 'cultivate', major: true };
     else if (p.realmIdx === 9 && p.layer === 3 && p.exp >= need && !p.flags.ascended) alert = { text: '真仙圆满，可白日飞升', go: 'cultivate', major: true };
     else if (p.realmIdx >= 1 && !p.dao) alert = { text: '大道未定，宜叩问大道', go: 'cultivate', major: true };
-    else if ((p.counters.gupianGot || 0) >= 9 && !p.bag.z_benming && !Object.values(p.equipped).some(e => e && Utils.eqId(e) === 'z_benming')) alert = { text: '九枚碎片集齐，可合成本命法宝', go: 'map', major: true };
+    else if ((p.counters.gupianGot || 0) >= 9 && !p.bag.z_benming && !Object.values(p.equipped).some(e => e && Utils.eqId(e) === 'z_benming')) alert = { text: '九枚碎片集齐，可合成本命法宝', go: 'map:realm', major: true };
     else if ((p.karma || 0) >= 100) alert = { text: '孽障缠身，可斩三尸', go: 'cultivate', major: true };
     else if (QuestSys.SIDES.some(sd => !(p.quest || {}).side[sd.id] && p.realmIdx >= sd.minRealm && sd.steps.every(x => QuestSys.stepDone(x, p)))) alert = { text: '有支线奇遇可结案领赏', go: 'quest' };
     else if (p.poison > cap * 0.75) alert = { text: '丹毒将满，宜服解毒丹', go: 'cultivate' };
@@ -12906,9 +13101,13 @@ const UI = {
       || !!p.canReincarnate;
     const showMapDot = !!(p.world && p.world.pending);
     const showJianghuDot = NpcSys.grudgeCount(p) > 0 || (typeof PersonalSys !== 'undefined' && PersonalSys.anyAvailable(p));   // v19 个人线待续谈
+    // v22 红点随子页签内容迁移：悬赏可领→坊市，灵田已熟→洞府
+    const showShopDot = (p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need);
+    const showCaveDot = ((p.cave && p.cave.plots) || []).some(pl => pl && pl.seed && (Math.floor(p.day || 0) - (pl.plantedDay || 0)) >= (pl.days || 0));
     const htmls = tabs.map(t => {
       const dot = (t.id === 'sect' && showSectDot) || (t.id === 'cultivate' && showCultDot)
-        || (t.id === 'map' && showMapDot) || (t.id === 'jianghu' && showJianghuDot);
+        || (t.id === 'map' && showMapDot) || (t.id === 'jianghu' && showJianghuDot)
+        || (t.id === 'shop' && showShopDot) || (t.id === 'cave' && showCaveDot);
       const lock = Guide.tabLocked(t.id);   // v6：分步解锁
       return `<button class="tab-btn ${Game.activeTab === t.id ? 'active' : ''} ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${t.id}" ${lock ? `title="${lock}"` : ''}>${lock ? '🔒' : ''}${t.name}${dot ? '<span class="dot"></span>' : ''}</button>`;
     });
@@ -12922,21 +13121,49 @@ const UI = {
     this.setHTML(this.el['tabs'], tabsHtml);
   },
 
+  /* ---------- v22 页签内子页签（信息架构归一：大页签拆分栏，深链写法 tab:sub） ---------- */
+  SUBTABS: {
+    shop: [
+      { id: 'market', name: '万宝阁' }, { id: 'craft', name: '炼制坊' }, { id: 'forge', name: '祭炼堂' },
+      { id: 'bounty', name: '悬赏板' }, { id: 'odd', name: '奇 市' },
+    ],
+    cave: [
+      { id: 'home', name: '洞府' }, { id: 'farm', name: '灵田' }, { id: 'beast', name: '灵兽' },
+    ],
+    map: [
+      { id: 'atlas', name: '舆 图' }, { id: 'realm', name: '秘 境' }, { id: 'world', name: '天 下' },
+    ],
+  },
+  /** 当前页签生效的子页签（无记忆或记忆已失效时回落到首栏） */
+  subOf(tab) {
+    const list = this.SUBTABS[tab];
+    if (!list) return null;
+    const cur = Game.subTab[tab];
+    return list.some(s => s.id === cur) ? cur : list[0].id;
+  },
+  renderSubTabs(tab, cur) {
+    const list = this.SUBTABS[tab];
+    if (!list) return '';
+    return `<nav class="subtabs">${list.map(s =>
+      `<button class="subtab-btn ${s.id === cur ? 'active' : ''}" data-action="act-tab" data-tab="${tab}:${s.id}">${s.name}</button>`).join('')}</nav>`;
+  },
+
   renderTabContent() {
+    const sub = this.subOf(Game.activeTab);
     const fn = {
       cultivate: () => this.renderCultivateTab(),
       quest: () => QuestSys.renderTab(),
-      cave: () => this.renderCaveTab(),
-      map: () => this.renderMapTab(),
+      cave: () => this.renderCaveTab(sub),
+      map: () => this.renderMapTab(sub),
       jianghu: () => this.renderNpcTab(),
-      shop: () => this.renderShopTab(),
+      shop: () => this.renderShopTab(sub),
       sect: () => this.renderSectTab(),
       gongfa: () => this.renderGongfaTab(),
     }[Game.activeTab];
     // v21：宽屏双列栅格——独立卡片构成的页签并排铺满，消灭大片留白
-    // （问道页自带主线+详情双栏结构，不适用外层栅格）
-    this.el['tab-content'].classList.toggle('grid2', ['cultivate', 'cave'].includes(Game.activeTab));
-    this.setHTML(this.el['tab-content'], fn ? fn() : '');
+    // （问道页自带主线+详情双栏结构，不适用外层栅格；v22 洞府改子页签后不再栅格）
+    this.el['tab-content'].classList.toggle('grid2', Game.activeTab === 'cultivate');
+    this.setHTML(this.el['tab-content'], this.renderSubTabs(Game.activeTab, sub) + (fn ? fn() : ''));
   },
 
   renderCultivateTab() {
@@ -13051,7 +13278,7 @@ const UI = {
         <div class="rp-track">${rpTrack}</div>
       </div>
       <div class="card card-main">
-        <div class="card-title">✦ 修行 <span style="font-size:12px;color:var(--text-dim)">当前层尚需修为 ${Utils.fmtNum(Math.max(0, need - p.exp))}</span></div>
+        <div class="card-title">✦ 修行 <span style="font-size:12px;color:var(--text-dim)">当前层尚需修为 ${Utils.fmtNum(Math.max(0, need - p.exp))}${est > 0 && need > p.exp ? ` · 约需 ${Math.max(1, Math.ceil((need - p.exp) / est * 3))} 日` : ''}</span></div>
         <div class="card-desc">当前每轮修炼约得修为 <b class="hl">${Utils.fmtNum(est)}</b>（悟性 ${p.attrs.comp}，功法加成 ${st.cultPct}%）。</div>
         <div class="act-groups">
           <div class="act-main-row">
@@ -13079,22 +13306,23 @@ const UI = {
     const today = Math.floor(p.day || 0);
     const rows = [];
     const signed = p.signDay === today;
-    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}` : '今日未求签', go: 'map' });
+    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}` : '今日未求签', go: 'map:world' });
     const rush = p.rushDay === today;
-    rows.push({ state: rush ? 'ok' : 'todo', label: '聚灵加速', stat: rush ? '已点燃 · 修炼 ×1.5' : '阵未点燃', go: p.cave ? 'cave' : '' });
+    rows.push({ state: rush ? 'ok' : 'todo', label: '聚灵加速', stat: rush ? '已点燃 · 修炼 ×1.5' : '阵未点燃', go: p.cave ? 'cave:home' : '' });
     const plots = (p.cave && p.cave.plots) || [];
     const ripe = plots.filter(pl => pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
     const growing = plots.filter(pl => pl && pl.seed).length;
-    rows.push({ state: ripe > 0 ? 'warn' : (growing > 0 ? 'ok' : 'todo'), label: '灵田', stat: plots.length ? (ripe > 0 ? `${ripe} 块已熟宜采收` : `${growing} 块生长中`) : '今日未播种', go: p.cave ? 'cave' : '' });
+    rows.push({ state: ripe > 0 ? 'warn' : (growing > 0 ? 'ok' : 'todo'), label: '灵田', stat: plots.length ? (ripe > 0 ? `${ripe} 块已熟宜采收` : `${growing} 块生长中`) : '今日未播种', go: p.cave ? 'cave:farm' : '' });
     const bl = (p.bounties && p.bounties.list) || [];
     const claimable = bl.filter(bt => bt && bt.progress >= bt.need).length;   // v21: 领后置空条目判空
-    rows.push({ state: claimable > 0 ? 'warn' : (bl.length ? 'ok' : 'todo'), label: '悬赏板', stat: claimable > 0 ? `${claimable} 张可领赏` : (bl.length ? '进行中' : '未接悬赏'), go: 'shop' });
+    rows.push({ state: claimable > 0 ? 'warn' : (bl.length ? 'ok' : 'todo'), label: '悬赏板', stat: claimable > 0 ? `${claimable} 张可领赏` : (bl.length ? '进行中' : '未接悬赏'), go: 'shop:bounty' });
     const fest = FestivalSys.today(p);
-    if (fest) rows.push({ state: 'warn', label: '节庆', stat: `${fest.name} · 只此一日`, go: 'map' });
+    if (fest) rows.push({ state: 'warn', label: '节庆', stat: `${fest.name} · 只此一日`, go: 'map:world' });
     const done = rows.filter(r => r.state === 'ok').length;
     return `
       <div class="card daily-card">
-        <div class="card-title">✦ 今日修行 <span class="daily-count">${done} / ${rows.length} 事</span></div>
+        <div class="card-title">✦ 今日修行 <span class="daily-count">${done} / ${rows.length} 事</span>
+          <button class="btn btn-sm" data-action="act-daily-all" style="margin-left:auto" title="求签、聚灵、采收、领赏一次办完">⚡ 一键行权</button></div>
         ${rows.map(r => `
           <div class="daily-row ${r.state}">
             <span class="daily-dot"></span>
@@ -13106,8 +13334,8 @@ const UI = {
       </div>`;
   },
 
-  /* ---------- v13 洞府页签（聚灵阵 / 灵田 / 兽栏） ---------- */
-  renderCaveTab() {
+  /* ---------- v13 洞府页签（v22 拆三：洞府主楼 / 灵田 / 灵兽） ---------- */
+  renderCaveTab(sub) {
     const p = Game.player;
     if (!CaveSys.unlocked(p)) {
       return `<div class="card"><div class="card-title">✦ 洞府</div>
@@ -13195,13 +13423,20 @@ const UI = {
       <div class="card-desc">战斗中将可驯妖兽打至<b>两成血以下</b>，可尝试驯服。出战灵兽每回合四成几率协助攻击，并给主人一项被动加成。喂食【妖兽内丹】可升阶；派遣外出可寻回灵材。</div>
       ${beastRows || '<div class="tip-line">兽栏空空——去荒野驯一头灵兽回来罢。</div>'}
     </div>`;
-    return caveCard + plotsCard + buildsCard + beastCard;
+    // v22 子页签分发：洞府主楼（聚灵阵+营造）/ 灵田 / 灵兽（兽栏+斗兽场）
+    const R = {
+      home: () => caveCard + buildsCard,
+      farm: () => plotsCard,
+      beast: () => beastCard,
+    };
+    return (R[sub] || R.home)();
   },
 
-  renderMapTab() {
+  /* ---------- v22 游历拆三：舆图 / 秘境 / 天下 ---------- */
+  renderMapTab(sub) {
     const p = Game.player;
-    return this.renderWorldCard() + this.renderSignCard() + this.renderDungeonSection()
-      + GameData.MAPS.map(m => {
+    const R = {
+      atlas: () => GameData.MAPS.map(m => {
         const diff = p.realmIdx < m.recRealm
           ? { cls: 'danger', text: `推荐${m.recText} · 境界不足，九死一生！` }
           : p.realmIdx === m.recRealm
@@ -13228,7 +13463,11 @@ const UI = {
         ${wxLine}
         <div class="action-row"><button class="btn" data-action="act-explore" data-map="${m.id}">探索此地（2日）</button></div>
       </div>`;
-      }).join('');
+      }).join(''),
+      realm: () => this.renderDungeonSection(),
+      world: () => this.renderWorldCard() + this.renderSignCard(),
+    };
+    return (R[sub] || R.atlas)();
   },
 
   /* ---------- §23 天下大势 ---------- */
@@ -13330,6 +13569,12 @@ const UI = {
       <div class="card-title">✦ 秘境 · ${R.name} <span class="tag warn">第 ${Math.min(D.depth + 1, D.total)} / ${D.total} 层</span></div>
       <div class="card-desc">${R.desc}</div>
       <div class="route-choices">${nodeBtns}</div>
+      ${(() => {
+        // v22 路径预览：灵觉所及，前方两层的岔口类型（预生成路线）
+        const peek = (D.route || []).slice(D.depth + 1, D.depth + 3)
+          .map((pair, i) => `第 ${D.depth + 2 + i} 层 ${pair.map(t => DungeonSys.nodeIcon(t)).join('/')}`);
+        return peek.length ? `<div class="tip-line">· 灵觉所及：${peek.join('　·　')}${D.depth + 3 >= D.total ? '（更深处便是守关者）' : ''}</div>` : '';
+      })()}
       ${D.gains && D.gains.length ? `<div class="tip-line">已掠得：${D.gains.slice(-5).join('；')}</div>` : ''}
       <div class="action-row"><button class="btn btn-danger" data-action="act-realm-retreat">携收获 · 撤离秘境</button></div>
       <div class="tip-line">当前气血 ${Math.round(p.hp)} / ${Stat.compute(p).maxHp} —— 陨落于秘境者，背包三成之物将永远留在其中。</div>
@@ -13397,7 +13642,19 @@ const UI = {
     </div>${RankSys.render(p)}${rows}`;
   },
 
-  renderShopTab() {
+  /* ---------- v22 坊市拆五：万宝阁 / 炼制坊 / 祭炼堂 / 悬赏板 / 奇市（信息架构归一） ---------- */
+  renderShopTab(sub) {
+    const R = {
+      market: () => this.shopMarket(),
+      craft: () => this.shopCraft(),
+      forge: () => this.shopForge(),
+      bounty: () => this.shopBounty(),
+      odd: () => this.shopOdd(),
+    };
+    return (R[sub] || R.market)();
+  },
+
+  shopMarket() {
     const p = Game.player;
     const st = Stat.compute(p);
     const stock = GameData.SHOP.filter(row => p.realmIdx >= row.minRealm);
@@ -13439,6 +13696,28 @@ const UI = {
         </div>
       </div>`;
     }).join('');
+    return `
+      <div class="card">
+        <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
+        <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。</div>
+        <div class="card-tags">
+          <button class="btn btn-sm" data-action="act-convert" data-dir="up1">100下品 → 1中品</button>
+          <button class="btn btn-sm" data-action="act-convert" data-dir="down1">1中品 → 100下品</button>
+          <button class="btn btn-sm" data-action="act-convert" data-dir="up2">100中品 → 1上品</button>
+          <button class="btn btn-sm" data-action="act-convert" data-dir="down2">1上品 → 100中品</button>
+        </div>
+        ${group('pill', '丹药')}
+        ${group('artifact', '法器')}
+        ${group('gongfa', '功法典籍')}
+        ${group('material', '杂货材料')}
+        ${group('seed', '灵田种子')}
+        <div class="shop-section-title">◈ 出售物品（四折回收${p.dao === 'pill' ? '，丹药另有五成加成' : ''}）</div>
+        ${sellRows || '<div class="tip-line">背包中空空如也。</div>'}
+      </div>`;
+  },
+
+  shopCraft() {
+    const p = Game.player;
     // 炼丹炉（人人可用，丹道成丹率大涨）
     const alchemySection = `
       <div class="shop-section-title">◈ 炼丹炉${p.dao === 'pill' ? '（丹道加持，成丹率大增）' : ''}</div>
@@ -13473,63 +13752,34 @@ const UI = {
         </div>
         <div class="gf-actions"><button class="btn btn-sm btn-primary" data-action="act-draw">画符（${Utils.fmtNum(CraftSys.drawCost(p))}灵石）</button></div>
       </div>` : '';
-    // v13 悬赏任务板
-    const B = BountySys.stateOf(p);
-    const r = BountySys.rewards(p);
-    const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
-    const repTag = repBonus > 1 ? ` <span class="tag safe" title="声望加成：${Math.round((repBonus - 1) * 100)}%">声望赏格 ×${repBonus}</span>` : '';
-    const bountyRows = B.list.map((t, i) => {
-      if (!t) return `
-      <div class="shop-row">
-        <div class="gf-info"><div class="gf-name">（此悬赏已交付）</div><div class="gf-desc">明日将有新悬赏贴出。</div></div>
-      </div>`;
-      const done = t.progress >= t.need;
-      const btn = done
-        ? `<button class="btn btn-sm btn-primary" data-action="act-bounty-claim" data-i="${i}">领赏（${Utils.fmtNum(r.stones)}灵石${p.sect ? `+${r.contrib}贡献` : ''}）</button>`
-        : t.type === 'collect'
-          ? `<button class="btn btn-sm" data-action="act-bounty-submit" data-i="${i}">上交（持有${Bag.count(t.target)}）</button>`
-          : t.type === 'spar'
-            ? '<span class="tip-line" style="margin:0">去江湖页切磋获胜</span>'
-            : '<span class="tip-line" style="margin:0">游历猎杀自动计入</span>';
+    // v13 炼器坊
+    const forgeRows = GameData.FORGE_RECIPES.map(r => {
+      const out = GameData.ITEMS[r.out];
+      const mats = Object.entries(r.need).map(([id, n]) => `${GameData.ITEMS[id].name} ${Bag.count(id)}/${n}`).join('、');
+      const can = Object.entries(r.need).every(([id, n]) => Bag.count(id) >= n);
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${t.name} ${done ? '<span class="tag safe">已达成</span>' : `<span class="tag">进度 ${t.progress}/${t.need}</span>`}${(t === B.list.find(x => x)) ? repTag : ''}</div>
-          <div class="gf-desc">${t.desc} · 赏格：灵石 ${Utils.fmtNum(Math.round(r.stones * (t.chain ? 1 + t.chain * 0.6 : 1)))}${p.sect ? `、贡献 ${Math.round(r.contrib * (t.chain ? 1 + t.chain * 0.6 : 1))}` : ''}</div>
+          <div class="gf-name">${this.gradeSpan(out.name, out.grade)}${out.set ? ' <span class="tag warn">套装件</span>' : ''}（成器率 ${r.rate}%）</div>
+          <div class="gf-desc">${out.desc}<br>需 ${mats}</div>
         </div>
-        <div class="gf-actions">${btn}</div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-forge" data-recipe="${r.id}" ${can ? '' : 'disabled'}>锻 造</button></div>
       </div>`;
     }).join('');
-    const bountySection = `
-      <div class="shop-section-title">◈ 悬赏任务板 <span class="tag">第 ${B.day + 1} 日贴出 · 存续两日</span></div>
-      ${bountyRows}`;
-    // v13 黑市（每月前三日开市）
-    const blackSection = BlackSys.isOpen(p) ? `
-      <div class="shop-section-title">◈ 暗巷黑市 <span class="tag warn">开市中 · 余 ${BlackSys.daysLeft(p)} 日</span></div>
-      <div class="tip-line" style="margin:0 0 6px">· 黑市奇货稀罕，价钱却贵六成；每月初三开市三日。<br>· 巷角的「来路不明之物」，福缘高者捡漏，福缘低者破财。</div>
-      ${BlackSys.goods(p).map(id => {
-        const def = GameData.ITEMS[id];
-        const price = BlackSys.price(p, id);
-        const afford = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000 >= price;
-        return `
-        <div class="shop-row">
-          <div class="gf-info">
-            <div class="gf-name">${this.gradeSpan(def.name, def.grade ?? def.tier ?? 0)}</div>
-            <div class="gf-desc">${def.desc}</div>
-          </div>
-          <div class="gf-actions">
-            <span class="price ${afford ? '' : 'lack'}">${Utils.fmtNum(price)}灵石</span>
-            <button class="btn btn-sm" data-action="act-black-buy" data-item="${id}">买 下</button>
-          </div>
-        </div>`;
-      }).join('')}
-      <div class="shop-row">
-        <div class="gf-info"><div class="gf-name">？？？ <span class="tag danger">来路不明</span></div>
-        <div class="gf-desc">巷角那只血渍未干的储物袋……要赌一手吗？</div></div>
-        <div class="gf-actions"><button class="btn btn-sm btn-danger" data-action="act-black-mystery">赌一手</button></div>
-      </div>` : `
-      <div class="shop-section-title">◈ 暗巷黑市 <span class="tag">闭市</span></div>
-      <div class="tip-line" style="margin:0 0 6px">· 每月初三开市三日——如今巷口空空，唯有野猫。</div>`;
+    const forgeSection = `
+      <div class="shop-section-title">◈ 炼器坊（消耗材料锻造神兵；天级神兵与套装件唯此处可出）</div>
+      ${forgeRows}`;
+    return `
+      <div class="card">
+        <div class="card-title">✦ 炼制坊 <span style="font-size:12px;color:var(--text-dim)">丹炉 · 符坊 · 器坊——百艺皆出于此</span></div>
+        ${alchemySection}
+        ${talismanSection}
+        ${forgeSection}
+      </div>`;
+  },
+
+  shopForge() {
+    const p = Game.player;
     // v13 祭炼强化（对已穿戴装备）
     const enhSlots = ['weapon', 'armor', 'accessory'].map(slot => {
       const id = p.equipped[slot] ? Utils.eqId(p.equipped[slot]) : null;
@@ -13570,7 +13820,7 @@ const UI = {
       </div>`;
     }).join('');
     const affixSection = `
-      <div class="shop-section-title">◈ 词缀洗练（v19：洗练重掷，不问因果）</div>
+      <div class="shop-section-title">◈ 词缀洗练（洗练重掷，不问因果）</div>
       ${affixSlots || '<div class="tip-line">先装备法宝，方能洗练词缀。</div>'}`;
     // v19 本命法宝喂养
     const benmingSection = ForgeSys.benmingOwn(p) ? `
@@ -13585,23 +13835,82 @@ const UI = {
       ${enhSlots || '<div class="tip-line">先在乾坤袋中装备法宝，方可祭炼强化。</div>'}
       ${affixSection}
       ${benmingSection}`;
-    // v13 炼器坊
-    const forgeRows = GameData.FORGE_RECIPES.map(r => {
-      const out = GameData.ITEMS[r.out];
-      const mats = Object.entries(r.need).map(([id, n]) => `${GameData.ITEMS[id].name} ${Bag.count(id)}/${n}`).join('、');
-      const can = Object.entries(r.need).every(([id, n]) => Bag.count(id) >= n);
+    return `
+      <div class="card">
+        <div class="card-title">✦ 祭炼堂 <span style="font-size:12px;color:var(--text-dim)">强化 · 洗练 · 本命温养——法宝之道</span></div>
+        ${enhanceSection}
+      </div>`;
+  },
+
+  shopBounty() {
+    const p = Game.player;
+    // v13 悬赏任务板
+    const B = BountySys.stateOf(p);
+    const r = BountySys.rewards(p);
+    const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
+    const repTag = repBonus > 1 ? ` <span class="tag safe" title="声望加成：${Math.round((repBonus - 1) * 100)}%">声望赏格 ×${repBonus}</span>` : '';
+    const bountyRows = B.list.map((t, i) => {
+      if (!t) return `
+      <div class="shop-row">
+        <div class="gf-info"><div class="gf-name">（此悬赏已交付）</div><div class="gf-desc">明日将有新悬赏贴出。</div></div>
+      </div>`;
+      const done = t.progress >= t.need;
+      const btn = done
+        ? `<button class="btn btn-sm btn-primary" data-action="act-bounty-claim" data-i="${i}">领赏（${Utils.fmtNum(r.stones)}灵石${p.sect ? `+${r.contrib}贡献` : ''}）</button>`
+        : t.type === 'collect'
+          ? `<button class="btn btn-sm" data-action="act-bounty-submit" data-i="${i}">上交（持有${Bag.count(t.target)}）</button>`
+          : t.type === 'spar'
+            ? '<span class="tip-line" style="margin:0">去江湖页切磋获胜</span>'
+            : '<span class="tip-line" style="margin:0">游历猎杀自动计入</span>';
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${this.gradeSpan(out.name, out.grade)}${out.set ? ' <span class="tag warn">套装件</span>' : ''}（成器率 ${r.rate}%）</div>
-          <div class="gf-desc">${out.desc}<br>需 ${mats}</div>
+          <div class="gf-name">${t.name} ${done ? '<span class="tag safe">已达成</span>' : `<span class="tag">进度 ${t.progress}/${t.need}</span>`}${(t === B.list.find(x => x)) ? repTag : ''}</div>
+          <div class="gf-desc">${t.desc} · 赏格：灵石 ${Utils.fmtNum(Math.round(r.stones * (t.chain ? 1 + t.chain * 0.6 : 1)))}${p.sect ? `、贡献 ${Math.round(r.contrib * (t.chain ? 1 + t.chain * 0.6 : 1))}` : ''}</div>
         </div>
-        <div class="gf-actions"><button class="btn btn-sm" data-action="act-forge" data-recipe="${r.id}" ${can ? '' : 'disabled'}>锻 造</button></div>
+        <div class="gf-actions">${btn}</div>
       </div>`;
     }).join('');
-    const forgeSection = `
-      <div class="shop-section-title">◈ 炼器坊（消耗材料锻造神兵；天级神兵与套装件唯此处可出）</div>
-      ${forgeRows}`;
+    const bountySection = `
+      <div class="shop-section-title">◈ 悬赏任务板 <span class="tag">第 ${B.day + 1} 日贴出 · 存续两日</span></div>
+      ${bountyRows}`;
+    return `
+      <div class="card">
+        <div class="card-title">✦ 悬赏使命 <span style="font-size:12px;color:var(--text-dim)">接榜 · 践诺 · 领赏</span></div>
+        <div class="tip-line" style="margin:0 0 6px">· 悬赏两日一换，达成后记得及时领赏；猎杀类目标游历时自动计入。</div>
+        ${bountySection}
+      </div>`;
+  },
+
+  shopOdd() {
+    const p = Game.player;
+    // v13 黑市（每月前三日开市）
+    const blackSection = BlackSys.isOpen(p) ? `
+      <div class="shop-section-title">◈ 暗巷黑市 <span class="tag warn">开市中 · 余 ${BlackSys.daysLeft(p)} 日</span></div>
+      <div class="tip-line" style="margin:0 0 6px">· 黑市奇货稀罕，价钱却贵六成；每月初三开市三日。<br>· 巷角的「来路不明之物」，福缘高者捡漏，福缘低者破财。</div>
+      ${BlackSys.goods(p).map(id => {
+        const def = GameData.ITEMS[id];
+        const price = BlackSys.price(p, id);
+        const afford = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000 >= price;
+        return `
+        <div class="shop-row">
+          <div class="gf-info">
+            <div class="gf-name">${this.gradeSpan(def.name, def.grade ?? def.tier ?? 0)}</div>
+            <div class="gf-desc">${def.desc}</div>
+          </div>
+          <div class="gf-actions">
+            <span class="price ${afford ? '' : 'lack'}">${Utils.fmtNum(price)}灵石</span>
+            <button class="btn btn-sm" data-action="act-black-buy" data-item="${id}">买 下</button>
+          </div>
+        </div>`;
+      }).join('')}
+      <div class="shop-row">
+        <div class="gf-info"><div class="gf-name">？？？ <span class="tag danger">来路不明</span></div>
+        <div class="gf-desc">巷角那只血渍未干的储物袋……要赌一手吗？</div></div>
+        <div class="gf-actions"><button class="btn btn-sm btn-danger" data-action="act-black-mystery">赌一手</button></div>
+      </div>` : `
+      <div class="shop-section-title">◈ 暗巷黑市 <span class="tag">闭市</span></div>
+      <div class="tip-line" style="margin:0 0 6px">· 每月初三开市三日——如今巷口空空，唯有野猫。</div>`;
     // v19 拍卖行
     const lot = AuctionSys.state(p);
     const isMystery = lot.item === 'mystery';
@@ -13634,27 +13943,8 @@ const UI = {
       ${donateRows}`;
     return `
       <div class="card">
-        <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
-        <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。</div>
-        <div class="card-tags">
-          <button class="btn btn-sm" data-action="act-convert" data-dir="up1">100下品 → 1中品</button>
-          <button class="btn btn-sm" data-action="act-convert" data-dir="down1">1中品 → 100下品</button>
-          <button class="btn btn-sm" data-action="act-convert" data-dir="up2">100中品 → 1上品</button>
-          <button class="btn btn-sm" data-action="act-convert" data-dir="down2">1上品 → 100中品</button>
-        </div>
-        ${group('pill', '丹药')}
-        ${group('artifact', '法器')}
-        ${group('gongfa', '功法典籍')}
-        ${group('material', '杂货材料')}
-        ${group('seed', '灵田种子')}
-        <div class="shop-section-title">◈ 出售物品（四折回收${p.dao === 'pill' ? '，丹药另有五成加成' : ''}）</div>
-        ${sellRows || '<div class="tip-line">背包中空空如也。</div>'}
-        ${bountySection}
+        <div class="card-title">✦ 奇 市 <span style="font-size:12px;color:var(--text-dim)">黑市 · 拍卖 · 布施——非常之法，非常之时</span></div>
         ${blackSection}
-        ${alchemySection}
-        ${talismanSection}
-        ${enhanceSection}
-        ${forgeSection}
         ${auctionSection}
         ${donateSection}
       </div>`;
@@ -13752,7 +14042,16 @@ const UI = {
         ${facRows}
       </div>`;
     }
+    // v22 宗门大比：每五年一届，三轮车轮战
+    const T = p.sect.tourney;
+    const tourneyCard = T ? `
+      <div class="card card-trib">
+        <div class="card-title">✦ 宗门大比 <span class="tag warn">${SectSys.TOURNEY_ROUNDS[Math.min(2, T.round)]} · 已胜 ${T.wins} 场</span></div>
+        <div class="card-desc">擂台已筑，钟鼓齐鸣。同门比试点到为止——胜场越多彩头越厚，三连胜者<b>魁首扬名</b>（气运大赠，生涯留名）。</div>
+        <div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-tourney-fight">登 台 比 武</button></div>
+      </div>` : '';
     return `
+      ${tourneyCard}
       ${facSection}
       <div class="card">
         <div class="card-title">✦ ${sect.name} <span class="tag safe">${sect.bonusText}</span></div>
@@ -13945,6 +14244,24 @@ const UI = {
   /** v18：标记某区域需要重渲染 */
   markDirty(area) { this._dirty = this._dirty || {}; this._dirty[area] = true; },
 
+  /* ---------- v22 移动端抽屉：道途 / 乾坤袋 面板 ≤860px 收进侧滑抽屉 ---------- */
+  toggleDrawer(panel) {
+    const id = panel === 'left' ? 'panel-left' : panel === 'right' ? 'panel-right' : null;
+    if (!id) return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    const willOpen = !el.classList.contains('drawer-open');
+    this.closeDrawers();
+    if (willOpen) {
+      el.classList.add('drawer-open');
+      document.getElementById('drawer-backdrop')?.classList.add('on');
+    }
+  },
+  closeDrawers() {
+    for (const id of ['panel-left', 'panel-right']) document.getElementById(id)?.classList.remove('drawer-open');
+    document.getElementById('drawer-backdrop')?.classList.remove('on');
+  },
+
   /* ---------- 通用弹窗（Promise 风格，resolve 选项的 value） ---------- */
   _popupResolve: null,
   _popupOptions: [],
@@ -13980,6 +14297,7 @@ const UI = {
    *  未决弹窗按取消结算，杜绝「遮罩卡死」与挂起的 Promise */
   closeOverlays() {
     this.closePopup();
+    this.closeDrawers();   // v22：抽屉随覆盖层一并收起
     for (const id of ['battle-modal', 'dao-modal', 'tribulation-modal', 'tutorial', 'amb-panel']) {
       const el = document.getElementById(id);
       if (el) el.classList.add('hidden');
@@ -14250,6 +14568,7 @@ const Game = {
   activeTab: 'cultivate',
   bagTab: 'all',
   bagSort: 'quality',   // v20 背包排序：quality 品质 / type 类型 / name 名字
+  subTab: {},   // v22 页签内子页签记忆（shop/cave/map 各自记住上次所在分栏）
 
   init() {
     UI.cache();
@@ -14271,6 +14590,10 @@ const Game = {
       const ctrl = document.getElementById('amb-ctrl');
       const panel = document.getElementById('amb-panel');
       if (panel && !panel.classList.contains('hidden') && ctrl && !ctrl.contains(e.target)) panel.classList.add('hidden');
+    });
+    // v22：点击通用弹窗遮罩（弹窗盒以外区域）按取消结算，与右上 ✕ 等效
+    document.getElementById('popup-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'popup-modal' && UI._popupResolve) UI.popupChoose(-1);
     });
     // v7：背包双击快捷操作（服用 / 装备 / 学习；丢弃按钮除外）
     document.addEventListener('dblclick', (e) => {
@@ -14416,6 +14739,7 @@ const Game = {
 
   enterGame() {
     Anim.reset();   // v4：换档后数字动画记忆清零
+    this.subTab = {};   // v22：换档后子页签记忆一并复位
     Meta.load();    // v6：装载本存档位的成就与图鉴
     AutoCult.abort();
     this.computeOfflineProgress();  // v18：离线进度
@@ -14450,6 +14774,7 @@ const Game = {
     Achieve.check();   // v6：成就检查（解锁即发奖播报）
     try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
     try { if (typeof FestivalSys !== 'undefined') FestivalSys.check(p); } catch (err) { console.error('节庆检查异常:', err); }   // v20：节庆触发
+    try { if (typeof SectSys !== 'undefined' && SectSys.tourneyCheck) SectSys.tourneyCheck(p); } catch (err) { console.error('大比检查异常:', err); }   // v22：宗门大比（每五年一届）
     try { if (typeof NpcSys !== 'undefined' && NpcSys.companionCheck) NpcSys.companionCheck(p); } catch (err) { console.error('共修检查异常:', err); }   // v20：道侣共修
     try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
@@ -14503,13 +14828,17 @@ const Game = {
     },
     /* --- 标签页 / 背包 --- */
     'act-tab': (d) => {
-      const lock = Guide.tabLocked(d.tab);   // v6：分步解锁
+      // v22：支持 "tab:sub" 深链写法（如 shop:bounty 直达坊市·悬赏板）
+      const [tab, sub] = String(d.tab || '').split(':');
+      const lock = Guide.tabLocked(tab);   // v6：分步解锁
       if (lock) { UI.toast(`尚未解锁 —— ${lock}`); return; }
-      if (Game.activeTab !== d.tab && typeof Ambience !== 'undefined' && Ambience.sfxOn) Ambience.sfx('tab');   // v20 切页轻音
-      Game.activeTab = d.tab; UI.renderTabs(); UI.renderTabContent();
+      if (sub) Game.subTab[tab] = sub;
+      UI.closeDrawers();   // v22：移动端切页后收起抽屉，回到内容视图
+      if (Game.activeTab !== tab && typeof Ambience !== 'undefined' && Ambience.sfxOn) Ambience.sfx('tab');   // v20 切页轻音
+      Game.activeTab = tab; UI.renderTabs(); UI.renderTabContent();
       // v20 情境 BGM：进秘境页/坊市页切换氛围（战斗/剧情情境各自接管）
       if (typeof Ambience !== 'undefined' && Ambience.musicOn && !Battle.active && !Story.active()) {
-        Ambience.setMood(d.tab === 'map' && this.player && this.player.dungeon ? 'secret' : d.tab === 'shop' ? 'market' : 'calm');
+        Ambience.setMood(tab === 'map' && this.player && this.player.dungeon ? 'secret' : tab === 'shop' ? 'market' : 'calm');
       }
       // 面板切换平滑过渡：短暂加动效类，避免生硬跳变
       const box = UI.el['tab-content'];
@@ -14518,6 +14847,9 @@ const Game = {
         box.classList.remove('tab-switch'); void box.offsetWidth; box.classList.add('tab-switch');
       }
     },
+    /** v22 移动端抽屉：道途 / 乾坤袋 面板在 ≤860px 收进侧滑抽屉 */
+    'act-drawer': (d) => UI.toggleDrawer(d.panel),
+    'act-drawer-close': () => UI.closeDrawers(),
     'bag-tab': (d) => { Game.bagTab = d.bagtab; UI.renderBag(); },
     'bag-sort': (d) => { Game.bagSort = d.sort; UI.renderBag(); },   // v20 背包排序
     /* --- v4 日志工具 / 一键减负 --- */
@@ -14705,6 +15037,8 @@ const Game = {
     'act-faction-join': (d) => SectSys.joinFaction(d.f),
     'act-faction-exchange': (d) => SectSys.factionExchange(Number(d.i)),
     'act-danger-go': (d) => SectSys.goDanger(Number(d.i)),
+    'act-tourney-fight': () => SectSys.tourneyFight(),   // v22 宗门大比登台
+    'act-daily-all': () => Guide.dailyAll(),   // v22 一键日常
     /* --- v3 世界大事件 --- */
     'act-event-join': () => WorldSys.joinEvent(),
     'act-event-skip': () => WorldSys.skipEvent(),

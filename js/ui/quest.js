@@ -295,17 +295,17 @@ const QuestSys = {
     },
   ],
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
-  /** v12 每章各目标对应的功能页签（供焦点条「前往」直达） */
+  /** v12 每章各目标对应的功能页签（供焦点条「前往」直达；v22 支持子页签深链 tab:sub） */
   GO: {
-    c1: ['cultivate', 'map', 'map'],
-    c2: ['map', 'map', 'cultivate'],
+    c1: ['cultivate', 'map:atlas', 'map:atlas'],
+    c2: ['map:atlas', 'map:atlas', 'cultivate'],
     c3: ['cultivate', 'sect', 'gongfa'],
-    c4: ['jianghu', 'map', 'map'],
-    c5: ['cultivate', 'shop', 'map'],
-    c6: ['cultivate', 'map', 'map'],
-    c7: ['cultivate', 'map', 'shop'],
+    c4: ['jianghu', 'map:atlas', 'map:atlas'],
+    c5: ['cultivate', 'shop:craft', 'map:atlas'],
+    c6: ['cultivate', 'map:realm', 'map:realm'],
+    c7: ['cultivate', 'map:atlas', 'shop:market'],
     c8: ['cultivate', 'jianghu', 'gongfa'],
-    c9: ['cultivate', 'map', 'cultivate'],
+    c9: ['cultivate', 'map:atlas', 'cultivate'],
   },
   /** v12 有效章节序号：跳过「境界已领先、目标全部自动追认」的章节（正式结算仍在 check 中逐章进行） */
   currentChapterIdx(p) {

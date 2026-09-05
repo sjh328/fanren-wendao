@@ -1285,7 +1285,7 @@ const Battle = {
     B.over = true;
     // v20 多波遭遇：妖群未绝 → 半额结算本波，立即接战下一波（仅普通战斗）
     if (B.ctx.waveIds && (B.waveIdx || 0) < B.ctx.waveIds.length - 1
-      && !B.ctx.spar && !B.ctx.story && !B.ctx.dungeon && !B.ctx.npcId && !B.ctx.weType && !B.ctx.sectDanger) {
+      && !B.ctx.spar && !B.ctx.story && !B.ctx.dungeon && !B.ctx.npcId && !B.ctx.weType && !B.ctx.sectDanger && !B.ctx.tourney) {
       B.over = false;
       const waveExp = Math.round(B.enemy.expGain * 0.5);
       Cultivate.addExp(p, waveExp);
@@ -1301,12 +1301,22 @@ const Battle = {
       B.intent = null;
       Anim.drop('bt-ehp');
       this.log(`⚔ 第 ${B.waveIdx + 1} 波——<b class="grade-0">${e2.name}</b>（${e2.realmLabel}${e2.elite ? ' · 精英' : ''}${e2.tplName ? ' · ' + e2.tplName : ''}）杀入战团！`, 'warn');
+      B.busy = false;   // v22 修瑕：先解忙再渲染——原顺序会把 disabled 按钮锁死整场多波战斗（手动战斗卡死）
       this.render();
-      B.busy = false;
       this.autoNext();
       return;
     }
     const st = Stat.compute(p);
+    // v22 宗门大比：同门较技，点到为止，一轮战毕回传大比分
+    if (B.ctx.tourney) {
+      this.log('台上二人收势而立，裁判长老高声唱名。', 'log-system');
+      Cultivate.addExp(p, Math.round(B.enemy.expGain * 0.3));
+      p.counters.spars = (p.counters.spars || 0) + 1;
+      await this.wait(700);
+      SectSys.onTourneyRound(true);
+      this.end(false);
+      return;
+    }
     // §24 切磋：点到为止，不取性命不掠财物
     if (B.ctx.spar) {
       this.log('二人收势而立，抱拳一礼——点到为止。', 'log-system');
@@ -1415,6 +1425,14 @@ const Battle = {
       p.hp = Math.max(1, Math.round(Stat.compute(p).maxHp * 0.2));
       this.end(false);
       Log.add(`你与 ${B.enemy.name} 切磋落败，技不如人，虽无大碍亦有所悟。`, 'info');
+      return;
+    }
+    // v22 宗门大比落败：点到为止，止步仍领已胜彩头
+    if (B.ctx.tourney) {
+      const stT = Stat.compute(p);
+      p.hp = Math.max(1, Math.round(stT.maxHp * 0.3));
+      SectSys.onTourneyRound(false);
+      this.end(false);
       return;
     }
     // §25 秘境陨落：背包三成之物永远留在其中

@@ -2356,15 +2356,7 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
 .affix-p { color: #8a6a2a; font-size: 12px; font-weight: 700; cursor: help; }
 .affix-s { color: #5a7a8a; font-size: 12px; font-weight: 700; cursor: help; }
 
-/* ==================== v19 战斗升级 ==================== */
-.ult-row { margin-top: 6px; }
-.ult-btn { border-color: #7c5cb0; }
-.ult-btn:disabled { opacity: 0.45; }
-.bt-info-btn { background: none; border: none; cursor: pointer; font-size: 13px; padding: 0 4px; opacity: 0.8; }
-.bt-summary { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--gold, #8a6a2a); background: rgba(0,0,0,0.03); text-align: center; animation: fadeIn 0.3s; }
-.bt-sum-title { font-weight: 700; letter-spacing: 2px; margin-bo
-
-/* ==================== v19 战斗升级 ==================== */
+/* ==================== v19 战斗升级（v22 修瑕：此处原有截断的重复坏块，未闭合花括号吞掉了其后全部规则） ==================== */
 .ult-row { margin-top: 6px; }
 .ult-btn { border-color: #7c5cb0; }
 .ult-btn:disabled { opacity: 0.45; }
@@ -2499,3 +2491,192 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   .amb-panel { right: 4px; left: auto; width: min(92vw, 300px); }
   #log-wrap .log-tools .log-tool { min-height: 34px; }
 }
+
+
+/* ======================================================================
+   v22「归一」：子页签 · 移动端底部导航 · 双抽屉 · 底部弹层
+   ====================================================================== */
+
+/* ---------- 子页签 chips（大页签拆分栏，横向可滚动） ---------- */
+.subtabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 0 0 8px;
+  margin-bottom: 10px;
+  border-bottom: 1px dashed var(--border);
+  scrollbar-width: none;
+  flex: 0 0 auto;
+}
+.subtabs::-webkit-scrollbar { display: none; }
+.subtab-btn {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 5px 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(255, 253, 244, 0.65);
+  color: var(--text-dim);
+  font-family: var(--font-kai);
+  font-size: 13px;
+  letter-spacing: 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s, background 0.15s, transform 0.1s;
+}
+.subtab-btn:hover { color: var(--text); border-color: var(--border-light); }
+.subtab-btn:active { transform: translateY(1px); }
+.subtab-btn.active {
+  color: #fff8e8;
+  background: linear-gradient(180deg, #9a7a3a, #7a5c24);
+  border-color: #7a5c24;
+  box-shadow: 0 1px 5px rgba(96, 76, 40, 0.35);
+  font-weight: bold;
+}
+
+/* ---------- v22 弹窗右上 ✕ ---------- */
+.popup-x {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: color 0.15s, background 0.15s;
+}
+.popup-x:hover { color: var(--danger); background: rgba(191, 74, 68, 0.1); }
+.popup-box, .dao-box, .trib-box { position: relative; }
+
+/* ---------- v22 移动端抽屉按钮（桌面隐藏） ---------- */
+.m-drawer-btn { display: none; }
+
+/* ---------- ≤860px：底部导航 + 双抽屉 ---------- */
+@media (max-width: 860px) {
+  .m-drawer-btn {
+    display: inline-block;
+    min-height: 38px;
+    padding: 4px 12px;
+    border: 1px solid rgba(150, 112, 46, 0.45);
+    border-radius: 20px;
+    background: rgba(255, 253, 244, 0.8);
+    color: var(--gold-bright);
+    font-family: var(--font-kai);
+    font-size: 13px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .m-drawer-btn:active { transform: translateY(1px); }
+
+  /* 页签栏固定为底部导航（同一 DOM，CSS 重定位） */
+  #tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 60;
+    margin-bottom: 0;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(248, 241, 222, 0.98), rgba(238, 227, 199, 0.99));
+    border-bottom: none;
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -3px 14px rgba(80, 60, 28, 0.18);
+    gap: 2px;
+  }
+  .tab-btn {
+    flex: 1 0 auto;
+    min-height: 44px;
+    text-align: center;
+    padding: 6px 10px;
+    border-bottom: none;
+    border-radius: 10px;
+  }
+  .tab-btn.active { border-radius: 10px; }
+  .tab-btn.active::after { display: none; }
+  /* 主内容区预留底部导航高度，不再被遮挡 */
+  #layout { padding-bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
+  .center-panel { padding-bottom: 8px; }
+
+  /* 焦点条吸顶：随时可见「现在该做什么」 */
+  #focus-strip { position: sticky; top: 0; z-index: 30; }
+
+  /* 左右面板 → 侧滑抽屉（渲染管线不变，仅收进屏外） */
+  #panel-left, #panel-right {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    width: min(84vw, 340px);
+    z-index: 80;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: var(--panel);
+    box-shadow: 0 0 40px rgba(60, 44, 18, 0.35);
+    transition: transform 0.26s ease;
+    max-height: none;
+  }
+  #panel-left {
+    left: 0;
+    right: auto;
+    transform: translateX(-106%);
+    padding: 12px 12px calc(20px + env(safe-area-inset-bottom, 0px));
+    border-right: 1px solid var(--border);
+  }
+  #panel-right {
+    right: 0;
+    left: auto;
+    transform: translateX(106%);
+    padding: 12px 12px calc(20px + env(safe-area-inset-bottom, 0px));
+    border-left: 1px solid var(--border);
+  }
+  #panel-left.drawer-open, #panel-right.drawer-open { transform: translateX(0); }
+  #panel-right { flex-direction: column; }
+
+  /* 抽屉遮罩 */
+  #drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    background: rgba(46, 34, 14, 0.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s ease;
+  }
+  #drawer-backdrop.on { opacity: 1; pointer-events: auto; }
+}
+
+/* ---------- ≤480px：弹层近全屏底部弹层化 ---------- */
+@media (max-width: 480px) {
+  .modal { align-items: flex-end; padding: 0; }
+  .popup-box, .battle-box, .dao-box, .trib-box, .tutorial-box {
+    width: 100vw;
+    max-width: 100vw;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .subtab-btn { min-height: 40px; }
+}
+
+/* ---------- 左栏折叠分组（原生 details，分层不折叠常驻项） ---------- */
+.fold { margin: 2px 0 6px; }
+.fold > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  padding: 3px 0;
+  user-select: none;
+}
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary::before { content: '▸ '; color: var(--gold); font-size: 11px; }
+.fold[open] > summary::before { content: '▾ '; }
+.fold > summary:hover { color: var(--text); }

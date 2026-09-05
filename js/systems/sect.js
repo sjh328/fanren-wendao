@@ -230,4 +230,77 @@ const SectSys = {
       }
     }
   },
+
+  /* ---------- v22 宗门大比：每五年一届，三轮车轮战，胜负皆有名次 ---------- */
+  TOURNEY_EVERY: 5,
+  TOURNEY_ROUNDS: ['首轮', '次轮', '决胜轮'],
+  TOURNEY_FOES: ['同门师兄', '同门师姐', '首座大师兄'],
+  /** 行动收尾钩子：每逢五年（游戏年）开一届大比 */
+  tourneyCheck(p) {
+    if (!p.sect) return;
+    const y = WorldSys.year(p);
+    if (y <= 0 || y % this.TOURNEY_EVERY !== 0) return;
+    if ((p.sect.lastTourney || 0) >= y) return;
+    if (p.sect.tourney) return;
+    p.sect.tourney = { round: 0, wins: 0 };
+    p.sect.lastTourney = y;
+    Log.add('锣鼓喧天——<b>宗门大比</b>开幕了！三轮车轮战，同门比试点到为止；胜场越多彩头越厚，三连胜者魁首扬名。', 'system');
+    Story.chron('宗门大比开幕');
+    UI.announce('⚔ 宗门大比开幕', 'gold');
+  },
+  /** 生成当轮对手：同门弟子（兽形灵技拟态），一轮强过一轮 */
+  tourneyOpponent(p, round) {
+    const rp = p.realmIdx * 4 + p.layer;
+    const pool = this.taskMonsters(rp + round);
+    const mid = pool.length ? Utils.pick(pool) : Utils.pick(Object.keys(GameData.MONSTERS));
+    const e = buildMonster(mid, Math.max(0, rp + round - GameData.MONSTERS[mid].power));
+    e.name = `${this.TOURNEY_FOES[round] || '同门弟子'}·${Utils.pick(GameData.NAMES)}`;
+    e.elite = false;
+    return e;
+  },
+  /** 登台比武（第 T.round 轮） */
+  tourneyFight() {
+    const p = Game.player;
+    const T = p.sect && p.sect.tourney;
+    if (!T) { UI.toast('当前没有进行中的大比'); return; }
+    if (Battle.active) return;
+    if (T.round >= 3) { UI.toast('三轮已毕'); return; }
+    Battle.start(null, {
+      enemy: this.tourneyOpponent(p, T.round),
+      tourney: true,
+      mapName: `宗门大比 · ${this.TOURNEY_ROUNDS[T.round]}`,
+    });
+  },
+  /** 一轮战罢（胜负皆入此）：发彩头 / 定名次 */
+  onTourneyRound(win) {
+    const p = Game.player;
+    const T = p.sect && p.sect.tourney;
+    if (!T) return;
+    if (win) {
+      T.wins++;
+      T.round++;
+      const stones = Math.round(120 * GameData.stoneEco(p.realmIdx) * (T.wins + 1) / 2);
+      const contrib = 80 + p.realmIdx * 40;
+      p.sect.contrib += contrib;
+      Bag.addStones(stones);
+      KarmaSys.addFortune(2, true);
+      Log.add(`大比${this.TOURNEY_ROUNDS[T.wins - 1] || ''}胜出！彩头：贡献 +${contrib}、灵石 ${Utils.fmtNum(stones)}、气运 +2。`, 'gain');
+      if (T.round >= 3) {
+        p.flags = p.flags || {};
+        p.flags.tourneyChamp = (p.flags.tourneyChamp || 0) + 1;
+        KarmaSys.addFortune(8, true);
+        Log.add('<b>三轮全胜，大比魁首！</b>掌门亲授魁首玉佩，门中扬名——气运 +8。（生涯魁首 ' + p.flags.tourneyChamp + ' 次）', 'realm');
+        Story.chron('宗门大比 · 魁首');
+        UI.announce('⚔ 大比魁首 · 三连胜', 'gold');
+        p.sect.tourney = null;
+      } else {
+        Log.add('下一轮对手已定，且去台下调息片刻。', 'info');
+      }
+    } else {
+      Log.add('大比止步于此——虽未登顶，已胜诸场的彩头尽入囊中。来届再战。', 'warn');
+      Story.chron(`宗门大比 · ${T.wins} 胜止步`);
+      p.sect.tourney = null;
+    }
+    Game.afterAction();
+  },
 };

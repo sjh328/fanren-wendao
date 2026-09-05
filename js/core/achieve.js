@@ -62,6 +62,8 @@ const Achieve = {
     { id: 'v10', cat: 'reinc', name: '印记如星', desc: '累计十枚轮回印记', reward: { fortune: 18 }, prog: p => `${Math.min(10, p.reinc ? (p.reinc.marks || 0) : 0)}/10`, test: p => p.reinc && (p.reinc.marks || 0) >= 10 },
     { id: 'v11', cat: 'dao', name: '道韵全通', desc: '同时激活四条道韵', reward: { fortune: 12 }, test: p => (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) >= 4 },
     { id: 'v12', cat: 'dao', name: '奥义宗师', desc: '三部功法修至大成', reward: { fortune: 10 }, test: p => Object.entries(p.gongfa || {}).filter(([id, g]) => GameData.ITEMS[id] && g.level >= GongfaSys.maxLevel(GameData.ITEMS[id])).length >= 3 },
+    /* ---- v22 宗门大比 ---- */
+    { id: 'w1', cat: 'battle', name: '大比魁首', desc: '于宗门大比三轮全胜夺魁', reward: { fortune: 10 }, test: p => (p.flags && p.flags.tourneyChamp) || false },
   ],
   /** 每次行动收尾时检查：解锁则发奖并播报 */
   check() {

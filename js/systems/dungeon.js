@@ -27,27 +27,42 @@ const DungeonSys = {
     if (p.realmIdx < R.recRealm) { UI.toast(`需 ${GameData.REALM_NAMES[R.recRealm]}期方可入内`); return; }
     Meta.see('realm', R.id);   // v6 图鉴
     p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS, choices: [], gains: [], stuck: false };
+    this.genRoute(p.dungeon);
     this.genChoices(p.dungeon);
     Log.add(`你寻得入口，踏入 <b>${R.name}</b>——雾气在身后合拢，退路只剩来时那条。`, 'system');
     Game.activeTab = 'map';
+    Game.subTab = Game.subTab || {};
+    Game.subTab.map = 'realm';   // v22 直达游历·秘境分栏
     Game.afterAction();
   },
-  /** 随机节点路线：每层二选一，最深处为守关者 */
-  genChoices(D) {
+  /** v22 预生成整条随机路线（每层二选一，末层守关）——供「前方预览」，亦兼容旧档补齐 */
+  genRoute(D) {
     const R = GameData.SECRET_REALMS[D.realm];
-    if (D.depth >= D.total - 1) { D.choices = ['boss']; D.stuck = false; return; }
-    const w = { ...R.weights };
-    const bias = D.depth * 2;
-    w.battle += bias;                                  // 愈深愈多战
-    w.trap += Math.floor(bias / 2);                    // 愈深愈多陷阱
-    w.treasure = Math.max(6, w.treasure - Math.floor(bias / 3));
-    const types = [];
-    let guard = 0;
-    while (types.length < 2 && guard++ < 30) {
-      const t = Utils.pickWeighted(w);
-      if (!types.includes(t)) types.push(t);
+    const total = D.total || GameData.DUNGEON_TOTAL_LAYERS;
+    const start = D.depth || 0;
+    const route = [];
+    for (let d = 0; d < start; d++) route.push(['battle', 'treasure']);   // 旧档已走过的层：占位补齐
+    for (let d = start; d < total - 1; d++) {
+      const w = { ...R.weights };
+      const bias = d * 2;
+      w.battle += bias;                                  // 愈深愈多战
+      w.trap += Math.floor(bias / 2);                    // 愈深愈多陷阱
+      w.treasure = Math.max(6, w.treasure - Math.floor(bias / 3));
+      const types = [];
+      let guard = 0;
+      while (types.length < 2 && guard++ < 30) {
+        const t = Utils.pickWeighted(w);
+        if (!types.includes(t)) types.push(t);
+      }
+      route.push(types.length ? types : ['battle', 'treasure']);
     }
-    D.choices = types.length ? types : ['battle', 'treasure'];
+    route.push(['boss']);
+    D.route = route;
+  },
+  /** 当前层二选一：从预生成路线中取本层岔口 */
+  genChoices(D) {
+    if (!D.route) this.genRoute(D);
+    D.choices = D.route[D.depth] || ['boss'];
     D.stuck = false;
   },
   makeEnemy(R, depth, forceElite = false) {

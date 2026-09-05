@@ -842,6 +842,254 @@ try {
   v10.groups === 2 && needActs.every(a => v10.actions.includes(a))
     ? pass('V10 菜单两分组（记档/系统），七入口保留') : fail('V10 菜单分组', JSON.stringify(v10));
 
+
+  /* ================= W 组 · v22「归一」：子页签 / 深链 / 移动端 / 玩法增补 ================= */
+  // W1 坊市五分栏
+  const w1 = await page.evaluate(async () => {
+    Game.actions['act-tab']({ tab: 'shop' });
+    await new Promise(r => setTimeout(r, 150));
+    const subs = [...document.querySelectorAll('.subtab-btn')].map(b => b.textContent);
+    const market = document.getElementById('tab-content').innerText.includes('万宝坊市');
+    return { subs, market };
+  });
+  w1.subs.length === 5 && w1.market ? pass('W1 坊市五分栏（' + w1.subs.join('/') + '）') : fail('W1 坊市分栏', JSON.stringify(w1));
+
+  // W2 分栏内容各归其位
+  const w2 = await page.evaluate(async () => {
+    const see = async (sub, key) => {
+      Game.actions['act-tab']({ tab: 'shop:' + sub });
+      await new Promise(r => setTimeout(r, 120));
+      return document.getElementById('tab-content').innerText.includes(key);
+    };
+    return {
+      craft: await see('craft', '炼丹炉'),
+      forge: await see('forge', '祭炼强化'),
+      bounty: await see('bounty', '悬赏任务板'),
+      odd: await see('odd', '暗巷黑市'),
+    };
+  });
+  Object.values(w2).every(Boolean) ? pass('W2 炼制/祭炼/悬赏/奇市 内容各归其位') : fail('W2 分栏内容', JSON.stringify(w2));
+
+  // W3 洞府三分栏（筑基解锁后）
+  const w3 = await page.evaluate(async () => {
+    Game.player.realmIdx = 1;
+    UI.renderAll();
+    Game.actions['act-tab']({ tab: 'cave' });
+    await new Promise(r => setTimeout(r, 150));
+    const home = document.getElementById('tab-content').innerText.includes('聚灵阵');
+    Game.actions['act-tab']({ tab: 'cave:farm' });
+    await new Promise(r => setTimeout(r, 120));
+    const farm = document.getElementById('tab-content').innerText.includes('灵田');
+    Game.actions['act-tab']({ tab: 'cave:beast' });
+    await new Promise(r => setTimeout(r, 120));
+    const beast = document.getElementById('tab-content').innerText.includes('兽栏');
+    return { home, farm, beast };
+  });
+  Object.values(w3).every(Boolean) ? pass('W3 洞府三分栏（主楼/灵田/灵兽）') : fail('W3 洞府分栏', JSON.stringify(w3));
+
+  // W4 游历三分栏
+  const w4 = await page.evaluate(async () => {
+    const see = async (sub, key) => {
+      Game.actions['act-tab']({ tab: 'map' + (sub ? ':' + sub : '') });
+      await new Promise(r => setTimeout(r, 120));
+      return document.getElementById('tab-content').innerText.includes(key);
+    };
+    return { atlas: await see('', '探索此地'), realm: await see('realm', '秘境探索'), world: await see('world', '天下大势') };
+  });
+  Object.values(w4).every(Boolean) ? pass('W4 游历三分栏（舆图/秘境/天下）') : fail('W4 游历分栏', JSON.stringify(w4));
+
+  // W5 深链直达 + 红点迁移
+  const w5 = await page.evaluate(async () => {
+    Game.actions['act-tab']({ tab: 'shop:bounty' });
+    await new Promise(r => setTimeout(r, 120));
+    const deep = Game.activeTab === 'shop' && Game.subTab.shop === 'bounty'
+      && document.getElementById('tab-content').innerText.includes('悬赏任务板');
+    Game.player.bounties = { day: 0, list: [{ name: '测试悬赏', type: 'kill', target: 'm_lingcao', need: 1, progress: 1, desc: 'x' }] };
+    UI.renderTabs();
+    const shopDot = !!document.querySelector('.tab-btn[data-tab="shop"] .dot');
+    Game.player.cave = { lv: 1, plots: [{ seed: 's_lingcao', crop: 'm_lingcao', days: 1, plantedDay: Math.floor(Game.player.day) - 5 }], builds: {} };
+    UI.renderTabs();
+    const caveDot = !!document.querySelector('.tab-btn[data-tab="cave"] .dot');
+    Game.player.bounties = { day: 0, list: [] };
+    Game.player.cave = null;
+    UI.renderTabs();
+    return { deep, shopDot, caveDot };
+  });
+  w5.deep && w5.shopDot && w5.caveDot ? pass('W5 深链直达 tab:sub + 红点随分栏迁移') : fail('W5 深链红点', JSON.stringify(w5));
+
+  // W6 修炼预估天数
+  const w6 = await page.evaluate(async () => {
+    Game.actions['act-tab']({ tab: 'cultivate' });
+    await new Promise(r => setTimeout(r, 120));
+    const t = document.getElementById('tab-content').innerText;
+    return { est: /约需 \d+ 日/.test(t) };
+  });
+  w6.est ? pass('W6 修行卡显示距圆满预估天数') : fail('W6 修炼预估', JSON.stringify(w6));
+
+  // W7 秘境路径预览
+  const w7 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.dungeon = null;
+    DungeonSys.enter(0);
+    await new Promise(r => setTimeout(r, 150));
+    const t = document.getElementById('tab-content').innerText;
+    const peek = t.includes('灵觉所及');
+    const hasRoute = !!(p.dungeon && p.dungeon.route && p.dungeon.route.length === p.dungeon.total);
+    p.dungeon = null;
+    UI.renderAll();
+    return { peek, hasRoute };
+  });
+  w7.peek && w7.hasRoute ? pass('W7 秘境预生成路线 + 前方两层预览') : fail('W7 秘境预览', JSON.stringify(w7));
+
+  // W8 一键日常：求签/采收/领赏 一次办完
+  const w8 = await page.evaluate(async () => {
+    const p = Game.player;
+    const today = Math.floor(p.day);
+    p.signDay = -1;
+    p.cave = { lv: 1, plots: [{ seed: 's_lingcao', crop: 'm_lingcao', days: 1, plantedDay: today - 3 }], builds: {} };
+    p.bounties = { day: Math.floor(p.day), list: [{ name: '测试悬赏', type: 'kill', target: 'm_lingcao', need: 1, progress: 1, desc: 'x', chain: 1 }] };   // 榜单日期=当天，避免 stateOf 日界再生
+    Guide.dailyAll();
+    await new Promise(r => setTimeout(r, 300));
+    const txt = document.getElementById('popup-body').innerText || '';
+    const claimed = !p.bounties.list[0];
+    const ok = p.signDay === today && !p.cave.plots[0] && claimed;
+    window.__w8diag = { sign: p.signDay === today, plot: !p.cave.plots[0], claimed };
+    UI.popupChoose(-1);
+    p.cave = null; p.bounties = { day: 0, list: [] };
+    UI.renderAll();
+    return { ok, hasQian: txt.includes('黄历求签'), hasShou: txt.includes('采收灵田'), hasLing: txt.includes('悬赏领赏') };
+  });
+  w8.ok && w8.hasQian && w8.hasShou && w8.hasLing ? pass('W8 一键日常小账（求签/采收/领赏）') : fail('W8 一键日常', JSON.stringify(w8));
+
+  // W9 宗门大比：开幕→登台→三连胜魁首
+  const w9 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.sect = { id: 'qingyun', contrib: 0, faction: null, rank: 'outer', tasks: [], lastTourney: 0, tourney: null };
+    p.day = 365 * 4 + 300;   // WorldSys.year = floor(day/365)+1 = 第 5 年 → 大比开幕
+    SectSys.tourneyCheck(p);
+    const opened = !!p.sect.tourney;
+    Game.actions['act-tab']({ tab: 'sect' });
+    await new Promise(r => setTimeout(r, 150));
+    const card = document.getElementById('tab-content').innerText.includes('宗门大比');
+    SectSys.tourneyFight();
+    await new Promise(r => setTimeout(r, 400));
+    const battleOpen = !document.getElementById('battle-modal').className.includes('hidden');
+    if (Battle.active) { Battle.active.over = true; Battle.active.busy = true; document.getElementById('battle-modal').classList.add('hidden'); Battle.active = null; }
+    SectSys.onTourneyRound(true); SectSys.onTourneyRound(true); SectSys.onTourneyRound(true);
+    const champ = (p.flags.tourneyChamp || 0) === 1 && p.sect.tourney === null;
+    p.sect = null; p.day = 400;
+    UI.renderAll();
+    return { opened, card, battleOpen, champ };
+  });
+  w9.opened && w9.card && w9.battleOpen && w9.champ ? pass('W9 宗门大比全流程（开幕/登台/魁首）') : fail('W9 宗门大比', JSON.stringify(w9));
+
+  // W10 弹窗：右上 ✕ 与点遮罩关闭
+  const w10 = await page.evaluate(async () => {
+    UI.popup({ title: '遮罩测试', html: 'x', options: [{ text: '确定', value: true, primary: true }] });
+    await new Promise(r => setTimeout(r, 120));
+    const xBtn = !!document.querySelector('.popup-x');
+    document.querySelector('.popup-x').click();
+    await new Promise(r => setTimeout(r, 80));
+    const closedByX = document.getElementById('popup-modal').className.includes('hidden');
+    UI.popup({ title: '遮罩测试2', html: 'x', options: [{ text: '确定', value: true, primary: true }] });
+    await new Promise(r => setTimeout(r, 120));
+    const m = document.getElementById('popup-modal');
+    const ev = new MouseEvent('click', { bubbles: true });
+    Object.defineProperty(ev, 'target', { value: m, enumerable: true });
+    m.dispatchEvent(ev);
+    await new Promise(r => setTimeout(r, 80));
+    const closedByMask = m.className.includes('hidden');
+    if (UI._popupResolve) UI.popupChoose(-1);
+    return { xBtn, closedByX, closedByMask };
+  });
+  w10.xBtn && w10.closedByX && w10.closedByMask ? pass('W10 弹窗 ✕ 与点遮罩关闭') : fail('W10 弹窗关闭', JSON.stringify(w10));
+
+  // W11 首遇新知：情境提示进当前建议
+  const w11 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.bag.w_tiejian = 1;   // 丢一件法宝进背包
+    p.equipped = { weapon: null, armor: null, accessory: null };
+    UI.renderStatus();
+    const tip = (document.querySelector('.guide-box') || {}).innerText || '';
+    delete p.bag.w_tiejian;
+    UI.renderStatus();
+    return { ok: tip.includes('新知') };
+  });
+  w11.ok ? pass('W11 首遇新知提示（法宝未佩戴）') : fail('W11 新知', JSON.stringify(w11));
+
+  // W12 移动端视口：底部导航贴底 + 抽屉按钮可见
+  await page.setViewport({ width: 390, height: 844 });
+  await sleep(250);
+  const w12 = await page.evaluate(() => {
+    const tabs = document.getElementById('tabs');
+    const r = tabs.getBoundingClientRect();
+    const drawerBtn = getComputedStyle(document.querySelector('.m-drawer-btn')).display;
+    return { fixed: getComputedStyle(tabs).position, bottom: Math.round(r.bottom), vh: window.innerHeight, drawerBtn };
+  });
+  w12.fixed === 'fixed' && Math.abs(w12.bottom - w12.vh) <= 2 && w12.drawerBtn !== 'none'
+    ? pass('W12 移动端底部导航（fixed 贴底 + 抽屉按钮可见）') : fail('W12 底部导航', JSON.stringify(w12));
+
+  // W13 道途/乾坤 双抽屉开合 + 遮罩
+  const w13 = await page.evaluate(async () => {
+    document.querySelector('[data-action="act-drawer"][data-panel="left"]').click();
+    await new Promise(r => setTimeout(r, 350));
+    const leftOpen = document.getElementById('panel-left').classList.contains('drawer-open');
+    const backdropOn = document.getElementById('drawer-backdrop').classList.contains('on');
+    document.getElementById('drawer-backdrop').click();
+    await new Promise(r => setTimeout(r, 350));
+    const leftClosed = !document.getElementById('panel-left').classList.contains('drawer-open');
+    document.querySelector('[data-action="act-drawer"][data-panel="right"]').click();
+    await new Promise(r => setTimeout(r, 350));
+    const rightOpen = document.getElementById('panel-right').classList.contains('drawer-open');
+    UI.closeDrawers();
+    return { leftOpen, backdropOn, leftClosed, rightOpen };
+  });
+  Object.values(w13).every(Boolean) ? pass('W13 道途/乾坤 双抽屉开合 + 遮罩') : fail('W13 抽屉', JSON.stringify(w13));
+
+  // W14 移动端弹层近全屏贴底
+  const w14 = await page.evaluate(async () => {
+    UI.popup({ title: '底部弹层', html: 'x', options: [{ text: '确定', value: true, primary: true }] });
+    await new Promise(r => setTimeout(r, 150));
+    const r = document.querySelector('.popup-box').getBoundingClientRect();
+    const full = r.width >= window.innerWidth * 0.95 && Math.abs(r.bottom - window.innerHeight) <= 4;
+    UI.popupChoose(-1);
+    return { full, w: Math.round(r.width), bottom: Math.round(r.bottom), vh: window.innerHeight };
+  });
+  w14.full ? pass('W14 移动端弹层近全屏贴底') : fail('W14 底部弹层', JSON.stringify(w14));
+
+  // W16 多波战斗修瑕回归：第二波刷新后按钮必须可点（v22 修复 render/busy 顺序）
+  const w16 = await page.evaluate(async () => {
+    Battle.setSpeed(3);
+    Battle.start(null, { enemy: buildMonster('m_yezhu', 0), waveIds: ['m_yezhu', 'm_yezhu'], mapName: '测试' });
+    for (let t = 0; t < 30; t++) {
+      const B = Battle.active;
+      if (!B) break;
+      if ((B.waveIdx || 0) >= 1) {
+        await new Promise(r => setTimeout(r, 120));
+        const btn = document.querySelector('[data-action="bt-attack"]');
+        const ok = !!btn && !btn.disabled && !B.busy;
+        Battle.active.over = true; document.getElementById('battle-modal').classList.add('hidden'); Battle.active = null;
+        UI.renderAll();
+        return { ok };
+      }
+      const b = document.querySelector('[data-action="bt-attack"]');
+      if (b && !b.disabled) b.click();
+      await new Promise(r => setTimeout(r, 300));
+    }
+    if (Battle.active) { Battle.active.over = true; document.getElementById('battle-modal').classList.add('hidden'); Battle.active = null; UI.renderAll(); }
+    return { ok: false };
+  });
+  w16.ok ? pass('W16 多波战斗第二波按钮可点（修瑕回归）') : fail('W16 多波修瑕', JSON.stringify(w16));
+
+  // W15 桌面回归：抽屉按钮隐藏、导航回中央
+  await page.setViewport({ width: 1280, height: 720 });
+  await sleep(250);
+  const w15 = await page.evaluate(() => ({
+    drawerHidden: getComputedStyle(document.querySelector('.m-drawer-btn')).display === 'none',
+    tabsStatic: getComputedStyle(document.getElementById('tabs')).position !== 'fixed',
+  }));
+  w15.drawerHidden && w15.tabsStatic ? pass('W15 桌面布局回归（抽屉按钮隐藏/导航复位）') : fail('W15 桌面回归', JSON.stringify(w15));
+
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');
   console.log('\n========== verify-v10 汇总 ==========');

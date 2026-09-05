@@ -249,17 +249,22 @@ try {
   /* ================= V2 秘境 ================= */
   console.log('--- V2 秘境 ---');
   await seedAndLoad({ day: 40, realmIdx: 2 });
-  await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
+  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
   await sleep(300);
   {
     const mapHtml = await text(page, '#tab-content');
-    mapHtml.includes('秘境探索') ? pass('V2 游历页出现秘境入口') : fail('V2 秘境入口', mapHtml.slice(0, 60));
-    mapHtml.includes('天下大势') ? pass('V2 游历页出现天下大势') : fail('V2 天下大势', '');
+    mapHtml.includes('秘境探索') ? pass('V2 游历·秘境页出现秘境入口') : fail('V2 秘境入口', mapHtml.slice(0, 60));
+    const hasSub = await page.$('.subtab-btn');
+    hasSub ? pass('V2 子页签渲染') : fail('V2 子页签', mapHtml.slice(0, 60));
+    await clickSel(page, '[data-action="act-tab"][data-tab="map:world"]');
+    await sleep(300);
+    const wHtml = await text(page, '#tab-content');
+    wHtml.includes('天下大势') ? pass('V2 游历·天下页出现天下大势') : fail('V2 天下大势', '');
   }
   // 种子秘境进行中：宝箱 / 陷阱 两节点
   await patchSave({ dungeon: { realm: 2, depth: 0, total: 9, choices: ['treasure', 'trap'], gains: [], stuck: false } });
   await reloadSlot3();
-  await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
+  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
   await sleep(300);
   {
     const dn = await text(page, '#tab-content');
@@ -272,7 +277,7 @@ try {
   // 节点结算后路线重新随机生成——重新播种陷阱节点验证
   await patchSave({ dungeon: { realm: 2, depth: 1, total: 9, choices: ['trap', 'treasure'], gains: [], stuck: false } });
   await reloadSlot3();
-  await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
+  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
   await sleep(300);
   {
     await clickSel(page, '[data-action="act-realm-node"][data-node="0"]').catch(() => {});
@@ -293,7 +298,7 @@ try {
   {
     await patchSave({ dungeon: { realm: 0, depth: 0, total: 9, choices: ['battle', 'treasure'], gains: [], stuck: false }, bag: { pill_juqi: 10, m_lingcao: 10, w_tiejian: 2 } });
     await reloadSlot3();
-    await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
+    await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
     await sleep(300);
     await clickSel(page, '[data-action="act-realm-node"][data-node="0"]');
     await sleep(700);
@@ -315,7 +320,7 @@ try {
   // 合成
   {
     await seedAndLoad({ bag: { m_gupian: 9 }, dungeon: null });
-    await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
+    await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
     await sleep(300);
     const hasSynth = await page.$('[data-action="act-realm-synth"]');
     hasSynth ? pass('V2 九碎片出现合成入口') : fail('V2 合成入口', '');
@@ -382,11 +387,11 @@ try {
   // 恩怨偷袭：种下多位宿敌提高触发率
   {
     await patchSave({
-      npcs: {
-        n4: { rel: -60, grudge: true, met: true },
-        n12: { rel: -60, grudge: true, met: true },
-        n13: { rel: -60, grudge: true, met: true },
-        n1: { rel: -60, grudge: true, met: true },
+      npcs: {   // v22 修复：补 alive:true——此前裸档合并后 alive 丢失，宿敌失效，偷袭从未真正触发过
+        n4: { rel: -60, grudge: true, met: true, alive: true },
+        n12: { rel: -60, grudge: true, met: true, alive: true },
+        n13: { rel: -60, grudge: true, met: true, alive: true },
+        n1: { rel: -60, grudge: true, met: true, alive: true },
         n4x: undefined,
       },
     });
@@ -428,7 +433,7 @@ try {
       ? pass('V4 大事件永久改变世界格局（v20 八类其一）') : fail('V4 永久格局', JSON.stringify(w));
     const logTxt = await text(page, '#log');
     logTxt.includes('天下大事') ? pass('V4 大事件日志播报') : fail('V4 事件日志', logTxt.slice(-80));
-    await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
+    await clickSel(page, '[data-action="act-tab"][data-tab="map:world"]');
     await sleep(300);
     const hasJoin = await page.$('[data-action="act-event-join"]');
     hasJoin ? pass('V4 游历页出现事件卡（参与/观望）') : fail('V4 事件卡', '');
@@ -443,7 +448,7 @@ try {
     await reloadSlot3();
     const p0 = await player(page);
     const exp0 = p0.exp;
-    await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
+    await clickSel(page, '[data-action="act-tab"][data-tab="map:world"]');
     await sleep(300);
     await clickSel(page, '[data-action="act-event-join"]');
     await sleep(600);
@@ -454,7 +459,7 @@ try {
   {
     await patchSave({ world: { pending: { type: 'demon', year: 3, mapId: 'qingfeng' }, magicMaps: ['qingfeng'] } });
     await reloadSlot3();
-    await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
+    await clickSel(page, '[data-action="act-tab"][data-tab="map:world"]');
     await sleep(300);
     const w0 = await player(page);
     const magicCount0 = w0.world.magicMaps.length;

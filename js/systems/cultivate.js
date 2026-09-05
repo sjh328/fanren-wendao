@@ -341,17 +341,30 @@ const Cultivate = {
     Bag.addItem('z_taiji', 1);
     Bag.addStones(Math.round(5000 * GameData.stoneEco(9)));
     Log.add('天道降下仙缘：获赠【太极玉】与巨额灵石！你已飞升证道，仍可留在人界继续游历。', 'gain');
-    await UI.popup({
+    const choice = await UI.popup({
       title: '✦ 位列仙班 ✦',
       html: `恭喜道友 <span class="hl">${Utils.esc(p.name)}</span> 白日飞升，证道成仙！<br><br>凡人之躯，逆天而行，此为大道之始。<br><br>你也可以选择<b>兵解转世</b>，携带仙缘重开一世。`,
       options: [{ text: '继续游历', value: 'stay', primary: true }, { text: '兵解转世', value: 'reinc' }],
-    }).then(choice => {
-      if (choice === 'reinc') {
-        p.canReincarnate = true;
-        Log.add('你于仙门之前驻足回望，选择兵解转世——携一缕仙缘，重入轮回。', 'system');
-        UI.toast('兵解转世之机已现（修炼页可用）');
-      }
     });
+    if (choice === 'reinc') {
+      p.canReincarnate = true;
+      Log.add('你于仙门之前驻足回望，选择兵解转世——携一缕仙缘，重入轮回。', 'system');
+      UI.toast('兵解转世之机已现（修炼页可用）');
+    }
     Game.afterAction();
+    // v22 飞升结语：三百年因果的收笔（一次性，先落盘后演出）
+    if (!p.flags.epilogueDone) {
+      p.flags.epilogueDone = true;
+      await UI.popup({
+        title: '✦ 尾 声 · 仙门之后 ✦',
+        html: `<div class="story-p">雷光散尽的刹那，你眉心那点朱砂微微一烫。</div>
+        <div class="story-p">三百年前，有人以一缕真灵封玉留志；三百年后，有人白衣登仙，替他把没走完的路走完了。</div>
+        <div class="story-p">血河旧案早已昭雪。故人或有转世，或有仙名——而你的名字，自此写进了人界说书人的段子里。</div>
+        <div class="story-p">仙门之后，另有一番天地。这段人间烟火的因果，就留在这里罢。</div>`,
+        options: [{ text: '携道而往', value: true, primary: true }],
+      });
+      Story.chron('飞升 · 尾声');
+      Game.afterAction();
+    }
   },
 };

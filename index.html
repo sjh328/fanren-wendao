@@ -6,7 +6,7 @@
 <meta name="description" content="凡人问道 —— 网页版文字修仙游戏">
 <link rel="icon" href="data:,">
 <title>凡人问道 · 文字修仙</title>
-<link rel="stylesheet" href="style.css?v=35">
+<link rel="stylesheet" href="style.css?v=36">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
@@ -52,6 +52,9 @@
     <header id="top-bar">
       <div class="top-title">凡人问道</div>
       <div class="top-right">
+        <!-- v22 移动端抽屉入口（桌面隐藏）：道途 / 乾坤 -->
+        <button class="m-drawer-btn" data-action="act-drawer" data-panel="left" aria-label="打开道途面板">☰ 道途</button>
+        <button class="m-drawer-btn" data-action="act-drawer" data-panel="right" aria-label="打开乾坤袋">🎒 乾坤</button>
         <div id="amb-ctrl">
           <button class="amb-btn" id="amb-toggle" data-action="amb-panel" title="设置">⚙ 设置</button>
           <div id="amb-panel" class="amb-panel hidden">
@@ -154,6 +157,7 @@
   <!-- ==================== 通用弹窗 ==================== -->
   <div id="popup-modal" class="modal hidden">
     <div class="popup-box">
+      <button class="popup-x" data-action="pop-choice" data-i="-1" title="关闭" aria-label="关闭弹窗">✕</button>
       <div class="popup-title" id="popup-title"></div>
       <div class="popup-body" id="popup-body"></div>
       <div class="popup-btns" id="popup-btns"></div>
@@ -187,9 +191,11 @@
     </div>
   </div>
 
+  <div id="drawer-backdrop" data-action="act-drawer-close" aria-hidden="true"></div>
+
   <div id="toast"></div>
   <div id="announce"></div>
 </div>
-<script src="game.js?v=35"></script>
+<script src="game.js?v=36"></script>
 </body>
 </html>

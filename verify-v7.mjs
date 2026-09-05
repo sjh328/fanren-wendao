@@ -604,10 +604,18 @@ try {
   v3.includes('天骄榜') ? pass('V2 江湖页含天骄榜排名') : fail('V2 天骄榜', v3.slice(0, 50));
   await page.click('[data-action="act-tab"][data-tab="shop"]');
   await sleep(200);
-  const v4 = await page.evaluate(() => document.getElementById('tab-content').innerText);
-  v4.includes('悬赏任务板') && v4.includes('祭炼强化') && v4.includes('炼器坊')
-    ? pass('V2 坊市页含悬赏板 / 祭炼强化 / 炼器坊')
-    : fail('V2 坊市区块', v4.slice(0, 80));
+  await page.click('[data-action="act-tab"][data-tab="shop:bounty"]');
+  await sleep(200);
+  const v4b = await page.evaluate(() => document.getElementById('tab-content').innerText);
+  await page.click('[data-action="act-tab"][data-tab="shop:forge"]');
+  await sleep(200);
+  const v4c = await page.evaluate(() => document.getElementById('tab-content').innerText);
+  await page.click('[data-action="act-tab"][data-tab="shop:craft"]');
+  await sleep(200);
+  const v4d = await page.evaluate(() => document.getElementById('tab-content').innerText);
+  v4b.includes('悬赏任务板') && v4c.includes('祭炼强化') && v4d.includes('炼器坊')
+    ? pass('V2 坊市子页签：悬赏板 / 祭炼堂 / 炼制坊 分栏齐备')
+    : fail('V2 坊市子页签', (v4b.slice(0, 30) + '|' + v4c.slice(0, 30) + '|' + v4d.slice(0, 30)));
   await page.evaluate(() => { const s = document.getElementById('amb-speed'); if (s) { s.value = '2'; s.dispatchEvent(new Event('change')); } });
   const v5 = await page.evaluate(() => Battle.speed);
   v5 === 2 ? pass('V3 设置中心切换战斗速度') : fail('V3 设置', String(v5));

@@ -5,6 +5,7 @@ const Game = {
   activeTab: 'cultivate',
   bagTab: 'all',
   bagSort: 'quality',   // v20 背包排序：quality 品质 / type 类型 / name 名字
+  subTab: {},   // v22 页签内子页签记忆（shop/cave/map 各自记住上次所在分栏）
 
   init() {
     UI.cache();
@@ -26,6 +27,10 @@ const Game = {
       const ctrl = document.getElementById('amb-ctrl');
       const panel = document.getElementById('amb-panel');
       if (panel && !panel.classList.contains('hidden') && ctrl && !ctrl.contains(e.target)) panel.classList.add('hidden');
+    });
+    // v22：点击通用弹窗遮罩（弹窗盒以外区域）按取消结算，与右上 ✕ 等效
+    document.getElementById('popup-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'popup-modal' && UI._popupResolve) UI.popupChoose(-1);
     });
     // v7：背包双击快捷操作（服用 / 装备 / 学习；丢弃按钮除外）
     document.addEventListener('dblclick', (e) => {
@@ -171,6 +176,7 @@ const Game = {
 
   enterGame() {
     Anim.reset();   // v4：换档后数字动画记忆清零
+    this.subTab = {};   // v22：换档后子页签记忆一并复位
     Meta.load();    // v6：装载本存档位的成就与图鉴
     AutoCult.abort();
     this.computeOfflineProgress();  // v18：离线进度
@@ -205,6 +211,7 @@ const Game = {
     Achieve.check();   // v6：成就检查（解锁即发奖播报）
     try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
     try { if (typeof FestivalSys !== 'undefined') FestivalSys.check(p); } catch (err) { console.error('节庆检查异常:', err); }   // v20：节庆触发
+    try { if (typeof SectSys !== 'undefined' && SectSys.tourneyCheck) SectSys.tourneyCheck(p); } catch (err) { console.error('大比检查异常:', err); }   // v22：宗门大比（每五年一届）
     try { if (typeof NpcSys !== 'undefined' && NpcSys.companionCheck) NpcSys.companionCheck(p); } catch (err) { console.error('共修检查异常:', err); }   // v20：道侣共修
     try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
@@ -258,13 +265,17 @@ const Game = {
     },
     /* --- 标签页 / 背包 --- */
     'act-tab': (d) => {
-      const lock = Guide.tabLocked(d.tab);   // v6：分步解锁
+      // v22：支持 "tab:sub" 深链写法（如 shop:bounty 直达坊市·悬赏板）
+      const [tab, sub] = String(d.tab || '').split(':');
+      const lock = Guide.tabLocked(tab);   // v6：分步解锁
       if (lock) { UI.toast(`尚未解锁 —— ${lock}`); return; }
-      if (Game.activeTab !== d.tab && typeof Ambience !== 'undefined' && Ambience.sfxOn) Ambience.sfx('tab');   // v20 切页轻音
-      Game.activeTab = d.tab; UI.renderTabs(); UI.renderTabContent();
+      if (sub) Game.subTab[tab] = sub;
+      UI.closeDrawers();   // v22：移动端切页后收起抽屉，回到内容视图
+      if (Game.activeTab !== tab && typeof Ambience !== 'undefined' && Ambience.sfxOn) Ambience.sfx('tab');   // v20 切页轻音
+      Game.activeTab = tab; UI.renderTabs(); UI.renderTabContent();
       // v20 情境 BGM：进秘境页/坊市页切换氛围（战斗/剧情情境各自接管）
       if (typeof Ambience !== 'undefined' && Ambience.musicOn && !Battle.active && !Story.active()) {
-        Ambience.setMood(d.tab === 'map' && this.player && this.player.dungeon ? 'secret' : d.tab === 'shop' ? 'market' : 'calm');
+        Ambience.setMood(tab === 'map' && this.player && this.player.dungeon ? 'secret' : tab === 'shop' ? 'market' : 'calm');
       }
       // 面板切换平滑过渡：短暂加动效类，避免生硬跳变
       const box = UI.el['tab-content'];
@@ -273,6 +284,9 @@ const Game = {
         box.classList.remove('tab-switch'); void box.offsetWidth; box.classList.add('tab-switch');
       }
     },
+    /** v22 移动端抽屉：道途 / 乾坤袋 面板在 ≤860px 收进侧滑抽屉 */
+    'act-drawer': (d) => UI.toggleDrawer(d.panel),
+    'act-drawer-close': () => UI.closeDrawers(),
     'bag-tab': (d) => { Game.bagTab = d.bagtab; UI.renderBag(); },
     'bag-sort': (d) => { Game.bagSort = d.sort; UI.renderBag(); },   // v20 背包排序
     /* --- v4 日志工具 / 一键减负 --- */
@@ -460,6 +474,8 @@ const Game = {
     'act-faction-join': (d) => SectSys.joinFaction(d.f),
     'act-faction-exchange': (d) => SectSys.factionExchange(Number(d.i)),
     'act-danger-go': (d) => SectSys.goDanger(Number(d.i)),
+    'act-tourney-fight': () => SectSys.tourneyFight(),   // v22 宗门大比登台
+    'act-daily-all': () => Guide.dailyAll(),   // v22 一键日常
     /* --- v3 世界大事件 --- */
     'act-event-join': () => WorldSys.joinEvent(),
     'act-event-skip': () => WorldSys.skipEvent(),
