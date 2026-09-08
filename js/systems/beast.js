@@ -54,6 +54,7 @@ const BeastSys = {
         Meta.see('monster', e.id);
       }
       B.enemy.hp = 0;
+      p.counters.tames = (p.counters.tames || 0) + 1;   // v24 章助缘计数
       B.log(`${e.name} 驯服功成！`, 'log-gain');
       await Battle.wait(500);
       Battle.victoryTame();

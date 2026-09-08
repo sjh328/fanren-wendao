@@ -60,6 +60,7 @@ const AuctionSys = {
     if (!Bag.spendStones(price)) { UI.toast('灵石不足'); return; }
     const win = Utils.chance(opts.rate);
     if (win) {
+      p.counters.auctionWins = (p.counters.auctionWins || 0) + 1;   // v24 章助缘计数
       if (isMystery) {
         // 鉴定：权重向低品倾斜，仙缘罕见
         const pool = this.MYSTERY_POOL;
@@ -109,6 +110,7 @@ const DonateSys = {
     });
     if (!ok) return;
     if (!Bag.spendStones(stones)) { UI.toast('灵石不足'); return; }
+    p.counters.donates = (p.counters.donates || 0) + 1;   // v24 章助缘计数
     if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, t.rep, '布施行善');
     KarmaSys.addFortune(t.fortune);
     if (t.karma < 0) KarmaSys.addKarma(t.karma, true);

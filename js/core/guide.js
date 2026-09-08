@@ -58,11 +58,24 @@ LOCKS: {
     if (p.canReincarnate) t.push({ text: '兵解转世之机已现——或可重开一世', go: 'cultivate' });
     if (p.world && p.world.pending) t.push({ text: '天下大势正待抉择，可于游历页参与', go: 'map:world' });
     if (NpcSys.grudgeCount(p) > 0) t.push({ text: '有宿敌伺机报复——宜化解仇怨或早做备战', go: 'jianghu' });
-    // v21 日常仪式提醒（v22：子页签深链直达）：黄历 / 灵田 / 悬赏
-    if (p.signDay !== Math.floor(p.day || 0)) t.push({ text: '今日黄历尚未求签——一签定小机缘', go: 'map:world' });
-    const ripe = ((p.cave && p.cave.plots) || []).filter(pl => pl && pl.seed && (Math.floor(p.day || 0) - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
-    if (ripe > 0) t.push({ text: `灵田有 <b>${ripe}</b> 块作物已然成熟——请及时采收`, go: 'cave:farm' });
-    if ((p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need)) t.push({ text: '悬赏目标已然达成——可去坊市领取赏格', go: 'shop:bounty' });   // v21: 领后置空条目判空
+    // v24 日常仪式（求签/灵田/悬赏）不再进建议——修炼页「今日修行」卡与页签红点已全程承接，
+    // 腾出的位置给支线结案与个人线续谈两条「内容型」提醒，避免 2.8 万字剧情内容被静默挤掉
+    if (typeof QuestSys !== 'undefined' && QuestSys.sideClaimable && QuestSys.sideClaimable(p)) {
+      t.push({ text: '<b>奇遇可了结</b>——支线已达成，结案领赏入问道录', go: 'quest' });
+    }
+    if (typeof PersonalSys !== 'undefined' && PersonalSys.anyAvailable && PersonalSys.anyAvailable(p)) {
+      t.push({ text: '<b>新知</b>：有故人似有心事——江湖页「续谈」可赴约一叙', go: 'jianghu' });
+    }
+    // v24 新知扩容：寻宝归来 / 碎片将齐 / 道韵将成
+    if ((p.beasts && p.beasts.list || []).some(b => b.trip && Math.floor(p.day || 0) >= b.trip.until)) {
+      t.push({ text: '<b>新知</b>：灵兽寻宝已归——洞府·灵兽可点「归来」收取灵材', go: 'cave:beast' });
+    }
+    if ((p.counters.gupianGot || 0) >= 9 && !p.benming) {
+      t.push({ text: '<b>新知</b>：上古碎片已足九枚——秘境页可合成本命法宝', go: 'map:realm' });
+    }
+    if (Object.values(p.gongfa || {}).some(g => g.level >= 2) && !(typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length)) {
+      t.push({ text: '<b>新知</b>：功法将可共鸣成韵——功法页道韵卡已标出缺口', go: 'gongfa' });
+    }
     // v23 奇市提醒：黑市开市 / 拍卖将止，错过不再无感
     if (BlackSys.isOpen(p)) t.push({ text: `暗巷黑市开市中（余 ${BlackSys.daysLeft(p)} 日）——奇货与赌局，福缘者得`, go: 'shop:odd' });
     {
@@ -114,7 +127,7 @@ LOCKS: {
     }
     // 2 聚灵加速（静默执行，省去确认弹窗）
     if (p.cave && p.rushDay !== today) {
-      const cost = Math.round(120 * GameData.stoneEco(Math.min(4, p.realmIdx)));
+      const cost = CaveSys.rushCost(p);   // v24 定价单源化（随境界）
       if (Bag.spendStones(cost)) {
         p.rushDay = today;
         Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');

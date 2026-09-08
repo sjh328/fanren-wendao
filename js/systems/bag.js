@@ -210,7 +210,10 @@ const Bag = {
     if (!def || def.type !== 'artifact' || !this.count(itemId)) return;
     const enh = (p.enhanced || {})[itemId] || 0;
     const oreBack = (def.grade || 0) + 1 + enh;
-    const stones = Math.max(10, Math.round((def.price || 500) * 0.15 * (1 + enh * 0.2)));
+    // v24：0 价稀有物（天级/仙级神兵、秘境专属）按品阶兜底计价，高分战利品不再沦为背包垃圾
+    const GRADE_FALLBACK = [300, 800, 2000, 6000, 16000, 40000];
+    const baseVal = (def.price || 0) > 0 ? def.price : (GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500);
+    const stones = Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2)));
     const ok = await UI.popup({
       title: `分解 · ${def.name}`,
       html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br><span class="neg">分解之物与其祭炼心得将一并化去，无法找回。</span>`,

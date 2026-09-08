@@ -20,6 +20,8 @@ const QuestSys = {
         { desc: '除魔自保（累计击败妖兽三头）', done: p => (p.counters.wins || 0) >= 3, prog: p => `${Math.min(3, p.counters.wins || 0)}/3` },
       ],
       ending: '三月苦修，你根基渐固。残玉在你气海中隐隐发烫——老人所说的血案，或许就藏在前方的山水之间。',
+      // v24 章助缘：可选支目标，不挡章末推进，把散落玩法织进主线动机
+      bonus: { desc: '问一签吉凶（黄历求签一次）', go: 'map:world', done: p => (p.counters.signs || 0) >= 1, prog: p => `${Math.min(1, p.counters.signs || 0)}/1`, reward: { fortune: 2 } },
       reward: { stones: 300, fortune: 2, items: { pill_juqi: 2 } },
     },
     {
@@ -32,6 +34,7 @@ const QuestSys = {
         { desc: '修至练气圆满', done: p => p.realmIdx >= 1 || p.layer >= 3, prog: p => p.realmIdx >= 1 ? '1/1' : `${p.layer}/3` },
       ],
       ending: '练气圆满之夜，残玉微鸣。你听见了遗迹深处传来的低语——那不是妖物，是人。血案的门，开了一道缝。',
+      bonus: { desc: '驯服一头灵兽（战斗中打至两成血可驯）', go: 'map:atlas', done: p => (p.counters.tames || 0) >= 1, prog: p => `${Math.min(1, p.counters.tames || 0)}/1`, reward: { stones: 600 } },
       reward: { stones: 800, items: { pill_ningqi: 2 } },
     },
     {
@@ -44,6 +47,7 @@ const QuestSys = {
         { desc: '修习第一部功法', done: p => (p.counters.learns || 0) >= 1, prog: p => `${Math.min(1, p.counters.learns || 0)}/1` },
       ],
       ending: '宗门典籍浩如烟海。你在故纸堆中翻到一页残卷：「血河宗主练万魂丹，以生魂饲之……」字迹至此被血渍浸透。你握紧残玉——路还很长。',
+      bonus: { desc: '安身立命（开辟洞府）', go: 'cave:home', done: p => !!p.cave, reward: { fortune: 3 } },
       reward: { stones: 2000, items: { pill_zhuji: 1 } },
     },
     {
@@ -56,6 +60,7 @@ const QuestSys = {
         { desc: '百战炼心（累计获胜二十场）', done: p => (p.counters.wins || 0) >= 20, prog: p => `${Math.min(20, p.counters.wins || 0)}/20` },
       ],
       ending: '红尘一遭，你见过跪地求饶的劫匪，也见过袖手旁观的仙师。善恶从来不在门派，而在人心。你摸了摸残玉——血河宗之事，你更想查明白了。',
+      bonus: { desc: '散财济世（江湖·义声行善一次）', go: 'jianghu', done: p => (p.counters.donates || 0) >= 1, prog: p => `${Math.min(1, p.counters.donates || 0)}/1`, reward: { fortune: 4 } },
       reward: { stones: 5000, fortune: 10 },
     },
     {
@@ -68,6 +73,7 @@ const QuestSys = {
         { desc: '挫敌扬威（累计击败精英妖兽两头）', done: p => (p.counters.killsElite || 0) >= 2, prog: p => `${Math.min(2, p.counters.killsElite || 0)}/2` },
       ],
       ending: '记忆归位，你对宗主的恨意有了温度——那是前世未尽的执念。残玉中除了记忆，还藏着一卷《血河真解》的目录：其本体，就在宗主手中。',
+      bonus: { desc: '祭炼法宝（强化装备一次）', go: 'shop:forge', done: p => (p.counters.enhances || 0) >= 1, prog: p => `${Math.min(1, p.counters.enhances || 0)}/1`, reward: { stones: 3000 } },
       reward: { stones: 10000, items: { pill_pojing: 1 } },
     },
     {
@@ -80,6 +86,7 @@ const QuestSys = {
         { desc: '碎片聚势（累计收取上古法宝碎片五枚）', done: p => (p.counters.gupianGot || 0) >= 5, prog: p => `${Math.min(5, p.counters.gupianGot || 0)}/5` },
       ],
       ending: '五枚碎片在你掌心嗡鸣，与体内残玉遥相呼应。分身的杀意暂时退去——它在等，等宗主本尊出关。你也在等，等自己足够强。',
+      bonus: { desc: '置身大势（参与一次天下大事）', go: 'map:world', done: p => (p.counters.eventJoins || 0) >= 1, prog: p => `${Math.min(1, p.counters.eventJoins || 0)}/1`, reward: { fortune: 5 } },
       reward: { stones: 20000, items: { m_gupian: 2 } },
     },
     {
@@ -92,6 +99,7 @@ const QuestSys = {
         { desc: '家底殷实（灵石积蓄十万）', done: p => (p.stones.low + p.stones.mid * 100 + p.stones.high * 10000) >= 100000, prog: p => `${Utils.fmtNum(Math.min(100000, p.stones.low + p.stones.mid * 100 + p.stones.high * 10000))}/10万` },
       ],
       ending: '名单在手，你反而冷静下来。棋盘比你想的大——但你已不是当年那个采药少年。金丹已固，化神已稳，接下来，该让某些人睡不着了。',
+      bonus: { desc: '奇货可居（拍卖行竞得一件拍品）', go: 'shop:odd', done: p => (p.counters.auctionWins || 0) >= 1, prog: p => `${Math.min(1, p.counters.auctionWins || 0)}/1`, reward: { fortune: 6 } },
       reward: { stones: 50000, fortune: 5 },
     },
     {
@@ -104,6 +112,7 @@ const QuestSys = {
         { desc: '参悟小成（任意功法修至第三层）', done: p => Object.values(p.gongfa || {}).some(g => g.level >= 3), prog: p => { let mx = 0; for (const g of Object.values(p.gongfa || {})) mx = Math.max(mx, g.level); return `${Math.min(3, mx)}/3`; } },
       ],
       ending: '道友在侧，真意在胸。残玉忽然安静下来——它感应到了什么。决战之地，已被选定：你的飞升雷台。',
+      bonus: { desc: '故人心事（江湖·个人线推进一幕）', go: 'jianghu', done: p => Object.values(p.personal || {}).some(v => v >= 1), reward: { fortune: 8 } },
       reward: { stones: 100000, fortune: 10, items: { pill_taichu: 1 } },
     },
     {
@@ -116,6 +125,7 @@ const QuestSys = {
         { desc: '白日飞升（于天劫中了断三百年因果）', done: p => !!(p.flags || {}).ascended, prog: p => `${(p.flags || {}).ascended ? 1 : 0}/1` },
       ],
       ending: '第九道天雷落下时，你引动残玉中前世的全部血煞，与宗主的魔身同缚雷心。雷光吞没一切的刹那，你听见宗主的咆哮化作一声长叹：「三百年……原来输的是我心魔。」\n雷散，云开。残玉化入你的眉心，化作一点朱砂。你回首人间，白衣胜雪——仙门之后，另有一番天地。',
+      bonus: { desc: '大道共鸣（激活一条道韵协同）', go: 'gongfa', done: p => (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) >= 1, prog: p => `${Math.min(1, (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) || 0)}/1`, reward: { fortune: 10 } },
       reward: { stones: 200000, fortune: 20 },
     },
   ],
@@ -293,6 +303,37 @@ const QuestSys = {
       ending: '第十五场打完，她收剑而立，眉目飞扬：「成了！这套剑活了！」她郑重把第一式演示给你看——剑光如疏影横斜，「《不在人后》。名字也想好了。」',
       reward: { stones: 5000, items: { pill_zhuji: 1 } },
     },
+    /* ---- v24 支线补全（炼虚~大乘真空期三则） ---- */
+    {
+      id: 's18', title: '千金一诺', minRealm: 5, npc: 'n8',
+      story: '万宝商会的车马队在北域荒原折了三趟——不是遇匪，是荒原深处新裂了一道灵壑，旧商路就此断绝。秦重楼寻到你时，手里捏着半张烧焦的商契：「重楼商行立号三百年，还从没对客人失过约。这条路再不通商，我万宝商会就得改姓。你若肯探路，佣金随你开。」',
+      steps: [
+        { desc: '家资巨万（灵石积蓄五十万）', done: p => QuestSys.stonesTotal(p) >= 500000 },
+        { desc: '深入险地（秘境推进至第六层）', done: p => (p.counters.maxDepth || 0) >= 6 },
+      ],
+      ending: '你沿着灵壑边沿踏出一条新路，沿途立下七座指路的界碑。首队商旅平安抵达那日，秦重楼把新商路命名为「一诺道」，并在道口为你立了块无字碑——「字就不刻了。三百年后，人们自然会知道该谢谁。」',
+      reward: { stones: 80000, fortune: 8 },
+    },
+    {
+      id: 's19', title: '阵魂归一', minRealm: 6, npc: 'n10',
+      story: '白玉京那座摆了百年的大阵，阵眼里的名字忽然镇不住了——阵纹夜夜自鸣。他盘坐阵中三日，出来时鬓角全白：「阵要成了，可我这辈子，怕是看不到它成的那天。差最后一个「引」——一个能把阵魂带出山门的人。你肯替我走这一程么？」',
+      steps: [
+        { desc: '百战之威（累计获胜八十场）', done: p => (p.counters.wins || 0) >= 80 },
+        { desc: '精英授首（累计击败精英妖兽二十头）', done: p => (p.counters.killsElite || 0) >= 20 },
+      ],
+      ending: '你带着阵魂走遍它想看的山河——百年的阵，原来向往的是山门外的云。归来那日阵光大盛，白玉京抚阵长笑：「成了。它认的不是我，是你带它看过的这一路。」他将阵图首卷赠你：「百年一阵，从今日起，姓你的姓。」',
+      reward: { fortune: 12, items: { m_gupian: 2 } },
+    },
+    {
+      id: 's20', title: '最后一条消息', minRealm: 7, npc: 'n15',
+      story: '唐三思破天荒地免费送了你一条消息，说完自己先笑了：「我年轻时买过一条天机——死于何年何月，何人刀下。日子，就在这几日了。」他顿了顿，声音难得地低了下去，「我不怕死。我就是怕，死了以后，坊市里那些消息，没人替它们开口。」',
+      steps: [
+        { desc: '博采众长（修习五部功法）', done: p => (p.counters.learns || 0) >= 5 },
+        { desc: '财通四海（灵石积蓄三十万）', done: p => QuestSys.stonesTotal(p) >= 300000 },
+      ],
+      ending: '你陪他在约定的渡口坐了整整三日。刀客没来——来的是一封迟到了二十年的信：当年卖他天机的术士临终忏悔，那「死期」，原是他编来赖账的谎话。唐三思把信读了三遍，忽然大笑，笑着笑着眼里就湿了：「好你个老骗子——这条消息，我买了半辈子，值！」他将半生的消息册尽数赠你：「往后坊市的消息，你替它们开口。」',
+      reward: { stones: 60000, insight: 10 },
+    },
   ],
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
   /** v12 每章各目标对应的功能页签（供焦点条「前往」直达；v22 支持子页签深链 tab:sub） */
@@ -331,6 +372,40 @@ const QuestSys = {
   stepDone(step, p, supR) {
     if (p.realmIdx >= (supR || 999)) return true;   // 境界领先：旧章目标自动追认
     try { return !!step.done(p); } catch (e) { return false; }
+  },
+  /** v24 章助缘领取（不挡章末推进的可选支目标，把散落玩法织进主线动机） */
+  bonusDone(def, p) {
+    if (!def || !def.bonus) return false;
+    try { return !!def.bonus.done(p); } catch (e) { return false; }
+  },
+  claimBonus() {
+    const p = Game.player;
+    if (!p) return;
+    const q = p.quest = p.quest || { ch: 0, side: {} };
+    q.bonus = q.bonus || {};
+    const def = this.CHAPTERS[Math.min(q.ch, this.CHAPTERS.length - 1)];
+    if (!def || !def.bonus || q.bonus[def.id]) return;
+    if (!this.bonusDone(def, p)) { UI.toast('助缘尚未达成'); return; }
+    q.bonus[def.id] = Math.floor(p.day);
+    this.grant(def.bonus.reward);
+    Log.add(`✦ 助缘功成 · ${def.bonus.desc} ——【酬谢】${this.rewardText(def.bonus.reward)}`, 'gain');
+    UI.toast('助缘功成，酬谢已入囊中');
+    Story.chron(`第${this.CN9[Math.min(q.ch, this.CHAPTERS.length - 1)]}章助缘达成`);
+    UI.renderAll();
+    Save.autoSave(true);
+  },
+  /** v24 百科新词条解锁提示（story markSeen 后调用） */
+  loreToast(sid) {
+    const p = Game.player;
+    if (!p || !sid) return;
+    const hit = this.LORE_KEYS.find(e => e.need === sid);
+    if (hit) setTimeout(() => UI.toast(`📖 百科更新：${hit.title}——问道录可阅`), 600);
+  },
+  /** v24 支线可结案红点判定（UI.dots 用） */
+  sideClaimable(p) {
+    const q = p.quest || { side: {} };
+    return this.SIDES.some(sd => !q.side[sd.id] && (!sd.prev || q.side[sd.prev]) && p.realmIdx >= sd.minRealm
+      && sd.steps.every(st => { try { return !!st.done(p); } catch (e) { return false; } }));
   },
   rewardText(reward) {
     const parts = [];
@@ -421,6 +496,7 @@ const QuestSys = {
           this.storyLog(`【主线 · 第${this.CN9[q.ch]}章 · ${next.title}】`, next.story);
           Log.add(`【本章目标】${next.goal}`, 'story');
           UI.announce(`主线 · ${next.title}`, 'gold');
+          UI.toast('此章剧情已随境界自动追认——可于「问道录 · 剧情回顾」补看');   // v24 跳章补看提示
           after();
         } else {
           // v18 角色注脚：开篇卷轴末尾追加残玉低语 / 道侣客串，让剧情看见"你是谁"
@@ -509,11 +585,25 @@ const QuestSys = {
         const go = (!ok && goTabs[si]) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${goTabs[si]}">前往</button>` : '';
         return `<div class="q-step ${ok ? 'done' : ''}"><span class="q-mark">${ok ? '✓' : '○'}</span><span class="q-desc">${st.desc}</span>${prog}${go}</div>`;
       }).join('');
+      // v24 章助缘：可选支目标行（不挡章末，完成后额外领赏）
+      let bonusHtml = '';
+      if (def.bonus) {
+        const q2 = p.quest || {};
+        const claimed = !!(q2.bonus || {})[def.id];
+        const ok = claimed || this.bonusDone(def, p);
+        const prog = (!ok && def.bonus.prog) ? `<span class="q-prog">${def.bonus.prog(p)}</span>` : '';
+        const goBtn = (!ok && def.bonus.go) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${def.bonus.go}">前往</button>` : '';
+        const act = claimed ? '<span class="q-prog">已领赏</span>'
+          : ok ? `<button class="btn btn-sm btn-primary" data-action="quest-bonus">领 赏</button>` : '';
+        bonusHtml = `<div class="q-step bonus ${ok ? 'done' : ''}"><span class="q-mark">${claimed ? '✓' : '✦'}</span><span class="q-desc"><b>助缘</b> · ${def.bonus.desc}</span>${prog}${act}${goBtn}</div>
+        <div class="tip-line">· 助缘不挡章末推进——完成可额外领取：${this.rewardText(def.bonus.reward)}。</div>`;
+      }
       mainHtml = `
       <div class="card quest-card card-main">
         <div class="card-title">主线 · 第${this.CN9[ch]}章 · ${def.title} <span class="tag warn">进行中</span></div>
         <div class="card-desc">${def.goal}</div>
         <div class="q-steps">${steps}</div>
+        ${bonusHtml}
         <div class="tip-line">章末奖励：${this.rewardText(def.reward)}</div>
       </div>`;
     }

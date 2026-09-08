@@ -101,6 +101,7 @@ const WorldSys = {
     if (!w.pending) return;
     const ev = w.pending;
     w.pending = null;
+    p.counters.eventJoins = (p.counters.eventJoins || 0) + 1;   // v24 章助缘计数
     if (ev.type === 'demon') {
       const map = GameData.MAPS.find(m => m.id === ev.mapId) || GameData.MAPS[1];
       Log.add('你奔赴魔域前线，与狂化的魔物战作一团！', 'event');

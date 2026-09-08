@@ -37,3 +37,26 @@ const Codex = {
       + Object.keys(c.monster).length + Object.keys(c.npc).length + Object.keys(c.realm).length;
   },
 };
+
+/* ======================================================================
+ * v24 图鉴收集闭环：五类图鉴每类收满 → 全属性永久 +1%（一次性，flags 记档）
+ * Achieve.check 之后由 Game.afterAction 调用，Meta 随档不重置，flags 自愈无需迁移。
+ * ====================================================================== */
+Codex.CAT_NAMES = { gongfa: '功法', artifact: '法宝', monster: '妖兽', npc: '奇人', realm: '秘境' };
+Codex.catGot = function (cat) { return Object.keys(Meta.data.codex[cat] || {}).length; };
+Codex.checkRewards = function () {
+  const p = Game.player;
+  if (!p || p.dead) return;
+  p.flags = p.flags || {};
+  let hit = '';
+  for (const cat of Object.keys(this.CAT_NAMES)) {
+    const total = this.catalog(cat).length;
+    if (!total || this.catGot(cat) < total || p.flags['codex_' + cat]) continue;
+    p.flags['codex_' + cat] = true;
+    p.codexBonus = (p.codexBonus || 0) + 1;
+    hit = this.CAT_NAMES[cat];
+    UI.announce(`✦ 图鉴大成 · ${hit} ✦`, 'gold');
+    Log.add(`✦ <b>${hit}图鉴</b>业已收录齐全——见多识广，道行精进（全属性永久 +1%，已累计 ${p.codexBonus} 类）。`, 'system');
+  }
+  if (hit) { Save.autoSave(); UI.renderAll(); }
+};

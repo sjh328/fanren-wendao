@@ -6,6 +6,7 @@ const Game = {
   bagTab: 'all',
   bagSort: 'quality',   // v20 背包排序：quality 品质 / type 类型 / name 名字
   subTab: {},   // v22 页签内子页签记忆（shop/cave/map 各自记住上次所在分栏）
+  foldState: {},   // v24 折叠分组开合记忆（data-fold 键）——行动后重渲染不再把用户展开的分组收回去
 
   init() {
     UI.cache();
@@ -18,10 +19,18 @@ const Game = {
       if (!el || el.disabled) return;
       const fn = this.actions[el.dataset.action];
       if (fn) {
+        if (el._busy) return;   // v24 防重入：同一按钮上一笔尚未结清时忽略连点
+        el._busy = true;
         try { await fn(el.dataset, el); }
         catch (err) { console.error('动作执行出错:', el.dataset.action, err); UI.toast('操作出了点问题，请重试', true); }
+        finally { el._busy = false; }
       }
     });
+    // v24 折叠开合记忆：toggle 不冒泡，用捕获监听统一记账
+    document.addEventListener('toggle', (e) => {
+      const key = e.target && e.target.dataset ? e.target.dataset.fold : null;
+      if (key) this.foldState[key] = e.target.open;
+    }, true);
     // 氛围面板：点击面板以外区域自动收起
     document.addEventListener('click', (e) => {
       const ctrl = document.getElementById('amb-ctrl');
@@ -167,8 +176,23 @@ const Game = {
         offlineCrops++;
       }
     }
+    // v24 离线修行：放置游戏名实相符——离线期间行功不辍，修为按四成效率折算（不冲关、不积丹毒）
+    let offlineExp = 0;
+    if (p.realmIdx >= 0 && !p.dead) {
+      try {
+        const st = Stat.compute(p);
+        const perRound = Cultivate.baseGain(p) * (1 + st.cultPct / 100);
+        offlineExp = Math.round(perRound / 3 * 0.4 * realDays);
+        if (offlineExp > 0) Cultivate.addExp(p, offlineExp);
+      } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; }
+    }
     if (offlineCrops > 0) {
       Log.add(`你不在的${realDays}个时辰里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
+    }
+    if (offlineExp > 0) {
+      Log.add(`离山的日子裡你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（离线修行按四成效率折算，共 ${realDays} 日）。`, 'gain');
+    }
+    if (offlineCrops > 0 || offlineExp > 0) {
       p.day += realDays;
       p.age += realDays / 365;
     }
@@ -214,6 +238,10 @@ const Game = {
     try { if (typeof SectSys !== 'undefined' && SectSys.tourneyCheck) SectSys.tourneyCheck(p); } catch (err) { console.error('大比检查异常:', err); }   // v22：宗门大比（每五年一届）
     try { if (typeof NpcSys !== 'undefined' && NpcSys.companionCheck) NpcSys.companionCheck(p); } catch (err) { console.error('共修检查异常:', err); }   // v20：道侣共修
     try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
+    // v24：日常结算统一收口到行动后（原先藏在各页签渲染函数里，打开页面才结算）
+    try { if (typeof RankSys !== 'undefined' && RankSys.dailyReward && RankSys.isTop(p)) RankSys.dailyReward(p); } catch (err) { console.error('登顶日赏异常:', err); }
+    try { if (p.cave) { CaveSys.visitorEvent(p); CaveSys.checkPest(p); CaveSys.springDaily(p); } } catch (err) { console.error('洞府日常异常:', err); }
+    try { if (typeof Codex !== 'undefined' && Codex.checkRewards) Codex.checkRewards(); } catch (err) { console.error('图鉴检查异常:', err); }
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
     if (p.pendingDao && !p.dao && !p.dead && !Battle.active
       && (p.realmIdx >= 1 || p.reinc)) {
@@ -371,12 +399,20 @@ const Game = {
       const ok = await UI.popup({ title: '读取存档', html: '读取后当前未保存的进度将丢失，确定吗？', options: [{ text: '读取', value: true }, { text: '取消', value: false }] });
       if (ok) Game.loadFrom(d.slot);
     },
-    'act-delete-save': (d) => {
+    'act-delete-save': async (d) => {
+      // v24 确认统一：删除存档补二次确认（与开始界面 st-delete 对齐）
+      const idx = Number(d.slot);
+      const ok = await UI.popup({
+        title: '删除存档',
+        html: `将删除 <b>存档位${['一', '二', '三'][idx - 1] || idx}</b> 的存档——此档一删，仙途尽消，确定吗？`,
+        options: [{ text: '删 除', value: true, primary: true }, { text: '取 消', value: false }],
+      });
+      if (!ok) return;
       Save.remove(d.slot);
       UI.toast('已删除该存档');
       UI.refreshSaveBody();
     },
-    'act-help': () => Tutorial.show(true),
+    'act-help': () => UI.helpModal(),   // v24：玩法手册（三分钟清单并入首节）
     'act-newgame': async () => {
       const ok = await UI.popup({ title: '离开游戏', html: '当前进度已自动保存。确定回到开始界面吗？', options: [{ text: '离开', value: true }, { text: '取消', value: false }] });
       if (ok) Game.exitToStart();
@@ -425,6 +461,7 @@ const Game = {
     'trib-strategy': (d) => Tribulation.choose(d.strategy),
     'act-slay': () => KarmaSys.slayCorpses(),
     'quest-side': (d) => QuestSys.claimSide(d.side),
+    'quest-bonus': () => QuestSys.claimBonus(),   // v24 章助缘领赏
     'act-sign': () => DailySign.draw(),
     'act-alchemy': (d) => CraftSys.alchemy(d.recipe),
     'act-study-recipe': (d) => CraftSys.studyRecipe(d.recipe),

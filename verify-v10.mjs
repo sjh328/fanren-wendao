@@ -82,7 +82,8 @@ try {
     p.cave._pestDay = undefined;
     CaveSys.checkPest(p);
     const guarded = p.cave._pestDay === Math.floor(p.day);
-    const wired = /checkPest\(p\)/.test(UI.renderCaveTab.toString()) && /visitorEvent\(p\)/.test(UI.renderCaveTab.toString());
+    // v24：三项每日结算由渲染函数迁往 Game.afterAction——断言接线点同步迁移
+    const wired = /checkPest\(p\)/.test(Game.afterAction.toString()) && /visitorEvent\(p\)/.test(Game.afterAction.toString());
     return { guarded, wired };
   });
   f3.guarded && f3.wired ? pass('F3 虫害/访客每日事件已接线且带日界防重') : fail('F3 洞府事件接线', JSON.stringify(f3));
@@ -128,8 +129,8 @@ try {
       sidesN: QuestSys.SIDES.length,
     };
   });
-  f6.lines24 === 24 && f6.dupDiscuss === 0 && f6.sidesN === 17
-    ? pass('F6 文案与台词修瑕：24 人矩阵齐、论道句无重复填充、支线 12 则')
+  f6.lines24 === 24 && f6.dupDiscuss === 0 && f6.sidesN === 20
+    ? pass('F6 文案与台词修瑕：24 人矩阵齐、论道句无重复填充、支线 20 则（v24 补三则）')
     : fail('F6 台词/文案', JSON.stringify(f6));
 
   /* ================= B 战斗组（阶段一） ================= */
@@ -467,7 +468,7 @@ try {
     const gate = PersonalSys.next(Object.assign(Game.player, { personal: {}, realmIdx: 0 }), 'n1') === null;   // 境界不足
     return { n, ok, gate };
   });
-  e1.n === 16 && e1.ok && e1.gate ? pass('E1 个人线补全：16 人 × 三幕脚本齐备，境界门槛生效') : fail('E1 个人线', JSON.stringify(e1));
+  e1.n === 18 && e1.ok && e1.gate ? pass('E1 个人线补全：18 人 × 三幕脚本齐备（v24 补苏白/林晚照），境界门槛生效') : fail('E1 个人线', JSON.stringify(e1));
 
   // E2 道侣共修：三十日一修，修为入账
   const e2 = await page.evaluate(async () => {
@@ -543,7 +544,7 @@ try {
     for (const l of Object.values(GameData.NPC_LINES)) if (!l.realm || l.realm.length < 3) realmOk = false;
     return { sides, realmOk };
   });
-  e5.sides === 17 && e5.realmOk ? pass('E5 支线 17 则 / 24 人 realm 台词 ≥3 句') : fail('E5 支线台词', JSON.stringify(e5));
+  e5.sides === 20 && e5.realmOk ? pass('E5 支线 20 则（v24 补炼虚~大乘三则）/ 24 人 realm 台词 ≥3 句') : fail('E5 支线台词', JSON.stringify(e5));
 
   /* ================= U 体验组（阶段六） ================= */
   // U1 属性构成明细：breakdown 来源合计与终值口径一致
@@ -805,9 +806,9 @@ try {
   const v7 = await page.evaluate(() => ({
     card: !!document.querySelector('#tab-content .daily-card'),
     rows: document.querySelectorAll('#tab-content .daily-row').length,
-    go: [...document.querySelectorAll('#tab-content .daily-card .guide-go')].every(b => b.dataset.action === 'act-tab' && b.dataset.tab),
+    go: [...document.querySelectorAll('#tab-content .daily-card .guide-go')].every(b => (b.dataset.action === 'act-tab' && b.dataset.tab) || b.dataset.action === 'act-sign'),   // v24 求签行内直签
   }));
-  v7.card && v7.rows >= 4 && v7.go ? pass('V7 今日修行聚合卡（' + v7.rows + ' 事，前往键齐全）') : fail('V7 聚合卡', JSON.stringify(v7));
+  v7.card && v7.rows >= 4 && v7.go ? pass('V7 今日修行聚合卡（' + v7.rows + ' 事，前往/直签键齐全）') : fail('V7 聚合卡', JSON.stringify(v7));
 
   // V8 当前建议：每条可带「前往」跳转
   const v8 = await page.evaluate(() => ({
@@ -1237,6 +1238,244 @@ try {
   const cb = (noComment.match(/}/g) || []).length;
   const buildWired = fs.readFileSync('scripts/build.mjs', 'utf8').includes('CSS 体检');
   ob === cb && buildWired ? pass(`X8 构建期 CSS 体检（括号平衡 ×${ob}，build.mjs 已接线）`) : fail('Y8 CSS 体检', `ob=${ob} cb=${cb} wired=${buildWired}`);
+
+  /* ================= Z 组 · v24「归心」：主线牵引/界面减负/剧情补全/经济闭环 ================= */
+
+  // Z1 章助缘：达成可领赏、领取后记录入档、问道页渲染助缘行
+  const z1 = await page.evaluate(async () => {
+    const p = Game.player;
+    p.quest = { ch: 2, side: {} };          // 第三章：助缘=开辟洞府
+    p.cave = p.cave || CaveSys.freshCave();
+    const doneBefore = QuestSys.bonusDone(QuestSys.CHAPTERS[2], p);
+    const fortuneBefore = p.fortune || 0;
+    await Game.actions['quest-bonus']();
+    const claimed = !!(p.quest.bonus || {}).c3;
+    const fortuneUp = (p.fortune || 0) > fortuneBefore;
+    Game.actions['act-tab']({ tab: 'quest' });
+    UI.renderTabContent();
+    const html = document.getElementById('tab-content').innerHTML;
+    return { doneBefore, claimed, fortuneUp, hasBonusRow: html.includes('助缘'), claimedTxt: html.includes('已领赏') };
+  });
+  z1.doneBefore && z1.claimed && z1.fortuneUp && z1.hasBonusRow && z1.claimedTxt
+    ? pass('Z1 章助缘（开辟洞府）：达成可领、领赏入档、问道页助缘行') : fail('Z1 章助缘', JSON.stringify(z1));
+
+  // Z2 布施迁江湖：奇市不再有布施，江湖页出现义声卡与行善按钮
+  const z2 = await page.evaluate(() => {
+    Game.actions['act-tab']({ tab: 'shop:odd' });
+    const oddHtml = document.getElementById('tab-content').innerHTML;
+    Game.actions['act-tab']({ tab: 'jianghu' });
+    const jhHtml = document.getElementById('tab-content').innerHTML;
+    return { oddClean: !oddHtml.includes('act-donate'), hasRep: jhHtml.includes('义声'), hasDonate: jhHtml.includes('act-donate'), tiers: DonateSys.TIERS.length };
+  });
+  z2.oddClean && z2.hasRep && z2.hasDonate && z2.tiers === 3 ? pass('Z2 布施迁江湖·义声卡（奇市瘦身归位）') : fail('Z2 义声卡', JSON.stringify(z2));
+
+  // Z3 声望买价接线：名望高者买价打折，劣迹者溢价
+  const z3 = await page.evaluate(() => {
+    const p = Game.player;
+    const item = (GameData.SHOP.find(r => (GameData.ITEMS[r.item].price || 0) > 0) || {}).item;
+    p.reputation = 100;
+    const high = ShopSys.price(item);
+    p.reputation = -60;
+    const low = ShopSys.price(item);
+    p.reputation = 0;
+    const base = ShopSys.price(item);
+    return { high, low, base, mulOk: RepSys.priceMul({ reputation: 100 }) === 0.85 };
+  });
+  z3.mulOk && z3.high < z3.base && z3.low > z3.base ? pass('Z3 声望买价接线（≥80 九折 / 负声望溢价）') : fail('Z3 声望买价', JSON.stringify(z3));
+
+  // Z4 红点统一源：支线可结案→问道，碎片九枚→游历·秘境，子页签按钮也渲染红点
+  const z4 = await page.evaluate(() => {
+    const p = Game.player;
+    const q = p.quest = p.quest || { ch: 0, side: {} };
+    q.side.s1 = undefined; p.realmIdx = Math.max(p.realmIdx, 0);
+    p.counters.mapExplores = p.counters.mapExplores || {};
+    p.counters.mapExplores.village = 99; p.counters.wins = 99;
+    const d1 = UI.dots().quest;
+    p.counters.gupianGot = 9;
+    const d2 = UI.dots()['map:realm'];
+    Game.actions['act-tab']({ tab: 'map' });
+    const html = document.getElementById('tab-content').innerHTML;
+    const subDot = /subtab-btn[^>]*data-tab="map:realm"[^>]*>.*<span class="dot"/.test(html.replace(/\n/g, ''));
+    p.counters.gupianGot = 0;
+    return { d1, d2, subDot };
+  });
+  z4.d1 && z4.d2 && z4.subDot ? pass('Z4 红点统一源 UI.dots（页签+子页签）') : fail('Z4 红点', JSON.stringify(z4));
+
+  // Z5 江湖行主次分级：主行高频钮 + 「恩怨与机缘」折叠收纳切磋/背刺
+  const z5 = await page.evaluate(() => {
+    const p0 = Game.player;
+    if (p0.npcs.n3 && p0.npcs.n3.alive) p0.npcs.n3.rel = Math.max(p0.npcs.n3.rel, 30);
+    Game.actions['act-tab']({ tab: 'jianghu' });
+    const html = document.getElementById('tab-content').innerHTML;
+    return {
+      fold: html.includes('恩怨与机缘'), spar: html.includes('npc-spar'), betray: html.includes('npc-betray'),
+      befriend: html.includes('npc-befriend'),
+    };
+  });
+  z5.fold && z5.spar && z5.betray && z5.befriend ? pass('Z5 江湖行重构（主行四钮+恩怨折叠）') : fail('Z5 江湖行', JSON.stringify(z5));
+
+  // Z6 灵兽行「照管」折叠
+  const z6 = await page.evaluate(() => {
+    const p = Game.player;
+    p.beasts = p.beasts || { list: [], nextId: 1 };
+    const had = p.beasts.list.length > 0;
+    if (!had) p.beasts.list.push({ uid: 9001, name: '测试灵兽', species: 'beast', power: 5, level: 1, exp: 0, skills: [] });
+    Game.actions['act-tab']({ tab: 'cave:beast' });
+    const html = document.getElementById('tab-content').innerHTML;
+    if (!had) p.beasts.list = p.beasts.list.filter(b => b.uid !== 9001);
+    return { fold: html.includes('照管'), pat: html.includes('act-beast-pat'), free: html.includes('act-beast-free') };
+  });
+  z6.fold && z6.pat && z6.free ? pass('Z6 灵兽行重构（照管折叠收纳低频钮）') : fail('Z6 灵兽行', JSON.stringify(z6));
+
+  // Z7 万宝阁折叠：分组 details + 出售区折叠含可售总值；丹药组默认展开
+  const z7 = await page.evaluate(() => {
+    Game.foldState = {};   // 清开合记忆，验默认态：丹药组默认展开
+    Game.actions['act-tab']({ tab: 'shop:market' });
+    const html = document.getElementById('tab-content').innerHTML;
+    return {
+      group: html.includes('shop-group'), sellFold: html.includes('shop-sell-fold'),
+      total: html.includes('可售总值'), pillOpen: html.includes('data-fold="shop-g-pill" open'),
+    };
+  });
+  z7.group && z7.sellFold && z7.total && z7.pillOpen ? pass('Z7 万宝阁折叠（分组+出售区+总值）') : fail('Z7 万宝阁', JSON.stringify(z7));
+
+  // Z8 宗门卡序：任务卡置顶（宗门名卡先于大比/派系渲染）
+  const z8 = await page.evaluate(() => {
+    const p = Game.player;
+    if (!p.sect) return { skip: true };
+    p.sect.tasks = p.sect.tasks || [];
+    Game.actions['act-tab']({ tab: 'sect' });
+    const html = document.getElementById('tab-content').innerHTML;
+    const iSect = html.indexOf(`✦ ${(GameData.SECTS.find(x => x.id === p.sect.id) || {}).name}`);
+    const iFac = html.indexOf('派系');
+    const iEx = html.indexOf('贡献兑换');
+    return { iSect, iEx, order: iSect >= 0 && iEx > iSect };
+  });
+  (z8.skip || z8.order) ? pass('Z8 宗门卡序（任务置顶，兑换收尾）') : fail('Z8 宗门卡序', JSON.stringify(z8));
+
+  // Z9 防重入锁：同按钮连点只执行一次
+  const z9 = await page.evaluate(async () => {
+    let n = 0;
+    Game.actions['zz-busy-test'] = async () => { n++; await new Promise(r => setTimeout(r, 250)); };
+    const el = document.createElement('button');
+    el.dataset.action = 'zz-busy-test';
+    document.body.appendChild(el);
+    el.click(); el.click(); el.click();
+    await new Promise(r => setTimeout(r, 400));
+    delete Game.actions['zz-busy-test'];
+    el.remove();
+    return n;
+  });
+  z9 === 1 ? pass('Z9 分发器防重入锁（同按钮连点去重）') : fail('Z9 防重入', `执行 ${z9} 次`);
+
+  // Z10 删除存档确认：先取消后确认
+  const z10 = await page.evaluate(async () => {
+    localStorage.setItem('fanren_wd_3', JSON.stringify({ meta: { name: '测试' }, player: { name: '测试' } }));
+    const first = Game.actions['act-delete-save']({ slot: '3' });
+    await new Promise(r => setTimeout(r, 150));
+    const popped = !!UI._popupResolve;
+    UI.popupChoose(-1);   // 取消
+    await first;
+    const kept = !!localStorage.getItem('fanren_wd_3');
+    const second = Game.actions['act-delete-save']({ slot: '3' });
+    await new Promise(r => setTimeout(r, 150));
+    if (UI._popupResolve) UI.popupChoose(0);   // 确认删除
+    await second;
+    const removed = !localStorage.getItem('fanren_wd_3');
+    return { popped, kept, removed };
+  });
+  z10.popped && z10.kept && z10.removed ? pass('Z10 删除存档须二次确认（取消保留/确认删除）') : fail('Z10 删除确认', JSON.stringify(z10));
+
+  // Z11 反派暗线九章齐备
+  const z11 = await page.evaluate(() => {
+    const keys = ['c1_mid2', 'c2_mid2', 'c3_mid2', 'c4_mid2', 'c5_mid2', 'c6_mid2', 'c7_mid2', 'c8_mid2', 'c9_mid2'];
+    return keys.filter(k => GameData.STORIES[k] && GameData.STORIES[k].scenes.length >= 3).length;
+  });
+  z11 === 9 ? pass('Z11 反派暗线 mid2 ×9（v24 补齐 c3~c9）') : fail('Z11 暗线', `仅 ${z11}/9`);
+
+  // Z12 百科解锁提示：c3_end → 黑玉令词条 toast
+  const z12 = await page.evaluate(async () => {
+    QuestSys.loreToast('c3_end');
+    await new Promise(r => setTimeout(r, 900));
+    const txt = document.getElementById('toast').innerText;
+    return { hit: txt.includes('百科更新') && txt.includes('黑玉令') };
+  });
+  z12.hit ? pass('Z12 百科词条解锁提示（📖 toast）') : fail('Z12 百科提示', JSON.stringify(z12));
+
+  // Z13 图鉴大成：单类收满 → flags 记档 + codexBonus 计数（测后复原）
+  const z13 = await page.evaluate(() => {
+    const p = Game.player;
+    const backup = JSON.stringify(Meta.data.codex.monster);
+    const flags0 = !!p.flags.codex_monster, bonus0 = p.codexBonus || 0;
+    Meta.data.codex.monster = {};
+    Codex.catalog('monster').forEach(id => { Meta.data.codex.monster[id] = 1; });
+    delete p.flags.codex_monster;
+    p.codexBonus = bonus0;
+    Codex.checkRewards();
+    const got = !!p.flags.codex_monster && p.codexBonus === bonus0 + 1;
+    Meta.data.codex.monster = JSON.parse(backup);
+    if (!flags0) delete p.flags.codex_monster;
+    p.codexBonus = bonus0;
+    return { got };
+  });
+  z13.got ? pass('Z13 图鉴收集闭环（类收满 → 全属性+1% 记档）') : fail('Z13 图鉴大成', JSON.stringify(z13));
+
+  // Z14 聚灵加速定价单源化：解封顶、随境界曲线
+  const z14 = await page.evaluate(() => {
+    const c2 = CaveSys.rushCost({ realmIdx: 2 }), c4 = CaveSys.rushCost({ realmIdx: 4 }),
+      c5 = CaveSys.rushCost({ realmIdx: 5 }), c7 = CaveSys.rushCost({ realmIdx: 7 });
+    return { c2, c4, c5, c7, legacyC4: Math.round(120 * GameData.stoneEco(4)), grows: c7 > c5 && c5 > c4 && c4 >= c2 };
+  });
+  z14.grows && z14.c4 === z14.legacyC4 && z14.c7 > z14.c4
+    ? pass(`Z14 聚灵解封顶（4境 ${z14.c4} → 7境 ${z14.c7}，老价不变）`) : fail('Z14 聚灵定价', JSON.stringify(z14));
+
+  // Z15 熔铸回收：0 价稀有物按品阶兜底计价
+  const z15 = await page.evaluate(() => {
+    const p = Game.player;
+    p.bag['s_xt_jian'] = 1;
+    Game.actions['act-tab']({ tab: 'shop:forge' });
+    const html = document.getElementById('tab-content').innerHTML;
+    const hasRow = html.includes('s_xt_jian') || html.includes('玄天古剑');
+    const hasFallback = html.includes('兜底计价');
+    const stones0 = p.stones.low + p.stones.mid * 100;
+    Bag.salvage('s_xt_jian');
+    return { hasRow, hasFallback, _popup: !!UI._popupResolve };
+  });
+  // 弹窗异步，稍后确认结算
+  await sleep(200);
+  const z15b = await page.evaluate(async () => {
+    const p = Game.player;
+    if (UI._popupResolve) UI.popupChoose(0);
+    await new Promise(r => setTimeout(r, 200));
+    const gone = !p.bag['s_xt_jian'];
+    const oreGot = (p.bag['m_xuantie'] || 0);
+    p.bag['s_xt_jian'] = undefined;
+    return { gone };
+  });
+  z15.hasRow && z15.hasFallback && z15b.gone ? pass('Z15 熔铸回收（0 价稀有物品阶兜底，分解入祭炼堂）') : fail('Z15 回收', JSON.stringify({ z15, gone: z15b.gone }));
+
+  // Z16 玩法手册：分章折叠 + 首节三分钟上手
+  const z16 = await page.evaluate(async () => {
+    await Game.actions['act-help']();
+    await new Promise(r => setTimeout(r, 150));
+    const body = document.getElementById('popup-body').innerText;
+    const ok = body.includes('三分钟上手') && body.includes('战斗要诀') && body.includes('营生与经济');
+    if (UI._popupResolve) UI.popupChoose(-1);
+    return { ok };
+  });
+  z16.ok ? pass('Z16 玩法手册（分章折叠帮助页）') : fail('Z16 帮助手册', JSON.stringify(z16));
+
+  // Z17 离线修行接线 + 移动端 CSS 三补
+  const z17 = (() => {
+    const wired = /离线修行/.test(fs.readFileSync('game.js', 'utf8'));
+    const css = fs.readFileSync('style.css', 'utf8');
+    const safe = /#top-bar { padding-top: env\(safe-area-inset-top/.test(css);
+    const sep = /\.tab-sep { display: none; }/.test(css);
+    const btn = /\.btn-sm { min-height: 42px; padding: 6px 10px; }/.test(css);
+    return { wired, safe, sep, btn };
+  })();
+  z17.wired && z17.safe && z17.sep && z17.btn
+    ? pass('Z17 离线修行接线 + 移动端三补（safe-area/tab-sep/触控目标）') : fail('Z17 接线', JSON.stringify(z17));
 
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');

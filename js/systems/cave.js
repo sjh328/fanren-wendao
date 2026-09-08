@@ -81,12 +81,14 @@ const CaveSys = {
     Game.afterAction();
   },
   /** v20 聚灵加速：花灵石点燃聚灵阵，当日修炼效率 ×1.5（日限一次） */
+  /** v24 聚灵加速定价单源化：随境界走 stoneEco 曲线（解除 v20 的 4 境封顶，高境灵石有了日常去路） */
+  rushCost(p) { return Math.round(120 * GameData.stoneEco(p ? p.realmIdx : 0)); },
   async spiritRush() {
     const p = Game.player;
     if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
     const today = Math.floor(p.day || 0);
     if (p.rushDay === today) { UI.toast('聚灵阵今日已点燃，明日再来'); return; }
-    const cost = Math.round(120 * GameData.stoneEco(Math.min(4, p.realmIdx)));
+    const cost = this.rushCost(p);
     const ok = await UI.popup({
       title: '聚灵加速',
       html: `燃烧灵石为聚灵阵供能——<b>今日修炼效率 ×1.5</b>（每轮修炼约 \${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 1.5))} 修为）。<br>需灵石 <span class="hl">\${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 日限一次；闭关与自动修炼同样受益。</span>`,

@@ -11,7 +11,9 @@ const ShopSys = {
     // v20 修瑕：ecoPrice（符箓时价）同步作用于买价——此前只涨卖价，构成「低买高卖」印钞循环
     let base = def.price || 0;
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
-    return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId)));
+    // v24 声望接线：名望高者坊市给面子（买价九折/九二折，劣迹昭彰者吃溢价）；卖价不受声望影响
+    const repMul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
+    return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId) * repMul));
   },
   sellPrice(itemId) {
     const p = Game.player;
@@ -53,11 +55,20 @@ const ShopSys = {
     Log.add(`你连买了 ${bought} 件<b>${def.name}</b>，共花费 ${Utils.fmtNum(spent)} 下品灵石。${bought < times ? '（灵石不济，止步于此）' : ''}`, 'info');
     Game.afterAction();
   },
-  sell(itemId, all = false) {
+  async sell(itemId, all = false) {
     const qty = all ? Bag.count(itemId) : 1;
     if (qty <= 0) return;
     const def = GameData.ITEMS[itemId];
     const gain = this.sellPrice(itemId) * qty;
+    // v24 确认统一：全售须二次确认（售一不弹）
+    if (all) {
+      const ok = await UI.popup({
+        title: '全售确认',
+        html: `将把 <b>${def.name}</b> ×${qty} 全数售予坊市，合计 <b class="hl">${Utils.fmtNum(gain)}</b> 下品灵石。<br><span class="neg">售出之物概不赎回。</span>`,
+        options: [{ text: '全 部 售 出', value: true, primary: true }, { text: '再想想', value: false }],
+      });
+      if (!ok) return;
+    }
     Bag.removeItem(itemId, qty);
     Bag.addStones(gain);
     Log.add(`你售出 ${def.name} ×${qty}，得 ${Utils.fmtNum(gain)} 下品灵石。`, 'gain');

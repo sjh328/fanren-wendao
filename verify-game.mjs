@@ -269,11 +269,18 @@ try {
   /* ---------- T8 坊市 ---------- */
   await clickSel(page, '[data-action="act-tab"][data-tab="shop"]');
   await sleep(300);
-  // 出售先行，凑足灵石
+  // 出售先行，凑足灵石（v24：出售区折叠需先展开；全售有二次确认弹窗。
+  //  DOM 直点 + 每笔后 drainStory——防章节剧情恰好在此刻弹出拦截坐标点击）
+  await page.evaluate(() => { const f = document.querySelector('.shop-sell-fold > summary'); if (f && !f.parentElement.open) f.click(); });
+  await sleep(150);
   const sellAll = async (item) => {
-    if (await page.$(`[data-action="act-sell"][data-item="${item}"][data-qty="all"]`)) {
-      await clickSel(page, `[data-action="act-sell"][data-item="${item}"][data-qty="all"]`);
+    const sel = `[data-action="act-sell"][data-item="${item}"][data-qty="all"]`;
+    if (await page.$(sel)) {
+      await page.evaluate((s2) => { const f = document.querySelector('.shop-sell-fold'); if (f && !f.open) f.querySelector('summary').click(); const b = document.querySelector(s2); if (b) b.click(); }, sel);
       await sleep(300);
+      await clickPopupBtn(0);   // v24 全售确认
+      await drainStory(page);
+      await sleep(200);
     }
   };
   await sellAll('m_lingcao'); await sellAll('m_yaopi'); await sellAll('m_xuantie'); await sellAll('m_lingzhi');
@@ -323,6 +330,9 @@ try {
 
   await drainStory(page);
   /* ---------- T9 闭关（弹窗确认） ---------- */
+  // v24 防御：清掉残留浮层（全售确认/大道选择等），避免遮罩吞掉切页点击
+  await page.evaluate(() => { if (UI._popupResolve) UI.popupChoose(-1); const dao = document.getElementById('dao-modal'); if (dao) dao.classList.add('hidden'); });
+  await sleep(150);
   await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
   await sleep(300);
   await clickSel(page, '[data-action="act-seclude"]');

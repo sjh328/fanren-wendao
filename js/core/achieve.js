@@ -1,6 +1,6 @@
 
 /* ======================================================================
- * §1.10 增量扩展（v6）：成就系统 Achieve（五类三十项）
+ * §1.10 增量扩展（v6）：成就系统 Achieve（v24 起共 51 项，含境界九档/职业/战斗/奇遇/转世/经营/大比）
  * 完成奖励少量气运或灵石；进度存于 Meta，随档、转世不重置。
  * ====================================================================== */
 const Achieve = {
@@ -13,7 +13,10 @@ const Achieve = {
     { id: 'r2', cat: 'realm', name: '金丹大道', desc: '突破至金丹期', reward: { fortune: 5 }, test: p => p.realmIdx >= 2 },
     { id: 'r3', cat: 'realm', name: '元婴出窍', desc: '突破至元婴期', reward: { fortune: 8 }, test: p => p.realmIdx >= 3 },
     { id: 'r4', cat: 'realm', name: '化神通玄', desc: '突破至化神期', reward: { fortune: 10 }, test: p => p.realmIdx >= 4 },
-    { id: 'r5', cat: 'realm', name: '合体无为', desc: '突破至合体期', reward: { fortune: 12 }, test: p => p.realmIdx >= 6 },
+    { id: 'r4b', cat: 'realm', name: '炼虚合道', desc: '突破至炼虚期', reward: { fortune: 12 }, test: p => p.realmIdx >= 5 },   // v24 补档
+    { id: 'r5', cat: 'realm', name: '合体无为', desc: '突破至合体期', reward: { fortune: 13 }, test: p => p.realmIdx >= 6 },
+    { id: 'r5b', cat: 'realm', name: '大乘渐满', desc: '突破至大乘期', reward: { fortune: 14 }, test: p => p.realmIdx >= 7 },   // v24 补档
+    { id: 'r5c', cat: 'realm', name: '劫火淬身', desc: '突破至渡劫期', reward: { fortune: 16 }, test: p => p.realmIdx >= 8 },   // v24 补档
     { id: 'r6', cat: 'realm', name: '白日飞升', desc: '修至真仙期', reward: { fortune: 20 }, test: p => p.realmIdx >= 9 },
     /* ---- 职业 ---- */
     { id: 'd0', cat: 'dao', name: '道途初定', desc: '择定第一条大道', reward: { stones: 200 }, test: p => !!p.dao },

@@ -225,6 +225,38 @@ const UI = {
     this.el['focus-strip'].classList.toggle('hidden', !parts.length);
   },
 
+  /* ---------- v24 红点统一源：页签/子页签红点全部收敛到单一计算，各处只读不各算各的 ---------- */
+  dots() {
+    const p = Game.player;
+    if (!p) return {};
+    const today = Math.floor(p.day || 0);
+    const need = GameData.layerNeed(p.realmIdx, p.layer);
+    const ripe = ((p.cave && p.cave.plots) || []).some(pl => pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0));
+    const tripBack = (p.beasts && p.beasts.list || []).some(b => b.trip && today >= b.trip.until);
+    const bountyOk = (p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need);
+    const gupianOk = (p.counters.gupianGot || 0) >= 9 || (p.bag['m_gupian'] || 0) >= 9;
+    const oddHot = (typeof BlackSys !== 'undefined' && BlackSys.isOpen(p))
+      || (typeof AuctionSys !== 'undefined' && (() => { const lot = AuctionSys.state(p); return lot.until - today > 0 && lot.until - today <= 10; })());
+    const sectTasksOk = !!p.sect && (p.sect.tasks || []).some(t => t && t.progress >= t.need);
+    const tourneyOn = !!(p.sect && p.sect.tourney);   // 大比进行中（tourneyCheck 开赛才写入）
+    return {
+      cultivate: (p.layer === 3 && p.exp >= need && p.realmIdx < 9)
+        || (p.realmIdx === 9 && p.layer === 3 && p.exp >= need && !p.flags.ascended)
+        || !!p.canReincarnate,
+      quest: (typeof QuestSys !== 'undefined') ? QuestSys.sideClaimable(p) : false,
+      cave: ripe || tripBack,
+      'cave:farm': ripe,
+      'cave:beast': tripBack,
+      map: !!(p.world && p.world.pending) || gupianOk,
+      'map:realm': gupianOk,
+      jianghu: NpcSys.grudgeCount(p) > 0 || (typeof PersonalSys !== 'undefined' && PersonalSys.anyAvailable(p)),
+      shop: bountyOk || oddHot,
+      'shop:bounty': bountyOk,
+      'shop:odd': oddHot,
+      sect: (!p.sect && p.realmIdx >= 1) || sectTasksOk || tourneyOn,
+      gongfa: false,
+    };
+  },
   /* ---------- 中央标签页 ---------- */
   renderTabs() {
     const tabs = [
@@ -237,21 +269,9 @@ const UI = {
       { id: 'sect', name: '宗门' },
       { id: 'gongfa', name: '功法' },
     ];
-    const p = Game.player;
-    const showSectDot = !p.sect && p.realmIdx >= 1;
-    const need = GameData.layerNeed(p.realmIdx, p.layer);
-    const showCultDot = (p.layer === 3 && p.exp >= need && p.realmIdx < 9)
-      || (p.realmIdx === 9 && p.layer === 3 && p.exp >= need && !p.flags.ascended)
-      || !!p.canReincarnate;
-    const showMapDot = !!(p.world && p.world.pending);
-    const showJianghuDot = NpcSys.grudgeCount(p) > 0 || (typeof PersonalSys !== 'undefined' && PersonalSys.anyAvailable(p));   // v19 个人线待续谈
-    // v22 红点随子页签内容迁移：悬赏可领→坊市，灵田已熟→洞府
-    const showShopDot = (p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need);
-    const showCaveDot = ((p.cave && p.cave.plots) || []).some(pl => pl && pl.seed && (Math.floor(p.day || 0) - (pl.plantedDay || 0)) >= (pl.days || 0));
+    const dots = this.dots();   // v24 红点统一源
     const htmls = tabs.map(t => {
-      const dot = (t.id === 'sect' && showSectDot) || (t.id === 'cultivate' && showCultDot)
-        || (t.id === 'map' && showMapDot) || (t.id === 'jianghu' && showJianghuDot)
-        || (t.id === 'shop' && showShopDot) || (t.id === 'cave' && showCaveDot);
+      const dot = !!dots[t.id];
       const lock = Guide.tabLocked(t.id);   // v6：分步解锁
       return `<button class="tab-btn ${Game.activeTab === t.id ? 'active' : ''} ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${t.id}" ${lock ? `title="${lock}"` : ''}>${lock ? '🔒' : ''}${t.name}${dot ? '<span class="dot"></span>' : ''}</button>`;
     });
@@ -288,8 +308,9 @@ const UI = {
   renderSubTabs(tab, cur) {
     const list = this.SUBTABS[tab];
     if (!list) return '';
+    const dots = this.dots();   // v24 子页签同样吃统一红点源
     return `<nav class="subtabs">${list.map(s =>
-      `<button class="subtab-btn ${s.id === cur ? 'active' : ''}" data-action="act-tab" data-tab="${tab}:${s.id}">${s.name}</button>`).join('')}</nav>`;
+      `<button class="subtab-btn ${s.id === cur ? 'active' : ''}" data-action="act-tab" data-tab="${tab}:${s.id}">${s.name}${dots[`${tab}:${s.id}`] ? '<span class="dot"></span>' : ''}</button>`).join('')}</nav>`;
   },
 
   renderTabContent() {
@@ -450,7 +471,8 @@ const UI = {
     const today = Math.floor(p.day || 0);
     const rows = [];
     const signed = p.signDay === today;
-    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}` : '今日未求签', go: 'map:world' });
+    // v24 求签行内直签——无需再绕道游历·天下
+    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}` : '今日未求签', act: signed ? '' : 'act-sign', actText: '摇 签' });
     const rush = p.rushDay === today;
     rows.push({ state: rush ? 'ok' : 'todo', label: '聚灵加速', stat: rush ? '已点燃 · 修炼 ×1.5' : '阵未点燃', go: p.cave ? 'cave:home' : '' });
     const plots = (p.cave && p.cave.plots) || [];
@@ -472,7 +494,8 @@ const UI = {
             <span class="daily-dot"></span>
             <span class="daily-label">${r.label}</span>
             <span class="daily-stat">${r.stat}</span>
-            ${r.go ? `<button class="btn btn-sm guide-go" data-action="act-tab" data-tab="${r.go}">前往 ›</button>` : ''}
+            ${r.act ? `<button class="btn btn-sm btn-primary guide-go" data-action="${r.act}">${r.actText}</button>` : ''}
+            ${!r.act && r.go ? `<button class="btn btn-sm guide-go" data-action="act-tab" data-tab="${r.go}">前往 ›</button>` : ''}
           </div>`).join('')}
         <div class="tip-line">· 日常诸事不强制——但积少成多，皆是道途资粮。</div>
       </div>`;
@@ -486,9 +509,7 @@ const UI = {
         <div class="card-desc">洞府乃修士安身立命之所——聚灵阵助修行、灵田可种药、兽栏能养灵兽。<br>然开辟洞府耗费甚巨，须至<b>筑基期</b>方可为之。</div></div>`;
     }
     if (!p.cave) p.cave = CaveSys.freshCave();
-    CaveSys.visitorEvent(p);   // v20 接线：每日访客事件（15% 几率，v18 起闲置）
-    CaveSys.checkPest(p);      // v20 接线：每日虫害检查（v18 起闲置）
-    CaveSys.springDaily(p);    // v20：灵泉日产灵石
+    // v24：访客/虫害/灵泉三项每日结算已迁往 Game.afterAction——渲染恢复纯函数
     const lv = p.cave.lv;
     const maxed = lv >= CaveSys.MAX_LV;
     const c = CaveSys.upCost(p);
@@ -532,11 +553,13 @@ const UI = {
         <div class="gf-actions">
           <button class="btn btn-sm" data-action="act-beast-active" data-uid="${b.uid}">${isOn ? '歇 息' : '出 战'}</button>
           <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
-          <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
-          ${!b.trip ? `<button class="btn btn-sm" data-action="act-beast-dispatch" data-uid="${b.uid}" title="外出寻宝，数日后带回灵材">派 遣</button>` : ''}
-          ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
           <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${Bag.count('m_neidan') ? '' : 'disabled'}>喂内丹（${Bag.count('m_neidan')}）</button>
-          <button class="btn btn-sm btn-danger" data-action="act-beast-free" data-uid="${b.uid}">放归</button>
+          ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
+          <details class="fold npc-more"><summary>照管 ▾</summary><div class="gf-actions" style="margin-top:6px">
+            <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
+            ${!b.trip ? `<button class="btn btn-sm" data-action="act-beast-dispatch" data-uid="${b.uid}" title="外出寻宝，数日后带回灵材">派 遣</button>` : ''}
+            <button class="btn btn-sm btn-danger" data-action="act-beast-free" data-uid="${b.uid}">放归</button>
+          </div></details>
         </div>
       </div>`;
     }).join('');
@@ -728,10 +751,9 @@ const UI = {
     </div>`;
   },
 
-  /* ---------- §24 江湖人脉 ---------- */
+  /* ---------- §24 江湖人脉（v24：行内按钮主次分级 + 义声卡入驻；登顶日赏迁至 afterAction 结算） ---------- */
   renderNpcTab() {
     const p = Game.player;
-    RankSys.dailyReward(p);   // v13：登顶每日气运（渲染时领取，随后由收尾落盘）
     const mapName = id => (GameData.MAPS.find(m => m.id === id) || {}).name || '四方云游';
     const myPow = p.realmIdx * 4 + p.layer;
     const rows = GameData.NPCS.map(d => {
@@ -750,27 +772,37 @@ const UI = {
       const powerText = !s.alive ? '已殒身'
         : his > myPow + 3 ? '远胜于你' : his > myPow ? '略胜于你' : his === myPow ? '与你相当' : '不及你';
       const sparTag = (s.sparWins || s.sparLoses) ? `<span class="tag">切磋 ${s.sparWins || 0}胜${s.sparLoses || 0}负</span>` : '';
-      const btns = !s.alive ? '<span class="tag danger">已身故</span>' : [
-        `<button class="btn btn-sm" data-action="npc-befriend" data-npc="${d.id}">结交（${Utils.fmtNum(NpcSys.befriendCost(p, d.id))}灵石）</button>`,
-        `<button class="btn btn-sm" data-action="npc-spar" data-npc="${d.id}">切磋</button>`,
-        s.met ? `<button class="btn btn-sm" data-action="npc-gift" data-npc="${d.id}">赠礼（${Utils.fmtNum(Math.round(30 * GameData.stoneEco(s.realmIdx)))}灵石）</button>` : '',
-        s.met && s.rel >= 30 ? `<button class="btn btn-sm" data-action="npc-discuss" data-npc="${d.id}">论道</button>` : '',
-        PersonalSys.next(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-line" data-npc="${d.id}" title="${Utils.esc((GameData.PERSONAL[d.id].acts[(p.personal[d.id] || 0)] || {}).brief || '')}">续谈 · ${Utils.esc(GameData.PERSONAL[d.id].arc)}</button>` : '',
-        s.rel >= 15 && p.partner !== d.id ? `<button class="btn btn-sm btn-danger" data-action="npc-betray" data-npc="${d.id}">背刺夺宝</button>` : '',
-        s.rel >= 70 && !(p.sworn || []).includes(d.id) ? `<button class="btn btn-sm" data-action="npc-swear" data-npc="${d.id}">结拜</button>` : '',
-        s.rel >= 90 && !p.partner ? `<button class="btn btn-sm btn-primary" data-action="npc-dao" data-npc="${d.id}">结为道侣</button>` : '',
-        s.grudge ? `<button class="btn btn-sm" data-action="npc-peace" data-npc="${d.id}">${s.pastLife ? '前世恩怨' : '化解仇怨'}</button>` : '',
-        NpcSys.canShowdown(p, d.id) ? `<button class="btn btn-sm btn-danger" data-action="npc-showdown" data-npc="${d.id}" title="约战雷台，胜者夺其法宝，恩怨两清">⚡ 雷台了断</button>` : '',
-      ].filter(Boolean).join('');
+      // v24 主次分级：主行只留高频四钮（结交/赠礼/论道/续谈），切磋结缘与恩怨抉择收进折叠
+      let btns = '';
+      let moreBtns = [];
+      if (s.alive) {
+        const main = [
+          `<button class="btn btn-sm" data-action="npc-befriend" data-npc="${d.id}">结交（${Utils.fmtNum(NpcSys.befriendCost(p, d.id))}灵石）</button>`,
+          s.met ? `<button class="btn btn-sm" data-action="npc-gift" data-npc="${d.id}">赠礼（${Utils.fmtNum(Math.round(30 * GameData.stoneEco(s.realmIdx)))}灵石）</button>` : '',
+          s.met && s.rel >= 30 ? `<button class="btn btn-sm" data-action="npc-discuss" data-npc="${d.id}">论道</button>` : '',
+          PersonalSys.next(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-line" data-npc="${d.id}" title="${Utils.esc((GameData.PERSONAL[d.id].acts[(p.personal[d.id] || 0)] || {}).brief || '')}">续谈 · ${Utils.esc(GameData.PERSONAL[d.id].arc)}</button>` : '',
+        ].filter(Boolean);
+        moreBtns = [
+          `<button class="btn btn-sm" data-action="npc-spar" data-npc="${d.id}">切磋</button>`,
+          s.rel >= 70 && !(p.sworn || []).includes(d.id) ? `<button class="btn btn-sm" data-action="npc-swear" data-npc="${d.id}">结拜</button>` : '',
+          s.rel >= 90 && !p.partner ? `<button class="btn btn-sm btn-primary" data-action="npc-dao" data-npc="${d.id}">结为道侣</button>` : '',
+          NpcSys.canLearnFrom(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-learnfrom" data-npc="${d.id}" title="三胜之后，请其倾囊相授">请其指点</button>` : '',
+          s.grudge ? `<button class="btn btn-sm" data-action="npc-peace" data-npc="${d.id}">${s.pastLife ? '化解前世恩怨' : '化解仇怨'}</button>` : '',
+          s.rel >= 15 && p.partner !== d.id ? `<button class="btn btn-sm btn-danger" data-action="npc-betray" data-npc="${d.id}">背刺夺宝</button>` : '',
+          NpcSys.canShowdown(p, d.id) ? `<button class="btn btn-sm btn-danger" data-action="npc-showdown" data-npc="${d.id}" title="约战雷台，胜者夺其法宝，恩怨两清">⚡ 雷台了断</button>` : '',
+        ].filter(Boolean);
+        btns = main.join('')
+          + (moreBtns.length ? ` <details class="fold npc-more"><summary>恩怨与机缘 ▾</summary><div class="gf-actions" style="margin-top:6px">${moreBtns.join('')}</div></details>` : '');
+      } else {
+        btns = '<span class="tag danger">已身故</span>';
+      }
       return `
       <div class="shop-row">
         <div class="gf-info">
           <div class="gf-name"><span style="display:inline-block;vertical-align:middle;width:34px;height:34px;border-radius:6px;overflow:hidden;margin-right:6px">${Art.portrait(Art.npcLook(d))}</span>${d.name} <span style="color:var(--text-faint);font-size:12px">${d.title} · ${d.temper}</span> <span class="tag ${relCls}">${lbl} ${s.rel > 0 ? '+' : ''}${s.rel}</span> ${sparTag} ${tags.join('')}</div>
           <div class="gf-desc">${d.desc}<br><span style="color:var(--text-faint)">${GameData.REALM_NAMES[s.realmIdx]}${GameData.LAYER_NAMES[s.layer]} · 现于${s.alive ? mapName(s.map) : '殒身之地'} · 战力${powerText}</span></div>
         </div>
-        <div class="gf-actions">${btns}
-          ${NpcSys.canLearnFrom(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-learnfrom" data-npc="${d.id}" title="三胜之后，请其倾囊相授">请其指点</button>` : ''}
-        </div>
+        <div class="gf-actions">${btns}</div>
       </div>`;
     }).join('');
     const rel = [];
@@ -786,7 +818,29 @@ const UI = {
       结交可成好友、结拜、道侣——你于战斗、渡劫的虚弱危急关头，他们有概率舍命相助；背刺夺宝收益翻倍，但气运暴跌、恩怨永结——宿敌会趁你历练、突破、渡劫时偷袭。</div>
       ${rel.length ? `<div class="card-tags"><span class="tag safe">${rel.join(' · ')}</span></div>` : ''}
       ${awayLine}
-    </div>${RankSys.render(p)}${rows}`;
+    </div>${RankSys.render(p)}${this.renderRepCard(p)}${rows}`;
+  },
+
+  /* ---------- v24 义声卡：布施行善自「奇市」迁入江湖——行善消业与江湖声望同卡归位 ---------- */
+  renderRepCard(p) {
+    const rep = (typeof RepSys !== 'undefined' && RepSys.level) ? RepSys.level(p) : null;
+    const mul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
+    const bon = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
+    const donateRows = (typeof DonateSys !== 'undefined' ? DonateSys.TIERS : []).map(t => {
+      const stones = Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(5, p.realmIdx) - 1) / 1));
+      return `
+      <div class="shop-row">
+        <div class="gf-info"><div class="gf-name">${t.name}</div>
+        <div class="gf-desc">声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。需灵石 ${Utils.fmtNum(stones)}。</div></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-donate" data-d="${t.id}">行 善</button></div>
+      </div>`;
+    }).join('');
+    return `
+    <div class="card rep-card">
+      <div class="card-title">✦ 义声 · 布施 <span class="tag ${rep && rep.color === 'neg' ? 'danger' : 'safe'}">${rep ? rep.name : '初露头角'} · 声望 ${p.reputation || 0}</span></div>
+      <div class="card-desc">散财于世间疾苦，善名自远——声望高者，坊市买价有面子（当前买价 ×${mul}），悬赏赏格更丰（×${bon}）；劣迹昭彰者处处吃闭门羹。</div>
+      ${donateRows}
+    </div>`;
   },
 
   /* ---------- v22 坊市拆五：万宝阁 / 炼制坊 / 祭炼堂 / 悬赏板 / 奇市（信息架构归一） ---------- */
@@ -805,7 +859,7 @@ const UI = {
     const p = Game.player;
     const st = Stat.compute(p);
     const stock = GameData.SHOP.filter(row => p.realmIdx >= row.minRealm);
-    const group = (type, title) => {
+    const group = (type, title, open = false) => {
       const items = stock.filter(r => GameData.ITEMS[r.item].type === type);
       if (!items.length) return '';
       const rows = items.map(r => {
@@ -828,9 +882,15 @@ const UI = {
           </div>
         </div>`;
       }).join('');
-      return `<div class="shop-section-title">◈ ${title}</div>${rows}`;
+      const fk = 'shop-g-' + type;   // v24 开合记忆：行动重渲染后保持用户展开状态
+      const isOpen = Game.foldState[fk] !== undefined ? Game.foldState[fk] : open;
+      return `<details class="fold shop-group" data-fold="${fk}" ${isOpen ? 'open' : ''}><summary>◈ ${title}（${items.length} 种 ▾）</summary><div style="margin-top:6px">${rows}</div></details>`;
     };
-    const sellable = Object.keys(p.bag).filter(id => (GameData.ITEMS[id].price || 0) > 0);
+    // v24 出售区折叠 + 按价值降序：买与卖不再 40+ 行平铺一页
+    const sellable = Object.keys(p.bag)
+      .filter(id => (GameData.ITEMS[id].price || 0) > 0)
+      .sort((a, b) => ShopSys.sellPrice(b) * (p.bag[b] || 0) - ShopSys.sellPrice(a) * (p.bag[a] || 0));
+    const sellTotal = sellable.reduce((sum, id) => sum + ShopSys.sellPrice(id) * (p.bag[id] || 0), 0);
     const sellRows = sellable.map(id => {
       const def = GameData.ITEMS[id];
       const sp = ShopSys.sellPrice(id);
@@ -844,9 +904,15 @@ const UI = {
         </div>
       </div>`;
     }).join('');
+    const sellFold = sellable.length ? `
+      <details class="fold shop-sell-fold" data-fold="shop-sell" ${Game.foldState['shop-sell'] ? 'open' : ''}>
+        <summary>◈ 出售物品（${sellable.length} 种 · 可售总值 <b class="hl">${Utils.fmtNum(sellTotal)}</b> 灵石 ▾）</summary>
+        <div class="tip-line" style="margin:6px 0">· 四折回收${p.dao === 'pill' ? '，丹药另有五成加成' : ''}；全售需二次确认。凡品杂物可在乾坤袋「一键卖凡品」。</div>
+        ${sellRows}
+      </details>` : '<div class="tip-line">背包中暂无可售之物。</div>';
     return `
       <div class="card">
-        <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
+        <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}${(typeof RepSys !== 'undefined' && RepSys.priceMul && RepSys.priceMul(p) !== 1) ? `声望买价 ×${RepSys.priceMul(p)} · ` : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
         <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。</div>
         <div class="card-tags">
           <button class="btn btn-sm" data-action="act-convert" data-dir="up1">100下品 → 1中品</button>
@@ -854,13 +920,12 @@ const UI = {
           <button class="btn btn-sm" data-action="act-convert" data-dir="up2">100中品 → 1上品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="down2">1上品 → 100中品</button>
         </div>
-        ${group('pill', '丹药')}
+        ${group('pill', '丹药', true)}
         ${group('artifact', '法器')}
         ${group('gongfa', '功法典籍')}
         ${group('material', '杂货材料')}
         ${group('seed', '灵田种子')}
-        <div class="shop-section-title">◈ 出售物品（四折回收${p.dao === 'pill' ? '，丹药另有五成加成' : ''}）</div>
-        ${sellRows || '<div class="tip-line">背包中空空如也。</div>'}
+        ${sellFold}
       </div>`;
   },
 
@@ -978,14 +1043,35 @@ const UI = {
         <div class="gf-desc">以本命精血温养，吞玄铁与灵石而长。${(p.benming && p.benming.lv) >= ForgeSys.BENMING_MAX ? '已至圆满之境。' : ''}</div></div>
         <div class="gf-actions"><button class="btn btn-sm" data-action="act-benming-feed" ${((p.benming && p.benming.lv) || 0) >= ForgeSys.BENMING_MAX ? 'disabled' : ''}>喂 养</button></div>
       </div>` : '';
+    // v24 熔铸回收：囊中闲置法器就地分解（0 价稀有物按品阶兜底计价，不再沦为背包垃圾）
+    const salvageRows = Object.keys(p.bag).filter(id => {
+      const def = GameData.ITEMS[id];
+      return def && def.type === 'artifact' && (p.bag[id] || 0) > 0;
+    }).map(id => {
+      const def = GameData.ITEMS[id];
+      const n = p.bag[id];
+      const oreBack = (def.grade || 0) + 1;
+      const GRADE_FALLBACK = [300, 800, 2000, 6000, 16000, 40000];
+      const baseVal = (def.price || 0) > 0 ? def.price : (GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500);
+      return `
+      <div class="shop-row">
+        <div class="gf-info"><div class="gf-name">${this.gradeSpan(def.name, def.grade)} <span style="color:var(--text-faint)">×${n}</span></div>
+        <div class="gf-desc">可回炉得玄铁矿 ×${oreBack}/件、灵石 ${Utils.fmtNum(Math.max(10, Math.round(baseVal * 0.15)))}/件${(def.price || 0) <= 0 ? '（稀有物按品阶兜底计价）' : ''}。</div></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-salvage" data-item="${id}">分 解</button></div>
+      </div>`;
+    }).join('');
+    const salvageSection = `
+      <div class="shop-section-title">◈ 熔铸回收（闲置法器回炉：得玄铁矿与灵石）</div>
+      ${salvageRows || '<div class="tip-line">囊中暂无可回炉的法器。</div>'}`;
     const enhanceSection = `
       <div class="shop-section-title">◈ 祭炼强化（+1~+10，每级 +10% 数值属性）</div>
       ${enhSlots || '<div class="tip-line">先在乾坤袋中装备法宝，方可祭炼强化。</div>'}
       ${affixSection}
-      ${benmingSection}`;
+      ${benmingSection}
+      ${salvageSection}`;
     return `
       <div class="card">
-        <div class="card-title">✦ 祭炼堂 <span style="font-size:12px;color:var(--text-dim)">强化 · 洗练 · 本命温养——法宝之道</span></div>
+        <div class="card-title">✦ 祭炼堂 <span style="font-size:12px;color:var(--text-dim)">强化 · 洗练 · 本命温养 · 回收——法宝之道</span></div>
         ${enhanceSection}
       </div>`;
   },
@@ -1077,32 +1163,17 @@ const UI = {
         </div>
       </div>`;
     // v19 布施
-    const donateRows = DonateSys.TIERS.map(t => {
-      const stones = Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(5, p.realmIdx) - 1) / 1));
-      return `
-      <div class="shop-row">
-        <div class="gf-info"><div class="gf-name">${t.name}</div>
-        <div class="gf-desc">声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。需灵石 ${Utils.fmtNum(stones)}。</div></div>
-        <div class="gf-actions"><button class="btn btn-sm" data-action="act-donate" data-d="${t.id}">行 善</button></div>
-      </div>`;
-    }).join('');
-    const donateSection = `
-      <div class="shop-section-title">◈ 布施（散财消业，声望与气运双收）</div>
-      ${donateRows}`;
+    // v24 布施迁往「江湖 · 义声」——行善消业与销赃暗巷分而治之
     return `
       <div class="card">
-        <div class="card-title">✦ 奇 市 <span style="font-size:12px;color:var(--text-dim)">黑市 · 拍卖 · 布施——非常之法，非常之时</span></div>
+        <div class="card-title">✦ 奇 市 <span style="font-size:12px;color:var(--text-dim)">黑市 · 拍卖——非常之法，非常之时</span></div>
         ${blackSection}
         ${auctionSection}
-        ${donateSection}
       </div>`;
   },
 
   renderSectTab() {
     const p = Game.player;
-    const cmdBtn = typeof SectSys !== 'undefined' && SectSys.isElder && SectSys.isElder(p)
-      ? `<button class="btn btn-sm btn-primary" data-action="act-sect-command">⚡ 长老令</button>` : '';
-    void cmdBtn;
     if (p.realmIdx < 1 && !p.sect) {
       return `<div class="card"><div class="card-title">✦ 宗门</div>
         <div class="card-desc">修仙界宗门林立，然非筑基不得其门而入。<br>你如今尚在练气，还请先专心修行。</div></div>`;
@@ -1198,14 +1269,17 @@ const UI = {
         <div class="card-desc">擂台已筑，钟鼓齐鸣。同门比试点到为止——胜场越多彩头越厚，三连胜者<b>魁首扬名</b>（气运大赠，生涯留名）。</div>
         <div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-tourney-fight">登 台 比 武</button></div>
       </div>` : '';
+    // v24 卡序归位：宗门任务置顶（进门第一屏就是可做的事），派系→大比→兑换随后
+    const elderBtn = (typeof SectSys !== 'undefined' && SectSys.isElder && SectSys.isElder(p))
+      ? '<button class="btn btn-sm btn-primary" data-action="act-sect-command" style="margin-left:auto">⚡ 长老令</button>' : '';
     return `
-      ${tourneyCard}
-      ${facSection}
       <div class="card">
-        <div class="card-title">✦ ${sect.name} <span class="tag safe">${sect.bonusText}</span></div>
-        <div class="card-desc">当前贡献：<b class="hl">${p.sect.contrib}</b> 点。完成宗门任务可获得贡献与灵石。</div>
+        <div class="card-title">✦ ${sect.name} <span class="tag safe">${sect.bonusText}</span>${elderBtn}</div>
+        <div class="card-desc">当前贡献：<b class="hl">${Utils.fmtNum(p.sect.contrib)}</b> 点。完成宗门任务可获得贡献与灵石。</div>
         ${taskRows}
       </div>
+      ${facSection}
+      ${tourneyCard}
       <div class="card">
         <div class="card-title">✦ 贡献兑换</div>
         ${exRows}
@@ -1270,17 +1344,26 @@ const UI = {
       <div class="card"><div class="card-title">✦ 出战技能盘 <span class="tag">${deck.length}/4</span></div>
       <div class="card-desc">战斗中的「法诀」菜单只出手盘内招式——择四招随身，临阵不乱。空盘时全部法诀皆可用。</div>
       ${deckRows || '<div class="tip-line">尚未修习带神通的法诀。</div>'}</div>`;
-    // v19 道韵协同
-    const dyRows = (GameData.DAO_YUN || []).map(dy => {
-      const on = dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3);
-      const names = dy.need.map(gid => `${(GameData.ITEMS[gid] || {}).name || gid} ${p.gongfa[gid] ? p.gongfa[gid].level : 0}/3层`).join(' · ');
-      return `<div class="tip-line" style="${on ? '' : 'opacity:.65'}">${on ? '✦' : '·'} <b>${dy.name}</b>（${names}）——${dy.desc}</div>`;
+    // v24 道韵协同 2.0：主池+扩池合并、逐条层数进度、差临门一脚时明示缺口
+    const dyList = (GameData.DAO_YUN || []).concat(GameData.DAO_YUN_EXTRA || []);
+    const activeDyN = (typeof Stat !== 'undefined' && Stat.activeDaoYun) ? Stat.activeDaoYun(p).length : 0;
+    const dyRows = dyList.map(dy => {
+      const parts = dy.need.map(gid => ({ gid, nm: (GameData.ITEMS[gid] || {}).name || gid, g: p.gongfa[gid] }));
+      const on = parts.every(x => x.g && x.g.level >= 3);
+      let hint = '';
+      if (!on && parts.some(x => x.g)) {
+        const miss = parts.filter(x => !x.g || x.g.level < 3);
+        hint = `<span style="color:var(--text-faint)">　→ 尚缺：${miss.map(x => `${x.nm}${!x.g ? '（未学）' : ` 第${x.g.level}层`}`).join('、')}</span>`;
+      }
+      return `<div class="tip-line" style="${on ? '' : 'opacity:.7'}">${on ? '✦' : '·'} <b>${dy.name}</b>（${parts.map(x => `${x.nm} ${x.g ? x.g.level : 0}/3层`).join(' · ')}）——${dy.desc}${hint}</div>`;
     }).join('');
     return `
       <div class="card"><div class="card-title">✦ 已修功法</div>${learned || '<div class="tip-line">尚未修习任何功法。</div>'}</div>
       ${deckCard}
       ${learnRows ? `<div class="card"><div class="card-title">✦ 待学典籍（背包中）</div>${learnRows}</div>` : ''}
-      <div class="card"><div class="card-title">✦ 道韵协同（双功法修至三层以上，共鸣生韵）</div>${dyRows}</div>`;
+      <div class="card"><div class="card-title">✦ 道韵协同（双功法修至三层以上，共鸣生韵） <span class="tag ${activeDyN ? 'warn' : ''}">已激活 ${activeDyN}/${dyList.length}</span></div>
+      <div class="tip-line">· 成韵即永久生效；缺口已为你标出——典籍可于坊市、宗门与秘境深处求取。</div>
+      ${dyRows}</div>`;
   },
 
   /** v20 属性构成明细弹窗（.stat-detail 点击触发，Game 全局委托捕获） */
@@ -1547,10 +1630,65 @@ const UI = {
           </div>`;
         }).join('');
         const gotN = ids.filter(id => Meta.data.codex[cat][id]).length;
-        body += `<div class="shop-section-title">◈ ${label} · ${gotN}/${ids.length}</div>${rows}`;
+        const full = gotN >= ids.length && ids.length > 0;
+        const bonusTag = full ? '<span class="tag safe">已大成 · 全属性 +1%</span>' : '<span class="tag">收满全属性 +1%</span>';
+        body += `<div class="shop-section-title">◈ ${label} · ${gotN}/${ids.length} ${bonusTag}</div>${rows}`;
       }
     }
-    return `${tabs}<div class="codex-list">${body}</div>`;
+    return `${tabs}<div class="codex-list">${body}</div>
+      <div class="tip-line" style="margin-top:6px">· 每类图鉴收录齐全，道行自有精进——全属性永久 +1%（可叠加，跨转世保留）。</div>`;
+  },
+
+  /* ---------- v24 玩法手册：分章折叠的帮助页（原「三分钟上手清单」为首节） ---------- */
+  helpModal() {
+    const folds = `
+      <details class="fold" open><summary>✦ 三分钟上手</summary>
+        <div class="tip-line">· <b>修炼</b>攒修为，圆满后冲关；练气→筑基无天劫，金丹起有硬抗/法宝/借地三策博弈。</div>
+        <div class="tip-line">· <b>游历</b>探地图搏机缘，遇敌注意敌方「下一手」意图——<b>蓄力时防御可破招反击</b>。</div>
+        <div class="tip-line">· <b>坊市</b>买丹药法宝；丹毒是服丹的代价——丹毒上限见左栏，超过七成五会提示停口，解毒丹可压。</div>
+        <div class="tip-line">· 灵石分<b>下品/中品/上品</b>三档，1 中品=100 下品、1 上品=100 中品；万宝阁可互相兑换。</div>
+        <div class="tip-line">· 筑基后解锁 <b>洞府/宗门/江湖</b>：种田炼药、领任务、结交修士（可结拜、结为道侣）。</div>
+        <div class="tip-line">· 每章主线完结送残玉共鸣（全属性 +1.5%）——跟主线走不吃亏；卡住就看左栏「当前建议」。</div>
+      </details>
+      <details class="fold"><summary>✦ 修行与境界</summary>
+        <div class="tip-line">· 十境三十六层：练气→筑基→金丹→元婴→化神→炼虚→合体→大乘→渡劫→真仙，每境四层。</div>
+        <div class="tip-line">· 每层修为攒满即「圆满」，可冲关下一境；金丹起冲关引天劫，成败皆有道果（劫前记得存档）。</div>
+        <div class="tip-line">· 闭关 30 日 = 一轮大修炼（耗灵石、清丹毒）；「聚灵加速」日限一次，当日修炼 ×1.5。</div>
+        <div class="tip-line">· 大道六择一（剑/丹/符/体/阵/魔）：剑修渡劫 ×0.77、体修 ×1.4，各道有专属行为加成，终身可转（跌一大境界）。</div>
+        <div class="tip-line">· 心魔满百必劫（丹毒反噬/渡劫失利所积）；孽障满百可斩三尸（清孽障，散修为）。</div>
+        <div class="tip-line">· 渡劫失利不死——可兵解转世重开一世：印记全属性 +1%/枚，传承树逐层解锁。</div>
+      </details>
+      <details class="fold"><summary>✦ 战斗要诀</summary>
+        <div class="tip-line">· 敌方「下一手」意图明示：攻击/蓄力/防御。敌<b>蓄力</b>时用「防御」可破招，反伤其身并攒气。</div>
+        <div class="tip-line">· 必杀技随战斗积「气」施放；出战技能盘（功法页）至多带四招，空盘则全部可用。</div>
+        <div class="tip-line">· 战斗中可服丹/掷符/饮灵力药；残血开「自动战斗」会自动服药与防御。</div>
+        <div class="tip-line">· 可驯妖兽打至两成血以下出现「驯服」——灵兽出战可协战，喂妖兽内丹可升阶。</div>
+        <div class="tip-line">· 打不过可「遁走」（有伤）——精英词缀（汲血/魔棘/不灭等）开局可见，量力而行。</div>
+      </details>
+      <details class="fold"><summary>✦ 江湖与恩怨</summary>
+        <div class="tip-line">· 二十四位常驻修士随岁月成长：结交→赠礼→论道→结拜/结侣；道侣会在你渡劫时舍命相助。</div>
+        <div class="tip-line">· 关系深厚触发「续谈」——个人线三幕剧情，全通给永久加成；错过档位会暂隐，不必急。</div>
+        <div class="tip-line">· 宿敌会截胡机缘、趁虚偷袭；「化解仇怨」或雷台了断可消患。孽障越高，仇家越多。</div>
+        <div class="tip-line">· 声望由布施行善积累：买价打折、悬赏赏格加成；声名狼藉则处处吃闭门羹。</div>
+      </details>
+      <details class="fold"><summary>✦ 营生与经济</summary>
+        <div class="tip-line">· 洞府灵田自种自收（离线亦生长）；种子在坊市「灵田种子」区；一键行权可代收代种。</div>
+        <div class="tip-line">· 悬赏板两日一换，猎杀目标游历自动计入；宗门任务同源——贡献换功法秘宝。</div>
+        <div class="tip-line">· 奇市：黑市每月初三开市三日（贵六成但货奇）；拍卖行每六十日一件稀有拍品。</div>
+        <div class="tip-line">· 闲置法器可在祭炼堂「熔铸回收」分解成玄铁矿与灵石——天级神兵也按品阶兜底计价。</div>
+        <div class="tip-line">· 灵田灵兽寻宝有「归来」红点提醒；奇市开市、拍期将止也会在页签上亮灯。</div>
+      </details>
+      <details class="fold"><summary>✦ 杂录</summary>
+        <div class="tip-line">· 快捷键：剧情中 Enter/空格 翻页；战斗中 1~5 普攻/法诀/防御/道具/遁走；QWERTASD 切页签；ESC 关层。</div>
+        <div class="tip-line">· 离线时灵田照常生长、修为按修炼四成效率自行精进（上限 30 日），回归时入账。</div>
+        <div class="tip-line">· 图鉴五类收满各得全属性 +1%（永久）；成就页未完成的排在前头。</div>
+        <div class="tip-line">· 问道录（问道页右上）收录你看过的全部剧情、人物志、年表、抉择树与百科。</div>
+      </details>`;
+    this.popup({
+      title: '📖 玩法手册',
+      html: folds,
+      options: [{ text: '合 上', value: true, primary: true }],
+    });
   },
 
   /* ---------- v6：存档导出 / 导入（文本码） ---------- */

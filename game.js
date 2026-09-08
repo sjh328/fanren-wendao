@@ -709,7 +709,7 @@ const Meta = {
 };
 
 /* ======================================================================
- * §1.10 增量扩展（v6）：成就系统 Achieve（五类三十项）
+ * §1.10 增量扩展（v6）：成就系统 Achieve（v24 起共 51 项，含境界九档/职业/战斗/奇遇/转世/经营/大比）
  * 完成奖励少量气运或灵石；进度存于 Meta，随档、转世不重置。
  * ====================================================================== */
 const Achieve = {
@@ -722,7 +722,10 @@ const Achieve = {
     { id: 'r2', cat: 'realm', name: '金丹大道', desc: '突破至金丹期', reward: { fortune: 5 }, test: p => p.realmIdx >= 2 },
     { id: 'r3', cat: 'realm', name: '元婴出窍', desc: '突破至元婴期', reward: { fortune: 8 }, test: p => p.realmIdx >= 3 },
     { id: 'r4', cat: 'realm', name: '化神通玄', desc: '突破至化神期', reward: { fortune: 10 }, test: p => p.realmIdx >= 4 },
-    { id: 'r5', cat: 'realm', name: '合体无为', desc: '突破至合体期', reward: { fortune: 12 }, test: p => p.realmIdx >= 6 },
+    { id: 'r4b', cat: 'realm', name: '炼虚合道', desc: '突破至炼虚期', reward: { fortune: 12 }, test: p => p.realmIdx >= 5 },   // v24 补档
+    { id: 'r5', cat: 'realm', name: '合体无为', desc: '突破至合体期', reward: { fortune: 13 }, test: p => p.realmIdx >= 6 },
+    { id: 'r5b', cat: 'realm', name: '大乘渐满', desc: '突破至大乘期', reward: { fortune: 14 }, test: p => p.realmIdx >= 7 },   // v24 补档
+    { id: 'r5c', cat: 'realm', name: '劫火淬身', desc: '突破至渡劫期', reward: { fortune: 16 }, test: p => p.realmIdx >= 8 },   // v24 补档
     { id: 'r6', cat: 'realm', name: '白日飞升', desc: '修至真仙期', reward: { fortune: 20 }, test: p => p.realmIdx >= 9 },
     /* ---- 职业 ---- */
     { id: 'd0', cat: 'dao', name: '道途初定', desc: '择定第一条大道', reward: { stones: 200 }, test: p => !!p.dao },
@@ -859,11 +862,24 @@ LOCKS: {
     if (p.canReincarnate) t.push({ text: '兵解转世之机已现——或可重开一世', go: 'cultivate' });
     if (p.world && p.world.pending) t.push({ text: '天下大势正待抉择，可于游历页参与', go: 'map:world' });
     if (NpcSys.grudgeCount(p) > 0) t.push({ text: '有宿敌伺机报复——宜化解仇怨或早做备战', go: 'jianghu' });
-    // v21 日常仪式提醒（v22：子页签深链直达）：黄历 / 灵田 / 悬赏
-    if (p.signDay !== Math.floor(p.day || 0)) t.push({ text: '今日黄历尚未求签——一签定小机缘', go: 'map:world' });
-    const ripe = ((p.cave && p.cave.plots) || []).filter(pl => pl && pl.seed && (Math.floor(p.day || 0) - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
-    if (ripe > 0) t.push({ text: `灵田有 <b>${ripe}</b> 块作物已然成熟——请及时采收`, go: 'cave:farm' });
-    if ((p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need)) t.push({ text: '悬赏目标已然达成——可去坊市领取赏格', go: 'shop:bounty' });   // v21: 领后置空条目判空
+    // v24 日常仪式（求签/灵田/悬赏）不再进建议——修炼页「今日修行」卡与页签红点已全程承接，
+    // 腾出的位置给支线结案与个人线续谈两条「内容型」提醒，避免 2.8 万字剧情内容被静默挤掉
+    if (typeof QuestSys !== 'undefined' && QuestSys.sideClaimable && QuestSys.sideClaimable(p)) {
+      t.push({ text: '<b>奇遇可了结</b>——支线已达成，结案领赏入问道录', go: 'quest' });
+    }
+    if (typeof PersonalSys !== 'undefined' && PersonalSys.anyAvailable && PersonalSys.anyAvailable(p)) {
+      t.push({ text: '<b>新知</b>：有故人似有心事——江湖页「续谈」可赴约一叙', go: 'jianghu' });
+    }
+    // v24 新知扩容：寻宝归来 / 碎片将齐 / 道韵将成
+    if ((p.beasts && p.beasts.list || []).some(b => b.trip && Math.floor(p.day || 0) >= b.trip.until)) {
+      t.push({ text: '<b>新知</b>：灵兽寻宝已归——洞府·灵兽可点「归来」收取灵材', go: 'cave:beast' });
+    }
+    if ((p.counters.gupianGot || 0) >= 9 && !p.benming) {
+      t.push({ text: '<b>新知</b>：上古碎片已足九枚——秘境页可合成本命法宝', go: 'map:realm' });
+    }
+    if (Object.values(p.gongfa || {}).some(g => g.level >= 2) && !(typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length)) {
+      t.push({ text: '<b>新知</b>：功法将可共鸣成韵——功法页道韵卡已标出缺口', go: 'gongfa' });
+    }
     // v23 奇市提醒：黑市开市 / 拍卖将止，错过不再无感
     if (BlackSys.isOpen(p)) t.push({ text: `暗巷黑市开市中（余 ${BlackSys.daysLeft(p)} 日）——奇货与赌局，福缘者得`, go: 'shop:odd' });
     {
@@ -915,7 +931,7 @@ LOCKS: {
     }
     // 2 聚灵加速（静默执行，省去确认弹窗）
     if (p.cave && p.rushDay !== today) {
-      const cost = Math.round(120 * GameData.stoneEco(Math.min(4, p.realmIdx)));
+      const cost = CaveSys.rushCost(p);   // v24 定价单源化（随境界）
       if (Bag.spendStones(cost)) {
         p.rushDay = today;
         Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
@@ -1118,6 +1134,29 @@ const Codex = {
     return Object.keys(c.gongfa).length + Object.keys(c.artifact).length
       + Object.keys(c.monster).length + Object.keys(c.npc).length + Object.keys(c.realm).length;
   },
+};
+
+/* ======================================================================
+ * v24 图鉴收集闭环：五类图鉴每类收满 → 全属性永久 +1%（一次性，flags 记档）
+ * Achieve.check 之后由 Game.afterAction 调用，Meta 随档不重置，flags 自愈无需迁移。
+ * ====================================================================== */
+Codex.CAT_NAMES = { gongfa: '功法', artifact: '法宝', monster: '妖兽', npc: '奇人', realm: '秘境' };
+Codex.catGot = function (cat) { return Object.keys(Meta.data.codex[cat] || {}).length; };
+Codex.checkRewards = function () {
+  const p = Game.player;
+  if (!p || p.dead) return;
+  p.flags = p.flags || {};
+  let hit = '';
+  for (const cat of Object.keys(this.CAT_NAMES)) {
+    const total = this.catalog(cat).length;
+    if (!total || this.catGot(cat) < total || p.flags['codex_' + cat]) continue;
+    p.flags['codex_' + cat] = true;
+    p.codexBonus = (p.codexBonus || 0) + 1;
+    hit = this.CAT_NAMES[cat];
+    UI.announce(`✦ 图鉴大成 · ${hit} ✦`, 'gold');
+    Log.add(`✦ <b>${hit}图鉴</b>业已收录齐全——见多识广，道行精进（全属性永久 +1%，已累计 ${p.codexBonus} 类）。`, 'system');
+  }
+  if (hit) { Save.autoSave(); UI.renderAll(); }
 };
 
 /* ======================================================================
@@ -2219,6 +2258,9 @@ const GameData = {
     c_zhangmen: { name: '白须掌门', title: '太衍宗掌门 · 白鹤真人', color: '#5a6a6a', stance: '友', role: '补过者',
       desc: '当年围杀时师尊被黑玉令牵着走。时日无多，有些账再烂在土里就没人记得了。',
       look: { robe: '#e8e4d8', hair: '#f0ede4', item: 'scroll', aura: '#8fa8a8' } },
+    c_baifa:    { name: '白发长老', title: '宗门隐执 · 当年知情人', color: '#8a8a7a', stance: '灰', role: '守密者',
+      desc: '宗门里扫了三百年藏经阁的老执事。黑玉令的事他知道一半，黑玉令主人的事，他知道得更多——所以他只敢在密室里说。',
+      look: { robe: '#9a9a8a', hair: '#e8e4d8', item: 'broom', aura: '#a8a898' } },
     c_xuanji:   { name: '玄玑真人', title: '太衍宗太上长老', color: '#6a5a8a', stance: '灰', role: '当年的刀',
       desc: '当年九位执行人之一。朱笔圈名单的人，丹会设鸿门的人——也是唯一活着知道黑玉令味道不对的人。',
       look: { robe: '#8a7ab0', hair: '#c8c2d8', item: 'seal', aura: '#7c5cb0' } },
@@ -2482,6 +2524,25 @@ const GameData = {
         { key: 'pl_n2_a3', title: '第三幕 · 回春之约', need: { tier: 'sworn', realm: 6 }, brief: '她以陈拾遗方重配「回春续断散」，从此你的丹炉里多了一味人情的火候。',
           reward: { insight: 6, items: { pill_dahuan: 2 } } },
       ] },
+    /* ---- v24 个人线补全（有主线戏份而无个人线者） ---- */
+    n3:  { arc: '刀笔春秋', title: '苏白 · 故纸修史', fx: { cult: 3 }, doneText: '通晓故纸掌故，修行愈捷',
+      acts: [
+        { key: 'pl_n3_a1', title: '第一幕 · 一页旧榜', need: { tier: 'friend', realm: 2 }, brief: '他把一页三百年前九宗联席的旧榜抄给你——抄本的墨迹，比正史诚实。',
+          reward: { insight: 4 } },
+        { key: 'pl_n3_a2', title: '第二幕 · 焚稿', need: { tier: 'bosom', realm: 4 }, brief: '他的先祖是当年执笔记档的史官，写了真话，稿被焚，人被逐——那支笔传到他手里，三百年没敢落纸。',
+          reward: { insight: 6 } },
+        { key: 'pl_n3_a3', title: '第三幕 · 刀笔归鞘', need: { tier: 'sworn', realm: 6 }, brief: '他把先祖未写完的史稿补完了最后一卷——卷首的传主一栏，写的是你的名字。',
+          reward: { insight: 8, items: { m_danfang: 2 } } },
+      ] },
+    n11: { arc: '医者仁心', title: '林晚照 · 针下道心', fx: { pillPct: 4, hpPct: 2 }, doneText: '得医仙亲授，药力更润根基更韧',
+      acts: [
+        { key: 'pl_n11_a1', title: '第一幕 · 一枚银针', need: { tier: 'friend', realm: 2 }, brief: '义诊路上她教你认药行针——医道与道心，原是同一根脉。',
+          reward: { insight: 3 } },
+        { key: 'pl_n11_a2', title: '第二幕 · 瘟村镇', need: { tier: 'bosom', realm: 4 }, brief: '疫病村镇里她被诬为投毒者。你助她洗冤，才知医者最难的病，治的是人心。',
+          reward: { insight: 5, fortune: 3 } },
+        { key: 'pl_n11_a3', title: '第三幕 · 医者自医', need: { tier: 'sworn', realm: 6 }, brief: '她当年救不回的病人是她的师父。这一针，她终于肯朝自己落下——师父教的最后一针。',
+          reward: { insight: 6, items: { pill_dahuan: 2 } } },
+      ] },
     n5:  { arc: '烟雨账簿', title: '柳含烟 · 无价之数', fx: { stoneMult: 0.05 }, doneText: '通晓商事行情，财路自宽',
       acts: [
         { key: 'pl_n5_a1', title: '第一幕 · 一条消息', need: { tier: 'friend', realm: 3 }, brief: '她想查一笔三百年前的老账——查账，得先找到那个记账的人。',
@@ -2727,6 +2788,14 @@ c3_mid: { id: 'c3_mid', title: '第三章 · 藏经阁夜话', scenes: [
   { t: 'narr', text: '你把残卷原样放回，指尖冰凉。\n这潭水，比你想的深得多。' },
 ] },
 
+c3_mid2: { id: 'c3_mid2', title: '第三章 · 阁中影', scenes: [
+  { t: 'narr', text: '残卷归架的第三夜，你鬼使神差又折回了藏经阁。\n不是为书——是那夜你分明记得，归架时邻排的烛台上，积着一段燃到一半的灯芯。藏经阁夜来禁火，那烛芯，是有人躲在这儿看完书忘了掐的。' },
+  { t: 'narr', text: '你循着烛台一路查过去。\n顶格那排架后，灰尘上有半枚极淡的足印——足尖朝内，正对着你那册残卷空出来的位置。有人在你之前读过它，读完，把它挪进了更没人找得到的死角；你又花了三夜才把它寻回来。' },
+  { t: 'dialog', who: '@c_xuanying', title: '檐上 · 隔空低语', text: '好书，是么？\n九宗的牛毛好事者何止千万，三百年却无一人翻到那一页——你知道为何？因为想让人看见的，才摆得上架。你翻到的这一页，是老主人当年埋下的饵。\n可惜，饵也不是给你预备的。' },
+  { t: 'narr', text: '声音自檐上来，落到耳畔却像贴着后颈。\n你霍然回首，阁中空无一人，唯有满架故纸簌簌作响，仿佛整座藏经阁都替那个声音保守着秘密。' },
+  { t: 'narr', text: '你把残卷贴身收了，再不归架。\n从这一夜起你明白了一件事：这座宗门里，有一双眼睛比你先读完了所有故纸——而你不知道它是谁，不知道它还读了什么，更不知道，它为什么肯让你活着读完。' },
+] },
+
 c3_end: { id: 'c3_end', title: '第三章 · 终 · 玄影夜访', scenes: [
   { t: 'narr', text: '你在宗门站定了脚跟。这一夜你刚行功完毕，窗纸上忽然多了一道人影——\n人影负手而立，声音像是从很远的地方传来，又像贴着你的耳根。' },
   { t: 'dialog', who: '@c_xuanying', title: '窗外 · 隔空传音', text: '别找了。你翻遍藏经阁也找不到真相——真相在血河故道的水底。\n小家伙，玉在你身上，是它的运气，也是你的丧钟。' },
@@ -2748,7 +2817,7 @@ c3_end: { id: 'c3_end', title: '第三章 · 终 · 玄影夜访', scenes: [
 /* ============ 第四章 · 红尘炼心 ============ */
 c4_open: { id: 'c4_open', title: '第四章 · 红尘炼心', scenes: [
   { t: 'narr', text: '宗门长老见你勤勉，私下透露了一桩秘辛：\n当年围杀血河宗的密令，出自一封无落款的黑玉令。九宗各执一词，而黑玉令的主人，至今仍在暗处。' },
-  { t: 'dialog', who: '白发长老', title: '密室 · 压低声音', text: '此事牵扯太广。你如今人微言轻，查案是找死。\n听老朽一句劝——先炼心，后问案。心不坚者，知道了真相也撑不住真相。' },
+  { t: 'dialog', who: '@c_baifa', title: '密室 · 压低声音', text: '此事牵扯太广。你如今人微言轻，查案是找死。\n听老朽一句劝——先炼心，后问案。心不坚者，知道了真相也撑不住真相。' },
   { t: 'narr', text: '于是你走入红尘。\n红尘劫、江湖义、陌路的善与恶——三百年前的血案是一面镜子，照见的却是今人的心。' },
   { t: 'battle', foe: { m: 'm_zeiren' }, label: '红尘路匪', text: '官道暮色，林子深处转出一名蒙面贼人，横刀索要买路财。\n刀光一起，你忽然想起长老的话——先炼心，后问案。\n那就拿这场架，练一练这颗心。', win: ['三合，贼人的刀飞出丈外，人跪在地上抖成一团。\n你刀尖抵着他咽喉，半晌，终究收了刀：「滚。再劫道，下次落下的就不是刀背了。」\n杀心起时收得住——这一课，值。'], lose: ['你着了一记闷棍栽进路沟，贼人抢了行囊扬长而去。\n爬起身时，一队运药的行商把你拽上牛车，分了你半囊伤药。\n善恶擦肩而过——炼心不在胜负，在你记住什么。'] },
   { t: 'dialog', who: '@c_n11', title: '路边 · 施针接骨', text: '前头围了一圈人：脚夫被惊马踩断了腿，血染黄尘。围观的人里不乏佩剑的仙师，掐着诀算时辰，没一个肯落针。\n人群外走来个背药箱的青衫女子，蹲下便接骨正位，手上稳得没有一丝颤。有人认出她，惊呼「丹霞谷圣手医仙」，她头也不抬：「骨头断了，接上就是。仙字留给牌坊听。」\n临行你问她，救人为何不留名。她掸了掸袖口的血：「善不为名——为名的善，是买卖，不是医。」' },
@@ -2766,6 +2835,13 @@ c4_mid: { id: 'c4_mid', title: '第四章 · 临终之言', scenes: [
     { text: '只取腰间钱袋充作葬资，余物随棺焚尽', value: 'burn', ok: false },
   ] },
   { t: 'narr', text: '当夜你取出残玉，就着灯火比照账上那枚河纹画押。\n玉中血纹与画押暗红同源，隔着三百年，遥遥一烫。\n散修的笑、黑玉令、半页账——三条线，在你掌心慢慢拧成了一股。' },
+] },
+
+c4_mid2: { id: 'c4_mid2', title: '第四章 · 账上河纹', scenes: [
+  { t: 'narr', text: '半页账目在你袖中焐了三日。第四日，你按账上仅有的一个地名，摸到了城南的药材暗市。\n赤芍、鬼臼、锁魂藤——账上三味，暗市里恰有一家铺子在常年收，价给得比市面高四成，收了就走，从不还价。' },
+  { t: 'narr', text: '你在铺子对面的茶棚坐了一日。\n收货的伙计称完货，从不记账，只在一枚黑木牌上刻一道细痕。傍晚收摊，他把木牌交回后堂，后堂帘子一挑，你瞥见柜上供着一方拜垫——垫面上，绣着半幅暗红的河纹。' },
+  { t: 'dialog', who: '@c_baifa', title: '茶棚 · 忽然落座', text: '老朽就说怎么近来眼皮总跳——原来你蹲在这儿。\n（他压低声音，快得像倒豆子）这铺子收料收了三百年，掌柜换了七茬，规矩没换过一根毫毛。当年老朽也在那本账上见过这路刻痕——黑玉令走一两银子，这木牌就添一道痕。\n小辈，听劝：看清了就走，别碰那道帘子。帘子后头的人，不老。' },
+  { t: 'narr', text: '你随着人流散了。\n走出暗市很远，回望时那铺面已经上了板——白日里挤挤挨挨的暗市，独它一家，天没黑就收了摊。像是有人隔着帘子看了你一眼，然后吹了灯。' },
 ] },
 
 c4_end: { id: 'c4_end', title: '第四章 · 终 · 道心之答', scenes: [
@@ -2803,6 +2879,14 @@ c5_mid: { id: 'c5_mid', title: '第五章 · 万魂幻象', scenes: [
   { t: 'dialog', who: '@c_ling', title: '幻象 · 玉语', text: '幻象深处，忽然响起玉灵的呜咽，细若游丝：\n「……链子……每一环……都拴着一盏灯……三百七十一盏之外……还有这么多……」\n原来残玉认得锁魂链上的每一缕魂。原来他们三百年夜夜都在呼救——只是从前，无人听见。' },
   { t: 'dialog', who: '@c_zhenling', title: '幻象中', text: '看见了吗。这就是我拼死阻止的东西。\n如今炉在你手，玉在你身——这一世的你，敢不敢接着烧完这炉火？' },
   { t: 'narr', text: '幻象散去，你攥紧了拳。\n散魂未灭，就有救回来的可能——这是仇，也是债。两笔，你一起还。' },
+] },
+
+c5_mid2: { id: 'c5_mid2', title: '第五章 · 千里收线', scenes: [
+  { t: 'narr', text: '你没有察觉的是——幻象漫起的同一夜，千里之外，血河故道的水底。\n一口沉了三百年的丹炉，炉壁上九千九百九十九条锁魂链，同时轻轻响了一声。' },
+  { t: 'figure', chr: '@c_zongzhu', art: '水底无火，他的侧脸却映着丹炉的光——三百年了，那炉火从未真正熄过。' },
+  { t: 'dialog', who: '@c_zongzhu', title: '水底 · 睁眼', text: '真灵动了吗。\n……好。烧了三百年，这炉丹总算开始自己往里走了。（他屈指一弹，一线黑水自炉中升起，凝成一面水镜）\n看着它。玉长一分，线收一寸。等它修到雷台之上、天地门开——那只玉里捂着的魂，正好开炉。' },
+  { t: 'dialog', who: '@c_xuanying', title: '水镜旁 · 领命', text: '若他中途察觉呢。\n——金丹之前，他是好苗子；金丹之后，他是熟透了的孩子。苗子折了可惜，孩子……熟了，就由不得他了。' },
+  { t: 'narr', text: '水镜散作黑雨，落回河里。\n故道水面无波，仿佛什么都不曾发生——只有摆渡的老酒鬼在雨前收了篙，望着水底那团不散的暗色，往河心倒了一碗酒：「急什么。水面上的，一个都还不知死活呢。」' },
 ] },
 
 c5_end: { id: 'c5_end', title: '第五章 · 终 · 认与不认', scenes: [
@@ -2845,6 +2929,13 @@ c6_mid: { id: 'c6_mid', title: '第六章 · 残魂授法', scenes: [
   { t: 'narr', text: '光幕散尽前，你把那套心法一字一字刻进识海：九石祭炼之序、温养认主之法，还有那个缺一不可的「护」字诀。\n碎片尚未聚齐，法却已入手。\n从今往后，每一枚到手的碎片，都不再是死物——而是未来那件本命法宝的一块骨血。' },
 ] },
 
+c6_mid2: { id: 'c6_mid2', title: '第六章 · 故人收石', scenes: [
+  { t: 'narr', text: '残魂授法的当夜，你在秘境出口的野店里歇脚，隔壁桌几个蒙面客的谈话飘进耳中。\n他们不喝酒，也不点菜，桌上摊着一张揉皱的图——图上朱笔圈着七处地名，每一处，你都认得：那是秘境，七座秘境。' },
+  { t: 'dialog', who: '蒙面客', title: '野店 · 压着嗓子', text: '「宗主有令：石头一件不落，全数收回。挖出来多少，送回去多少。」\n「三百年前的旧物，凭什么还听他调遣？」\n「凭咱们身上都刻着河纹。忘了么——咱们不是客，是『故人』。故人，就得办故人的差。」' },
+  { t: 'narr', text: '「故人」。\n你在坊市听过这个词——血河旧部彼此相认的隐语。三百年过去，散落四方的旧党非但没有散，反而像埋进土里的火种，借着「收石」的差事，头一回重新串成了线。' },
+  { t: 'narr', text: '你低头饮尽杯中冷茶，悄然结账。\n出门时你回头看了一眼：那几张蒙面脸仍在灯下对着秘境图比比划划——他们要收的是碎片，你要集的也是碎片。\n从今夜起，这场寻宝，成了两拨人之间明抢暗夺的赛跑。' },
+] },
+
 c6_end: { id: 'c6_end', title: '第六章 · 终 · 五碎片退敌', scenes: [
   { t: 'narr', text: '五枚碎片在你掌心嗡鸣，与体内残玉遥相呼应。\n分身的第三波杀意压顶而至的刹那，五道光柱冲天而起，结成一座上古困杀大阵！' },
   { t: 'battle', foe: { name: '宗主分身', power: 24, species: 'human', elite: true }, label: '五碎片困杀之阵', text: '分身自黑雾中凝出真形，袖中血河虚影翻卷如潮。\n大阵落定的刹那，五道光柱化作绞龙当空缠落——这一战，避无可避。', win: ['大阵绞落，分身影身寸寸崩裂。', '但一缕魂烟仍被光柱死死绞在阵心——困阵只余三息，它还有最后的话要说。'], lose: ['阵纹碎裂，分身冷笑而退——但它记住了你。', '五枚碎片却不肯罢休，余威自发追缠，生生把它的影身拖回阵心——困阵只余三息。'] },
@@ -2871,6 +2962,7 @@ c7_open: { id: 'c7_open', title: '第七章 · 血河旧账', scenes: [
   { t: 'narr', text: '名单上九个名字，六人已化尘土。\n第三个名字被朱笔圈过：当世某大宗的太上长老，如今依旧端坐在护山大阵之后，受万人敬仰。' },
   { t: 'dialog', who: '你', title: '摩挲名单', text: '朱笔圈过的……是第一个死的，还是第一个该死的？\n老前辈，这一笔，是您圈的，还是……' },
   { t: 'dialog', who: '@c_n5', title: '当夜 · 烟雨楼传讯', text: '白须掌门走后当夜，一枚烟雨楼的传讯玉简落在案头，柳含烟的声音懒洋洋的——\n「先前卖你的那笔『黑玉令』的账，记起来了么？九笔灵石，笔笔脏。今日白送一句：买名单抄本的那位买主，近来在筹一场丹会。他早知道你要查——真去赴宴的话，菜可以吃，茶别喝。」' },
+  { t: 'narr', req: ['k4_ledger'], text: '你把那半页丹材账铺在玉简旁比对——账上那个河纹画押的收料暗桩，正开在太衍宗山门三十里内。\n柳含烟的九笔灵石，你账上的三味丹材，白须掌门的九个名字：三条线在灯下咬合，严丝合缝得让人脊背发凉。\n原来当年那一炉丹的料，一半是从围杀者的库房里买的——名门卖料，魔道炼丹，这才叫真正的一张网。' },
 ] },
 
 c7_mid: { id: 'c7_mid', title: '第七章 · 一纸请帖', scenes: [
@@ -2879,6 +2971,13 @@ c7_mid: { id: 'c7_mid', title: '第七章 · 一纸请帖', scenes: [
   { t: 'dialog', who: '@c_ling', title: '玉灵 · 案头低语', text: '……这块玉……是太衍祖堂的玉髓……三百年前，围山那面大阵的阵眼，也是这个颜色……\n……写帖的手……和当年递令的手……是同一双……' },
   { t: 'narr', text: '没有落款，没有威胁。\n可你翻遍整张玉帖，越看越冷——对方知道你在查，知道你查到哪一步，甚至……知道你会上钩。' },
   { t: 'narr', text: '明知是鸿门宴。\n但有些话，只有坐在那个位置上的人才能说给你听。' },
+] },
+
+c7_mid2: { id: 'c7_mid2', title: '第七章 · 祖师堂夜', scenes: [
+  { t: 'narr', text: '玉帖发出的当夜，太衍宗祖师堂灯火未熄。\n玄玑真人独坐堂中，面前摊着两样东西：一份是发出去的请帖底稿，一份，是三百年前那份黑玉令的拓样。' },
+  { t: 'dialog', who: '@c_xuanji', title: '祖师堂 · 自语', text: '「令出九宗，围山灭河」——好一封令。老夫当年批「如律」二字时，手没抖。\n如今再拓一遍这令上的印鉴……（指腹在拓样上停了很久）印是真的，纸是新的。三百年前递令的那只手，把九宗当刀使了一回——用的，还是老夫自己的印。' },
+  { t: 'narr', text: '他唤来心腹，附耳低语了几句。\n心腹离去时袖中多了一封密信——信上只有一个去处：血河故道。老人要赶在丹会之前，先问问水底那位：当年借印之人，如今安在。' },
+  { t: 'dialog', who: '@c_xuanying', title: '故道上空 · 转达', text: '（黑影立于水云之间，向水底传话）主人，太衍的老东西起疑了，约您丹会。\n（水底静了半晌，浮起一句轻笑）疑了三百年才敢疑，晚矣。让他来——棋盘上多个知道怕的棋子，戏才有意思。\n替我带一句话：茶，还是当年灭河那夜的茶。让他尝尝，还认不认得那个味道。' },
 ] },
 
 c7_end: { id: 'c7_end', title: '第七章 · 终 · 落子之选', scenes: [
@@ -2912,6 +3011,9 @@ c8_open: { id: 'c8_open', title: '第八章 · 大乘问道', scenes: [
   { t: 'dialog', who: '@c_n17', title: '星阵仙子 · 推演', text: '你的飞升雷台会落在何处，星图上已有先兆——血河故道上游，龙脊第三峰。\n天雷落处，星轨有七瞬倒卷，那是有人想借你的劫数搭桥。我把周天星阵铺在雷台四角——阵不替你挡雷，只替你定神。星与君同在。' },
   { t: 'dialog', who: '@c_n1', title: '剑宗 · 夜访', text: '听闻有人在集你的人头。\n我不管你查什么旧案——剑宗欠你一个恩情，这一战，青锋剑痴的剑，借你。' },
   { t: 'dialog', who: '你', title: '还礼', text: '沈兄，此战之后，我请你喝最好的酒。\n……若我回不来，就当我赊的。' },
+  { t: 'narr', reqChoice: { key: 'c7_end', oneOf: ['open'] }, text: '临行前，玄玑真人托人送来一枚旧印——当年黑玉令上的私印拓样。\n附言只有一行：「老夫在祖师堂自请思过，替你看住这枚印。雷台之上，若有人以『九宗旧令』号令天雷，把它举起来。」\n当日你赴的那场鸿门宴，今日成了你手里的一道护身符。' },
+  { t: 'narr', reqChoice: { key: 'c7_end', oneOf: ['dark'] }, text: '临行前，柳含烟把最后半页暗账烧了，灰烬里只留下一枚河纹印拓。\n「黑玉令的来路，我查到底了——令是假造，造令的坊，如今还在给人刻印。」她把拓样按进你掌心，「明路上你只管飞升。暗路上的账，烟雨楼替你记着——记到它还清为止。」' },
+  { t: 'narr', reqChoice: { key: 'c7_end', oneOf: ['blade'] }, text: '临行前，三家门派的「故人书」有了回音：玄玑真人闭宫思过，其政敌联名上书，重提三百年前围杀旧案。\n借出去的刀还在飞。你在山上听着远处庙堂的风声，忽然明白：你借的哪里是刀——是把三百年压成三年的光阴，逼着所有人，在你飞升之前把账算完。' },
 ] },
 
 c8_mid: { id: 'c8_mid', title: '第八章 · 真灵授剑', scenes: [
@@ -2920,6 +3022,14 @@ c8_mid: { id: 'c8_mid', title: '第八章 · 真灵授剑', scenes: [
   { t: 'dialog', who: '@c_ling', title: '玉灵 · 识海深处', text: '……这一式……我见过……那年围山的大火烧到河边，他就是用这一式断后的……一式落，追兵跪了一片，却没有一颗头颅落地……\n……三百年了……这一式，还记得回家的路……' },
   { t: 'dialog', who: '@c_zhenling', title: '临别', text: '这一式，三百年前我没能用它救下那九千九百九十九人。\n今日传你——别再像我一样，学会得太迟。' },
   { t: 'narr', text: '真灵散入你的金丹，从此不分彼此。\n你睁开眼，眸底有过一瞬的血色，随即澄明如洗。' },
+] },
+
+c8_mid2: { id: 'c8_mid2', title: '第八章 · 雷台之下', scenes: [
+  { t: 'narr', text: '决战前十日，龙脊第三峰的夜里落了头一场雪。\n姬冰颜的传讯玉符在你案头亮起，只有八个字：「星轨有异，雷台有人。」' },
+  { t: 'narr', text: '你赶到时，她正立在崖边，指尖悬着一缕星辉。\n星辉照处的雷台之下，积雪上无一枚足印——可她袖中的周天星图上，那个位置的星子，正一颗一颗地暗下去。' },
+  { t: 'dialog', who: '@c_n17', title: '崖边 · 星图', text: '足印可以不落，星位骗不了人。十日之内，有东西把雷台底下挖空了——它在等你的劫雷落下来，借雷开路。\n我布的阵拦不住它，只能替你「看见」它。记住：上台那天，若星图全暗——先斩脚下，再应天雷。' },
+  { t: 'dialog', who: '@c_xuanying', title: '雷台腹底 · 复命', text: '主人，桥修好了。九条锁魂链的残环埋进雷台基座，劫雷落下之日，就是魂桥贯通之时。\n（水底的声音淡淡浮上来）好。三百年的路，铺到今夜，就算铺完了。\n——让那孩子安心修他的道。路铺得越稳，他走得越欢；走得越欢，到得越齐。' },
+  { t: 'narr', text: '你辞别姬冰颜下山，雪落满了肩头。\n这一夜你终于明白：决战从来不在十日后的雷台——雷台之下，每一寸基座里，都早已经埋好了三百年的杀局。' },
 ] },
 
 c8_end: { id: 'c8_end', title: '第八章 · 终 · 决战前夜', scenes: [
@@ -2949,6 +3059,7 @@ c9_open: { id: 'c9_open', title: '第九章 · 天劫决战', scenes: [
   { t: 'figure', chr: '@c_zongzhu', art: '雷光在他身后炸开又熄灭——三百年了，这个人终于亲自来了。' },
   { t: 'dialog', who: '@c_zongzhu', title: '踏雷而至', text: '小家伙，你借残玉修行每一步，都是在替我温养真灵。\n如今你渡劫飞升，天地门开——把你炼成万魂丹最后的主魂，我这万年血河，就圆满了。' },
   { t: 'dialog', who: '你', title: '雷海中央 · 长啸', text: '三百年前你打碎他的金身，三百年后你打我的算盘。\n宗主——你算计了一辈子，就没算到，我们两个，都想你死。' },
+  { t: 'narr', req: ['k5_jade_truth'], text: '话音落处，你把残玉举向雷光。\n识海深处，另一半残玉的方位轰然亮起——就在他袖中。同源相引，两块古玉隔着雷海遥遥共鸣，鸣声如泣如诉。\n帝渊瞳孔骤缩：三百年来，他第一次在自己的猎物身上，看见了猎手的目光。' },
   { t: 'narr', text: '雷海之上，新旧两世，终须一战。' },
 ] },
 
@@ -2958,6 +3069,14 @@ c9_mid: { id: 'c9_mid', title: '第九章 · 血煞渐醒', scenes: [
   { t: 'narr', text: '你梦见三百年前的血河。火光里有人提刀而立，见人就斩，斩尽了一支追兵，回头时满脸是血——那张脸，是你现在的脸。\n你在梦里喊不出声，只听见那人低低笑了一声，笑声里的痛快，比哭还冷。惊醒时指缝里全是血腥味，残玉烫得几乎握不住。' },
   { t: 'dialog', who: '@c_zhenling', title: '识海 · 最后的叮嘱', text: '决战之时，我会把我所有的血煞借给你。\n但你要记住——借刀是为了止杀，不是为了痛快。这是我这三百年，唯一想通的事。' },
   { t: 'narr', text: '你点了点头。\n两世合一，只此一战。' },
+] },
+
+c9_mid2: { id: 'c9_mid2', title: '第九章 · 水底灯影', scenes: [
+  { t: 'narr', text: '决战前夜，血河故道的水忽然亮了。\n不是月色，也不是渔火——是水底深处，一盏一盏接次亮起的微光。三百七十一盏，之外，还有九千九百九十九盏。' },
+  { t: 'dialog', who: '@c_ling', title: '船头 · 玉颤如语', text: '……听见了么……水底的灯，在数自己的数……\n三百年了，头一回……它们不是在等死……它们是在等「有人来」……炉子开了三百年的火，它们把「熄火」这件事，托付给雷台上的你了……' },
+  { t: 'narr', text: '老酒鬼把船横在灯河正中，竹篙一点，水面灯影荡开千重。\n他望着水底，破天荒地把酒葫芦塞进了怀里，没有喝。' },
+  { t: 'dialog', who: '@c_n23', title: '渡口 · 老酒鬼', text: '老朽守了三百年渡，渡的都是活人——今夜头一回，渡的是灯。\n（他把篙交给你的手，又收了回去）明日雷台，水底这一万盏灯与你同去。它们等这一战，等得比你还久。\n赢了，记得回来——老朽教它们认你的船。' },
+  { t: 'narr', text: '船靠对岸，你踏雪上行。\n身后满河灯火次第浮出水面，像一条逆流而上的星河，一直送到看不见的山脚——雷台之约，从来不是你一个人的。' },
 ] },
 
 c9_end: { id: 'c9_end', title: '终章 · 雷海了断', scenes: [
@@ -2987,6 +3106,8 @@ c9_end: { id: 'c9_end', title: '终章 · 雷海了断', scenes: [
   { t: 'narr', req: ['k8_shadow_slain'], reqChoice: { key: 'c9_end', oneOf: ['walk'] }, text: '你没有回头。\n身后雷光散尽，天光落满人间——从这一夜起，巡夜的更夫再没见过踏月无声的黑影，说书人的段子里，多了一个「再没有暗影的人间」。' },
   { t: 'dialog', who: '@c_ling', req: ['k8_shadow_slain'], reqChoice: { key: 'c9_end', oneOf: ['walk'] }, title: '玉灵 · 灯河', text: '……三百七十一盏灯……都灭了……不对……是都「到家」了……\n……玉也困了……往后夜里，你睡你的，我睡我的……偶尔在梦里遇见，不算打扰……' },
   { t: 'narr', req: ['k8_shadow_slain'], reqChoice: { key: 'c9_end', oneOf: ['walk'] }, text: '残玉在你怀里轻轻一颤，像一声道别，又像一声晚安。\n人间再无暗影——这句话，往后要由活着的人，一年一年讲下去。' },
+  { t: 'narr', noFlag: 'k8_shadow_slain', reqChoice: { key: 'c9_end', oneOf: ['walk'] }, text: '你没有回头。转身的那一瞬，暗影自你身侧掠过，追着它的主人一同散进了劫火里——三百年的眼睛，终究没能等到它想看的那一幕。\n它临散前替你挡下了最后一缕反噬：恩怨两清这件事，连它也懒得再拦。' },
+  { t: 'narr', noFlag: 'k8_shadow_slain', reqChoice: { key: 'c9_end', oneOf: ['walk'] }, text: '雪落无声。你一步步走下雷台，没有告别，没有回望。\n有些事不必亲眼看着它结束——转身本身就是结局。' },
   { t: 'narr', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, text: '雷散，云开。你独自走下雷台，长阶九百级，没有一个人迎你。\n也好——修士的道途本就是一个人走。你在心里这样说了两遍，走到第七十三级的时候忽然想起：这句话，你已经骗了自己两世。' },
   { t: 'dialog', who: '@c_zhenling', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, title: '识海 · 烟散', text: '识海深处，前世真灵的声音淡得像一缕烟：「别学我。我独行了一世，把道走成了刀。\n我随劫火去了——往后的路你自己走。走慢些，替我把两世的风景，都看全。」' },
   { t: 'narr', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, text: '你在长阶尽头站定，回身望了一眼雷台。\n天光落在空无一人的台上，像落在一张刚收完子的棋枰上——这局棋，两世为人，你终于下完了。' },
@@ -3093,6 +3214,105 @@ pl_n2_a3: { id: 'pl_n2_a3', title: '药炉心事 · 第三幕 · 回春之约', 
       KarmaSys.addFortune(3); return ['你在坟前把蜡丸埋进土里，坟头那株野药草开了一朵小花。\n她对着坟拜了三拜：「陈老先生，丹霞谷还药来了。」（气运 +3）'];
     } },
     { t: 'narr', text: '封口时她提笔写了一张小签：「回春续断散 · 陈拾方 · 丹霞谷谨制」。\n从此丹霞谷的药单上，多了一个失传三百年的名字。\n药香满谷，像有人终于睡了个好觉。' },
+  ] },
+
+/* ============ v24 个人线 · 苏白（刀笔春秋） ============ */
+pl_n3_a1: { id: 'pl_n3_a1', title: '刀笔春秋 · 第一幕 · 一页旧榜', scenes: [
+    { t: 'narr', text: '坊市旧书摊，苏白蹲在摊尾翻一册虫蛀的账本，看得出神。\n见你来，他把账本递过来，指着页脚一行小字：「你查血河宗？巧了。这页账的骑缝章，是三百年前九宗联席的关防——正史里，那一年九宗『并无联席』。」' },
+    { t: 'dialog', who: '@c_n3', title: '旧书摊 · 压低声音', text: '正史说没有的事，账本说有——你说该信哪个？\n我信账本。账本造不了假：造假的人，不会在每一笔银子的去处上都盖印。他盖了，说明他笃定三百年后没人翻账。\n笃定的人，最容易漏东西。' },
+    { t: 'choice', text: '他把那页账纸小心揭下，捧到你面前，像捧着一件易碎的东西。', options: [
+      { text: '郑重收下——这页纸比一把剑更锋利', value: 'a' },
+      { text: '劝他抄录留底，原件烧掉——纸会招祸', value: 'b' },
+      { text: '问他：为何偏偏是你来翻这册死账', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 2); KarmaSys.addFortune(2); return ['他把账纸折成方胜，郑重放进你掌心：「拿好。当年写这页账的人，等一个会翻账的人，等了三百年。」\n纸轻，压手。（感悟 +2，气运 +2）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他愣了愣，抚掌而笑：「对，对！字在人心，纸在火里——这才是读书人的稳妥。」\n当夜他抄了三份，分藏三处。藏完最后一处，他长出一口气，像卸下了什么。（感悟 +4）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他沉默半晌：「因为三百年了，只有你真的去翻。\n读书人图什么？图的就是有人肯读。」（感悟 +3）'];
+    } },
+    { t: 'narr', text: '临别时他把摊子上的书拢了拢，忽然道：「我屡试不第，才去问道。如今才懂——\n不是我没考上，是考场太小，装不下要写的文章。」' },
+  ] },
+pl_n3_a2: { id: 'pl_n3_a2', title: '刀笔春秋 · 第二幕 · 焚稿', scenes: [
+    { t: 'narr', text: '苏白的居所是他自己起的名字：补史斋。斋里没有书架，只有一口装手稿的樟木箱——箱底压着一叠焦黄的残页。\n他把残页取出来时，手一直在抖。' },
+    { t: 'dialog', who: '@c_n3', title: '补史斋 · 灯下', text: '我祖上，苏秉笔，三百年前九宗联席的随军记档史官。围山那一夜，他把自己关在帐里写实录——写了什么，没人知道。\n只知道七日后他出来了，两手空空。稿被焚，印被夺，逐出史馆，罪名是「妄记」。\n他临终只留一句话：「字我烧了，可我教儿子的第一件事，是写字。」' },
+    { t: 'narr', text: '残页上只余半行可辨的字迹：\n「……山门未开，先闻……」后头的字，全被火舌卷走了。\n山门未开，先闻什么？三百年来，这半行字像一根刺，扎在苏家每一代人的喉咙里。' },
+    { t: 'choice', text: '他把祖传的那支秃笔推到你面前，问了一个他问了半生的问题。', options: [
+      { text: '「续写。把那半行字补完——我帮你查」', value: 'a' },
+      { text: '「封笔。有些真相，记在心上比记在纸上活得久」', value: 'b' },
+      { text: '「把残页公之于众——三百年了，该见光了」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他握笔的手第一次稳了：「好。你查案，我修史——咱们各证一半，两下合璧。」\n那支秃笔在灯下微微发亮，像终于等到了它的墨。（感悟 +4）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 2); KarmaSys.addFortune(3); return ['他长揖到地：「先生一言，解了苏家三代的心结。」\n当夜他把秃笔供进箱底，睡了一个整觉——三百年来的第一个。（感悟 +2，气运 +3）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他摇头，眼里却有光：「公开太急。半行字换不来公道，只换来灭口。\n等案子见光那日，我把它裱进正文里——一字不差。」（感悟 +3）'];
+    } },
+    { t: 'narr', text: '你走时回头望了一眼。\n补史斋的灯还亮着，窗纸上他伏案的影子，像一座搁了三百年终于重新开工的碑。' },
+  ] },
+pl_n3_a3: { id: 'pl_n3_a3', title: '刀笔春秋 · 第三幕 · 刀笔归鞘', scenes: [
+    { t: 'narr', text: '数月后，补史斋。\n案头摊着一叠厚厚的手稿，墨迹有新有旧——新的是他这些日子写的，旧的，是那半行焦页：他照着笔画，一笔一笔描进了正文。' },
+    { t: 'dialog', who: '@c_n3', title: '补史斋 · 掷笔', text: '写完了。三百年，苏家五代人，就差这最后一卷。\n——山门未开，先闻哭声。当年围山的兵没破阵，破阵的是心防：有人先从山门里递出了降表。祖上写的就是这个。\n（他忽然笑了）你问我怎么证实的？你查案查出来的九笔灵石——买降表的银子，正是那九笔。我的稿，你的案，今日合一。' },
+    { t: 'narr', text: '他把最后一卷稿推到你面前。\n卷首传主一栏，端端正正写着你的道号。他提笔蘸墨，在卷末添了最后一行：「史官苏白，补录于两世之后。附传主自述一句——」' },
+    { t: 'choice', text: '史笔如刀，落在这最后一行上的，该是你的一句话。', options: [
+      { text: '「凡人问道，问的不是长生，是心安」', value: 'a' },
+      { text: '「此案无主角——三百七十一口，人人都是主角」', value: 'b' },
+      { text: '「写上：他只是个不肯放下药锄的采药人」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 5); return ['他一笔一划录下，掷笔长揖：「好一句心安。这一卷，成了。」\n灯花爆了一声，像谁在三百年前松了一口气。（感悟 +5）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(3); return ['他怔了怔，眼眶微热：「是老朽着相了。史里没有主角，只有人。」\n他依言改了传主一栏——写的是三百七十一，与九千九百九十九。（感悟 +3，气运 +3）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他录罢，郑重收笔入匣：「药锄比刀好。刀开杀戒，锄开生门。」\n秃笔归鞘，史稿归箱。补史斋的灯，这一夜亮到了天明。（感悟 +4）'];
+    } },
+    { t: 'narr', text: '离开补史斋时，他送你到巷口。\n身后斋内，樟木箱第一次敞着盖——写了三百年才敢写的东西，从此不必再藏。\n「往后史馆里的晚生们翻到这一卷，」他朝你抱拳，「他们会知道，真相这东西，只要有人肯接着写，就断不了根。」' },
+  ] },
+
+/* ============ v24 个人线 · 林晚照（医者仁心） ============ */
+pl_n11_a1: { id: 'pl_n11_a1', title: '医者仁心 · 第一幕 · 一枚银针', scenes: [
+    { t: 'narr', text: '山道旁的义诊棚，排队的人从棚口蜿蜒到溪边。\n林晚照一双手从早到晚没停过——正骨、施针、包扎，动作快，却快得一丝不乱。轮到你时，她却先看了你的手。' },
+    { t: 'dialog', who: '@c_n11', title: '义诊棚 · 一眼', text: '握刀的茧在虎口，握锄的茧在掌心——你的茧，两处都有。\n习武之人经脉常滞，你可知自己气海里有一处旧结？不算病，但行功久了会隐隐作痛。坐下，我给你三针。' },
+    { t: 'narr', text: '三针落处，一线暖流自督脉散开，你才惊觉那处隐痛跟了你多久。\n她收针入囊，顺手把一枚银针放进你掌心：「回礼。往后你路遇跌打损伤，照今日的手法，救急够了。」' },
+    { t: 'choice', text: '你捏着那枚针，问她：医术这般本事，为何只肯在义诊棚里使？', options: [
+      { text: '「可愿开馆授徒？这手艺不该只有你一人」', value: 'a' },
+      { text: '「跟你说实话：我学这个，是为了战场上多留一条命」', value: 'b' },
+      { text: '「这针我收下。他日必以医道还你」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 2); KarmaSys.addFortune(2); return ['她摇头笑了：「教过。徒儿们后来都去了大医馆——也好，各人有各人的道。\n我这道，就留在棚子里。」（感悟 +2，气运 +2）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她点头，神色郑重起来：「救命不分缘由。那我多教你一手止血的——战场上，止血比针法金贵。」\n她又留棚中半个时辰，倾囊相授。（感悟 +3）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 2); return ['她收拾药箱，头也不抬：「不必还我。\n——还给下一个你遇见的伤者，就算还清了。」（感悟 +2）'];
+    } },
+    { t: 'narr', text: '你帮着把最后一排病人送走，日头已经西斜。\n她背着药箱立在棚口，忽然道：「医道即道心。针下稳不稳，不看手，看心——心里乱，针就歪。\n你今日手很稳。」' },
+  ] },
+pl_n11_a2: { id: 'pl_n11_a2', title: '医者仁心 · 第二幕 · 瘟村镇', scenes: [
+    { t: 'narr', text: '瘟村镇的官道上钉着一排驱邪符，村口聚着十里八乡来的人——不是求医，是看罪人。\n罪人就是林晚照。镇上突发疫病，她第一个进村施药，如今满镇的人都说：药是她施的，病是她投的。' },
+    { t: 'dialog', who: '@c_n11', title: '柴房 · 手上停不了', text: '（她隔着柴房的木栏，仍在给一个高热的孩子施针）\n洗冤的事不急。急的是这孩子的热——井水被人上了锁，说是「疫水」，可退热就靠它。\n……你说，人心里的疫，和气血里的疫，哪个更难治？' },
+    { t: 'narr', text: '你连夜查证。\n疫从水起不假——但上锁的那口井才是源头：井壁附着一层死后才入水的腐妖血，旁人不知，只当井水也脏。\n投毒的不是人，是三日前镇外那头死在井边的妖。' },
+    { t: 'choice', text: '真相在手，怎么还她一个清白？', options: [
+      { text: '当众开井验源，请镇老亲眼看', value: 'a' },
+      { text: '先治病，后洗冤——救人急过名声', value: 'b' },
+      { text: '交给你来周旋，她只管医人', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(2); return ['井壁的腐血在千人注视下无所遁形。镇老当街焚了驱邪符，向她长揖。\n她只说了一句：「烧符的火，替孩子们烧点姜汤罢。」（感悟 +3，气运 +2）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['你们把井淘了三遍，药施到最后一户。疫情退时，流言也退了——病人不说，看病人的人自然也就不说。\n她笑：「清者自清？不，是愈者自愈。」（感悟 +4）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); return ['你在镇老们中间斡旋一日一夜，她足不出柴房医了四十人。\n临行她替你理了理风尘：「你管人心，我管人命——这搭配，不错。」（感悟 +3）'];
+    } },
+    { t: 'narr', text: '出村那日，全镇送到官道尽头。\n有个痊愈的孩子追着塞给她一枝野花。她把花别在药箱上，走出很远才轻声说：「你看，这世道，究竟还是治得好。」' },
+  ] },
+pl_n11_a3: { id: 'pl_n11_a3', title: '医者仁心 · 第三幕 · 医者自医', scenes: [
+    { t: 'narr', text: '丹霞谷后山，一座无碑的坟前，她坐了整整一夜。\n你寻到她时，她手里捏着一枚旧针——针尾缠着褪色的红线，与寻常银针不同，是医门授业师亲手交到弟子手里的那一枚。' },
+    { t: 'dialog', who: '@c_n11', title: '坟前 · 天将明', text: '我师父，医术比我高明百倍。当年瘟疫，她把我推出村，自己留下来。\n——我不是救不回她。我是根本没资格救：那针「渡厄」，师父说要等弟子「医遍千人、回头自医」那日才能用。她等我出师，我……我怕自己配不上这一针，一躲就是十年。' },
+    { t: 'narr', text: '天将明时，她忽然把那枚针递到你面前。\n「师父教的最后一针，叫「自医」——医者渡尽天下，最后要回头渡自己。你陪我走这一程，替我看着：这一针下去，我不能再逃了。」' },
+    { t: 'choice', text: '晨光落在针尾那截红线上。你说——', options: [
+      { text: '「她等的就是今日。落针吧，我守着你」', value: 'a' },
+      { text: '「先替师父把坟碑立了。有碑有据，这一针才算归位」', value: 'b' },
+      { text: '「这一针，我陪你一起学。你行针，我护法」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(3); return ['针入气海，十年郁结随一缕黑血尽数化开。她跪坐坟前，泪落如雨，笑声也是真的。\n「师父，弟子出师了。」——山风过处，松涛如答。（感悟 +4，气运 +3）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['你们采石立碑，凿下师承名讳。碑成那一刻，她朝碑拜了三拜，转身落针——针稳如山。\n「有碑有据，弟子今日归位。」（感悟 +3）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 4); return ['你以灵力为她护法，她行针如飞。一炷香后，两世郁结尽去。\n她收针而笑：「好——原来「自医」这一针，也是要有人陪的。师父没教这个，你教了。」（感悟 +4）'];
+    } },
+    { t: 'narr', text: '下山时，她把那枚缠红线的旧针郑重收进药箱最里层，另取出一枚新针，递到你手里。\n「上回那枚是救急用的。这一枚——」她按住你的手，「是「回头」用的。往后再高的山、再远的道，记得回头看看自己。\n医者如是，修士亦如是。」' },
   ] },
 
 /* ============ 个人线 · 柳含烟（烟雨账簿） ============ */
@@ -4552,6 +4772,7 @@ const Stat = {
       * (1 + jadePct / 100)
       * ((typeof XinmoSys !== 'undefined' && XinmoSys.scale) ? XinmoSys.scale(p) : 1)
       * (1 + ((p.benming && p.benming.lv) || 0) * 0.01)
+      * (1 + (p.codexBonus || 0) * 0.01)   // v24 图鉴大成：每类收集满全属性 +1%
       * ((typeof RankSys !== 'undefined' && RankSys.isTop && RankSys.isTop(p)) ? 1.02 : 1);   // v13 天下第一：全属性 +2%
 
     const maxHp = Math.round((90 + A.body * 15 + Math.pow(rp, 1.6) * 6 + (eq.hp || 0))
@@ -5306,7 +5527,10 @@ const Bag = {
     if (!def || def.type !== 'artifact' || !this.count(itemId)) return;
     const enh = (p.enhanced || {})[itemId] || 0;
     const oreBack = (def.grade || 0) + 1 + enh;
-    const stones = Math.max(10, Math.round((def.price || 500) * 0.15 * (1 + enh * 0.2)));
+    // v24：0 价稀有物（天级/仙级神兵、秘境专属）按品阶兜底计价，高分战利品不再沦为背包垃圾
+    const GRADE_FALLBACK = [300, 800, 2000, 6000, 16000, 40000];
+    const baseVal = (def.price || 0) > 0 ? def.price : (GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500);
+    const stones = Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2)));
     const ok = await UI.popup({
       title: `分解 · ${def.name}`,
       html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br><span class="neg">分解之物与其祭炼心得将一并化去，无法找回。</span>`,
@@ -5461,6 +5685,7 @@ const ForgeSys = {
     const hasOre = Bag.count('m_xuantie') >= oreNeed;
     const hasGuard = Bag.count('m_qianghua') > 0;
     const rate = this.rate(lv);
+    p.counters.enhances = (p.counters.enhances || 0) + 1;   // v24 章助缘计数
     const ok = await UI.popup({
       title: `祭炼强化 · ${def.name} +${lv} → +${lv + 1}`,
       html: `以灵火温养法宝，可再提升一层。<br>
@@ -5759,12 +5984,14 @@ const CaveSys = {
     Game.afterAction();
   },
   /** v20 聚灵加速：花灵石点燃聚灵阵，当日修炼效率 ×1.5（日限一次） */
+  /** v24 聚灵加速定价单源化：随境界走 stoneEco 曲线（解除 v20 的 4 境封顶，高境灵石有了日常去路） */
+  rushCost(p) { return Math.round(120 * GameData.stoneEco(p ? p.realmIdx : 0)); },
   async spiritRush() {
     const p = Game.player;
     if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
     const today = Math.floor(p.day || 0);
     if (p.rushDay === today) { UI.toast('聚灵阵今日已点燃，明日再来'); return; }
-    const cost = Math.round(120 * GameData.stoneEco(Math.min(4, p.realmIdx)));
+    const cost = this.rushCost(p);
     const ok = await UI.popup({
       title: '聚灵加速',
       html: `燃烧灵石为聚灵阵供能——<b>今日修炼效率 ×1.5</b>（每轮修炼约 \${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 1.5))} 修为）。<br>需灵石 <span class="hl">\${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 日限一次；闭关与自动修炼同样受益。</span>`,
@@ -5999,6 +6226,7 @@ const BeastSys = {
         Meta.see('monster', e.id);
       }
       B.enemy.hp = 0;
+      p.counters.tames = (p.counters.tames || 0) + 1;   // v24 章助缘计数
       B.log(`${e.name} 驯服功成！`, 'log-gain');
       await Battle.wait(500);
       Battle.victoryTame();
@@ -6275,7 +6503,9 @@ const ShopSys = {
     // v20 修瑕：ecoPrice（符箓时价）同步作用于买价——此前只涨卖价，构成「低买高卖」印钞循环
     let base = def.price || 0;
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
-    return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId)));
+    // v24 声望接线：名望高者坊市给面子（买价九折/九二折，劣迹昭彰者吃溢价）；卖价不受声望影响
+    const repMul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
+    return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId) * repMul));
   },
   sellPrice(itemId) {
     const p = Game.player;
@@ -6317,11 +6547,20 @@ const ShopSys = {
     Log.add(`你连买了 ${bought} 件<b>${def.name}</b>，共花费 ${Utils.fmtNum(spent)} 下品灵石。${bought < times ? '（灵石不济，止步于此）' : ''}`, 'info');
     Game.afterAction();
   },
-  sell(itemId, all = false) {
+  async sell(itemId, all = false) {
     const qty = all ? Bag.count(itemId) : 1;
     if (qty <= 0) return;
     const def = GameData.ITEMS[itemId];
     const gain = this.sellPrice(itemId) * qty;
+    // v24 确认统一：全售须二次确认（售一不弹）
+    if (all) {
+      const ok = await UI.popup({
+        title: '全售确认',
+        html: `将把 <b>${def.name}</b> ×${qty} 全数售予坊市，合计 <b class="hl">${Utils.fmtNum(gain)}</b> 下品灵石。<br><span class="neg">售出之物概不赎回。</span>`,
+        options: [{ text: '全 部 售 出', value: true, primary: true }, { text: '再想想', value: false }],
+      });
+      if (!ok) return;
+    }
     Bag.removeItem(itemId, qty);
     Bag.addStones(gain);
     Log.add(`你售出 ${def.name} ×${qty}，得 ${Utils.fmtNum(gain)} 下品灵石。`, 'gain');
@@ -7635,6 +7874,7 @@ const AuctionSys = {
     if (!Bag.spendStones(price)) { UI.toast('灵石不足'); return; }
     const win = Utils.chance(opts.rate);
     if (win) {
+      p.counters.auctionWins = (p.counters.auctionWins || 0) + 1;   // v24 章助缘计数
       if (isMystery) {
         // 鉴定：权重向低品倾斜，仙缘罕见
         const pool = this.MYSTERY_POOL;
@@ -7684,6 +7924,7 @@ const DonateSys = {
     });
     if (!ok) return;
     if (!Bag.spendStones(stones)) { UI.toast('灵石不足'); return; }
+    p.counters.donates = (p.counters.donates || 0) + 1;   // v24 章助缘计数
     if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, t.rep, '布施行善');
     KarmaSys.addFortune(t.fortune);
     if (t.karma < 0) KarmaSys.addKarma(t.karma, true);
@@ -7815,6 +8056,7 @@ const DailySign = {
     for (const x of pools) { r -= x.w; if (r <= 0) { item = x; break; } }
     const effect = item.apply(p);
     p.signDay = today;
+    p.counters.signs = (p.counters.signs || 0) + 1;   // v24 章助缘计数
     p.signText = item.text;
     p.signDesc = item.desc;
     Log.add(`【黄历】你诚心摇签，得一支<b>${item.text}</b>——${item.desc}（${effect}）`, item.id === 'mishap' ? 'warn' : 'gain');
@@ -8328,6 +8570,7 @@ const WorldSys = {
     if (!w.pending) return;
     const ev = w.pending;
     w.pending = null;
+    p.counters.eventJoins = (p.counters.eventJoins || 0) + 1;   // v24 章助缘计数
     if (ev.type === 'demon') {
       const map = GameData.MAPS.find(m => m.id === ev.mapId) || GameData.MAPS[1];
       Log.add('你奔赴魔域前线，与狂化的魔物战作一团！', 'event');
@@ -8706,7 +8949,8 @@ const RankSys = {
     return `
     <div class="card">
       <div class="card-title">✦ 天骄榜 ${top ? '<span class="tag warn">天下第一 · 全属性 +2%</span>' : `<span class="tag">你的排名 · 第 ${myIdx + 1} 位</span>`}</div>
-      <div class="card-desc">修行界二十四位风云人物与你的境界排名。登顶者名动天下：全属性 +2%，每日另有气运小赏。</div>
+      <div class="card-desc">修行界二十四位风云人物与你的境界排名（按境界小层排布）。登顶者名动天下：全属性 +2%，每日另有气运小赏。</div>
+      <div class="tip-line">· 你的综合战力 ⚔ <b>${Utils.fmtNum(Stat.power(p))}</b>（装备/功法/灵兽一应计入）——境界是名次，战力是底气。</div>
       <div class="rank-list">${rowsHtml}</div>
     </div>`;
   },
@@ -11163,6 +11407,13 @@ const Battle = {
       e.charging = true;
       this.log(`${e.name} 妖气翻涌、筋肉隆起——它正在<b>蓄力</b>，下回合将施展杀招！`, 'log-warn');
       this.pushFloat('enemy', '蓄力', 'miss');
+      // v24 情境教学：首次遭遇蓄力，教一次「防御破招」
+      const pp = Game.player;
+      if (pp && !(pp.flags || {}).tut_parry) {
+        pp.flags = pp.flags || {};
+        pp.flags.tut_parry = true;
+        setTimeout(() => UI.toast('⚔ 教学：敌正蓄力——此刻选【防御】可破招反击！'), 400);
+      }
     } else {
       const heavy = !!act.heavy;
       this.enemyStrike(st, heavy ? 1.55 : 1, heavy);
@@ -11939,6 +12190,7 @@ const Story = {
     if (!p) return;
     if (!p.story) p.story = { seen: {}, mid: {}, choices: {} };
     p.story.seen[id] = Math.floor(p.day || 0) + 1;
+    if (typeof QuestSys !== 'undefined' && QuestSys.loreToast) QuestSys.loreToast(id);   // v24 百科新词条解锁提示
   },
   /** 抉择记录（每章末记录所选 value） */
   recordChoice(key, value) {
@@ -12241,6 +12493,8 @@ const QuestSys = {
         { desc: '除魔自保（累计击败妖兽三头）', done: p => (p.counters.wins || 0) >= 3, prog: p => `${Math.min(3, p.counters.wins || 0)}/3` },
       ],
       ending: '三月苦修，你根基渐固。残玉在你气海中隐隐发烫——老人所说的血案，或许就藏在前方的山水之间。',
+      // v24 章助缘：可选支目标，不挡章末推进，把散落玩法织进主线动机
+      bonus: { desc: '问一签吉凶（黄历求签一次）', go: 'map:world', done: p => (p.counters.signs || 0) >= 1, prog: p => `${Math.min(1, p.counters.signs || 0)}/1`, reward: { fortune: 2 } },
       reward: { stones: 300, fortune: 2, items: { pill_juqi: 2 } },
     },
     {
@@ -12253,6 +12507,7 @@ const QuestSys = {
         { desc: '修至练气圆满', done: p => p.realmIdx >= 1 || p.layer >= 3, prog: p => p.realmIdx >= 1 ? '1/1' : `${p.layer}/3` },
       ],
       ending: '练气圆满之夜，残玉微鸣。你听见了遗迹深处传来的低语——那不是妖物，是人。血案的门，开了一道缝。',
+      bonus: { desc: '驯服一头灵兽（战斗中打至两成血可驯）', go: 'map:atlas', done: p => (p.counters.tames || 0) >= 1, prog: p => `${Math.min(1, p.counters.tames || 0)}/1`, reward: { stones: 600 } },
       reward: { stones: 800, items: { pill_ningqi: 2 } },
     },
     {
@@ -12265,6 +12520,7 @@ const QuestSys = {
         { desc: '修习第一部功法', done: p => (p.counters.learns || 0) >= 1, prog: p => `${Math.min(1, p.counters.learns || 0)}/1` },
       ],
       ending: '宗门典籍浩如烟海。你在故纸堆中翻到一页残卷：「血河宗主练万魂丹，以生魂饲之……」字迹至此被血渍浸透。你握紧残玉——路还很长。',
+      bonus: { desc: '安身立命（开辟洞府）', go: 'cave:home', done: p => !!p.cave, reward: { fortune: 3 } },
       reward: { stones: 2000, items: { pill_zhuji: 1 } },
     },
     {
@@ -12277,6 +12533,7 @@ const QuestSys = {
         { desc: '百战炼心（累计获胜二十场）', done: p => (p.counters.wins || 0) >= 20, prog: p => `${Math.min(20, p.counters.wins || 0)}/20` },
       ],
       ending: '红尘一遭，你见过跪地求饶的劫匪，也见过袖手旁观的仙师。善恶从来不在门派，而在人心。你摸了摸残玉——血河宗之事，你更想查明白了。',
+      bonus: { desc: '散财济世（江湖·义声行善一次）', go: 'jianghu', done: p => (p.counters.donates || 0) >= 1, prog: p => `${Math.min(1, p.counters.donates || 0)}/1`, reward: { fortune: 4 } },
       reward: { stones: 5000, fortune: 10 },
     },
     {
@@ -12289,6 +12546,7 @@ const QuestSys = {
         { desc: '挫敌扬威（累计击败精英妖兽两头）', done: p => (p.counters.killsElite || 0) >= 2, prog: p => `${Math.min(2, p.counters.killsElite || 0)}/2` },
       ],
       ending: '记忆归位，你对宗主的恨意有了温度——那是前世未尽的执念。残玉中除了记忆，还藏着一卷《血河真解》的目录：其本体，就在宗主手中。',
+      bonus: { desc: '祭炼法宝（强化装备一次）', go: 'shop:forge', done: p => (p.counters.enhances || 0) >= 1, prog: p => `${Math.min(1, p.counters.enhances || 0)}/1`, reward: { stones: 3000 } },
       reward: { stones: 10000, items: { pill_pojing: 1 } },
     },
     {
@@ -12301,6 +12559,7 @@ const QuestSys = {
         { desc: '碎片聚势（累计收取上古法宝碎片五枚）', done: p => (p.counters.gupianGot || 0) >= 5, prog: p => `${Math.min(5, p.counters.gupianGot || 0)}/5` },
       ],
       ending: '五枚碎片在你掌心嗡鸣，与体内残玉遥相呼应。分身的杀意暂时退去——它在等，等宗主本尊出关。你也在等，等自己足够强。',
+      bonus: { desc: '置身大势（参与一次天下大事）', go: 'map:world', done: p => (p.counters.eventJoins || 0) >= 1, prog: p => `${Math.min(1, p.counters.eventJoins || 0)}/1`, reward: { fortune: 5 } },
       reward: { stones: 20000, items: { m_gupian: 2 } },
     },
     {
@@ -12313,6 +12572,7 @@ const QuestSys = {
         { desc: '家底殷实（灵石积蓄十万）', done: p => (p.stones.low + p.stones.mid * 100 + p.stones.high * 10000) >= 100000, prog: p => `${Utils.fmtNum(Math.min(100000, p.stones.low + p.stones.mid * 100 + p.stones.high * 10000))}/10万` },
       ],
       ending: '名单在手，你反而冷静下来。棋盘比你想的大——但你已不是当年那个采药少年。金丹已固，化神已稳，接下来，该让某些人睡不着了。',
+      bonus: { desc: '奇货可居（拍卖行竞得一件拍品）', go: 'shop:odd', done: p => (p.counters.auctionWins || 0) >= 1, prog: p => `${Math.min(1, p.counters.auctionWins || 0)}/1`, reward: { fortune: 6 } },
       reward: { stones: 50000, fortune: 5 },
     },
     {
@@ -12325,6 +12585,7 @@ const QuestSys = {
         { desc: '参悟小成（任意功法修至第三层）', done: p => Object.values(p.gongfa || {}).some(g => g.level >= 3), prog: p => { let mx = 0; for (const g of Object.values(p.gongfa || {})) mx = Math.max(mx, g.level); return `${Math.min(3, mx)}/3`; } },
       ],
       ending: '道友在侧，真意在胸。残玉忽然安静下来——它感应到了什么。决战之地，已被选定：你的飞升雷台。',
+      bonus: { desc: '故人心事（江湖·个人线推进一幕）', go: 'jianghu', done: p => Object.values(p.personal || {}).some(v => v >= 1), reward: { fortune: 8 } },
       reward: { stones: 100000, fortune: 10, items: { pill_taichu: 1 } },
     },
     {
@@ -12337,6 +12598,7 @@ const QuestSys = {
         { desc: '白日飞升（于天劫中了断三百年因果）', done: p => !!(p.flags || {}).ascended, prog: p => `${(p.flags || {}).ascended ? 1 : 0}/1` },
       ],
       ending: '第九道天雷落下时，你引动残玉中前世的全部血煞，与宗主的魔身同缚雷心。雷光吞没一切的刹那，你听见宗主的咆哮化作一声长叹：「三百年……原来输的是我心魔。」\n雷散，云开。残玉化入你的眉心，化作一点朱砂。你回首人间，白衣胜雪——仙门之后，另有一番天地。',
+      bonus: { desc: '大道共鸣（激活一条道韵协同）', go: 'gongfa', done: p => (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) >= 1, prog: p => `${Math.min(1, (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) || 0)}/1`, reward: { fortune: 10 } },
       reward: { stones: 200000, fortune: 20 },
     },
   ],
@@ -12514,6 +12776,37 @@ const QuestSys = {
       ending: '第十五场打完，她收剑而立，眉目飞扬：「成了！这套剑活了！」她郑重把第一式演示给你看——剑光如疏影横斜，「《不在人后》。名字也想好了。」',
       reward: { stones: 5000, items: { pill_zhuji: 1 } },
     },
+    /* ---- v24 支线补全（炼虚~大乘真空期三则） ---- */
+    {
+      id: 's18', title: '千金一诺', minRealm: 5, npc: 'n8',
+      story: '万宝商会的车马队在北域荒原折了三趟——不是遇匪，是荒原深处新裂了一道灵壑，旧商路就此断绝。秦重楼寻到你时，手里捏着半张烧焦的商契：「重楼商行立号三百年，还从没对客人失过约。这条路再不通商，我万宝商会就得改姓。你若肯探路，佣金随你开。」',
+      steps: [
+        { desc: '家资巨万（灵石积蓄五十万）', done: p => QuestSys.stonesTotal(p) >= 500000 },
+        { desc: '深入险地（秘境推进至第六层）', done: p => (p.counters.maxDepth || 0) >= 6 },
+      ],
+      ending: '你沿着灵壑边沿踏出一条新路，沿途立下七座指路的界碑。首队商旅平安抵达那日，秦重楼把新商路命名为「一诺道」，并在道口为你立了块无字碑——「字就不刻了。三百年后，人们自然会知道该谢谁。」',
+      reward: { stones: 80000, fortune: 8 },
+    },
+    {
+      id: 's19', title: '阵魂归一', minRealm: 6, npc: 'n10',
+      story: '白玉京那座摆了百年的大阵，阵眼里的名字忽然镇不住了——阵纹夜夜自鸣。他盘坐阵中三日，出来时鬓角全白：「阵要成了，可我这辈子，怕是看不到它成的那天。差最后一个「引」——一个能把阵魂带出山门的人。你肯替我走这一程么？」',
+      steps: [
+        { desc: '百战之威（累计获胜八十场）', done: p => (p.counters.wins || 0) >= 80 },
+        { desc: '精英授首（累计击败精英妖兽二十头）', done: p => (p.counters.killsElite || 0) >= 20 },
+      ],
+      ending: '你带着阵魂走遍它想看的山河——百年的阵，原来向往的是山门外的云。归来那日阵光大盛，白玉京抚阵长笑：「成了。它认的不是我，是你带它看过的这一路。」他将阵图首卷赠你：「百年一阵，从今日起，姓你的姓。」',
+      reward: { fortune: 12, items: { m_gupian: 2 } },
+    },
+    {
+      id: 's20', title: '最后一条消息', minRealm: 7, npc: 'n15',
+      story: '唐三思破天荒地免费送了你一条消息，说完自己先笑了：「我年轻时买过一条天机——死于何年何月，何人刀下。日子，就在这几日了。」他顿了顿，声音难得地低了下去，「我不怕死。我就是怕，死了以后，坊市里那些消息，没人替它们开口。」',
+      steps: [
+        { desc: '博采众长（修习五部功法）', done: p => (p.counters.learns || 0) >= 5 },
+        { desc: '财通四海（灵石积蓄三十万）', done: p => QuestSys.stonesTotal(p) >= 300000 },
+      ],
+      ending: '你陪他在约定的渡口坐了整整三日。刀客没来——来的是一封迟到了二十年的信：当年卖他天机的术士临终忏悔，那「死期」，原是他编来赖账的谎话。唐三思把信读了三遍，忽然大笑，笑着笑着眼里就湿了：「好你个老骗子——这条消息，我买了半辈子，值！」他将半生的消息册尽数赠你：「往后坊市的消息，你替它们开口。」',
+      reward: { stones: 60000, insight: 10 },
+    },
   ],
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
   /** v12 每章各目标对应的功能页签（供焦点条「前往」直达；v22 支持子页签深链 tab:sub） */
@@ -12552,6 +12845,40 @@ const QuestSys = {
   stepDone(step, p, supR) {
     if (p.realmIdx >= (supR || 999)) return true;   // 境界领先：旧章目标自动追认
     try { return !!step.done(p); } catch (e) { return false; }
+  },
+  /** v24 章助缘领取（不挡章末推进的可选支目标，把散落玩法织进主线动机） */
+  bonusDone(def, p) {
+    if (!def || !def.bonus) return false;
+    try { return !!def.bonus.done(p); } catch (e) { return false; }
+  },
+  claimBonus() {
+    const p = Game.player;
+    if (!p) return;
+    const q = p.quest = p.quest || { ch: 0, side: {} };
+    q.bonus = q.bonus || {};
+    const def = this.CHAPTERS[Math.min(q.ch, this.CHAPTERS.length - 1)];
+    if (!def || !def.bonus || q.bonus[def.id]) return;
+    if (!this.bonusDone(def, p)) { UI.toast('助缘尚未达成'); return; }
+    q.bonus[def.id] = Math.floor(p.day);
+    this.grant(def.bonus.reward);
+    Log.add(`✦ 助缘功成 · ${def.bonus.desc} ——【酬谢】${this.rewardText(def.bonus.reward)}`, 'gain');
+    UI.toast('助缘功成，酬谢已入囊中');
+    Story.chron(`第${this.CN9[Math.min(q.ch, this.CHAPTERS.length - 1)]}章助缘达成`);
+    UI.renderAll();
+    Save.autoSave(true);
+  },
+  /** v24 百科新词条解锁提示（story markSeen 后调用） */
+  loreToast(sid) {
+    const p = Game.player;
+    if (!p || !sid) return;
+    const hit = this.LORE_KEYS.find(e => e.need === sid);
+    if (hit) setTimeout(() => UI.toast(`📖 百科更新：${hit.title}——问道录可阅`), 600);
+  },
+  /** v24 支线可结案红点判定（UI.dots 用） */
+  sideClaimable(p) {
+    const q = p.quest || { side: {} };
+    return this.SIDES.some(sd => !q.side[sd.id] && (!sd.prev || q.side[sd.prev]) && p.realmIdx >= sd.minRealm
+      && sd.steps.every(st => { try { return !!st.done(p); } catch (e) { return false; } }));
   },
   rewardText(reward) {
     const parts = [];
@@ -12642,6 +12969,7 @@ const QuestSys = {
           this.storyLog(`【主线 · 第${this.CN9[q.ch]}章 · ${next.title}】`, next.story);
           Log.add(`【本章目标】${next.goal}`, 'story');
           UI.announce(`主线 · ${next.title}`, 'gold');
+          UI.toast('此章剧情已随境界自动追认——可于「问道录 · 剧情回顾」补看');   // v24 跳章补看提示
           after();
         } else {
           // v18 角色注脚：开篇卷轴末尾追加残玉低语 / 道侣客串，让剧情看见"你是谁"
@@ -12730,11 +13058,25 @@ const QuestSys = {
         const go = (!ok && goTabs[si]) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${goTabs[si]}">前往</button>` : '';
         return `<div class="q-step ${ok ? 'done' : ''}"><span class="q-mark">${ok ? '✓' : '○'}</span><span class="q-desc">${st.desc}</span>${prog}${go}</div>`;
       }).join('');
+      // v24 章助缘：可选支目标行（不挡章末，完成后额外领赏）
+      let bonusHtml = '';
+      if (def.bonus) {
+        const q2 = p.quest || {};
+        const claimed = !!(q2.bonus || {})[def.id];
+        const ok = claimed || this.bonusDone(def, p);
+        const prog = (!ok && def.bonus.prog) ? `<span class="q-prog">${def.bonus.prog(p)}</span>` : '';
+        const goBtn = (!ok && def.bonus.go) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${def.bonus.go}">前往</button>` : '';
+        const act = claimed ? '<span class="q-prog">已领赏</span>'
+          : ok ? `<button class="btn btn-sm btn-primary" data-action="quest-bonus">领 赏</button>` : '';
+        bonusHtml = `<div class="q-step bonus ${ok ? 'done' : ''}"><span class="q-mark">${claimed ? '✓' : '✦'}</span><span class="q-desc"><b>助缘</b> · ${def.bonus.desc}</span>${prog}${act}${goBtn}</div>
+        <div class="tip-line">· 助缘不挡章末推进——完成可额外领取：${this.rewardText(def.bonus.reward)}。</div>`;
+      }
       mainHtml = `
       <div class="card quest-card card-main">
         <div class="card-title">主线 · 第${this.CN9[ch]}章 · ${def.title} <span class="tag warn">进行中</span></div>
         <div class="card-desc">${def.goal}</div>
         <div class="q-steps">${steps}</div>
+        ${bonusHtml}
         <div class="tip-line">章末奖励：${this.rewardText(def.reward)}</div>
       </div>`;
     }
@@ -13152,6 +13494,38 @@ const UI = {
     this.el['focus-strip'].classList.toggle('hidden', !parts.length);
   },
 
+  /* ---------- v24 红点统一源：页签/子页签红点全部收敛到单一计算，各处只读不各算各的 ---------- */
+  dots() {
+    const p = Game.player;
+    if (!p) return {};
+    const today = Math.floor(p.day || 0);
+    const need = GameData.layerNeed(p.realmIdx, p.layer);
+    const ripe = ((p.cave && p.cave.plots) || []).some(pl => pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0));
+    const tripBack = (p.beasts && p.beasts.list || []).some(b => b.trip && today >= b.trip.until);
+    const bountyOk = (p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need);
+    const gupianOk = (p.counters.gupianGot || 0) >= 9 || (p.bag['m_gupian'] || 0) >= 9;
+    const oddHot = (typeof BlackSys !== 'undefined' && BlackSys.isOpen(p))
+      || (typeof AuctionSys !== 'undefined' && (() => { const lot = AuctionSys.state(p); return lot.until - today > 0 && lot.until - today <= 10; })());
+    const sectTasksOk = !!p.sect && (p.sect.tasks || []).some(t => t && t.progress >= t.need);
+    const tourneyOn = !!(p.sect && p.sect.tourney);   // 大比进行中（tourneyCheck 开赛才写入）
+    return {
+      cultivate: (p.layer === 3 && p.exp >= need && p.realmIdx < 9)
+        || (p.realmIdx === 9 && p.layer === 3 && p.exp >= need && !p.flags.ascended)
+        || !!p.canReincarnate,
+      quest: (typeof QuestSys !== 'undefined') ? QuestSys.sideClaimable(p) : false,
+      cave: ripe || tripBack,
+      'cave:farm': ripe,
+      'cave:beast': tripBack,
+      map: !!(p.world && p.world.pending) || gupianOk,
+      'map:realm': gupianOk,
+      jianghu: NpcSys.grudgeCount(p) > 0 || (typeof PersonalSys !== 'undefined' && PersonalSys.anyAvailable(p)),
+      shop: bountyOk || oddHot,
+      'shop:bounty': bountyOk,
+      'shop:odd': oddHot,
+      sect: (!p.sect && p.realmIdx >= 1) || sectTasksOk || tourneyOn,
+      gongfa: false,
+    };
+  },
   /* ---------- 中央标签页 ---------- */
   renderTabs() {
     const tabs = [
@@ -13164,21 +13538,9 @@ const UI = {
       { id: 'sect', name: '宗门' },
       { id: 'gongfa', name: '功法' },
     ];
-    const p = Game.player;
-    const showSectDot = !p.sect && p.realmIdx >= 1;
-    const need = GameData.layerNeed(p.realmIdx, p.layer);
-    const showCultDot = (p.layer === 3 && p.exp >= need && p.realmIdx < 9)
-      || (p.realmIdx === 9 && p.layer === 3 && p.exp >= need && !p.flags.ascended)
-      || !!p.canReincarnate;
-    const showMapDot = !!(p.world && p.world.pending);
-    const showJianghuDot = NpcSys.grudgeCount(p) > 0 || (typeof PersonalSys !== 'undefined' && PersonalSys.anyAvailable(p));   // v19 个人线待续谈
-    // v22 红点随子页签内容迁移：悬赏可领→坊市，灵田已熟→洞府
-    const showShopDot = (p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need);
-    const showCaveDot = ((p.cave && p.cave.plots) || []).some(pl => pl && pl.seed && (Math.floor(p.day || 0) - (pl.plantedDay || 0)) >= (pl.days || 0));
+    const dots = this.dots();   // v24 红点统一源
     const htmls = tabs.map(t => {
-      const dot = (t.id === 'sect' && showSectDot) || (t.id === 'cultivate' && showCultDot)
-        || (t.id === 'map' && showMapDot) || (t.id === 'jianghu' && showJianghuDot)
-        || (t.id === 'shop' && showShopDot) || (t.id === 'cave' && showCaveDot);
+      const dot = !!dots[t.id];
       const lock = Guide.tabLocked(t.id);   // v6：分步解锁
       return `<button class="tab-btn ${Game.activeTab === t.id ? 'active' : ''} ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${t.id}" ${lock ? `title="${lock}"` : ''}>${lock ? '🔒' : ''}${t.name}${dot ? '<span class="dot"></span>' : ''}</button>`;
     });
@@ -13215,8 +13577,9 @@ const UI = {
   renderSubTabs(tab, cur) {
     const list = this.SUBTABS[tab];
     if (!list) return '';
+    const dots = this.dots();   // v24 子页签同样吃统一红点源
     return `<nav class="subtabs">${list.map(s =>
-      `<button class="subtab-btn ${s.id === cur ? 'active' : ''}" data-action="act-tab" data-tab="${tab}:${s.id}">${s.name}</button>`).join('')}</nav>`;
+      `<button class="subtab-btn ${s.id === cur ? 'active' : ''}" data-action="act-tab" data-tab="${tab}:${s.id}">${s.name}${dots[`${tab}:${s.id}`] ? '<span class="dot"></span>' : ''}</button>`).join('')}</nav>`;
   },
 
   renderTabContent() {
@@ -13377,7 +13740,8 @@ const UI = {
     const today = Math.floor(p.day || 0);
     const rows = [];
     const signed = p.signDay === today;
-    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}` : '今日未求签', go: 'map:world' });
+    // v24 求签行内直签——无需再绕道游历·天下
+    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}` : '今日未求签', act: signed ? '' : 'act-sign', actText: '摇 签' });
     const rush = p.rushDay === today;
     rows.push({ state: rush ? 'ok' : 'todo', label: '聚灵加速', stat: rush ? '已点燃 · 修炼 ×1.5' : '阵未点燃', go: p.cave ? 'cave:home' : '' });
     const plots = (p.cave && p.cave.plots) || [];
@@ -13399,7 +13763,8 @@ const UI = {
             <span class="daily-dot"></span>
             <span class="daily-label">${r.label}</span>
             <span class="daily-stat">${r.stat}</span>
-            ${r.go ? `<button class="btn btn-sm guide-go" data-action="act-tab" data-tab="${r.go}">前往 ›</button>` : ''}
+            ${r.act ? `<button class="btn btn-sm btn-primary guide-go" data-action="${r.act}">${r.actText}</button>` : ''}
+            ${!r.act && r.go ? `<button class="btn btn-sm guide-go" data-action="act-tab" data-tab="${r.go}">前往 ›</button>` : ''}
           </div>`).join('')}
         <div class="tip-line">· 日常诸事不强制——但积少成多，皆是道途资粮。</div>
       </div>`;
@@ -13413,9 +13778,7 @@ const UI = {
         <div class="card-desc">洞府乃修士安身立命之所——聚灵阵助修行、灵田可种药、兽栏能养灵兽。<br>然开辟洞府耗费甚巨，须至<b>筑基期</b>方可为之。</div></div>`;
     }
     if (!p.cave) p.cave = CaveSys.freshCave();
-    CaveSys.visitorEvent(p);   // v20 接线：每日访客事件（15% 几率，v18 起闲置）
-    CaveSys.checkPest(p);      // v20 接线：每日虫害检查（v18 起闲置）
-    CaveSys.springDaily(p);    // v20：灵泉日产灵石
+    // v24：访客/虫害/灵泉三项每日结算已迁往 Game.afterAction——渲染恢复纯函数
     const lv = p.cave.lv;
     const maxed = lv >= CaveSys.MAX_LV;
     const c = CaveSys.upCost(p);
@@ -13459,11 +13822,13 @@ const UI = {
         <div class="gf-actions">
           <button class="btn btn-sm" data-action="act-beast-active" data-uid="${b.uid}">${isOn ? '歇 息' : '出 战'}</button>
           <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
-          <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
-          ${!b.trip ? `<button class="btn btn-sm" data-action="act-beast-dispatch" data-uid="${b.uid}" title="外出寻宝，数日后带回灵材">派 遣</button>` : ''}
-          ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
           <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${Bag.count('m_neidan') ? '' : 'disabled'}>喂内丹（${Bag.count('m_neidan')}）</button>
-          <button class="btn btn-sm btn-danger" data-action="act-beast-free" data-uid="${b.uid}">放归</button>
+          ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
+          <details class="fold npc-more"><summary>照管 ▾</summary><div class="gf-actions" style="margin-top:6px">
+            <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
+            ${!b.trip ? `<button class="btn btn-sm" data-action="act-beast-dispatch" data-uid="${b.uid}" title="外出寻宝，数日后带回灵材">派 遣</button>` : ''}
+            <button class="btn btn-sm btn-danger" data-action="act-beast-free" data-uid="${b.uid}">放归</button>
+          </div></details>
         </div>
       </div>`;
     }).join('');
@@ -13655,10 +14020,9 @@ const UI = {
     </div>`;
   },
 
-  /* ---------- §24 江湖人脉 ---------- */
+  /* ---------- §24 江湖人脉（v24：行内按钮主次分级 + 义声卡入驻；登顶日赏迁至 afterAction 结算） ---------- */
   renderNpcTab() {
     const p = Game.player;
-    RankSys.dailyReward(p);   // v13：登顶每日气运（渲染时领取，随后由收尾落盘）
     const mapName = id => (GameData.MAPS.find(m => m.id === id) || {}).name || '四方云游';
     const myPow = p.realmIdx * 4 + p.layer;
     const rows = GameData.NPCS.map(d => {
@@ -13677,27 +14041,37 @@ const UI = {
       const powerText = !s.alive ? '已殒身'
         : his > myPow + 3 ? '远胜于你' : his > myPow ? '略胜于你' : his === myPow ? '与你相当' : '不及你';
       const sparTag = (s.sparWins || s.sparLoses) ? `<span class="tag">切磋 ${s.sparWins || 0}胜${s.sparLoses || 0}负</span>` : '';
-      const btns = !s.alive ? '<span class="tag danger">已身故</span>' : [
-        `<button class="btn btn-sm" data-action="npc-befriend" data-npc="${d.id}">结交（${Utils.fmtNum(NpcSys.befriendCost(p, d.id))}灵石）</button>`,
-        `<button class="btn btn-sm" data-action="npc-spar" data-npc="${d.id}">切磋</button>`,
-        s.met ? `<button class="btn btn-sm" data-action="npc-gift" data-npc="${d.id}">赠礼（${Utils.fmtNum(Math.round(30 * GameData.stoneEco(s.realmIdx)))}灵石）</button>` : '',
-        s.met && s.rel >= 30 ? `<button class="btn btn-sm" data-action="npc-discuss" data-npc="${d.id}">论道</button>` : '',
-        PersonalSys.next(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-line" data-npc="${d.id}" title="${Utils.esc((GameData.PERSONAL[d.id].acts[(p.personal[d.id] || 0)] || {}).brief || '')}">续谈 · ${Utils.esc(GameData.PERSONAL[d.id].arc)}</button>` : '',
-        s.rel >= 15 && p.partner !== d.id ? `<button class="btn btn-sm btn-danger" data-action="npc-betray" data-npc="${d.id}">背刺夺宝</button>` : '',
-        s.rel >= 70 && !(p.sworn || []).includes(d.id) ? `<button class="btn btn-sm" data-action="npc-swear" data-npc="${d.id}">结拜</button>` : '',
-        s.rel >= 90 && !p.partner ? `<button class="btn btn-sm btn-primary" data-action="npc-dao" data-npc="${d.id}">结为道侣</button>` : '',
-        s.grudge ? `<button class="btn btn-sm" data-action="npc-peace" data-npc="${d.id}">${s.pastLife ? '前世恩怨' : '化解仇怨'}</button>` : '',
-        NpcSys.canShowdown(p, d.id) ? `<button class="btn btn-sm btn-danger" data-action="npc-showdown" data-npc="${d.id}" title="约战雷台，胜者夺其法宝，恩怨两清">⚡ 雷台了断</button>` : '',
-      ].filter(Boolean).join('');
+      // v24 主次分级：主行只留高频四钮（结交/赠礼/论道/续谈），切磋结缘与恩怨抉择收进折叠
+      let btns = '';
+      let moreBtns = [];
+      if (s.alive) {
+        const main = [
+          `<button class="btn btn-sm" data-action="npc-befriend" data-npc="${d.id}">结交（${Utils.fmtNum(NpcSys.befriendCost(p, d.id))}灵石）</button>`,
+          s.met ? `<button class="btn btn-sm" data-action="npc-gift" data-npc="${d.id}">赠礼（${Utils.fmtNum(Math.round(30 * GameData.stoneEco(s.realmIdx)))}灵石）</button>` : '',
+          s.met && s.rel >= 30 ? `<button class="btn btn-sm" data-action="npc-discuss" data-npc="${d.id}">论道</button>` : '',
+          PersonalSys.next(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-line" data-npc="${d.id}" title="${Utils.esc((GameData.PERSONAL[d.id].acts[(p.personal[d.id] || 0)] || {}).brief || '')}">续谈 · ${Utils.esc(GameData.PERSONAL[d.id].arc)}</button>` : '',
+        ].filter(Boolean);
+        moreBtns = [
+          `<button class="btn btn-sm" data-action="npc-spar" data-npc="${d.id}">切磋</button>`,
+          s.rel >= 70 && !(p.sworn || []).includes(d.id) ? `<button class="btn btn-sm" data-action="npc-swear" data-npc="${d.id}">结拜</button>` : '',
+          s.rel >= 90 && !p.partner ? `<button class="btn btn-sm btn-primary" data-action="npc-dao" data-npc="${d.id}">结为道侣</button>` : '',
+          NpcSys.canLearnFrom(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-learnfrom" data-npc="${d.id}" title="三胜之后，请其倾囊相授">请其指点</button>` : '',
+          s.grudge ? `<button class="btn btn-sm" data-action="npc-peace" data-npc="${d.id}">${s.pastLife ? '化解前世恩怨' : '化解仇怨'}</button>` : '',
+          s.rel >= 15 && p.partner !== d.id ? `<button class="btn btn-sm btn-danger" data-action="npc-betray" data-npc="${d.id}">背刺夺宝</button>` : '',
+          NpcSys.canShowdown(p, d.id) ? `<button class="btn btn-sm btn-danger" data-action="npc-showdown" data-npc="${d.id}" title="约战雷台，胜者夺其法宝，恩怨两清">⚡ 雷台了断</button>` : '',
+        ].filter(Boolean);
+        btns = main.join('')
+          + (moreBtns.length ? ` <details class="fold npc-more"><summary>恩怨与机缘 ▾</summary><div class="gf-actions" style="margin-top:6px">${moreBtns.join('')}</div></details>` : '');
+      } else {
+        btns = '<span class="tag danger">已身故</span>';
+      }
       return `
       <div class="shop-row">
         <div class="gf-info">
           <div class="gf-name"><span style="display:inline-block;vertical-align:middle;width:34px;height:34px;border-radius:6px;overflow:hidden;margin-right:6px">${Art.portrait(Art.npcLook(d))}</span>${d.name} <span style="color:var(--text-faint);font-size:12px">${d.title} · ${d.temper}</span> <span class="tag ${relCls}">${lbl} ${s.rel > 0 ? '+' : ''}${s.rel}</span> ${sparTag} ${tags.join('')}</div>
           <div class="gf-desc">${d.desc}<br><span style="color:var(--text-faint)">${GameData.REALM_NAMES[s.realmIdx]}${GameData.LAYER_NAMES[s.layer]} · 现于${s.alive ? mapName(s.map) : '殒身之地'} · 战力${powerText}</span></div>
         </div>
-        <div class="gf-actions">${btns}
-          ${NpcSys.canLearnFrom(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-learnfrom" data-npc="${d.id}" title="三胜之后，请其倾囊相授">请其指点</button>` : ''}
-        </div>
+        <div class="gf-actions">${btns}</div>
       </div>`;
     }).join('');
     const rel = [];
@@ -13713,7 +14087,29 @@ const UI = {
       结交可成好友、结拜、道侣——你于战斗、渡劫的虚弱危急关头，他们有概率舍命相助；背刺夺宝收益翻倍，但气运暴跌、恩怨永结——宿敌会趁你历练、突破、渡劫时偷袭。</div>
       ${rel.length ? `<div class="card-tags"><span class="tag safe">${rel.join(' · ')}</span></div>` : ''}
       ${awayLine}
-    </div>${RankSys.render(p)}${rows}`;
+    </div>${RankSys.render(p)}${this.renderRepCard(p)}${rows}`;
+  },
+
+  /* ---------- v24 义声卡：布施行善自「奇市」迁入江湖——行善消业与江湖声望同卡归位 ---------- */
+  renderRepCard(p) {
+    const rep = (typeof RepSys !== 'undefined' && RepSys.level) ? RepSys.level(p) : null;
+    const mul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
+    const bon = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
+    const donateRows = (typeof DonateSys !== 'undefined' ? DonateSys.TIERS : []).map(t => {
+      const stones = Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(5, p.realmIdx) - 1) / 1));
+      return `
+      <div class="shop-row">
+        <div class="gf-info"><div class="gf-name">${t.name}</div>
+        <div class="gf-desc">声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。需灵石 ${Utils.fmtNum(stones)}。</div></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-donate" data-d="${t.id}">行 善</button></div>
+      </div>`;
+    }).join('');
+    return `
+    <div class="card rep-card">
+      <div class="card-title">✦ 义声 · 布施 <span class="tag ${rep && rep.color === 'neg' ? 'danger' : 'safe'}">${rep ? rep.name : '初露头角'} · 声望 ${p.reputation || 0}</span></div>
+      <div class="card-desc">散财于世间疾苦，善名自远——声望高者，坊市买价有面子（当前买价 ×${mul}），悬赏赏格更丰（×${bon}）；劣迹昭彰者处处吃闭门羹。</div>
+      ${donateRows}
+    </div>`;
   },
 
   /* ---------- v22 坊市拆五：万宝阁 / 炼制坊 / 祭炼堂 / 悬赏板 / 奇市（信息架构归一） ---------- */
@@ -13732,7 +14128,7 @@ const UI = {
     const p = Game.player;
     const st = Stat.compute(p);
     const stock = GameData.SHOP.filter(row => p.realmIdx >= row.minRealm);
-    const group = (type, title) => {
+    const group = (type, title, open = false) => {
       const items = stock.filter(r => GameData.ITEMS[r.item].type === type);
       if (!items.length) return '';
       const rows = items.map(r => {
@@ -13755,9 +14151,15 @@ const UI = {
           </div>
         </div>`;
       }).join('');
-      return `<div class="shop-section-title">◈ ${title}</div>${rows}`;
+      const fk = 'shop-g-' + type;   // v24 开合记忆：行动重渲染后保持用户展开状态
+      const isOpen = Game.foldState[fk] !== undefined ? Game.foldState[fk] : open;
+      return `<details class="fold shop-group" data-fold="${fk}" ${isOpen ? 'open' : ''}><summary>◈ ${title}（${items.length} 种 ▾）</summary><div style="margin-top:6px">${rows}</div></details>`;
     };
-    const sellable = Object.keys(p.bag).filter(id => (GameData.ITEMS[id].price || 0) > 0);
+    // v24 出售区折叠 + 按价值降序：买与卖不再 40+ 行平铺一页
+    const sellable = Object.keys(p.bag)
+      .filter(id => (GameData.ITEMS[id].price || 0) > 0)
+      .sort((a, b) => ShopSys.sellPrice(b) * (p.bag[b] || 0) - ShopSys.sellPrice(a) * (p.bag[a] || 0));
+    const sellTotal = sellable.reduce((sum, id) => sum + ShopSys.sellPrice(id) * (p.bag[id] || 0), 0);
     const sellRows = sellable.map(id => {
       const def = GameData.ITEMS[id];
       const sp = ShopSys.sellPrice(id);
@@ -13771,9 +14173,15 @@ const UI = {
         </div>
       </div>`;
     }).join('');
+    const sellFold = sellable.length ? `
+      <details class="fold shop-sell-fold" data-fold="shop-sell" ${Game.foldState['shop-sell'] ? 'open' : ''}>
+        <summary>◈ 出售物品（${sellable.length} 种 · 可售总值 <b class="hl">${Utils.fmtNum(sellTotal)}</b> 灵石 ▾）</summary>
+        <div class="tip-line" style="margin:6px 0">· 四折回收${p.dao === 'pill' ? '，丹药另有五成加成' : ''}；全售需二次确认。凡品杂物可在乾坤袋「一键卖凡品」。</div>
+        ${sellRows}
+      </details>` : '<div class="tip-line">背包中暂无可售之物。</div>';
     return `
       <div class="card">
-        <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
+        <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}${(typeof RepSys !== 'undefined' && RepSys.priceMul && RepSys.priceMul(p) !== 1) ? `声望买价 ×${RepSys.priceMul(p)} · ` : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
         <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。</div>
         <div class="card-tags">
           <button class="btn btn-sm" data-action="act-convert" data-dir="up1">100下品 → 1中品</button>
@@ -13781,13 +14189,12 @@ const UI = {
           <button class="btn btn-sm" data-action="act-convert" data-dir="up2">100中品 → 1上品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="down2">1上品 → 100中品</button>
         </div>
-        ${group('pill', '丹药')}
+        ${group('pill', '丹药', true)}
         ${group('artifact', '法器')}
         ${group('gongfa', '功法典籍')}
         ${group('material', '杂货材料')}
         ${group('seed', '灵田种子')}
-        <div class="shop-section-title">◈ 出售物品（四折回收${p.dao === 'pill' ? '，丹药另有五成加成' : ''}）</div>
-        ${sellRows || '<div class="tip-line">背包中空空如也。</div>'}
+        ${sellFold}
       </div>`;
   },
 
@@ -13905,14 +14312,35 @@ const UI = {
         <div class="gf-desc">以本命精血温养，吞玄铁与灵石而长。${(p.benming && p.benming.lv) >= ForgeSys.BENMING_MAX ? '已至圆满之境。' : ''}</div></div>
         <div class="gf-actions"><button class="btn btn-sm" data-action="act-benming-feed" ${((p.benming && p.benming.lv) || 0) >= ForgeSys.BENMING_MAX ? 'disabled' : ''}>喂 养</button></div>
       </div>` : '';
+    // v24 熔铸回收：囊中闲置法器就地分解（0 价稀有物按品阶兜底计价，不再沦为背包垃圾）
+    const salvageRows = Object.keys(p.bag).filter(id => {
+      const def = GameData.ITEMS[id];
+      return def && def.type === 'artifact' && (p.bag[id] || 0) > 0;
+    }).map(id => {
+      const def = GameData.ITEMS[id];
+      const n = p.bag[id];
+      const oreBack = (def.grade || 0) + 1;
+      const GRADE_FALLBACK = [300, 800, 2000, 6000, 16000, 40000];
+      const baseVal = (def.price || 0) > 0 ? def.price : (GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500);
+      return `
+      <div class="shop-row">
+        <div class="gf-info"><div class="gf-name">${this.gradeSpan(def.name, def.grade)} <span style="color:var(--text-faint)">×${n}</span></div>
+        <div class="gf-desc">可回炉得玄铁矿 ×${oreBack}/件、灵石 ${Utils.fmtNum(Math.max(10, Math.round(baseVal * 0.15)))}/件${(def.price || 0) <= 0 ? '（稀有物按品阶兜底计价）' : ''}。</div></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-salvage" data-item="${id}">分 解</button></div>
+      </div>`;
+    }).join('');
+    const salvageSection = `
+      <div class="shop-section-title">◈ 熔铸回收（闲置法器回炉：得玄铁矿与灵石）</div>
+      ${salvageRows || '<div class="tip-line">囊中暂无可回炉的法器。</div>'}`;
     const enhanceSection = `
       <div class="shop-section-title">◈ 祭炼强化（+1~+10，每级 +10% 数值属性）</div>
       ${enhSlots || '<div class="tip-line">先在乾坤袋中装备法宝，方可祭炼强化。</div>'}
       ${affixSection}
-      ${benmingSection}`;
+      ${benmingSection}
+      ${salvageSection}`;
     return `
       <div class="card">
-        <div class="card-title">✦ 祭炼堂 <span style="font-size:12px;color:var(--text-dim)">强化 · 洗练 · 本命温养——法宝之道</span></div>
+        <div class="card-title">✦ 祭炼堂 <span style="font-size:12px;color:var(--text-dim)">强化 · 洗练 · 本命温养 · 回收——法宝之道</span></div>
         ${enhanceSection}
       </div>`;
   },
@@ -14004,32 +14432,17 @@ const UI = {
         </div>
       </div>`;
     // v19 布施
-    const donateRows = DonateSys.TIERS.map(t => {
-      const stones = Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(5, p.realmIdx) - 1) / 1));
-      return `
-      <div class="shop-row">
-        <div class="gf-info"><div class="gf-name">${t.name}</div>
-        <div class="gf-desc">声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。需灵石 ${Utils.fmtNum(stones)}。</div></div>
-        <div class="gf-actions"><button class="btn btn-sm" data-action="act-donate" data-d="${t.id}">行 善</button></div>
-      </div>`;
-    }).join('');
-    const donateSection = `
-      <div class="shop-section-title">◈ 布施（散财消业，声望与气运双收）</div>
-      ${donateRows}`;
+    // v24 布施迁往「江湖 · 义声」——行善消业与销赃暗巷分而治之
     return `
       <div class="card">
-        <div class="card-title">✦ 奇 市 <span style="font-size:12px;color:var(--text-dim)">黑市 · 拍卖 · 布施——非常之法，非常之时</span></div>
+        <div class="card-title">✦ 奇 市 <span style="font-size:12px;color:var(--text-dim)">黑市 · 拍卖——非常之法，非常之时</span></div>
         ${blackSection}
         ${auctionSection}
-        ${donateSection}
       </div>`;
   },
 
   renderSectTab() {
     const p = Game.player;
-    const cmdBtn = typeof SectSys !== 'undefined' && SectSys.isElder && SectSys.isElder(p)
-      ? `<button class="btn btn-sm btn-primary" data-action="act-sect-command">⚡ 长老令</button>` : '';
-    void cmdBtn;
     if (p.realmIdx < 1 && !p.sect) {
       return `<div class="card"><div class="card-title">✦ 宗门</div>
         <div class="card-desc">修仙界宗门林立，然非筑基不得其门而入。<br>你如今尚在练气，还请先专心修行。</div></div>`;
@@ -14125,14 +14538,17 @@ const UI = {
         <div class="card-desc">擂台已筑，钟鼓齐鸣。同门比试点到为止——胜场越多彩头越厚，三连胜者<b>魁首扬名</b>（气运大赠，生涯留名）。</div>
         <div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-tourney-fight">登 台 比 武</button></div>
       </div>` : '';
+    // v24 卡序归位：宗门任务置顶（进门第一屏就是可做的事），派系→大比→兑换随后
+    const elderBtn = (typeof SectSys !== 'undefined' && SectSys.isElder && SectSys.isElder(p))
+      ? '<button class="btn btn-sm btn-primary" data-action="act-sect-command" style="margin-left:auto">⚡ 长老令</button>' : '';
     return `
-      ${tourneyCard}
-      ${facSection}
       <div class="card">
-        <div class="card-title">✦ ${sect.name} <span class="tag safe">${sect.bonusText}</span></div>
-        <div class="card-desc">当前贡献：<b class="hl">${p.sect.contrib}</b> 点。完成宗门任务可获得贡献与灵石。</div>
+        <div class="card-title">✦ ${sect.name} <span class="tag safe">${sect.bonusText}</span>${elderBtn}</div>
+        <div class="card-desc">当前贡献：<b class="hl">${Utils.fmtNum(p.sect.contrib)}</b> 点。完成宗门任务可获得贡献与灵石。</div>
         ${taskRows}
       </div>
+      ${facSection}
+      ${tourneyCard}
       <div class="card">
         <div class="card-title">✦ 贡献兑换</div>
         ${exRows}
@@ -14197,17 +14613,26 @@ const UI = {
       <div class="card"><div class="card-title">✦ 出战技能盘 <span class="tag">${deck.length}/4</span></div>
       <div class="card-desc">战斗中的「法诀」菜单只出手盘内招式——择四招随身，临阵不乱。空盘时全部法诀皆可用。</div>
       ${deckRows || '<div class="tip-line">尚未修习带神通的法诀。</div>'}</div>`;
-    // v19 道韵协同
-    const dyRows = (GameData.DAO_YUN || []).map(dy => {
-      const on = dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3);
-      const names = dy.need.map(gid => `${(GameData.ITEMS[gid] || {}).name || gid} ${p.gongfa[gid] ? p.gongfa[gid].level : 0}/3层`).join(' · ');
-      return `<div class="tip-line" style="${on ? '' : 'opacity:.65'}">${on ? '✦' : '·'} <b>${dy.name}</b>（${names}）——${dy.desc}</div>`;
+    // v24 道韵协同 2.0：主池+扩池合并、逐条层数进度、差临门一脚时明示缺口
+    const dyList = (GameData.DAO_YUN || []).concat(GameData.DAO_YUN_EXTRA || []);
+    const activeDyN = (typeof Stat !== 'undefined' && Stat.activeDaoYun) ? Stat.activeDaoYun(p).length : 0;
+    const dyRows = dyList.map(dy => {
+      const parts = dy.need.map(gid => ({ gid, nm: (GameData.ITEMS[gid] || {}).name || gid, g: p.gongfa[gid] }));
+      const on = parts.every(x => x.g && x.g.level >= 3);
+      let hint = '';
+      if (!on && parts.some(x => x.g)) {
+        const miss = parts.filter(x => !x.g || x.g.level < 3);
+        hint = `<span style="color:var(--text-faint)">　→ 尚缺：${miss.map(x => `${x.nm}${!x.g ? '（未学）' : ` 第${x.g.level}层`}`).join('、')}</span>`;
+      }
+      return `<div class="tip-line" style="${on ? '' : 'opacity:.7'}">${on ? '✦' : '·'} <b>${dy.name}</b>（${parts.map(x => `${x.nm} ${x.g ? x.g.level : 0}/3层`).join(' · ')}）——${dy.desc}${hint}</div>`;
     }).join('');
     return `
       <div class="card"><div class="card-title">✦ 已修功法</div>${learned || '<div class="tip-line">尚未修习任何功法。</div>'}</div>
       ${deckCard}
       ${learnRows ? `<div class="card"><div class="card-title">✦ 待学典籍（背包中）</div>${learnRows}</div>` : ''}
-      <div class="card"><div class="card-title">✦ 道韵协同（双功法修至三层以上，共鸣生韵）</div>${dyRows}</div>`;
+      <div class="card"><div class="card-title">✦ 道韵协同（双功法修至三层以上，共鸣生韵） <span class="tag ${activeDyN ? 'warn' : ''}">已激活 ${activeDyN}/${dyList.length}</span></div>
+      <div class="tip-line">· 成韵即永久生效；缺口已为你标出——典籍可于坊市、宗门与秘境深处求取。</div>
+      ${dyRows}</div>`;
   },
 
   /** v20 属性构成明细弹窗（.stat-detail 点击触发，Game 全局委托捕获） */
@@ -14474,10 +14899,65 @@ const UI = {
           </div>`;
         }).join('');
         const gotN = ids.filter(id => Meta.data.codex[cat][id]).length;
-        body += `<div class="shop-section-title">◈ ${label} · ${gotN}/${ids.length}</div>${rows}`;
+        const full = gotN >= ids.length && ids.length > 0;
+        const bonusTag = full ? '<span class="tag safe">已大成 · 全属性 +1%</span>' : '<span class="tag">收满全属性 +1%</span>';
+        body += `<div class="shop-section-title">◈ ${label} · ${gotN}/${ids.length} ${bonusTag}</div>${rows}`;
       }
     }
-    return `${tabs}<div class="codex-list">${body}</div>`;
+    return `${tabs}<div class="codex-list">${body}</div>
+      <div class="tip-line" style="margin-top:6px">· 每类图鉴收录齐全，道行自有精进——全属性永久 +1%（可叠加，跨转世保留）。</div>`;
+  },
+
+  /* ---------- v24 玩法手册：分章折叠的帮助页（原「三分钟上手清单」为首节） ---------- */
+  helpModal() {
+    const folds = `
+      <details class="fold" open><summary>✦ 三分钟上手</summary>
+        <div class="tip-line">· <b>修炼</b>攒修为，圆满后冲关；练气→筑基无天劫，金丹起有硬抗/法宝/借地三策博弈。</div>
+        <div class="tip-line">· <b>游历</b>探地图搏机缘，遇敌注意敌方「下一手」意图——<b>蓄力时防御可破招反击</b>。</div>
+        <div class="tip-line">· <b>坊市</b>买丹药法宝；丹毒是服丹的代价——丹毒上限见左栏，超过七成五会提示停口，解毒丹可压。</div>
+        <div class="tip-line">· 灵石分<b>下品/中品/上品</b>三档，1 中品=100 下品、1 上品=100 中品；万宝阁可互相兑换。</div>
+        <div class="tip-line">· 筑基后解锁 <b>洞府/宗门/江湖</b>：种田炼药、领任务、结交修士（可结拜、结为道侣）。</div>
+        <div class="tip-line">· 每章主线完结送残玉共鸣（全属性 +1.5%）——跟主线走不吃亏；卡住就看左栏「当前建议」。</div>
+      </details>
+      <details class="fold"><summary>✦ 修行与境界</summary>
+        <div class="tip-line">· 十境三十六层：练气→筑基→金丹→元婴→化神→炼虚→合体→大乘→渡劫→真仙，每境四层。</div>
+        <div class="tip-line">· 每层修为攒满即「圆满」，可冲关下一境；金丹起冲关引天劫，成败皆有道果（劫前记得存档）。</div>
+        <div class="tip-line">· 闭关 30 日 = 一轮大修炼（耗灵石、清丹毒）；「聚灵加速」日限一次，当日修炼 ×1.5。</div>
+        <div class="tip-line">· 大道六择一（剑/丹/符/体/阵/魔）：剑修渡劫 ×0.77、体修 ×1.4，各道有专属行为加成，终身可转（跌一大境界）。</div>
+        <div class="tip-line">· 心魔满百必劫（丹毒反噬/渡劫失利所积）；孽障满百可斩三尸（清孽障，散修为）。</div>
+        <div class="tip-line">· 渡劫失利不死——可兵解转世重开一世：印记全属性 +1%/枚，传承树逐层解锁。</div>
+      </details>
+      <details class="fold"><summary>✦ 战斗要诀</summary>
+        <div class="tip-line">· 敌方「下一手」意图明示：攻击/蓄力/防御。敌<b>蓄力</b>时用「防御」可破招，反伤其身并攒气。</div>
+        <div class="tip-line">· 必杀技随战斗积「气」施放；出战技能盘（功法页）至多带四招，空盘则全部可用。</div>
+        <div class="tip-line">· 战斗中可服丹/掷符/饮灵力药；残血开「自动战斗」会自动服药与防御。</div>
+        <div class="tip-line">· 可驯妖兽打至两成血以下出现「驯服」——灵兽出战可协战，喂妖兽内丹可升阶。</div>
+        <div class="tip-line">· 打不过可「遁走」（有伤）——精英词缀（汲血/魔棘/不灭等）开局可见，量力而行。</div>
+      </details>
+      <details class="fold"><summary>✦ 江湖与恩怨</summary>
+        <div class="tip-line">· 二十四位常驻修士随岁月成长：结交→赠礼→论道→结拜/结侣；道侣会在你渡劫时舍命相助。</div>
+        <div class="tip-line">· 关系深厚触发「续谈」——个人线三幕剧情，全通给永久加成；错过档位会暂隐，不必急。</div>
+        <div class="tip-line">· 宿敌会截胡机缘、趁虚偷袭；「化解仇怨」或雷台了断可消患。孽障越高，仇家越多。</div>
+        <div class="tip-line">· 声望由布施行善积累：买价打折、悬赏赏格加成；声名狼藉则处处吃闭门羹。</div>
+      </details>
+      <details class="fold"><summary>✦ 营生与经济</summary>
+        <div class="tip-line">· 洞府灵田自种自收（离线亦生长）；种子在坊市「灵田种子」区；一键行权可代收代种。</div>
+        <div class="tip-line">· 悬赏板两日一换，猎杀目标游历自动计入；宗门任务同源——贡献换功法秘宝。</div>
+        <div class="tip-line">· 奇市：黑市每月初三开市三日（贵六成但货奇）；拍卖行每六十日一件稀有拍品。</div>
+        <div class="tip-line">· 闲置法器可在祭炼堂「熔铸回收」分解成玄铁矿与灵石——天级神兵也按品阶兜底计价。</div>
+        <div class="tip-line">· 灵田灵兽寻宝有「归来」红点提醒；奇市开市、拍期将止也会在页签上亮灯。</div>
+      </details>
+      <details class="fold"><summary>✦ 杂录</summary>
+        <div class="tip-line">· 快捷键：剧情中 Enter/空格 翻页；战斗中 1~5 普攻/法诀/防御/道具/遁走；QWERTASD 切页签；ESC 关层。</div>
+        <div class="tip-line">· 离线时灵田照常生长、修为按修炼四成效率自行精进（上限 30 日），回归时入账。</div>
+        <div class="tip-line">· 图鉴五类收满各得全属性 +1%（永久）；成就页未完成的排在前头。</div>
+        <div class="tip-line">· 问道录（问道页右上）收录你看过的全部剧情、人物志、年表、抉择树与百科。</div>
+      </details>`;
+    this.popup({
+      title: '📖 玩法手册',
+      html: folds,
+      options: [{ text: '合 上', value: true, primary: true }],
+    });
   },
 
   /* ---------- v6：存档导出 / 导入（文本码） ---------- */
@@ -14645,6 +15125,7 @@ const Game = {
   bagTab: 'all',
   bagSort: 'quality',   // v20 背包排序：quality 品质 / type 类型 / name 名字
   subTab: {},   // v22 页签内子页签记忆（shop/cave/map 各自记住上次所在分栏）
+  foldState: {},   // v24 折叠分组开合记忆（data-fold 键）——行动后重渲染不再把用户展开的分组收回去
 
   init() {
     UI.cache();
@@ -14657,10 +15138,18 @@ const Game = {
       if (!el || el.disabled) return;
       const fn = this.actions[el.dataset.action];
       if (fn) {
+        if (el._busy) return;   // v24 防重入：同一按钮上一笔尚未结清时忽略连点
+        el._busy = true;
         try { await fn(el.dataset, el); }
         catch (err) { console.error('动作执行出错:', el.dataset.action, err); UI.toast('操作出了点问题，请重试', true); }
+        finally { el._busy = false; }
       }
     });
+    // v24 折叠开合记忆：toggle 不冒泡，用捕获监听统一记账
+    document.addEventListener('toggle', (e) => {
+      const key = e.target && e.target.dataset ? e.target.dataset.fold : null;
+      if (key) this.foldState[key] = e.target.open;
+    }, true);
     // 氛围面板：点击面板以外区域自动收起
     document.addEventListener('click', (e) => {
       const ctrl = document.getElementById('amb-ctrl');
@@ -14806,8 +15295,23 @@ const Game = {
         offlineCrops++;
       }
     }
+    // v24 离线修行：放置游戏名实相符——离线期间行功不辍，修为按四成效率折算（不冲关、不积丹毒）
+    let offlineExp = 0;
+    if (p.realmIdx >= 0 && !p.dead) {
+      try {
+        const st = Stat.compute(p);
+        const perRound = Cultivate.baseGain(p) * (1 + st.cultPct / 100);
+        offlineExp = Math.round(perRound / 3 * 0.4 * realDays);
+        if (offlineExp > 0) Cultivate.addExp(p, offlineExp);
+      } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; }
+    }
     if (offlineCrops > 0) {
       Log.add(`你不在的${realDays}个时辰里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
+    }
+    if (offlineExp > 0) {
+      Log.add(`离山的日子裡你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（离线修行按四成效率折算，共 ${realDays} 日）。`, 'gain');
+    }
+    if (offlineCrops > 0 || offlineExp > 0) {
       p.day += realDays;
       p.age += realDays / 365;
     }
@@ -14853,6 +15357,10 @@ const Game = {
     try { if (typeof SectSys !== 'undefined' && SectSys.tourneyCheck) SectSys.tourneyCheck(p); } catch (err) { console.error('大比检查异常:', err); }   // v22：宗门大比（每五年一届）
     try { if (typeof NpcSys !== 'undefined' && NpcSys.companionCheck) NpcSys.companionCheck(p); } catch (err) { console.error('共修检查异常:', err); }   // v20：道侣共修
     try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
+    // v24：日常结算统一收口到行动后（原先藏在各页签渲染函数里，打开页面才结算）
+    try { if (typeof RankSys !== 'undefined' && RankSys.dailyReward && RankSys.isTop(p)) RankSys.dailyReward(p); } catch (err) { console.error('登顶日赏异常:', err); }
+    try { if (p.cave) { CaveSys.visitorEvent(p); CaveSys.checkPest(p); CaveSys.springDaily(p); } } catch (err) { console.error('洞府日常异常:', err); }
+    try { if (typeof Codex !== 'undefined' && Codex.checkRewards) Codex.checkRewards(); } catch (err) { console.error('图鉴检查异常:', err); }
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
     if (p.pendingDao && !p.dao && !p.dead && !Battle.active
       && (p.realmIdx >= 1 || p.reinc)) {
@@ -15010,12 +15518,20 @@ const Game = {
       const ok = await UI.popup({ title: '读取存档', html: '读取后当前未保存的进度将丢失，确定吗？', options: [{ text: '读取', value: true }, { text: '取消', value: false }] });
       if (ok) Game.loadFrom(d.slot);
     },
-    'act-delete-save': (d) => {
+    'act-delete-save': async (d) => {
+      // v24 确认统一：删除存档补二次确认（与开始界面 st-delete 对齐）
+      const idx = Number(d.slot);
+      const ok = await UI.popup({
+        title: '删除存档',
+        html: `将删除 <b>存档位${['一', '二', '三'][idx - 1] || idx}</b> 的存档——此档一删，仙途尽消，确定吗？`,
+        options: [{ text: '删 除', value: true, primary: true }, { text: '取 消', value: false }],
+      });
+      if (!ok) return;
       Save.remove(d.slot);
       UI.toast('已删除该存档');
       UI.refreshSaveBody();
     },
-    'act-help': () => Tutorial.show(true),
+    'act-help': () => UI.helpModal(),   // v24：玩法手册（三分钟清单并入首节）
     'act-newgame': async () => {
       const ok = await UI.popup({ title: '离开游戏', html: '当前进度已自动保存。确定回到开始界面吗？', options: [{ text: '离开', value: true }, { text: '取消', value: false }] });
       if (ok) Game.exitToStart();
@@ -15064,6 +15580,7 @@ const Game = {
     'trib-strategy': (d) => Tribulation.choose(d.strategy),
     'act-slay': () => KarmaSys.slayCorpses(),
     'quest-side': (d) => QuestSys.claimSide(d.side),
+    'quest-bonus': () => QuestSys.claimBonus(),   // v24 章助缘领赏
     'act-sign': () => DailySign.draw(),
     'act-alchemy': (d) => CraftSys.alchemy(d.recipe),
     'act-study-recipe': (d) => CraftSys.studyRecipe(d.recipe),

@@ -52,6 +52,7 @@ const Story = {
     if (!p) return;
     if (!p.story) p.story = { seen: {}, mid: {}, choices: {} };
     p.story.seen[id] = Math.floor(p.day || 0) + 1;
+    if (typeof QuestSys !== 'undefined' && QuestSys.loreToast) QuestSys.loreToast(id);   // v24 百科新词条解锁提示
   },
   /** 抉择记录（每章末记录所选 value） */
   recordChoice(key, value) {

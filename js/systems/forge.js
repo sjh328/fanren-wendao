@@ -47,6 +47,7 @@ const ForgeSys = {
     const hasOre = Bag.count('m_xuantie') >= oreNeed;
     const hasGuard = Bag.count('m_qianghua') > 0;
     const rate = this.rate(lv);
+    p.counters.enhances = (p.counters.enhances || 0) + 1;   // v24 章助缘计数
     const ok = await UI.popup({
       title: `祭炼强化 · ${def.name} +${lv} → +${lv + 1}`,
       html: `以灵火温养法宝，可再提升一层。<br>

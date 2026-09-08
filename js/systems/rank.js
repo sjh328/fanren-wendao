@@ -51,7 +51,8 @@ const RankSys = {
     return `
     <div class="card">
       <div class="card-title">✦ 天骄榜 ${top ? '<span class="tag warn">天下第一 · 全属性 +2%</span>' : `<span class="tag">你的排名 · 第 ${myIdx + 1} 位</span>`}</div>
-      <div class="card-desc">修行界二十四位风云人物与你的境界排名。登顶者名动天下：全属性 +2%，每日另有气运小赏。</div>
+      <div class="card-desc">修行界二十四位风云人物与你的境界排名（按境界小层排布）。登顶者名动天下：全属性 +2%，每日另有气运小赏。</div>
+      <div class="tip-line">· 你的综合战力 ⚔ <b>${Utils.fmtNum(Stat.power(p))}</b>（装备/功法/灵兽一应计入）——境界是名次，战力是底气。</div>
       <div class="rank-list">${rowsHtml}</div>
     </div>`;
   },

@@ -1039,6 +1039,13 @@ const Battle = {
       e.charging = true;
       this.log(`${e.name} 妖气翻涌、筋肉隆起——它正在<b>蓄力</b>，下回合将施展杀招！`, 'log-warn');
       this.pushFloat('enemy', '蓄力', 'miss');
+      // v24 情境教学：首次遭遇蓄力，教一次「防御破招」
+      const pp = Game.player;
+      if (pp && !(pp.flags || {}).tut_parry) {
+        pp.flags = pp.flags || {};
+        pp.flags.tut_parry = true;
+        setTimeout(() => UI.toast('⚔ 教学：敌正蓄力——此刻选【防御】可破招反击！'), 400);
+      }
     } else {
       const heavy = !!act.heavy;
       this.enemyStrike(st, heavy ? 1.55 : 1, heavy);

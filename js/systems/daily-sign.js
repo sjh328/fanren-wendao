@@ -33,6 +33,7 @@ const DailySign = {
     for (const x of pools) { r -= x.w; if (r <= 0) { item = x; break; } }
     const effect = item.apply(p);
     p.signDay = today;
+    p.counters.signs = (p.counters.signs || 0) + 1;   // v24 章助缘计数
     p.signText = item.text;
     p.signDesc = item.desc;
     Log.add(`【黄历】你诚心摇签，得一支<b>${item.text}</b>——${item.desc}（${effect}）`, item.id === 'mishap' ? 'warn' : 'gain');
