@@ -1,0 +1,10 @@
+{
+  // Cloudflare Workers 静态站部署配置（Workers Builds 的 Deploy command: npx wrangler deploy 用）
+  // 资产目录 = dist/：Build command（node scripts/cf-prepare.mjs）先把游戏本体拷进去
+  "$schema": "https://unpkg.com/wrangler/config-schema.json",
+  "name": "fanren-wendao",
+  "compatibility_date": "2025-12-01",
+  "assets": {
+    "directory": "./dist"
+  }
+}

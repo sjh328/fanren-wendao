@@ -29,8 +29,10 @@ node server.mjs     # http://localhost:8341/index.html
 
 1. 登录 [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages → 创建 → Pages → 连接到 Git**
 2. 授权 GitHub，选中本仓库 `fanren-wendao`
-3. 构建命令留空、输出目录填 `/`，点部署
-4. 约 1 分钟后得到 `https://<项目名>.pages.dev`——手机「添加到主屏幕」即可以 App 形态离线游玩（PWA）
+3. 部署配置（新版 Workers 流程）：Project name `fanren-wendao` · **Build command 填
+   `node scripts/cf-prepare.mjs`** · Deploy command 保持默认 `npx wrangler deploy`（配置在
+   `wrangler.jsonc`，资产目录锁定到 `dist/`，只上传游戏本体）
+4. 约 1 分钟后得到 `https://<项目名>.workers.dev`——手机「添加到主屏幕」即可以 App 形态离线游玩（PWA）
 
 之后**每次 commit（post-commit 钩子自动推送）都会触发自动部署**，无需任何手动操作。
 跨设备搬存档用游戏内置：菜单 → 存档/读档 → 导出/导入文本码。
