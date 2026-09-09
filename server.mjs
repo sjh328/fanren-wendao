@@ -13,6 +13,8 @@ const MIME = {
   '.mjs': 'text/javascript; charset=utf-8',
   '.json': 'application/json',
   '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webmanifest': 'application/manifest+json',
 };
 
 http.createServer((req, res) => {

@@ -23,6 +23,18 @@
 node server.mjs     # http://localhost:8341/index.html
 ```
 
+## 在线版 · Cloudflare Pages 部署（免费）
+
+纯静态站，零构建——Cloudflare Pages 连上仓库即得公开网址，任何设备浏览器可玩：
+
+1. 登录 [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages → 创建 → Pages → 连接到 Git**
+2. 授权 GitHub，选中本仓库 `fanren-wendao`
+3. 构建命令留空、输出目录填 `/`，点部署
+4. 约 1 分钟后得到 `https://<项目名>.pages.dev`——手机「添加到主屏幕」即可以 App 形态离线游玩（PWA）
+
+之后**每次 commit（post-commit 钩子自动推送）都会触发自动部署**，无需任何手动操作。
+跨设备搬存档用游戏内置：菜单 → 存档/读档 → 导出/导入文本码。
+
 ## 测试
 
 测试为 puppeteer-core 驱动真实 Chrome 的 E2E 回归（需先启动 `node server.mjs`，并保证本机装有 Chrome）：
@@ -50,7 +62,9 @@ style.css    宣纸水墨主题（按版本增量分区块）
 index.html   唯一入口（引用 game.js?v=37，改版时递增 N 清缓存）
 server.mjs   本地静态服务器（:8341，no-cache）
 verify-*.mjs puppeteer E2E 回归脚本（npm test:xxx）
-scripts/     build.mjs（安全构建+CSS 体检）· balance-sim.mjs（数值拟合）· price-audit.mjs（经济审计）
+icons/      PWA 图标（scripts/make-icons.mjs 生成：宣纸水墨 + 朱砂道印）
+manifest.webmanifest + sw.js   PWA：可安装到主屏幕、离线可玩（sw.js 改动时递增 VERSION 清旧缓存）
+scripts/     build.mjs（安全构建+CSS 体检）· make-icons.mjs（PWA 图标）· balance-sim.mjs · price-audit.mjs
 scripts/     build.mjs（安全构建）· balance-sim.mjs（数值拟合）· price-audit.mjs（经济审计）
              · split.mjs（切分工具）
 attic/       归档区（gitignore）：v18 半成品模块化遗留，见 attic/README.md

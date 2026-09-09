@@ -98,3 +98,15 @@
   v22 的子页签记忆反而是测试的新坑，改深链 `shop:market` 即愈。
 - verify-game 偶发挂死元凶是「出售确认弹窗重渲染后收起」：坐标点击落在错误目标上还报成功——
   给折叠加了开合记忆后顺手把测试点按方式也换了 DOM 直点。
+
+
+## 追加 · PWA 与 Cloudflare Pages 部署
+
+- **PWA 改造**：`manifest.webmanifest`（standalone / 宣纸主题色 / maskable 图标）+ `sw.js`
+  Service Worker（页面网络优先、静态资源 stale-while-revalidate、Google Fonts 运行时缓存）——
+  手机「添加到主屏幕」即 App 形态全屏游玩，**断网亦可开档修炼**；存档在 localStorage，
+  SW 升级不清档（`VERSION` 常量控制缓存世代）。图标由 `scripts/make-icons.mjs` 以无头 Chrome
+  按游戏视觉（宣纸水墨 + 朱砂道印）截图生成五枚。
+- **部署指南落 README**：Cloudflare Pages 连 Git 仓库、构建命令留空、输出目录 `/`——
+  此后每次 commit 自动上线。
+- verify-v10 新增 **Z18**（manifest/图标/SW 装备 + 真机注册 + 离线缓存就绪），89/89。

@@ -1477,6 +1477,34 @@ try {
   z17.wired && z17.safe && z17.sep && z17.btn
     ? pass('Z17 离线修行接线 + 移动端三补（safe-area/tab-sep/触控目标）') : fail('Z17 接线', JSON.stringify(z17));
 
+  // Z18 PWA：manifest/图标/SW 装备齐全 + 真机注册生效 + 离线缓存就绪
+  const z18a = (() => {
+    const mf = JSON.parse(fs.readFileSync('manifest.webmanifest', 'utf8'));
+    const sw = fs.readFileSync('sw.js', 'utf8');
+    const html = fs.readFileSync('index.html', 'utf8');
+    const icons = ['icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-32.png'];
+    return {
+      name: mf.name && mf.name.includes('凡人问道'), standalone: mf.display === 'standalone',
+      iconN: (mf.icons || []).filter(i => fs.existsSync(i.src)).length,
+      maskable: (mf.icons || []).some(i => i.purpose === 'maskable'),
+      swFetch: /addEventListener\('fetch'/.test(sw) && /stale|cache/i.test(sw),
+      htmlWired: html.includes('manifest.webmanifest') && html.includes('sw.js') && html.includes('apple-touch-icon'),
+    };
+  })();
+  const z18b = await page.evaluate(async () => {
+    if (!('serviceWorker' in navigator)) return { reg: false, cached: 0 };
+    const reg = await navigator.serviceWorker.getRegistration();
+    const keys = reg ? await caches.keys() : [];
+    let cached = 0;
+    if (keys.length) {
+      const c = await caches.open(keys[0]);
+      cached = (await c.keys()).length;
+    }
+    return { reg: !!reg, cached };
+  });
+  z18a.name && z18a.standalone && z18a.iconN >= 3 && z18a.maskable && z18a.swFetch && z18a.htmlWired && z18b.reg && z18b.cached >= 5
+    ? pass(`Z18 PWA（manifest+图标+SW 注册，离线缓存 ${z18b.cached} 项）`) : fail('Z18 PWA', JSON.stringify({ z18a, z18b }));
+
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');
   console.log('\n========== verify-v10 汇总 ==========');
