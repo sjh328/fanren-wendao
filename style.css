@@ -2067,6 +2067,15 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   overflow-y: auto;
   padding: 14px 24px 20px;
   position: relative;
+  /* v25 修复：剧情卷轴此前没有纸张背景，文字直接浮在模糊页面上——补双层宣纸卡底 */
+  border: 1px solid transparent;
+  background:
+    linear-gradient(180deg, rgba(252, 247, 233, 0.98), rgba(243, 235, 213, 0.99)) padding-box,
+    linear-gradient(165deg, rgba(150, 112, 46, 0.75), rgba(171, 155, 116, 0.6) 38%, rgba(150, 112, 46, 0.35) 72%, rgba(160, 56, 48, 0.45)) border-box;
+  border-radius: 12px;
+  box-shadow: 0 18px 50px rgba(80, 60, 28, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .story-chapter {
   font-family: var(--font-kai);
@@ -2730,4 +2739,119 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   background: linear-gradient(160deg, #c04b4b, #a03830);
   box-shadow: 0 0 6px rgba(192, 75, 75, 0.8);
   animation: dotPulse 1.4s ease-in-out infinite;
+}
+
+
+/* ==================== v25「掌上乾坤」：移动端全面重构 ==================== */
+/* 桌面（≥861px）零分叉；以下除标注外全部收敛在 ≤860px 断点内 */
+
+/* 页签文字包裹元素（v25 锁定图标化渲染用），基线还原直立体 */
+.tab-name { font-style: normal; }
+
+/* 仙途十境条：横向滚动容器（宽屏一屏铺开，窄屏横滑 + 渐隐提示） */
+.rp-scroll { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.rp-scroll::-webkit-scrollbar { display: none; }
+.rp-scroll .rp-track { width: max-content; min-width: 100%; padding: 6px 8px 2px; }
+
+/* ---------- ≤860px：手机主体 ---------- */
+@media (max-width: 860px) {
+  /* ---- A2 顶栏两行化：上行 标题+抽屉+设置，下行 chips 独占横滑 ---- */
+  #top-bar { flex-wrap: wrap; row-gap: 2px; padding: 8px 12px; }
+  .top-title { font-size: 17px; letter-spacing: 3px; }
+  .top-right { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+  #top-info {
+    order: 9;
+    flex: 1 1 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 3px 0 4px;
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 20px), transparent);
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 20px), transparent);
+  }
+  #top-info::-webkit-scrollbar { display: none; }
+  .top-info .top-meta { flex: 0 0 auto; }
+  #top-info .res-chip { flex: 0 0 auto; }
+
+  /* ---- A3 底部导航自适应：等分收缩 + 字号钳制 + 红点改角标 ---- */
+  #tabs {
+    -webkit-mask-image: none;
+    mask-image: none;                    /* v25：页签已等分收缩，v24 的右缘雾化退役 */
+  }
+  .tab-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 6px 2px;
+    font-size: clamp(11px, 3.1vw, 14px);
+    letter-spacing: 1px;
+  }
+  .tab-btn .dot {
+    position: absolute;
+    top: 3px;
+    right: 5px;
+    margin: 0;
+    vertical-align: baseline;
+  }
+  #layout { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }   /* 页签更紧凑，预留相应收窄 */
+
+  /* ---- A5 Toast 让位：双行顶栏之下、不遮抽屉按钮 ---- */
+  #toast { top: auto; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  .toast-item { max-width: calc(100vw - 32px); text-align: center; }
+
+  /* ---- A6 问道 rail / 仙途条渐隐（仅窄屏，宽屏不溢出不打雾） ---- */
+  .rail {
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 20px), transparent);
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 20px), transparent);
+  }
+  .rp-scroll {
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent);
+  }
+
+  /* ---- A7 触控目标与表单：行内小钮抬高度；输入字号 ≥16px 防 iOS 聚焦放大 ---- */
+  input[type="text"], input[type="number"], select, textarea { font-size: 16px; }
+  .bag-item-btns .btn { min-height: 36px; }
+  .log-tool, .log-toggle { min-height: 36px; }
+  .bt-actions .btn { min-height: 44px; }
+
+  /* ---- A1 剧情沉浸态：播放中隐藏底部导航与顶栏，剧情卷轴全屏化 ---- */
+  body.story-playing #tabs,
+  body.story-playing #top-bar { display: none; }
+  body.story-playing #layout { padding-bottom: 0; }
+  body.story-playing #story-modal { align-items: stretch; padding: 0; }
+  body.story-playing #story-modal .story-box {
+    width: 100%;
+    max-width: 100%;
+    max-height: none;
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
+    padding: calc(16px + env(safe-area-inset-top, 0px)) 18px calc(26px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------- ≤480px：小屏追加 ---------- */
+@media (max-width: 480px) {
+  /* 子页签横滑渐隐提示（五栏的坊市必溢出） */
+  .subtabs {
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent);
+  }
+  .btn-sm { min-height: 40px; }   /* 菜单/行内按钮触控目标保底（v24 的 42px 与此取交集） */
+}
+
+/* ---------- A8 弹窗滚动锁与防穿透（渐进增强：不支持 :has 的内核无感降级） ---------- */
+.modal { overscroll-behavior: contain; }
+body:has(.modal:not(.hidden)) { overflow: hidden; }
+
+/* ---------- A9 渲染性能：重渲染热区隔离布局重排范围 ---------- */
+#tab-content, #log { contain: layout style; }
+
+/* ---------- A10 平板竖屏（641~860px）：修炼页双列，不再一条长到底 ---------- */
+@media (min-width: 641px) and (max-width: 860px) {
+  #tab-content.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; align-content: start; }
+  #tab-content.grid2 > .card { margin-bottom: 0; }
+  #tab-content.grid2 > .span2 { grid-column: 1 / -1; }
 }

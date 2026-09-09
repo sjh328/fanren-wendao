@@ -13,6 +13,7 @@ const Meta = {
     this.data = {
       achv: (d && d.achv) || {},
       codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, (d && d.codex) || {}),
+      towerBest: (d && d.towerBest) || 0,   // v25：登天塔跨世最佳层
     };
   },
   save() {
@@ -30,7 +31,7 @@ const Meta = {
   /** 导入外部文本码时还原某存档位的成就图鉴 */
   importTo(slot, ext) {
     if (!ext || typeof ext !== 'object') return;
-    const raw = JSON.stringify({ achv: ext.achv || {}, codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, ext.codex || {}) });
+    const raw = JSON.stringify({ achv: ext.achv || {}, codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, ext.codex || {}), towerBest: ext.towerBest || 0 });
     try { if (Save.storage.setItem) Save.storage.setItem(Save.KEY + this.key(slot), raw); else Save.mem[Save.KEY + this.key(slot)] = raw; } catch (e) { /* ignore */ }
     if (slot == null || slot === Game.slot) this.load();
   },

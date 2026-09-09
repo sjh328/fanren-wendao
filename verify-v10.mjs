@@ -129,8 +129,8 @@ try {
       sidesN: QuestSys.SIDES.length,
     };
   });
-  f6.lines24 === 24 && f6.dupDiscuss === 0 && f6.sidesN === 20
-    ? pass('F6 文案与台词修瑕：24 人矩阵齐、论道句无重复填充、支线 20 则（v24 补三则）')
+  f6.lines24 === 24 && f6.dupDiscuss === 0 && f6.sidesN === 21
+    ? pass('F6 文案与台词修瑕：24 人矩阵齐、论道句无重复填充、支线 21 则（v25 补塔铃一声）')
     : fail('F6 台词/文案', JSON.stringify(f6));
 
   /* ================= B 战斗组（阶段一） ================= */
@@ -544,7 +544,7 @@ try {
     for (const l of Object.values(GameData.NPC_LINES)) if (!l.realm || l.realm.length < 3) realmOk = false;
     return { sides, realmOk };
   });
-  e5.sides === 20 && e5.realmOk ? pass('E5 支线 20 则（v24 补炼虚~大乘三则）/ 24 人 realm 台词 ≥3 句') : fail('E5 支线台词', JSON.stringify(e5));
+  e5.sides === 21 && e5.realmOk ? pass('E5 支线 21 则（v25 补塔铃一声）/ 24 人 realm 台词 ≥3 句') : fail('E5 支线台词', JSON.stringify(e5));
 
   /* ================= U 体验组（阶段六） ================= */
   // U1 属性构成明细：breakdown 来源合计与终值口径一致

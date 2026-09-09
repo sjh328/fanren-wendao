@@ -818,6 +818,7 @@ const Battle = {
           await this.wait(700);
           if (B.ctx.spar) NpcSys.afterSpar(p, B.ctx.npcId, false);
           if (B.ctx.dungeon) DungeonSys.onFlee();
+          if (B.ctx.tower) TowerSys.onFlee();   // v25：塔内遁走等同离塔，保全部收获
           this.end(false);
           return;
         }
@@ -1315,6 +1316,13 @@ const Battle = {
       return;
     }
     const st = Stat.compute(p);
+    // v25 登天塔：塔内战——先收战斗（腾出 Battle.active），再由 TowerSys 结算层奖并续层
+    if (B.ctx.tower) {
+      this.log(`${B.enemy.name} 寸寸崩解，化作满阶流萤——塔阶又向上亮起一层。`, 'log-system');
+      this.end(false);
+      await TowerSys.onVictory(B);
+      return;
+    }
     // v22 宗门大比：同门较技，点到为止，一轮战毕回传大比分
     if (B.ctx.tourney) {
       this.log('台上二人收势而立，裁判长老高声唱名。', 'log-system');
@@ -1440,6 +1448,14 @@ const Battle = {
       const stT = Stat.compute(p);
       p.hp = Math.max(1, Math.round(stT.maxHp * 0.3));
       SectSys.onTourneyRound(false);
+      this.end(false);
+      return;
+    }
+    // v25 登天塔：塔内败北不出人命——止步结算，无灵石修为折损
+    if (B.ctx.tower) {
+      const stT2 = Stat.compute(p);
+      p.hp = Math.max(1, Math.round(stT2.maxHp * 0.3));
+      TowerSys.onDefeat();
       this.end(false);
       return;
     }

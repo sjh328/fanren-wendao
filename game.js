@@ -685,6 +685,7 @@ const Meta = {
     this.data = {
       achv: (d && d.achv) || {},
       codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, (d && d.codex) || {}),
+      towerBest: (d && d.towerBest) || 0,   // v25：登天塔跨世最佳层
     };
   },
   save() {
@@ -702,14 +703,14 @@ const Meta = {
   /** 导入外部文本码时还原某存档位的成就图鉴 */
   importTo(slot, ext) {
     if (!ext || typeof ext !== 'object') return;
-    const raw = JSON.stringify({ achv: ext.achv || {}, codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, ext.codex || {}) });
+    const raw = JSON.stringify({ achv: ext.achv || {}, codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, ext.codex || {}), towerBest: ext.towerBest || 0 });
     try { if (Save.storage.setItem) Save.storage.setItem(Save.KEY + this.key(slot), raw); else Save.mem[Save.KEY + this.key(slot)] = raw; } catch (e) { /* ignore */ }
     if (slot == null || slot === Game.slot) this.load();
   },
 };
 
 /* ======================================================================
- * §1.10 增量扩展（v6）：成就系统 Achieve（v24 起共 51 项，含境界九档/职业/战斗/奇遇/转世/经营/大比）
+ * §1.10 增量扩展（v6）：成就系统 Achieve（v25 起共 56 项，含境界九档/职业/战斗/奇遇/转世/经营/大比/天塔/终章）
  * 完成奖励少量气运或灵石；进度存于 Meta，随档、转世不重置。
  * ====================================================================== */
 const Achieve = {
@@ -776,6 +777,12 @@ const Achieve = {
     { id: 'v12', cat: 'dao', name: '奥义宗师', desc: '三部功法修至大成', reward: { fortune: 10 }, test: p => Object.entries(p.gongfa || {}).filter(([id, g]) => GameData.ITEMS[id] && g.level >= GongfaSys.maxLevel(GameData.ITEMS[id])).length >= 3 },
     /* ---- v22 宗门大比 ---- */
     { id: 'w1', cat: 'battle', name: '大比魁首', desc: '于宗门大比三轮全胜夺魁', reward: { fortune: 10 }, test: p => (p.flags && p.flags.tourneyChamp) || false },
+    /* ---- v25 登天塔与真仙终章 ---- */
+    { id: 'tw1', cat: 'battle', name: '初登天塔', desc: '登天塔抵达第五层', reward: { stones: 800 }, prog: p => `${Math.min(5, p.counters.towerBest || 0)}/5`, test: p => (p.counters.towerBest || 0) >= 5 },
+    { id: 'tw2', cat: 'battle', name: '拾级而上', desc: '登天塔抵达第十二层', reward: { fortune: 6 }, prog: p => `${Math.min(12, p.counters.towerBest || 0)}/12`, test: p => (p.counters.towerBest || 0) >= 12 },
+    { id: 'tw3', cat: 'battle', name: '塔影同高', desc: '登天塔抵达第二十层', reward: { fortune: 10 }, prog: p => `${Math.min(20, p.counters.towerBest || 0)}/20`, test: p => (p.counters.towerBest || 0) >= 20 },
+    { id: 'tw4', cat: 'battle', name: '塔顶之风', desc: '登天塔抵达第三十层', reward: { fortune: 15 }, prog: p => `${Math.min(30, p.counters.towerBest || 0)}/30`, test: p => (p.counters.towerBest || 0) >= 30 },
+    { id: 'c10a', cat: 'exp', name: '仙门之外', desc: '踏出仙门，亲见门后天地', reward: { fortune: 20 }, test: p => (p.flags && p.flags.beyondGate) || false },
   ],
   /** 每次行动收尾时检查：解锁则发奖并播报 */
   check() {
@@ -897,6 +904,10 @@ LOCKS: {
     }
     if (p.realmIdx >= 1 && ((p.bounties && p.bounties.list) || []).some(bt => bt && bt.progress < bt.need)) {
       t.push({ text: '<b>新知</b>：坊市悬赏板贴出了新悬赏——猎杀目标游历时自动计入', go: 'shop:bounty' });
+    }
+    // v25 登天塔首遇新知
+    if (typeof TowerSys !== 'undefined' && TowerSys.unlockOk(p) && !(p.counters.towerWins || 0) && TowerSys.leftToday(p) > 0) {
+      t.push({ text: '<b>新知</b>：城西<b>登天塔</b>开塔了——每层一战、三层赠福、五层开箱，败北无性命之虞', go: 'map:tower' });
     }
     if (p.poison > cap * 0.5 && p.poison <= cap * 0.75) {
       t.push({ text: '<b>新知</b>：丹毒已过半——服丹宜缓，或备几枚解毒丹', go: 'cultivate' });
@@ -1500,6 +1511,10 @@ const GameData = {
     gf_hunyuan: { name: '混元真解',   type: 'gongfa', gtype: 'support', grade: 4, price: 0, desc: '秘境失传心法，混元一气，百脉皆通。', bonus: { cult: [15, 6], hpPct: [12, 5], mpPct: [12, 5] } },
     gf_niepan:  { name: '涅槃圣法',   type: 'gongfa', gtype: 'defense', grade: 5, price: 0, desc: '凤凰涅槃之秘法，置之死地而后生。', bonus: { hpPct: [18, 8], defPct: [15, 7] }, skill: { name: '涅槃重生', kind: 'heal', power: 55, mp: 30, desc: '沐浴火光，重续生机' } },
     m_gupian:   { name: '上古法宝碎片', type: 'material', tier: 4, price: 6000, desc: '上古法宝崩碎后的残片，隐有器灵低鸣。集齐九枚可炼化合成本命法宝。' },
+    /* ---- v25 登天塔：塔产奇物（宝箱掉落，可收藏可出售） ---- */
+    tw_sand:    { name: '天塔灵砂', type: 'material', tier: 3, price: 2400, desc: '登天塔石阶剥落的灵砂，触手生温，隐有塔铃声。' },
+    tw_iron:    { name: '云阶铁',   type: 'material', tier: 4, price: 5200, desc: '塔阶深处析出的玄铁，云纹天成，坚逾常铁。' },
+    tw_core:    { name: '镇塔符核', type: 'material', tier: 4, price: 9000, desc: '历代镇塔符箓燃尽后的符核，朱砂不褪，灵韵未散。' },
     z_benming:  { name: '本命法宝',   type: 'artifact', slot: 'accessory', grade: 5, price: 0, desc: '以九枚上古碎片炼化而成，与本命神魂相合，攻防气感皆得其益。', bonus: { atkPct: 12, defPct: 12, hpPct: 12, crit: 3, cult: 8, luck: 2 } },
     z_tianshu:  { name: '天枢战纹',   type: 'artifact', slot: 'accessory', grade: 2, price: 0, desc: '天枢殿长老亲手炼制的战纹玉符，勇猛精进。', bonus: { atkPct: 8, crit: 3 } },
     z_danxin:   { name: '丹心玉佩',   type: 'artifact', slot: 'accessory', grade: 2, price: 0, desc: '丹鼎阁信物，温养气脉，绵长持久。', bonus: { hpPct: 10, mpPct: 10 } },
@@ -2255,6 +2270,9 @@ const GameData = {
     c_zhenling: { name: '前世真灵', title: '血河首席 · 叛炉者', color: '#8a742e', stance: '友', role: '双世之魂',
       desc: '三百年前打翻万魂丹炉的人。不求你认下血河宗，只求你认下这笔执念——借刀是为了止杀。',
       look: { robe: '#b0a060', hair: '#e8e2d0', item: 'sword', aura: '#c9b660' } },
+    c_gatekeeper: { name: '守门人', title: '问道门阙 · 司门者', color: '#6a6a8a', stance: '中立', role: '终章引路人',   // v25 c10
+      desc: '立在仙门之下等了不知多少年的司门者。声音像采药老人，又像三百年前的自己——他说他等的是一个走完两世的人。',
+      look: { robe: '#6a6a8a', hair: '#d8d8e2', item: 'orb', aura: '#8a8ac2' } },
     c_zhangmen: { name: '白须掌门', title: '太衍宗掌门 · 白鹤真人', color: '#5a6a6a', stance: '友', role: '补过者',
       desc: '当年围杀时师尊被黑玉令牵着走。时日无多，有些账再烂在土里就没人记得了。',
       look: { robe: '#e8e4d8', hair: '#f0ede4', item: 'scroll', aura: '#8fa8a8' } },
@@ -3111,7 +3129,46 @@ c9_end: { id: 'c9_end', title: '终章 · 雷海了断', scenes: [
   { t: 'narr', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, text: '雷散，云开。你独自走下雷台，长阶九百级，没有一个人迎你。\n也好——修士的道途本就是一个人走。你在心里这样说了两遍，走到第七十三级的时候忽然想起：这句话，你已经骗了自己两世。' },
   { t: 'dialog', who: '@c_zhenling', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, title: '识海 · 烟散', text: '识海深处，前世真灵的声音淡得像一缕烟：「别学我。我独行了一世，把道走成了刀。\n我随劫火去了——往后的路你自己走。走慢些，替我把两世的风景，都看全。」' },
   { t: 'narr', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, text: '你在长阶尽头站定，回身望了一眼雷台。\n天光落在空无一人的台上，像落在一张刚收完子的棋枰上——这局棋，两世为人，你终于下完了。' },
-  { t: 'narr', text: '残玉化入你的眉心，化作一点朱砂。\n你回首人间，白衣胜雪——仙门之后，另有一番天地。\n\n【问道九章 · 终】' },
+  { t: 'narr', text: '残玉化入你的眉心，化作一点朱砂。\n你回首人间，白衣胜雪——仙门之后，另有一番天地。\n\n【问道九终 · 门启】' },
+] },
+
+  /* ============ v25 第十章 · 仙门之外（真仙终章） ============ */
+c10_open: { id: 'c10_open', title: '第十章 · 仙门之外', scenes: [
+  { t: 'narr', text: '飞升不是终点。\n天门在你身后缓缓合拢，眼前是一条悬于星海之上的长阶，尽头立着一座高逾云汉的门阙——上书两个古字：「问道」。\n阶下无风，星海无声，连时间都像是走累了。' },
+  { t: 'figure', chr: '@c_gatekeeper', art: '他立在门下，像已经立了一万年。' },
+  { t: 'dialog', who: '@c_gatekeeper', title: '门阙之下', text: '来了。\n老朽等一个走完两世的人，等了很久——你不必问老朽是谁。你听我这声音像谁，我便像谁。' },
+  { t: 'dialog', who: '@c_gatekeeper', title: '门规 · 三问', text: '这扇门后，没有仙官迎迓，没有琼楼玉宇，只有你要的那个答案。\n想进门，先过三关：修至真仙之境，是一；登天塔十层，塔影照心，是二；门前那一影，是三。\n——那一影，是你两世斩不尽的最后一缕「放不下」。它在你到门前，永远会先一步等在这里。' },
+  { t: 'narr', text: '守门人侧身让开半步。长阶尽头，一道与你一般无二的影子，正从门阙的阴影里缓缓站起。\n两世问道，最后一问——题面是你自己。' },
+] },
+
+c10_mid: { id: 'c10_mid', title: '第十章 · 门前影', scenes: [
+  { t: 'narr', text: '真仙之气灌体的那一夜，门阙下的星海忽然亮了。\n那道影子踏着长阶而来，每一步都踏在你两世的旧路上：青溪村的药香、雷台的天雷、识海里的那声「别学我」——它替你记着所有你不敢重温的时刻。' },
+  { t: 'dialog', who: '门前影', title: '长阶 · 无声', text: '（它不说话。它只是抬起手，用你的姿势，握住了你的剑。）\n（守门人的声音自星光里淡淡传来：「莫慌。它今日只来照你的面——何时应战，由你。斩它的资格，却要你自己挣来。」）' },
+  { t: 'narr', text: '影子开口了，声音是你的声音：\n「两世了。你放下了宗主，放下了血案，放下了执念——可你放下过你自己么？」\n它退回门阙的阴影里，化作一道与你形影不离的轮廓。守门人长叹：「去塔上走一遭罢。塔影照心，十层为凭——你若连自己的影子都照不透，门前那一战，赢不了。」' },
+  { t: 'narr', text: '你回望长阶之下，云海尽头，那座通天塔正在人间亮起第一层灯火。\n塔影照心，倒也是一场旧相识。' },
+] },
+
+c10_end: { id: 'c10_end', title: '终章 · 门后天地', scenes: [
+  { t: 'narr', text: '三关齐备，星海无风。\n门阙下那道与你形影不离的影子，终于踏出阴影，拔出了你的剑——两世问道的最后一战，对面站的是你自己。' },
+  { t: 'battle', foe: { name: '门前影 · 两世之我', power: 44, species: 'human', elite: true, scale: 1.1, bossArt: 'xuanYing' }, label: '问道门阙', text: '它用你的招式，走你的旧路，替你重来一遍你后悔过的每一战。\n你不必胜过它——你只需走出一条它没走过的路。', win: ['影子在你剑下寸寸碎裂，碎成漫天星砂。\n砂光里，你看见它笑了——用你自己的眉眼，笑得像卸下了千斤。\n「原来这条路，可以这样走。」它说。随后化作门阙上一点星光。'], lose: ['你被自己击落在长阶上。\n影子收剑而立，没有补刀——它有的是耐心，它就是你。\n「时候未到。」它说，「门后再会。」'], flagWin: 'gateShadowSlain' },
+  { t: 'narr', req: ['gateShadowSlain'], text: '影散的那一刻，门阙上「问道」二字亮作满辉，大门无风自开。\n守门人退后一步，朝你长揖到地。' },
+  { t: 'dialog', who: '@c_gatekeeper', req: ['gateShadowSlain'], title: '门开一线上', text: '老朽送过很多修士到这门前，你是头一个走完两世的。\n进去之前，容多嘴一句：门后没有你想找的「道」——道你早已走完了。门后只有一道题，出题的人是你自己。' },
+  { t: 'narr', req: ['gateShadowSlain'], text: '门内没有琼楼，没有仙宫。\n只有一条下山的小路，路旁一座茶棚。棚里说书人惊堂木一拍：「却说那位两世为人的修士，一剑斩了心魔，一步踏出仙门——列位看官，你道他求的甚么？」\n茶棚外，人间烟火气扑面而来。' },
+  { t: 'choice', req: ['gateShadowSlain'], text: '门后天地，一问当前：两世问道，你问的究竟是什么？', options: [
+    { text: '问道问道——问的是「路该怎么走」', value: 'road', flag: 'k10_final' },
+    { text: '问道问道——问的是「我该是谁」', value: 'self', flag: 'k10_final' },
+    { text: '不问了。往前走便是答案', value: 'walkon', flag: 'k10_final' },
+  ], pick: (v) => {
+    const p = Game.player;
+    p.flags.beyondGate = true;   // v25 残玉终响：全属性永久 +3%
+    KarmaSys.addFortune(6);
+    if (v === 'road') return ['你在茶棚坐下，听完了这一整段书。\n散场时说书人冲你一拱手：「客官，听出来了？这书里的道，是走出来的，不是问出来的。」\n你大笑出门。眉心朱砂轻轻一烫，两世记忆化作温润涟漪，漫过四肢百骸——残玉终响，道行更进一步。（气运 +6，全属性永久 +3%）'];
+    if (v === 'self') return ['你望着茶棚水缸里自己的倒影，看了很久。\n两世为人，名字换过，恩怨清过，唯一没换的是这双眼睛——它一直看着你想看的地方。\n眉心朱砂轻轻一烫，两世记忆化作温润涟漪，漫过四肢百骸——残玉终响，道行更进一步。（气运 +6，全属性永久 +3%）'];
+    return ['你没有回答，起身付了茶钱，沿着小路慢慢往下走。\n身后说书人的醒木又响，门前星光渐远——走着走着你忽然明白：不答，也是一种答案。\n眉心朱砂轻轻一烫，两世记忆化作温润涟漪，漫过四肢百骸——残玉终响，道行更进一步。（气运 +6，全属性永久 +3%）'];
+  } },
+  { t: 'dialog', who: '@c_ling', req: ['gateShadowSlain'], title: '眉心 · 朱砂低语', text: '……到站了……两班的马车，一趟都没误……\n往后没有我了……往后的路……你自己……慢慢走……' },
+  { t: 'narr', req: ['gateShadowSlain'], text: '朱砂的暖意淡去，像一声道晚安。\n小路尽头炊烟正起。你整了整衣冠，一步一步，走回人间。\n\n【问道十章 · 全终】' },
+  { t: 'narr', noFlag: 'gateShadowSlain', text: '你在长阶上坐了很久，影子便在你身边立了很久。\n星海无声，门阙的辉光缓缓暗了下去——不是拒绝，是「等你」。守门人的声音远远传来：「塔还在，路还在，你在。这一问，来日再答不迟。」\n\n【问道十章 · 未竟】' },
 ] },
 
   /* ============ v19 个人线 · 三幕角色弧光 ============ */
@@ -4773,6 +4830,7 @@ const Stat = {
       * ((typeof XinmoSys !== 'undefined' && XinmoSys.scale) ? XinmoSys.scale(p) : 1)
       * (1 + ((p.benming && p.benming.lv) || 0) * 0.01)
       * (1 + (p.codexBonus || 0) * 0.01)   // v24 图鉴大成：每类收集满全属性 +1%
+      * ((p.flags && p.flags.beyondGate) ? 1.03 : 1)   // v25 真仙终章「仙门之外」：残玉终响，全属性永久 +3%
       * ((typeof RankSys !== 'undefined' && RankSys.isTop && RankSys.isTop(p)) ? 1.02 : 1);   // v13 天下第一：全属性 +2%
 
     const maxHp = Math.round((90 + A.body * 15 + Math.pow(rp, 1.6) * 6 + (eq.hp || 0))
@@ -4840,6 +4898,7 @@ const Stat = {
       { name: '个人线', v: key === 'crit' || key === 'dodge' || key === 'pillPct' ? pctOf(pl, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(pl, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '洞府（聚灵/藏宝）', v: key === 'cultPct' ? ((p.cave && p.cave.lv) || 0) * 4 : key === 'stonePct' ? (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3) : 0 },
       { name: '轮回印记/残玉共鸣/心魔凝练', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed' ? Math.round(base * (((p.reinc ? (p.reinc.marks || 0) * 0.01 : 0) + ((p.jade || 0) * 0.015) + ((p.flags && p.flags.xinmoCleared) || 0) * 0.01 + ((p.benming && p.benming.lv) || 0) * 0.01)) * 100) / 100 : 0 },
+      { name: '仙门之外（残玉终响）', v: (p.flags && p.flags.beyondGate) && (key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed') ? Math.round(base * 0.03 * 100) / 100 : 0 },   // v25
     ].filter(x => Math.abs(x.v) > 0.01);
     return { final: st[key], src };
   },
@@ -8951,6 +9010,7 @@ const RankSys = {
       <div class="card-title">✦ 天骄榜 ${top ? '<span class="tag warn">天下第一 · 全属性 +2%</span>' : `<span class="tag">你的排名 · 第 ${myIdx + 1} 位</span>`}</div>
       <div class="card-desc">修行界二十四位风云人物与你的境界排名（按境界小层排布）。登顶者名动天下：全属性 +2%，每日另有气运小赏。</div>
       <div class="tip-line">· 你的综合战力 ⚔ <b>${Utils.fmtNum(Stat.power(p))}</b>（装备/功法/灵兽一应计入）——境界是名次，战力是底气。</div>
+      <div class="tip-line">· 登天塔本档最佳 <b>第 ${p.counters.towerBest || 0} 层</b>${(typeof Meta !== 'undefined' && Meta.data.towerBest) ? `｜跨世最佳 第 ${Meta.data.towerBest} 层` : ''}——塔中十层，亦是真仙终章的敲门砖。</div>
       <div class="rank-list">${rowsHtml}</div>
     </div>`;
   },
@@ -10249,6 +10309,263 @@ const DungeonSys = {
     Game.afterAction();
   },
 };
+/* ======================================================================
+ * §13.9 v25 登天塔 TowerSys（「掌上乾坤」新玩法）
+ * 筑基期解锁的无限爬塔：每层一战（塔内缩放守影），气血跨层延续；
+ * 每 3 层三选一「塔心祝福」，每 5 层开宝箱并回复三成气血；
+ * 败北止步不出人命（血线抬至三成，无灵石修为折损）。
+ * 每日免费 1 次 + 可灵石加购 1 次；最高层双记录（Meta 跨世 / counters 本档）。
+ * 祝福全部实现为敌人侧数值模组与结算乘数——零侵入战斗公式，出塔即弃。
+ * ====================================================================== */
+const TowerSys = {
+  /** 塔心祝福池（唯一不重复领取；mod 为乘算模组，heal/healChest 为加算回复比例） */
+  BUFFS: [
+    { id: 'twb_atk',    name: '慑魄低吟', desc: '塔内守影攻击 -12%', mod: { atk: 0.88 } },
+    { id: 'twb_def',    name: '碎甲罡风', desc: '塔内守影防御 -20%', mod: { def: 0.80 } },
+    { id: 'twb_hp',     name: '蚀灵血煞', desc: '塔内守影气血 -12%', mod: { hp: 0.88 } },
+    { id: 'twb_spd',    name: '迟滞咒纹', desc: '塔内守影身法 -15%', mod: { spd: 0.85 } },
+    { id: 'twb_all',    name: '塔灵低语', desc: '塔内守影全属性 -5%', mod: { all: 0.95 } },
+    { id: 'twb_stone',  name: '点石成金', desc: '层奖灵石 +40%', mod: { stone: 1.4 } },
+    { id: 'twb_stone2', name: '聚宝盆纹', desc: '层奖灵石 +25%（可与点石成金叠乘）', mod: { stone: 1.25 } },
+    { id: 'twb_exp',    name: '顿悟钟声', desc: '层奖修为 +50%', mod: { exp: 1.5 } },
+    { id: 'twb_exp2',   name: '壁上残篇', desc: '层奖修为 +25%（可与顿悟钟声叠乘）', mod: { exp: 1.25 } },
+    { id: 'twb_heal',   name: '回春玉露', desc: '每层战后半炷香回复 10% 气血', mod: { heal: 0.10 } },
+    { id: 'twb_heal2',  name: '深泉心露', desc: '每层战后半炷香回复 18% 气血', mod: { heal: 0.18 } },
+    { id: 'twb_chest',  name: '剥灵之手', desc: '宝箱所获翻倍', mod: { chest: 2 } },
+    { id: 'twb_healc',  name: '避劫福纹', desc: '每逢五层的大回复额外 +15%', mod: { healChest: 0.15 } },
+    { id: 'twb_risk',   name: '破釜沉舟', desc: '塔内守影防御 -30%，但攻击 +8%', mod: { def: 0.70, atk: 1.08 } },
+    { id: 'twb_guard',  name: '金刚护体', desc: '塔内守影攻击再 -8%', mod: { atk: 0.92 } },
+  ],
+
+  unlockOk(p) { return p.realmIdx >= 1; },
+  extraCost(p) { return Math.round(80 * GameData.stoneEco(p.realmIdx)); },
+
+  /** 塔状态自愈结构（老档无缝） */
+  state(p) {
+    if (!p.tower) p.tower = { best: 0, today: { day: 0, used: 0, bought: 0 }, run: null };
+    if (!p.tower.today || typeof p.tower.today.day !== 'number') p.tower.today = { day: 0, used: 0, bought: 0 };
+    return p.tower;
+  },
+  syncToday(p) {
+    const t = this.state(p);
+    const d = Math.floor(p.day || 0);
+    if (t.today.day !== d) { t.today.day = d; t.today.used = 0; t.today.bought = 0; }
+  },
+  leftToday(p) {
+    const t = this.state(p);
+    this.syncToday(p);
+    return Math.max(0, 1 + t.today.bought - t.today.used);
+  },
+  /** 灵石加购一次（每日至多一次） */
+  async buyExtra() {
+    const p = Game.player;
+    const t = this.state(p);
+    this.syncToday(p);
+    if (t.today.bought >= 1) { UI.toast('今日加购次数已用尽'); return; }
+    const cost = this.extraCost(p);
+    const ok = await UI.popup({
+      title: '登天塔 · 灵石加购',
+      html: `今日免费次数已尽。燃 <b class="hl">${Utils.fmtNum(cost)}</b> 灵石再登一次塔？<br><span class="tip-line">· 日限加购一次；塔内祝福与宝箱照常。</span>`,
+      options: [{ text: '加购一次', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    t.today.bought++;
+    Log.add(`你以 ${Utils.fmtNum(cost)} 灵石购得一次登天机缘。`, 'system');
+    UI.renderAll();
+  },
+
+  /** 已持祝福的乘算模组 */
+  modsOf(p) {
+    const run = this.state(p).run;
+    const mods = {};
+    if (!run) return mods;
+    for (const id of run.buffs) {
+      const b = this.BUFFS.find(x => x.id === id);
+      if (!b) continue;
+      for (const [k, v] of Object.entries(b.mod)) {
+        mods[k] = k === 'heal' || k === 'healChest' ? (mods[k] || 0) + v : (mods[k] || 1) * v;
+      }
+    }
+    return mods;
+  },
+  buffNames(p) {
+    const run = this.state(p).run;
+    if (!run || !run.buffs.length) return [];
+    return run.buffs.map(id => (this.BUFFS.find(b => b.id === id) || {}).name).filter(Boolean);
+  },
+
+  /** 塔内守影：以本档妖兽池为底，按境界 + 层数深度缩放（词缀/习性天然继承） */
+  foeFor(p, floor) {
+    const target = Utils.clamp(p.realmIdx * 4 + Math.floor((floor - 1) / 2), 0, 60);
+    const id = Utils.pick(Object.keys(GameData.MONSTERS));
+    const e = buildMonster(id, target - GameData.MONSTERS[id].power);
+    e.name = '塔影 · ' + e.name;
+    const m = this.modsOf(p);
+    const mul = (v, f) => Math.max(1, Math.round(v * f));
+    if (m.all) { e.hpMax = mul(e.hpMax, m.all); e.atk = mul(e.atk, m.all); e.def = mul(e.def, m.all); e.spd = Math.max(1, Math.round(e.spd * m.all)); }
+    if (m.hp) e.hpMax = mul(e.hpMax, m.hp);
+    if (m.atk) e.atk = mul(e.atk, m.atk);
+    if (m.def) e.def = mul(e.def, m.def);
+    if (m.spd) e.spd = Math.max(1, Math.round(e.spd * m.spd));
+    e.stoneGain = 0; e.dropTier = 0; e.rareDrop = null;   // 掉落由层奖统一接管
+    e.hp = e.hpMax;
+    return e;
+  },
+
+  /** 进塔（耗一次次数） */
+  enter() {
+    const p = Game.player;
+    if (!this.unlockOk(p)) { UI.toast('登天塔须筑基期方可登临'); return; }
+    const t = this.state(p);
+    this.syncToday(p);
+    if (this.leftToday(p) <= 0) { UI.toast('今日登天次数已尽——明日再来，或灵石加购'); return; }
+    t.today.used++;
+    t.run = { floor: 1, buffs: [] };
+    Log.add('你推开通天塔的厚重石门——塔内灵压如山，每层都有一头「守影」踞阶而踞。', 'story');
+    UI.renderAll();
+    this.nextFloor();
+  },
+  /** 中途退出后续登（run 仍在，接着打当前层） */
+  resume() {
+    const p = Game.player;
+    if (!this.state(p).run) { UI.toast('当前没有进行中的登塔'); return; }
+    this.nextFloor();
+  },
+  /** 收手离塔：已得层奖入囊，祝福清空 */
+  leave() {
+    const p = Game.player;
+    const t = this.state(p);
+    if (!t.run) return;
+    const cleared = t.run.floor - 1;
+    const nextNo = t.run.floor;
+    t.run = null;
+    Log.add(`你在第 ${nextNo} 层前收手离塔——${cleared} 层的收获落袋，塔门在身后缓缓合拢。`, 'story');
+    UI.renderAll();
+  },
+
+  /** 开打当前层 */
+  nextFloor() {
+    const p = Game.player;
+    const run = this.state(p).run;
+    if (!run) return;
+    if (p.hp <= 1) { UI.toast('气血近乎枯竭——先疗伤，或收手离塔'); UI.renderAll(); return; }
+    const foe = this.foeFor(p, run.floor);
+    Battle.start(null, {
+      tower: true,
+      enemy: foe,
+      mapName: `登天塔 · 第 ${run.floor} 层`,
+    });
+    const names = this.buffNames(p);
+    if (names.length && Battle.active) {
+      Battle.log(`【塔心祝福】${names.join('、')}——祝福之力与你同在。`, 'log-gain');
+      Battle.render();
+    }
+  },
+
+  /** 胜利结算（Battle.victory 的 ctx.tower 分支调用） */
+  async onVictory(B) {
+    const p = Game.player;
+    const t = this.state(p);
+    const run = t.run;
+    if (!run) return;
+    const mods = this.modsOf(p);
+    const exp = Math.round(B.enemy.expGain * 0.5 * (mods.exp || 1));
+    const stones = Math.round((8 + run.floor * 3) * GameData.stoneEco(p.realmIdx) * (mods.stone || 1));
+    Cultivate.addExp(p, exp);
+    Bag.addStones(stones);
+    p.counters.wins++;
+    p.counters.towerWins = (p.counters.towerWins || 0) + 1;
+    // 气血：五层大回复三成（+避劫福纹），其余层吃回春/深泉模组
+    const st = Stat.compute(p);
+    const healPct = (mods.heal || 0) + (run.floor % 5 === 0 ? 0.30 + (mods.healChest || 0) : 0);
+    if (healPct > 0) p.hp = Math.min(st.maxHp, p.hp + Math.round(st.maxHp * healPct));
+    // 纪录（本档 + 跨世）
+    if (run.floor > t.best) t.best = run.floor;
+    if (run.floor > (p.counters.towerBest || 0)) p.counters.towerBest = run.floor;
+    if (run.floor > (Meta.data.towerBest || 0)) { Meta.data.towerBest = run.floor; Meta.save(); }
+    const floor = run.floor;
+    run.floor++;
+    Log.add(`登天塔第 ${floor} 层已克——层奖：修为 +${Utils.fmtNum(exp)}、灵石 +${Utils.fmtNum(stones)}${healPct > 0 ? `，气血回复 ${Math.round(healPct * 100)}%` : ''}。`, 'gain');
+    Game.afterAction();
+    // 每 5 层：宝箱；每 3 层：祝福三选一；其余层自动续层
+    if (floor % 5 === 0) await this.chestStep(p, run, mods, floor);
+    else if (floor % 3 === 0) await this.blessStep(p, run, floor);
+    else { await Battle.wait(900); this.nextFloor(); }
+  },
+
+  /** 祝福三选一（第四项永远是离塔出口） */
+  async blessStep(p, run, floor) {
+    const pool = this.BUFFS.filter(b => !run.buffs.includes(b.id));
+    const picks = pool.sort(() => Math.random() - 0.5).slice(0, 3);
+    const v = await UI.popup({
+      title: `✦ 登天塔 · 第 ${floor} 层已克`,
+      html: `<div class="tip-line">塔心浮动，三道祝福任择其一——出塔即散，塔内长存。</div>
+        <div class="tip-line">· 已持 ${run.buffs.length} 道祝福：${this.buffNames(p).join('、') || '无'}</div>`,
+      options: [...picks.map(b => ({ text: `${b.name}｜${b.desc}`, value: b.id })),
+        { text: '收手离塔（带足战利品）', value: '__quit' }],
+    });
+    if (v === '__quit' || v == null) { if (v === '__quit') this.leave(); return; }
+    run.buffs.push(v);
+    const b = this.BUFFS.find(x => x.id === v);
+    UI.toast(`✦ 塔心祝福：${b.name}`);
+    Log.add(`塔心祝福入体：<b>${b.name}</b>——${b.desc}。`, 'gain');
+    this.nextFloor();
+  },
+
+  /** 五层宝箱 */
+  async chestStep(p, run, mods, floor) {
+    const bonus = Math.round(20 * GameData.stoneEco(p.realmIdx) * (mods.stone || 1));
+    Bag.addStones(bonus);
+    const pool = [
+      { id: 'm_gupian', w: 22 }, { id: 'tw_sand', w: 26 }, { id: 'tw_iron', w: 16 },
+      { id: 'tw_core', w: 8 }, { id: 'pill_ningqi', w: 16 }, { id: 'pill_xisui', w: 6 },
+      { id: 'tal_zilei', w: 6 },
+    ].filter(x => GameData.ITEMS[x.id]);
+    const total = pool.reduce((s, x) => s + x.w, 0);
+    let roll = Math.random() * total, drop = pool[0].id;
+    for (const x of pool) { roll -= x.w; if (roll <= 0) { drop = x.id; break; } }
+    const n = 1 + (mods.chest ? mods.chest - 1 : 0);
+    Bag.addItem(drop, n);
+    const def = GameData.ITEMS[drop];
+    const v = await UI.popup({
+      title: `✦ 登天塔 · 第 ${floor} 层宝箱`,
+      html: `<div class="tip-line">石阶尽头的鎏金宝箱应声而开——</div>
+        <div class="tip-line">· 灵石 <b class="hl">+${Utils.fmtNum(bonus)}</b>${mods.chest > 1 ? '（剥灵之手翻倍）' : ''}</div>
+        <div class="tip-line">· ${this.gradeName(def)} ×${n}</div>
+        <div class="tip-line">· 气血回复三成，塔风一清。</div>`,
+      options: [{ text: '继续登层', value: true, primary: true }, { text: '收手离塔（带足战利品）', value: '__quit' }],
+    });
+    if (v === '__quit' || v == null) { if (v === '__quit') this.leave(); return; }
+    this.nextFloor();
+  },
+
+  gradeName(def) {
+    const g = def.tier || def.grade || 1;
+    return `<b class="grade-${g}">${def.name}</b>`;
+  },
+
+  /** 塔内败北：止步结算，无折损（Battle.defeat 的 ctx.tower 分支调用） */
+  onDefeat() {
+    const p = Game.player;
+    const t = this.state(p);
+    const floor = t.run ? t.run.floor : 0;
+    t.run = null;
+    Log.add(`你在登天塔第 ${floor} 层力竭而止——塔影散去，已得收获尽数落袋，本档最佳 第 ${t.best} 层。`, 'warn');
+    UI.announce(`登天塔 · 止步第 ${floor} 层`, 'bad');
+  },
+  /** 塔内遁走：等同离塔（保全部收获） */
+  onFlee() {
+    const p = Game.player;
+    const t = this.state(p);
+    if (!t.run) return;
+    const cleared = t.run.floor - 1;
+    t.run = null;
+    Log.add(`你从第 ${cleared + 1} 层遁走离塔——好汉不吃眼前亏，${cleared} 层收获俱在。`, 'system');
+  },
+};
+
+window.TowerSys = TowerSys;   // v25：暴露全局以便调试与自动化测试
 /** 秘境深度对宝箱附加掉率的辅助 */
 function depth2(depth) { return depth * 2; }
 
@@ -11186,6 +11503,7 @@ const Battle = {
           await this.wait(700);
           if (B.ctx.spar) NpcSys.afterSpar(p, B.ctx.npcId, false);
           if (B.ctx.dungeon) DungeonSys.onFlee();
+          if (B.ctx.tower) TowerSys.onFlee();   // v25：塔内遁走等同离塔，保全部收获
           this.end(false);
           return;
         }
@@ -11683,6 +12001,13 @@ const Battle = {
       return;
     }
     const st = Stat.compute(p);
+    // v25 登天塔：塔内战——先收战斗（腾出 Battle.active），再由 TowerSys 结算层奖并续层
+    if (B.ctx.tower) {
+      this.log(`${B.enemy.name} 寸寸崩解，化作满阶流萤——塔阶又向上亮起一层。`, 'log-system');
+      this.end(false);
+      await TowerSys.onVictory(B);
+      return;
+    }
     // v22 宗门大比：同门较技，点到为止，一轮战毕回传大比分
     if (B.ctx.tourney) {
       this.log('台上二人收势而立，裁判长老高声唱名。', 'log-system');
@@ -11808,6 +12133,14 @@ const Battle = {
       const stT = Stat.compute(p);
       p.hp = Math.max(1, Math.round(stT.maxHp * 0.3));
       SectSys.onTourneyRound(false);
+      this.end(false);
+      return;
+    }
+    // v25 登天塔：塔内败北不出人命——止步结算，无灵石修为折损
+    if (B.ctx.tower) {
+      const stT2 = Stat.compute(p);
+      p.hp = Math.max(1, Math.round(stT2.maxHp * 0.3));
+      TowerSys.onDefeat();
       this.end(false);
       return;
     }
@@ -12094,17 +12427,11 @@ const Tutorial = {
       this.steps.map((_, i) => `<span class="${i === this.idx ? 'on' : ''}"></span>`).join('');
     const next = document.querySelector('[data-action="tut-next"]');
     if (next) next.textContent = this.idx === this.steps.length - 1 ? '踏入仙途' : '下一步';
-    // v18：聚光高亮目标区域；v22：目标面板在移动端收进了抽屉——先拉开再高亮
+    // v18：聚光高亮目标区域；v25：移动端不再自动拉开抽屉——开局第一屏必须完整可退，只做高亮提示
     document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
     if (s.target) {
       const el = document.querySelector(s.target);
-      if (el) {
-        if (window.innerWidth <= 860 && !el.classList.contains('drawer-open')
-          && (el.id === 'panel-left' || el.id === 'panel-right')) {
-          UI.toggleDrawer(el.id === 'panel-left' ? 'left' : 'right');
-        }
-        el.classList.add('tut-highlight');
-      }
+      if (el) el.classList.add('tut-highlight');
     }
   },
   next() {
@@ -12115,6 +12442,7 @@ const Tutorial = {
   finish() {
     document.getElementById('tutorial').classList.add('hidden');
     document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
+    UI.closeDrawers();   // v25：教程毕抽屉自愈——开局第一屏永远从完整主界面开始
     try {
       if (Save.storage.setItem) Save.storage.setItem('fanren_wd_tutorial', '1');
       else Save.mem['fanren_wd_tutorial'] = '1';
@@ -12170,6 +12498,8 @@ const Story = {
       document.getElementById('app').appendChild(modal);
     }
     modal.classList.remove('hidden');
+    // v25 移动端沉浸化：剧情播放期间隐藏底部导航/顶栏（CSS body.story-playing），桌面无感
+    if (typeof UI !== 'undefined' && UI.storyImmersive) UI.storyImmersive(true);
     if (!modal._twWired) {
       modal._twWired = true;
       modal.addEventListener('click', (e) => {
@@ -12330,6 +12660,7 @@ const Story = {
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 剧情毕归平静
     const modal = document.getElementById('story-modal');
     if (modal) modal.classList.add('hidden');
+    if (typeof UI !== 'undefined' && UI.storyImmersive) UI.storyImmersive(false);   // v25 沉浸态摘除
     if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 关层后公告归位
     if (c && c.onEnd) { const fn = c.onEnd; c.onEnd = null; fn(); }
     // 队列中的下一段剧情自动衔接
@@ -12480,8 +12811,8 @@ window.Story = Story;   // v19：暴露全局以便调试与自动化测试
  * ====================================================================== */
 const QuestSys = {
   checking: false,
-  CN9: ['一', '二', '三', '四', '五', '六', '七', '八', '九'],
-  /** 主线九章（supR：境界领先到该大境界时，本章目标自动追认完成——中期入坑亦可补剧情） */
+  CN9: ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'],
+  /** 主线十章（supR：境界领先到该大境界时，本章目标自动追认完成——中期入坑亦可补剧情） */
   CHAPTERS: [
     {
       id: 'c1', title: '尘缘', supR: 2,
@@ -12589,7 +12920,7 @@ const QuestSys = {
       reward: { stones: 100000, fortune: 10, items: { pill_taichu: 1 } },
     },
     {
-      id: 'c9', title: '天劫决战', supR: 999,
+      id: 'c9', title: '天劫决战', supR: 10,   // v25：真仙之后由 c10 接棒终章，本章可追认
       story: '渡劫雷云压顶之际，一道黑影踏雷而来——三百年前将你打下诛仙台的血河宗主，竟也踏入了这一方天地！\n他要在天劫中夺舍转世的你，炼成万魂丹最后的主魂。\n雷海之上，新旧两世，终须一战。',
       goal: '飞升雷台，即决战之地。渡劫、斩敌、飞升——三百年恩怨，雷海了结。',
       steps: [
@@ -12600,6 +12931,19 @@ const QuestSys = {
       ending: '第九道天雷落下时，你引动残玉中前世的全部血煞，与宗主的魔身同缚雷心。雷光吞没一切的刹那，你听见宗主的咆哮化作一声长叹：「三百年……原来输的是我心魔。」\n雷散，云开。残玉化入你的眉心，化作一点朱砂。你回首人间，白衣胜雪——仙门之后，另有一番天地。',
       bonus: { desc: '大道共鸣（激活一条道韵协同）', go: 'gongfa', done: p => (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) >= 1, prog: p => `${Math.min(1, (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) || 0)}/1`, reward: { fortune: 10 } },
       reward: { stones: 200000, fortune: 20 },
+    },
+    {
+      id: 'c10', title: '仙门之外', supR: 999,   // v25 新终章：飞升之后，门后天地
+      story: '飞升不是终点。\n天门在你身后缓缓合拢，眼前是一条悬于星海之上的长阶，尽头立着一座高逾云汉的门阙——上书两个古字：「问道」。\n门下立着一位守门人，看不清面目，声音却熟悉得让你心口一紧：像是采药老人，又像是三百年前的自己。\n「来了。」他说，「等一个走完两世的人，等了很久。」',
+      goal: '踏出仙门，亲见门后天地。斩妖证道、登塔十层以证心迹——两世问道的最后一问，就在门阙之下。',
+      steps: [
+        { desc: '修至真仙初期', done: p => p.realmIdx >= 9, prog: p => `${p.realmIdx >= 9 ? 1 : 0}/1` },
+        { desc: '塔影照心（登天塔抵达第十层）', done: p => (p.counters.towerBest || 0) >= 10, prog: p => `${Math.min(10, p.counters.towerBest || 0)}/10` },
+        { desc: '斩妖证道（累计击败精英妖兽二十头）', done: p => (p.counters.killsElite || 0) >= 20, prog: p => `${Math.min(20, p.counters.killsElite || 0)}/20` },
+      ],
+      ending: '门前影散作星砂，长阶尽头的大门应声而开。\n门后没有琼楼玉宇，没有仙官迎迓——只有一条下山的小路，路边茶棚里有说书人正拍醒木：「却说那位两世为人的修士，一剑斩了心魔，一步踏出仙门……」\n你忽然明白了守门人最后那句话：「问道问道——问的不是天，是自己。」\n眉心朱砂轻轻一烫，残玉两世的记忆化作一道温润涟漪，漫过四肢百骸。（全属性永久 +3%）',
+      bonus: { desc: '塔顶之风（登天塔抵达二十层）', go: 'map:tower', done: p => (p.counters.towerBest || 0) >= 20, prog: p => `${Math.min(20, p.counters.towerBest || 0)}/20`, reward: { fortune: 12 } },
+      reward: { stones: 800000, fortune: 25, items: { pill_zaohua: 1 } },
     },
   ],
   /** 奇遇录 · 支线十二则（minRealm 解锁境界；v19 起含 NPC 绑定与任务链） */
@@ -12807,6 +13151,17 @@ const QuestSys = {
       ending: '你陪他在约定的渡口坐了整整三日。刀客没来——来的是一封迟到了二十年的信：当年卖他天机的术士临终忏悔，那「死期」，原是他编来赖账的谎话。唐三思把信读了三遍，忽然大笑，笑着笑着眼里就湿了：「好你个老骗子——这条消息，我买了半辈子，值！」他将半生的消息册尽数赠你：「往后坊市的消息，你替它们开口。」',
       reward: { stones: 60000, insight: 10 },
     },
+    {
+      id: 's21', title: '塔铃声又响', minRealm: 1,   // v25 登天塔主题支线
+      story: '坊市孩童间传着一首新童谣：「天塔铃，铃一声，塔里藏着一斗金。」你初闻只当笑谈——直到某夜塔铃声穿过半座城，落在你窗前，铛、铛、铛，敲的竟是你心跳的节拍。城西那座闭了百年的登天塔，当夜开了门。',
+      steps: [
+        { desc: '初叩塔门（首次挑战登天塔）', done: p => (p.counters.towerWins || 0) >= 1 },
+        { desc: '拾级而上（累计克塔五层）', done: p => (p.counters.towerBest || 0) >= 5 },
+        { desc: '塔中拾遗（取得一件塔产奇物）', done: p => ['tw_sand', 'tw_iron', 'tw_core'].some(id => (p.bag[id] || 0) > 0) },
+      ],
+      ending: '第五层的鎏金宝箱底下，你摸出一只小小的铜铃——塔灵的声音自铃中响起，懒洋洋的：「百年来头一个爬到这儿的人，这个给你。别问有甚么用——塔铃声又响的时候，你自然会知道。」\n你握着铜铃走出塔门。身后的塔影在暮色里轻轻晃了晃，像在人间的黄昏里，伸了一个懒腰。',
+      reward: { stones: 3000, fortune: 4, items: { tw_sand: 1 } },
+    },
   ],
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
   /** v12 每章各目标对应的功能页签（供焦点条「前往」直达；v22 支持子页签深链 tab:sub） */
@@ -12820,6 +13175,7 @@ const QuestSys = {
     c7: ['cultivate', 'map:atlas', 'shop:market'],
     c8: ['cultivate', 'jianghu', 'gongfa'],
     c9: ['cultivate', 'map:atlas', 'cultivate'],
+    c10: ['cultivate', 'map:tower', 'map:atlas'],   // v25：塔影照心/斩妖证道直达天塔舆图
   },
   /** v12 有效章节序号：跳过「境界已领先、目标全部自动追认」的章节（正式结算仍在 check 中逐章进行） */
   currentChapterIdx(p) {
@@ -12981,7 +13337,7 @@ const QuestSys = {
           } else { after(); }
         }
       } else {
-        Log.add('✦ 问道九章 · 全部完结！残玉化砂，仙路已成。', 'realm');
+        Log.add('✦ 问道十章 · 全部完结！残玉化砂，仙路已成——门后天地，任君遨游。', 'realm');
         UI.renderAll();
         Save.autoSave(true);
       }
@@ -13150,6 +13506,7 @@ const QuestSys = {
     c7_end: { open: '应帖赴会，明查当面对质', dark: '绕行暗访黑玉令', blade: '借政敌之刀，坐观虎斗' },
     c8_end: { together: '立誓同生共死', entrust: '托付后事于至交', alone: '独自承担因果' },
     c9_end: { redeem: '渡宗主残魂往生', execute: '一剑斩尽，恩怨两清', walk: '转身不问，随劫火而灭' },
+    c10_end: { road: '问道问的是「路该怎么走」', self: '问道问的是「我该是谁」', walkon: '不问了，往前走便是答案' },
   },
   /** v19 问道录 2.0：剧情回顾 / 人物志 / 大事年表 / 抉择树（四页签） */
   openArchive(tab = 'story') {
@@ -13518,6 +13875,7 @@ const UI = {
       'cave:beast': tripBack,
       map: !!(p.world && p.world.pending) || gupianOk,
       'map:realm': gupianOk,
+      'map:tower': !!(p.tower && p.tower.run),   // v25：登塔中途离开，红点提示可续
       jianghu: NpcSys.grudgeCount(p) > 0 || (typeof PersonalSys !== 'undefined' && PersonalSys.anyAvailable(p)),
       shop: bountyOk || oddHot,
       'shop:bounty': bountyOk,
@@ -13542,7 +13900,8 @@ const UI = {
     const htmls = tabs.map(t => {
       const dot = !!dots[t.id];
       const lock = Guide.tabLocked(t.id);   // v6：分步解锁
-      return `<button class="tab-btn ${Game.activeTab === t.id ? 'active' : ''} ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${t.id}" ${lock ? `title="${lock}"` : ''}>${lock ? '🔒' : ''}${t.name}${dot ? '<span class="dot"></span>' : ''}</button>`;
+      // v25 移动端：锁定页签只渲染锁形不渲染文字——底部导航 320px 也不再被撑爆
+      return `<button class="tab-btn ${Game.activeTab === t.id ? 'active' : ''} ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${t.id}" ${lock ? `title="${lock}"` : ''}>${lock ? '🔒' : `<i class="tab-name">${t.name}</i>`}${dot ? '<span class="dot"></span>' : ''}</button>`;
     });
     // v12 页签分组：修炼·问道｜游历·江湖｜坊市·宗门｜功法
     const SEPS = new Set([1, 3, 5]);
@@ -13565,6 +13924,7 @@ const UI = {
     ],
     map: [
       { id: 'atlas', name: '舆 图' }, { id: 'realm', name: '秘 境' }, { id: 'world', name: '天 下' },
+      { id: 'tower', name: '天 塔' },
     ],
   },
   /** 当前页签生效的子页签（无记忆或记忆已失效时回落到首栏） */
@@ -13706,10 +14066,15 @@ const UI = {
     };
     const rpTrack = Array.from({ length: 10 }, (_, r) => rpNode(r))
       .join('<span class="rp-line"></span>');
+    // v25：仙途条横向滚动容器——渲染后自动把当前境界滚进视野（窄屏十境不再溢出裁切）
+    setTimeout(() => {
+      const cur = document.querySelector('#tab-content .rp-node.cur');
+      cur?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    }, 60);
     return `
       <div class="card span2 realm-path-card">
         <div class="card-title">✦ 仙途 <span style="font-size:12px;color:var(--text-dim)">十境三十六层 · 步步登天</span></div>
-        <div class="rp-track">${rpTrack}</div>
+        <div class="rp-scroll"><div class="rp-track">${rpTrack}</div></div>
       </div>
       <div class="card card-main">
         <div class="card-title">✦ 修行 <span style="font-size:12px;color:var(--text-dim)">当前层尚需修为 ${Utils.fmtNum(Math.max(0, need - p.exp))}${est > 0 && need > p.exp ? ` · 约需 ${Math.max(1, Math.ceil((need - p.exp) / est * 3))} 日` : ''}</span></div>
@@ -13905,8 +14270,49 @@ const UI = {
       }).join(''),
       realm: () => this.renderDungeonSection(),
       world: () => this.renderWorldCard() + this.renderSignCard(),
+      tower: () => this.renderTowerSection(),
     };
     return (R[sub] || R.atlas)();
+  },
+
+  /* ---------- v25 登天塔 ---------- */
+  renderTowerSection() {
+    const p = Game.player;
+    const t = TowerSys.state(p);
+    const bestAll = (typeof Meta !== 'undefined' && Meta.data.towerBest) || 0;
+    if (!TowerSys.unlockOk(p)) {
+      return `<div class="card tower-card">
+        <div class="card-title">✦ 登天塔</div>
+        <div class="card-desc">城西那座通天石塔直插云霄，塔门紧闭——塔灵的声音隐隐传来：<b>「筑基之上，方可登临。」</b><br><span class="tip-line">· 突破至筑基期后，此塔每日可免费登临一次。</span></div>
+      </div>`;
+    }
+    const run = t.run;
+    const left = TowerSys.leftToday(p);
+    const buffs = TowerSys.buffNames(p);
+    const head = `
+      <div class="card-title">✦ 登天塔
+        <span class="tag">本档最佳 第 ${t.best} 层</span>
+        ${bestAll > 0 ? `<span class="tag">跨世最佳 第 ${bestAll} 层</span>` : ''}
+      </div>
+      <div class="card-desc">塔影通天，每层踞一头「守影」。气血跨层延续，<b>每逢三层</b>塔心赠祝福（三选一），<b>每逢五层</b>开宝箱并回复三成气血。败北止步，性命无虞——已得层奖尽数入囊。</div>
+      <div class="tip-line">· 今日剩余次数：<b>${left}</b>（免费 1 次/日${t.today.bought ? '，已加购 1 次' : ''}）</div>`;
+    if (run) {
+      return `<div class="card tower-card">
+        ${head}
+        <div class="tip-line">· 当前登至<b class="hl">第 ${run.floor} 层</b>${buffs.length ? `｜祝福 ${run.buffs.length} 道：${buffs.join('、')}` : ''}</div>
+        <div class="action-row">
+          <button class="btn btn-primary" data-action="act-tower-resume">继续登层</button>
+          <button class="btn" data-action="act-tower-quit">收手离塔</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="card tower-card">
+      ${head}
+      <div class="action-row">
+        <button class="btn btn-primary btn-glow" data-action="act-tower-enter">挑战登天塔</button>
+        ${left <= 0 ? `<button class="btn" data-action="act-tower-buy">灵石加购一次（${Utils.fmtNum(TowerSys.extraCost(p))}）</button>` : ''}
+      </div>
+    </div>`;
   },
 
   /* ---------- §23 天下大势 ---------- */
@@ -14762,6 +15168,11 @@ const UI = {
     document.getElementById('drawer-backdrop')?.classList.remove('on');
   },
 
+  /* ---------- v25 剧情沉浸态：移动端播放剧情时隐藏底部导航与顶栏（桌面样式不分叉，无感） ---------- */
+  storyImmersive(on) {
+    document.body.classList.toggle('story-playing', !!on);
+  },
+
   /* ---------- 通用弹窗（Promise 风格，resolve 选项的 value） ---------- */
   _popupResolve: null,
   _popupOptions: [],
@@ -14947,6 +15358,13 @@ const UI = {
         <div class="tip-line">· 闲置法器可在祭炼堂「熔铸回收」分解成玄铁矿与灵石——天级神兵也按品阶兜底计价。</div>
         <div class="tip-line">· 灵田灵兽寻宝有「归来」红点提醒；奇市开市、拍期将止也会在页签上亮灯。</div>
       </details>
+      <details class="fold"><summary>✦ 登天塔（v25）</summary>
+        <div class="tip-line">· 筑基期解锁，游历·天塔进入。每层一头「守影」，强度随<b>层数与你的境界</b>爬坡；气血跨层延续，量力而登。</div>
+        <div class="tip-line">· 每逢<b>三层</b>塔心赠祝福（三选一，塔内有效、出塔即散）；每逢<b>五层</b>开宝箱并回复三成气血。</div>
+        <div class="tip-line">· 层间可选「收手离塔」带走全部层奖；败北亦无性命之虞（无灵石修为折损），只是止步。</div>
+        <div class="tip-line">· 每日免费一次，灵石可加购一次；最高层纪录跨世留存——转世重开亦可冲榜。</div>
+        <div class="tip-line">· 塔中宝箱藏<b>塔产奇物</b>（天塔灵砂/云阶铁/镇塔符核），可收藏可出售；真仙终章亦须塔中十层证道。</div>
+      </details>
       <details class="fold"><summary>✦ 杂录</summary>
         <div class="tip-line">· 快捷键：剧情中 Enter/空格 翻页；战斗中 1~5 普攻/法诀/防御/道具/遁走；QWERTASD 切页签；ESC 关层。</div>
         <div class="tip-line">· 离线时灵田照常生长、修为按修炼四成效率自行精进（上限 30 日），回归时入账。</div>
@@ -15005,12 +15423,15 @@ const UI = {
 
   /* ---------- Toast / 存档指示 ---------- */
   toast(text, err = false) {
+    const wrap = this.el['toast'];
+    // v25 移动端补课：同屏至多 3 条，超出移除最旧——成就/主线/百科同帧连发不再叠罗汉遮顶栏
+    while (wrap.children.length >= 3) wrap.firstElementChild?.remove();
     const div = document.createElement('div');
     div.className = 'toast-item' + (err ? ' err' : '');
     div.textContent = text;
-    this.el['toast'].appendChild(div);
+    wrap.appendChild(div);
     setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity .4s'; }, 1600);
-    setTimeout(() => div.remove(), 2100);
+    setTimeout(() => { div.remove(); }, 2100);
   },
   /** v21：行动浮字——所得在触发按钮上方飘起渐散（数字动效关闭时不显示） */
   float(text, color = 'var(--exp)', anchor) {
@@ -15474,6 +15895,10 @@ const Game = {
     /* --- 游历 --- */
     'act-explore': (d) => Explore.go(d.map),
     'act-explore-multi': (d) => Explore.goMulti(d.map, 5),   // v23 连续探索
+    'act-tower-enter': () => TowerSys.enter(),
+    'act-tower-resume': () => TowerSys.resume(),
+    'act-tower-quit': () => TowerSys.leave(),
+    'act-tower-buy': () => TowerSys.buyExtra(),
     'act-buy-multi': (d) => ShopSys.buyMulti(d.item, 5),   // v23 批量购买
     /* --- 坊市 --- */
     'act-buy': (d) => ShopSys.buy(d.item),

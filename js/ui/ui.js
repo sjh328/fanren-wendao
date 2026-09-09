@@ -249,6 +249,7 @@ const UI = {
       'cave:beast': tripBack,
       map: !!(p.world && p.world.pending) || gupianOk,
       'map:realm': gupianOk,
+      'map:tower': !!(p.tower && p.tower.run),   // v25：登塔中途离开，红点提示可续
       jianghu: NpcSys.grudgeCount(p) > 0 || (typeof PersonalSys !== 'undefined' && PersonalSys.anyAvailable(p)),
       shop: bountyOk || oddHot,
       'shop:bounty': bountyOk,
@@ -273,7 +274,8 @@ const UI = {
     const htmls = tabs.map(t => {
       const dot = !!dots[t.id];
       const lock = Guide.tabLocked(t.id);   // v6：分步解锁
-      return `<button class="tab-btn ${Game.activeTab === t.id ? 'active' : ''} ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${t.id}" ${lock ? `title="${lock}"` : ''}>${lock ? '🔒' : ''}${t.name}${dot ? '<span class="dot"></span>' : ''}</button>`;
+      // v25 移动端：锁定页签只渲染锁形不渲染文字——底部导航 320px 也不再被撑爆
+      return `<button class="tab-btn ${Game.activeTab === t.id ? 'active' : ''} ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${t.id}" ${lock ? `title="${lock}"` : ''}>${lock ? '🔒' : `<i class="tab-name">${t.name}</i>`}${dot ? '<span class="dot"></span>' : ''}</button>`;
     });
     // v12 页签分组：修炼·问道｜游历·江湖｜坊市·宗门｜功法
     const SEPS = new Set([1, 3, 5]);
@@ -296,6 +298,7 @@ const UI = {
     ],
     map: [
       { id: 'atlas', name: '舆 图' }, { id: 'realm', name: '秘 境' }, { id: 'world', name: '天 下' },
+      { id: 'tower', name: '天 塔' },
     ],
   },
   /** 当前页签生效的子页签（无记忆或记忆已失效时回落到首栏） */
@@ -437,10 +440,15 @@ const UI = {
     };
     const rpTrack = Array.from({ length: 10 }, (_, r) => rpNode(r))
       .join('<span class="rp-line"></span>');
+    // v25：仙途条横向滚动容器——渲染后自动把当前境界滚进视野（窄屏十境不再溢出裁切）
+    setTimeout(() => {
+      const cur = document.querySelector('#tab-content .rp-node.cur');
+      cur?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    }, 60);
     return `
       <div class="card span2 realm-path-card">
         <div class="card-title">✦ 仙途 <span style="font-size:12px;color:var(--text-dim)">十境三十六层 · 步步登天</span></div>
-        <div class="rp-track">${rpTrack}</div>
+        <div class="rp-scroll"><div class="rp-track">${rpTrack}</div></div>
       </div>
       <div class="card card-main">
         <div class="card-title">✦ 修行 <span style="font-size:12px;color:var(--text-dim)">当前层尚需修为 ${Utils.fmtNum(Math.max(0, need - p.exp))}${est > 0 && need > p.exp ? ` · 约需 ${Math.max(1, Math.ceil((need - p.exp) / est * 3))} 日` : ''}</span></div>
@@ -636,8 +644,49 @@ const UI = {
       }).join(''),
       realm: () => this.renderDungeonSection(),
       world: () => this.renderWorldCard() + this.renderSignCard(),
+      tower: () => this.renderTowerSection(),
     };
     return (R[sub] || R.atlas)();
+  },
+
+  /* ---------- v25 登天塔 ---------- */
+  renderTowerSection() {
+    const p = Game.player;
+    const t = TowerSys.state(p);
+    const bestAll = (typeof Meta !== 'undefined' && Meta.data.towerBest) || 0;
+    if (!TowerSys.unlockOk(p)) {
+      return `<div class="card tower-card">
+        <div class="card-title">✦ 登天塔</div>
+        <div class="card-desc">城西那座通天石塔直插云霄，塔门紧闭——塔灵的声音隐隐传来：<b>「筑基之上，方可登临。」</b><br><span class="tip-line">· 突破至筑基期后，此塔每日可免费登临一次。</span></div>
+      </div>`;
+    }
+    const run = t.run;
+    const left = TowerSys.leftToday(p);
+    const buffs = TowerSys.buffNames(p);
+    const head = `
+      <div class="card-title">✦ 登天塔
+        <span class="tag">本档最佳 第 ${t.best} 层</span>
+        ${bestAll > 0 ? `<span class="tag">跨世最佳 第 ${bestAll} 层</span>` : ''}
+      </div>
+      <div class="card-desc">塔影通天，每层踞一头「守影」。气血跨层延续，<b>每逢三层</b>塔心赠祝福（三选一），<b>每逢五层</b>开宝箱并回复三成气血。败北止步，性命无虞——已得层奖尽数入囊。</div>
+      <div class="tip-line">· 今日剩余次数：<b>${left}</b>（免费 1 次/日${t.today.bought ? '，已加购 1 次' : ''}）</div>`;
+    if (run) {
+      return `<div class="card tower-card">
+        ${head}
+        <div class="tip-line">· 当前登至<b class="hl">第 ${run.floor} 层</b>${buffs.length ? `｜祝福 ${run.buffs.length} 道：${buffs.join('、')}` : ''}</div>
+        <div class="action-row">
+          <button class="btn btn-primary" data-action="act-tower-resume">继续登层</button>
+          <button class="btn" data-action="act-tower-quit">收手离塔</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="card tower-card">
+      ${head}
+      <div class="action-row">
+        <button class="btn btn-primary btn-glow" data-action="act-tower-enter">挑战登天塔</button>
+        ${left <= 0 ? `<button class="btn" data-action="act-tower-buy">灵石加购一次（${Utils.fmtNum(TowerSys.extraCost(p))}）</button>` : ''}
+      </div>
+    </div>`;
   },
 
   /* ---------- §23 天下大势 ---------- */
@@ -1493,6 +1542,11 @@ const UI = {
     document.getElementById('drawer-backdrop')?.classList.remove('on');
   },
 
+  /* ---------- v25 剧情沉浸态：移动端播放剧情时隐藏底部导航与顶栏（桌面样式不分叉，无感） ---------- */
+  storyImmersive(on) {
+    document.body.classList.toggle('story-playing', !!on);
+  },
+
   /* ---------- 通用弹窗（Promise 风格，resolve 选项的 value） ---------- */
   _popupResolve: null,
   _popupOptions: [],
@@ -1678,6 +1732,13 @@ const UI = {
         <div class="tip-line">· 闲置法器可在祭炼堂「熔铸回收」分解成玄铁矿与灵石——天级神兵也按品阶兜底计价。</div>
         <div class="tip-line">· 灵田灵兽寻宝有「归来」红点提醒；奇市开市、拍期将止也会在页签上亮灯。</div>
       </details>
+      <details class="fold"><summary>✦ 登天塔（v25）</summary>
+        <div class="tip-line">· 筑基期解锁，游历·天塔进入。每层一头「守影」，强度随<b>层数与你的境界</b>爬坡；气血跨层延续，量力而登。</div>
+        <div class="tip-line">· 每逢<b>三层</b>塔心赠祝福（三选一，塔内有效、出塔即散）；每逢<b>五层</b>开宝箱并回复三成气血。</div>
+        <div class="tip-line">· 层间可选「收手离塔」带走全部层奖；败北亦无性命之虞（无灵石修为折损），只是止步。</div>
+        <div class="tip-line">· 每日免费一次，灵石可加购一次；最高层纪录跨世留存——转世重开亦可冲榜。</div>
+        <div class="tip-line">· 塔中宝箱藏<b>塔产奇物</b>（天塔灵砂/云阶铁/镇塔符核），可收藏可出售；真仙终章亦须塔中十层证道。</div>
+      </details>
       <details class="fold"><summary>✦ 杂录</summary>
         <div class="tip-line">· 快捷键：剧情中 Enter/空格 翻页；战斗中 1~5 普攻/法诀/防御/道具/遁走；QWERTASD 切页签；ESC 关层。</div>
         <div class="tip-line">· 离线时灵田照常生长、修为按修炼四成效率自行精进（上限 30 日），回归时入账。</div>
@@ -1736,12 +1797,15 @@ const UI = {
 
   /* ---------- Toast / 存档指示 ---------- */
   toast(text, err = false) {
+    const wrap = this.el['toast'];
+    // v25 移动端补课：同屏至多 3 条，超出移除最旧——成就/主线/百科同帧连发不再叠罗汉遮顶栏
+    while (wrap.children.length >= 3) wrap.firstElementChild?.remove();
     const div = document.createElement('div');
     div.className = 'toast-item' + (err ? ' err' : '');
     div.textContent = text;
-    this.el['toast'].appendChild(div);
+    wrap.appendChild(div);
     setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity .4s'; }, 1600);
-    setTimeout(() => div.remove(), 2100);
+    setTimeout(() => { div.remove(); }, 2100);
   },
   /** v21：行动浮字——所得在触发按钮上方飘起渐散（数字动效关闭时不显示） */
   float(text, color = 'var(--exp)', anchor) {

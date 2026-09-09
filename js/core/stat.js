@@ -108,6 +108,7 @@ const Stat = {
       * ((typeof XinmoSys !== 'undefined' && XinmoSys.scale) ? XinmoSys.scale(p) : 1)
       * (1 + ((p.benming && p.benming.lv) || 0) * 0.01)
       * (1 + (p.codexBonus || 0) * 0.01)   // v24 图鉴大成：每类收集满全属性 +1%
+      * ((p.flags && p.flags.beyondGate) ? 1.03 : 1)   // v25 真仙终章「仙门之外」：残玉终响，全属性永久 +3%
       * ((typeof RankSys !== 'undefined' && RankSys.isTop && RankSys.isTop(p)) ? 1.02 : 1);   // v13 天下第一：全属性 +2%
 
     const maxHp = Math.round((90 + A.body * 15 + Math.pow(rp, 1.6) * 6 + (eq.hp || 0))
@@ -175,6 +176,7 @@ const Stat = {
       { name: '个人线', v: key === 'crit' || key === 'dodge' || key === 'pillPct' ? pctOf(pl, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(pl, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '洞府（聚灵/藏宝）', v: key === 'cultPct' ? ((p.cave && p.cave.lv) || 0) * 4 : key === 'stonePct' ? (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3) : 0 },
       { name: '轮回印记/残玉共鸣/心魔凝练', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed' ? Math.round(base * (((p.reinc ? (p.reinc.marks || 0) * 0.01 : 0) + ((p.jade || 0) * 0.015) + ((p.flags && p.flags.xinmoCleared) || 0) * 0.01 + ((p.benming && p.benming.lv) || 0) * 0.01)) * 100) / 100 : 0 },
+      { name: '仙门之外（残玉终响）', v: (p.flags && p.flags.beyondGate) && (key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed') ? Math.round(base * 0.03 * 100) / 100 : 0 },   // v25
     ].filter(x => Math.abs(x.v) > 0.01);
     return { final: st[key], src };
   },

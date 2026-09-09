@@ -340,6 +340,10 @@ const GameData = {
     gf_hunyuan: { name: '混元真解',   type: 'gongfa', gtype: 'support', grade: 4, price: 0, desc: '秘境失传心法，混元一气，百脉皆通。', bonus: { cult: [15, 6], hpPct: [12, 5], mpPct: [12, 5] } },
     gf_niepan:  { name: '涅槃圣法',   type: 'gongfa', gtype: 'defense', grade: 5, price: 0, desc: '凤凰涅槃之秘法，置之死地而后生。', bonus: { hpPct: [18, 8], defPct: [15, 7] }, skill: { name: '涅槃重生', kind: 'heal', power: 55, mp: 30, desc: '沐浴火光，重续生机' } },
     m_gupian:   { name: '上古法宝碎片', type: 'material', tier: 4, price: 6000, desc: '上古法宝崩碎后的残片，隐有器灵低鸣。集齐九枚可炼化合成本命法宝。' },
+    /* ---- v25 登天塔：塔产奇物（宝箱掉落，可收藏可出售） ---- */
+    tw_sand:    { name: '天塔灵砂', type: 'material', tier: 3, price: 2400, desc: '登天塔石阶剥落的灵砂，触手生温，隐有塔铃声。' },
+    tw_iron:    { name: '云阶铁',   type: 'material', tier: 4, price: 5200, desc: '塔阶深处析出的玄铁，云纹天成，坚逾常铁。' },
+    tw_core:    { name: '镇塔符核', type: 'material', tier: 4, price: 9000, desc: '历代镇塔符箓燃尽后的符核，朱砂不褪，灵韵未散。' },
     z_benming:  { name: '本命法宝',   type: 'artifact', slot: 'accessory', grade: 5, price: 0, desc: '以九枚上古碎片炼化而成，与本命神魂相合，攻防气感皆得其益。', bonus: { atkPct: 12, defPct: 12, hpPct: 12, crit: 3, cult: 8, luck: 2 } },
     z_tianshu:  { name: '天枢战纹',   type: 'artifact', slot: 'accessory', grade: 2, price: 0, desc: '天枢殿长老亲手炼制的战纹玉符，勇猛精进。', bonus: { atkPct: 8, crit: 3 } },
     z_danxin:   { name: '丹心玉佩',   type: 'artifact', slot: 'accessory', grade: 2, price: 0, desc: '丹鼎阁信物，温养气脉，绵长持久。', bonus: { hpPct: 10, mpPct: 10 } },
@@ -1095,6 +1099,9 @@ const GameData = {
     c_zhenling: { name: '前世真灵', title: '血河首席 · 叛炉者', color: '#8a742e', stance: '友', role: '双世之魂',
       desc: '三百年前打翻万魂丹炉的人。不求你认下血河宗，只求你认下这笔执念——借刀是为了止杀。',
       look: { robe: '#b0a060', hair: '#e8e2d0', item: 'sword', aura: '#c9b660' } },
+    c_gatekeeper: { name: '守门人', title: '问道门阙 · 司门者', color: '#6a6a8a', stance: '中立', role: '终章引路人',   // v25 c10
+      desc: '立在仙门之下等了不知多少年的司门者。声音像采药老人，又像三百年前的自己——他说他等的是一个走完两世的人。',
+      look: { robe: '#6a6a8a', hair: '#d8d8e2', item: 'orb', aura: '#8a8ac2' } },
     c_zhangmen: { name: '白须掌门', title: '太衍宗掌门 · 白鹤真人', color: '#5a6a6a', stance: '友', role: '补过者',
       desc: '当年围杀时师尊被黑玉令牵着走。时日无多，有些账再烂在土里就没人记得了。',
       look: { robe: '#e8e4d8', hair: '#f0ede4', item: 'scroll', aura: '#8fa8a8' } },
@@ -1951,7 +1958,46 @@ c9_end: { id: 'c9_end', title: '终章 · 雷海了断', scenes: [
   { t: 'narr', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, text: '雷散，云开。你独自走下雷台，长阶九百级，没有一个人迎你。\n也好——修士的道途本就是一个人走。你在心里这样说了两遍，走到第七十三级的时候忽然想起：这句话，你已经骗了自己两世。' },
   { t: 'dialog', who: '@c_zhenling', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, title: '识海 · 烟散', text: '识海深处，前世真灵的声音淡得像一缕烟：「别学我。我独行了一世，把道走成了刀。\n我随劫火去了——往后的路你自己走。走慢些，替我把两世的风景，都看全。」' },
   { t: 'narr', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, text: '你在长阶尽头站定，回身望了一眼雷台。\n天光落在空无一人的台上，像落在一张刚收完子的棋枰上——这局棋，两世为人，你终于下完了。' },
-  { t: 'narr', text: '残玉化入你的眉心，化作一点朱砂。\n你回首人间，白衣胜雪——仙门之后，另有一番天地。\n\n【问道九章 · 终】' },
+  { t: 'narr', text: '残玉化入你的眉心，化作一点朱砂。\n你回首人间，白衣胜雪——仙门之后，另有一番天地。\n\n【问道九终 · 门启】' },
+] },
+
+  /* ============ v25 第十章 · 仙门之外（真仙终章） ============ */
+c10_open: { id: 'c10_open', title: '第十章 · 仙门之外', scenes: [
+  { t: 'narr', text: '飞升不是终点。\n天门在你身后缓缓合拢，眼前是一条悬于星海之上的长阶，尽头立着一座高逾云汉的门阙——上书两个古字：「问道」。\n阶下无风，星海无声，连时间都像是走累了。' },
+  { t: 'figure', chr: '@c_gatekeeper', art: '他立在门下，像已经立了一万年。' },
+  { t: 'dialog', who: '@c_gatekeeper', title: '门阙之下', text: '来了。\n老朽等一个走完两世的人，等了很久——你不必问老朽是谁。你听我这声音像谁，我便像谁。' },
+  { t: 'dialog', who: '@c_gatekeeper', title: '门规 · 三问', text: '这扇门后，没有仙官迎迓，没有琼楼玉宇，只有你要的那个答案。\n想进门，先过三关：修至真仙之境，是一；登天塔十层，塔影照心，是二；门前那一影，是三。\n——那一影，是你两世斩不尽的最后一缕「放不下」。它在你到门前，永远会先一步等在这里。' },
+  { t: 'narr', text: '守门人侧身让开半步。长阶尽头，一道与你一般无二的影子，正从门阙的阴影里缓缓站起。\n两世问道，最后一问——题面是你自己。' },
+] },
+
+c10_mid: { id: 'c10_mid', title: '第十章 · 门前影', scenes: [
+  { t: 'narr', text: '真仙之气灌体的那一夜，门阙下的星海忽然亮了。\n那道影子踏着长阶而来，每一步都踏在你两世的旧路上：青溪村的药香、雷台的天雷、识海里的那声「别学我」——它替你记着所有你不敢重温的时刻。' },
+  { t: 'dialog', who: '门前影', title: '长阶 · 无声', text: '（它不说话。它只是抬起手，用你的姿势，握住了你的剑。）\n（守门人的声音自星光里淡淡传来：「莫慌。它今日只来照你的面——何时应战，由你。斩它的资格，却要你自己挣来。」）' },
+  { t: 'narr', text: '影子开口了，声音是你的声音：\n「两世了。你放下了宗主，放下了血案，放下了执念——可你放下过你自己么？」\n它退回门阙的阴影里，化作一道与你形影不离的轮廓。守门人长叹：「去塔上走一遭罢。塔影照心，十层为凭——你若连自己的影子都照不透，门前那一战，赢不了。」' },
+  { t: 'narr', text: '你回望长阶之下，云海尽头，那座通天塔正在人间亮起第一层灯火。\n塔影照心，倒也是一场旧相识。' },
+] },
+
+c10_end: { id: 'c10_end', title: '终章 · 门后天地', scenes: [
+  { t: 'narr', text: '三关齐备，星海无风。\n门阙下那道与你形影不离的影子，终于踏出阴影，拔出了你的剑——两世问道的最后一战，对面站的是你自己。' },
+  { t: 'battle', foe: { name: '门前影 · 两世之我', power: 44, species: 'human', elite: true, scale: 1.1, bossArt: 'xuanYing' }, label: '问道门阙', text: '它用你的招式，走你的旧路，替你重来一遍你后悔过的每一战。\n你不必胜过它——你只需走出一条它没走过的路。', win: ['影子在你剑下寸寸碎裂，碎成漫天星砂。\n砂光里，你看见它笑了——用你自己的眉眼，笑得像卸下了千斤。\n「原来这条路，可以这样走。」它说。随后化作门阙上一点星光。'], lose: ['你被自己击落在长阶上。\n影子收剑而立，没有补刀——它有的是耐心，它就是你。\n「时候未到。」它说，「门后再会。」'], flagWin: 'gateShadowSlain' },
+  { t: 'narr', req: ['gateShadowSlain'], text: '影散的那一刻，门阙上「问道」二字亮作满辉，大门无风自开。\n守门人退后一步，朝你长揖到地。' },
+  { t: 'dialog', who: '@c_gatekeeper', req: ['gateShadowSlain'], title: '门开一线上', text: '老朽送过很多修士到这门前，你是头一个走完两世的。\n进去之前，容多嘴一句：门后没有你想找的「道」——道你早已走完了。门后只有一道题，出题的人是你自己。' },
+  { t: 'narr', req: ['gateShadowSlain'], text: '门内没有琼楼，没有仙宫。\n只有一条下山的小路，路旁一座茶棚。棚里说书人惊堂木一拍：「却说那位两世为人的修士，一剑斩了心魔，一步踏出仙门——列位看官，你道他求的甚么？」\n茶棚外，人间烟火气扑面而来。' },
+  { t: 'choice', req: ['gateShadowSlain'], text: '门后天地，一问当前：两世问道，你问的究竟是什么？', options: [
+    { text: '问道问道——问的是「路该怎么走」', value: 'road', flag: 'k10_final' },
+    { text: '问道问道——问的是「我该是谁」', value: 'self', flag: 'k10_final' },
+    { text: '不问了。往前走便是答案', value: 'walkon', flag: 'k10_final' },
+  ], pick: (v) => {
+    const p = Game.player;
+    p.flags.beyondGate = true;   // v25 残玉终响：全属性永久 +3%
+    KarmaSys.addFortune(6);
+    if (v === 'road') return ['你在茶棚坐下，听完了这一整段书。\n散场时说书人冲你一拱手：「客官，听出来了？这书里的道，是走出来的，不是问出来的。」\n你大笑出门。眉心朱砂轻轻一烫，两世记忆化作温润涟漪，漫过四肢百骸——残玉终响，道行更进一步。（气运 +6，全属性永久 +3%）'];
+    if (v === 'self') return ['你望着茶棚水缸里自己的倒影，看了很久。\n两世为人，名字换过，恩怨清过，唯一没换的是这双眼睛——它一直看着你想看的地方。\n眉心朱砂轻轻一烫，两世记忆化作温润涟漪，漫过四肢百骸——残玉终响，道行更进一步。（气运 +6，全属性永久 +3%）'];
+    return ['你没有回答，起身付了茶钱，沿着小路慢慢往下走。\n身后说书人的醒木又响，门前星光渐远——走着走着你忽然明白：不答，也是一种答案。\n眉心朱砂轻轻一烫，两世记忆化作温润涟漪，漫过四肢百骸——残玉终响，道行更进一步。（气运 +6，全属性永久 +3%）'];
+  } },
+  { t: 'dialog', who: '@c_ling', req: ['gateShadowSlain'], title: '眉心 · 朱砂低语', text: '……到站了……两班的马车，一趟都没误……\n往后没有我了……往后的路……你自己……慢慢走……' },
+  { t: 'narr', req: ['gateShadowSlain'], text: '朱砂的暖意淡去，像一声道晚安。\n小路尽头炊烟正起。你整了整衣冠，一步一步，走回人间。\n\n【问道十章 · 全终】' },
+  { t: 'narr', noFlag: 'gateShadowSlain', text: '你在长阶上坐了很久，影子便在你身边立了很久。\n星海无声，门阙的辉光缓缓暗了下去——不是拒绝，是「等你」。守门人的声音远远传来：「塔还在，路还在，你在。这一问，来日再答不迟。」\n\n【问道十章 · 未竟】' },
 ] },
 
   /* ============ v19 个人线 · 三幕角色弧光 ============ */

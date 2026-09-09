@@ -26,17 +26,11 @@ const Tutorial = {
       this.steps.map((_, i) => `<span class="${i === this.idx ? 'on' : ''}"></span>`).join('');
     const next = document.querySelector('[data-action="tut-next"]');
     if (next) next.textContent = this.idx === this.steps.length - 1 ? '踏入仙途' : '下一步';
-    // v18：聚光高亮目标区域；v22：目标面板在移动端收进了抽屉——先拉开再高亮
+    // v18：聚光高亮目标区域；v25：移动端不再自动拉开抽屉——开局第一屏必须完整可退，只做高亮提示
     document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
     if (s.target) {
       const el = document.querySelector(s.target);
-      if (el) {
-        if (window.innerWidth <= 860 && !el.classList.contains('drawer-open')
-          && (el.id === 'panel-left' || el.id === 'panel-right')) {
-          UI.toggleDrawer(el.id === 'panel-left' ? 'left' : 'right');
-        }
-        el.classList.add('tut-highlight');
-      }
+      if (el) el.classList.add('tut-highlight');
     }
   },
   next() {
@@ -47,6 +41,7 @@ const Tutorial = {
   finish() {
     document.getElementById('tutorial').classList.add('hidden');
     document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
+    UI.closeDrawers();   // v25：教程毕抽屉自愈——开局第一屏永远从完整主界面开始
     try {
       if (Save.storage.setItem) Save.storage.setItem('fanren_wd_tutorial', '1');
       else Save.mem['fanren_wd_tutorial'] = '1';

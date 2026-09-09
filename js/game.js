@@ -355,6 +355,10 @@ const Game = {
     /* --- 游历 --- */
     'act-explore': (d) => Explore.go(d.map),
     'act-explore-multi': (d) => Explore.goMulti(d.map, 5),   // v23 连续探索
+    'act-tower-enter': () => TowerSys.enter(),
+    'act-tower-resume': () => TowerSys.resume(),
+    'act-tower-quit': () => TowerSys.leave(),
+    'act-tower-buy': () => TowerSys.buyExtra(),
     'act-buy-multi': (d) => ShopSys.buyMulti(d.item, 5),   // v23 批量购买
     /* --- 坊市 --- */
     'act-buy': (d) => ShopSys.buy(d.item),

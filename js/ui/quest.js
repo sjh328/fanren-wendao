@@ -7,8 +7,8 @@
  * ====================================================================== */
 const QuestSys = {
   checking: false,
-  CN9: ['一', '二', '三', '四', '五', '六', '七', '八', '九'],
-  /** 主线九章（supR：境界领先到该大境界时，本章目标自动追认完成——中期入坑亦可补剧情） */
+  CN9: ['一', '二', '三', '四', '五', '六', '七', '八', '九', '十'],
+  /** 主线十章（supR：境界领先到该大境界时，本章目标自动追认完成——中期入坑亦可补剧情） */
   CHAPTERS: [
     {
       id: 'c1', title: '尘缘', supR: 2,
@@ -116,7 +116,7 @@ const QuestSys = {
       reward: { stones: 100000, fortune: 10, items: { pill_taichu: 1 } },
     },
     {
-      id: 'c9', title: '天劫决战', supR: 999,
+      id: 'c9', title: '天劫决战', supR: 10,   // v25：真仙之后由 c10 接棒终章，本章可追认
       story: '渡劫雷云压顶之际，一道黑影踏雷而来——三百年前将你打下诛仙台的血河宗主，竟也踏入了这一方天地！\n他要在天劫中夺舍转世的你，炼成万魂丹最后的主魂。\n雷海之上，新旧两世，终须一战。',
       goal: '飞升雷台，即决战之地。渡劫、斩敌、飞升——三百年恩怨，雷海了结。',
       steps: [
@@ -127,6 +127,19 @@ const QuestSys = {
       ending: '第九道天雷落下时，你引动残玉中前世的全部血煞，与宗主的魔身同缚雷心。雷光吞没一切的刹那，你听见宗主的咆哮化作一声长叹：「三百年……原来输的是我心魔。」\n雷散，云开。残玉化入你的眉心，化作一点朱砂。你回首人间，白衣胜雪——仙门之后，另有一番天地。',
       bonus: { desc: '大道共鸣（激活一条道韵协同）', go: 'gongfa', done: p => (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) >= 1, prog: p => `${Math.min(1, (typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length) || 0)}/1`, reward: { fortune: 10 } },
       reward: { stones: 200000, fortune: 20 },
+    },
+    {
+      id: 'c10', title: '仙门之外', supR: 999,   // v25 新终章：飞升之后，门后天地
+      story: '飞升不是终点。\n天门在你身后缓缓合拢，眼前是一条悬于星海之上的长阶，尽头立着一座高逾云汉的门阙——上书两个古字：「问道」。\n门下立着一位守门人，看不清面目，声音却熟悉得让你心口一紧：像是采药老人，又像是三百年前的自己。\n「来了。」他说，「等一个走完两世的人，等了很久。」',
+      goal: '踏出仙门，亲见门后天地。斩妖证道、登塔十层以证心迹——两世问道的最后一问，就在门阙之下。',
+      steps: [
+        { desc: '修至真仙初期', done: p => p.realmIdx >= 9, prog: p => `${p.realmIdx >= 9 ? 1 : 0}/1` },
+        { desc: '塔影照心（登天塔抵达第十层）', done: p => (p.counters.towerBest || 0) >= 10, prog: p => `${Math.min(10, p.counters.towerBest || 0)}/10` },
+        { desc: '斩妖证道（累计击败精英妖兽二十头）', done: p => (p.counters.killsElite || 0) >= 20, prog: p => `${Math.min(20, p.counters.killsElite || 0)}/20` },
+      ],
+      ending: '门前影散作星砂，长阶尽头的大门应声而开。\n门后没有琼楼玉宇，没有仙官迎迓——只有一条下山的小路，路边茶棚里有说书人正拍醒木：「却说那位两世为人的修士，一剑斩了心魔，一步踏出仙门……」\n你忽然明白了守门人最后那句话：「问道问道——问的不是天，是自己。」\n眉心朱砂轻轻一烫，残玉两世的记忆化作一道温润涟漪，漫过四肢百骸。（全属性永久 +3%）',
+      bonus: { desc: '塔顶之风（登天塔抵达二十层）', go: 'map:tower', done: p => (p.counters.towerBest || 0) >= 20, prog: p => `${Math.min(20, p.counters.towerBest || 0)}/20`, reward: { fortune: 12 } },
+      reward: { stones: 800000, fortune: 25, items: { pill_zaohua: 1 } },
     },
   ],
   /** 奇遇录 · 支线十二则（minRealm 解锁境界；v19 起含 NPC 绑定与任务链） */
@@ -334,6 +347,17 @@ const QuestSys = {
       ending: '你陪他在约定的渡口坐了整整三日。刀客没来——来的是一封迟到了二十年的信：当年卖他天机的术士临终忏悔，那「死期」，原是他编来赖账的谎话。唐三思把信读了三遍，忽然大笑，笑着笑着眼里就湿了：「好你个老骗子——这条消息，我买了半辈子，值！」他将半生的消息册尽数赠你：「往后坊市的消息，你替它们开口。」',
       reward: { stones: 60000, insight: 10 },
     },
+    {
+      id: 's21', title: '塔铃声又响', minRealm: 1,   // v25 登天塔主题支线
+      story: '坊市孩童间传着一首新童谣：「天塔铃，铃一声，塔里藏着一斗金。」你初闻只当笑谈——直到某夜塔铃声穿过半座城，落在你窗前，铛、铛、铛，敲的竟是你心跳的节拍。城西那座闭了百年的登天塔，当夜开了门。',
+      steps: [
+        { desc: '初叩塔门（首次挑战登天塔）', done: p => (p.counters.towerWins || 0) >= 1 },
+        { desc: '拾级而上（累计克塔五层）', done: p => (p.counters.towerBest || 0) >= 5 },
+        { desc: '塔中拾遗（取得一件塔产奇物）', done: p => ['tw_sand', 'tw_iron', 'tw_core'].some(id => (p.bag[id] || 0) > 0) },
+      ],
+      ending: '第五层的鎏金宝箱底下，你摸出一只小小的铜铃——塔灵的声音自铃中响起，懒洋洋的：「百年来头一个爬到这儿的人，这个给你。别问有甚么用——塔铃声又响的时候，你自然会知道。」\n你握着铜铃走出塔门。身后的塔影在暮色里轻轻晃了晃，像在人间的黄昏里，伸了一个懒腰。',
+      reward: { stones: 3000, fortune: 4, items: { tw_sand: 1 } },
+    },
   ],
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
   /** v12 每章各目标对应的功能页签（供焦点条「前往」直达；v22 支持子页签深链 tab:sub） */
@@ -347,6 +371,7 @@ const QuestSys = {
     c7: ['cultivate', 'map:atlas', 'shop:market'],
     c8: ['cultivate', 'jianghu', 'gongfa'],
     c9: ['cultivate', 'map:atlas', 'cultivate'],
+    c10: ['cultivate', 'map:tower', 'map:atlas'],   // v25：塔影照心/斩妖证道直达天塔舆图
   },
   /** v12 有效章节序号：跳过「境界已领先、目标全部自动追认」的章节（正式结算仍在 check 中逐章进行） */
   currentChapterIdx(p) {
@@ -508,7 +533,7 @@ const QuestSys = {
           } else { after(); }
         }
       } else {
-        Log.add('✦ 问道九章 · 全部完结！残玉化砂，仙路已成。', 'realm');
+        Log.add('✦ 问道十章 · 全部完结！残玉化砂，仙路已成——门后天地，任君遨游。', 'realm');
         UI.renderAll();
         Save.autoSave(true);
       }
@@ -677,6 +702,7 @@ const QuestSys = {
     c7_end: { open: '应帖赴会，明查当面对质', dark: '绕行暗访黑玉令', blade: '借政敌之刀，坐观虎斗' },
     c8_end: { together: '立誓同生共死', entrust: '托付后事于至交', alone: '独自承担因果' },
     c9_end: { redeem: '渡宗主残魂往生', execute: '一剑斩尽，恩怨两清', walk: '转身不问，随劫火而灭' },
+    c10_end: { road: '问道问的是「路该怎么走」', self: '问道问的是「我该是谁」', walkon: '不问了，往前走便是答案' },
   },
   /** v19 问道录 2.0：剧情回顾 / 人物志 / 大事年表 / 抉择树（四页签） */
   openArchive(tab = 'story') {

@@ -94,6 +94,10 @@ LOCKS: {
     if (p.realmIdx >= 1 && ((p.bounties && p.bounties.list) || []).some(bt => bt && bt.progress < bt.need)) {
       t.push({ text: '<b>新知</b>：坊市悬赏板贴出了新悬赏——猎杀目标游历时自动计入', go: 'shop:bounty' });
     }
+    // v25 登天塔首遇新知
+    if (typeof TowerSys !== 'undefined' && TowerSys.unlockOk(p) && !(p.counters.towerWins || 0) && TowerSys.leftToday(p) > 0) {
+      t.push({ text: '<b>新知</b>：城西<b>登天塔</b>开塔了——每层一战、三层赠福、五层开箱，败北无性命之虞', go: 'map:tower' });
+    }
     if (p.poison > cap * 0.5 && p.poison <= cap * 0.75) {
       t.push({ text: '<b>新知</b>：丹毒已过半——服丹宜缓，或备几枚解毒丹', go: 'cultivate' });
     }

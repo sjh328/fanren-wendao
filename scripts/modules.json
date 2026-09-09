@@ -40,6 +40,7 @@
   "js/systems/festival.js",
   "js/systems/npc.js",
   "js/systems/dungeon.js",
+  "js/systems/tower.js",
   "js/systems/reincarnation.js",
   "js/battle/battle.js",
   "js/ui/tutorial.js",

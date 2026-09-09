@@ -32,6 +32,8 @@ const Story = {
       document.getElementById('app').appendChild(modal);
     }
     modal.classList.remove('hidden');
+    // v25 移动端沉浸化：剧情播放期间隐藏底部导航/顶栏（CSS body.story-playing），桌面无感
+    if (typeof UI !== 'undefined' && UI.storyImmersive) UI.storyImmersive(true);
     if (!modal._twWired) {
       modal._twWired = true;
       modal.addEventListener('click', (e) => {
@@ -192,6 +194,7 @@ const Story = {
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 剧情毕归平静
     const modal = document.getElementById('story-modal');
     if (modal) modal.classList.add('hidden');
+    if (typeof UI !== 'undefined' && UI.storyImmersive) UI.storyImmersive(false);   // v25 沉浸态摘除
     if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 关层后公告归位
     if (c && c.onEnd) { const fn = c.onEnd; c.onEnd = null; fn(); }
     // 队列中的下一段剧情自动衔接

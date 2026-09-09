@@ -724,8 +724,8 @@ try {
     go: !!document.querySelector('.q-go'),
     done: document.querySelectorAll('.rail-node.done').length,
   }));
-  st4.rail === 9 && st4.cur && st4.prog >= 2 && st4.go && st4.done === 1
-    ? pass('ST4 问道页：九章进度轨 / 目标进度 / 单目标前往按钮')
+  st4.rail === 10 && st4.cur && st4.prog >= 2 && st4.go && st4.done === 1
+    ? pass('ST4 问道页：十章进度轨 / 目标进度 / 单目标前往按钮')
     : fail('ST4 问道页', JSON.stringify(st4));
   await shot(page, 'quest_v15');
 

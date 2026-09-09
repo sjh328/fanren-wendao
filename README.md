@@ -1,9 +1,9 @@
 # 凡人问道 · 文字修仙
 
 网页版文字修仙放置游戏。零依赖、纯前端：HTML + CSS + 原生 JavaScript，美术为程序化 SVG，音效为 Web Audio 合成。
-当前版本 **v24「归心」**（主线牵引：章助缘·布施迁江湖·声望接线 / 界面减负：红点统一·江湖灵兽行
-折叠·万宝阁分组 / 剧情补全：反派暗线九章齐·个人线 18 条·支线 20 则 / 经济闭环：聚灵解封顶·
-0 价物回收·图鉴收集奖励·离线修行——详见 `UPDATE_NOTES_V24.md`）。
+当前版本 **v25「掌上乾坤」**（移动端全面重构：剧情纸张卡修复·沉浸式全屏演出·顶栏两行化·底部导航
+自适应·锁定图标化·Toast 队列·触控与表单适配 / 新玩法：登天塔——无限爬塔·塔心祝福·宝箱层奖 /
+终章补完：第十章「仙门之外」真仙终局·门前影之战·残玉终响 +3%——详见 `UPDATE_NOTES_V25.md`）。
 
 ## 仓库与同步
 
@@ -42,26 +42,26 @@ node server.mjs     # http://localhost:8341/index.html
 测试为 puppeteer-core 驱动真实 Chrome 的 E2E 回归（需先启动 `node server.mjs`，并保证本机装有 Chrome）：
 
 ```bash
-npm run test:all    # 九套脚本全量回归（400+ 断言，随版本增长）
-npm run test:v10    # 单独运行某一版本专项
+npm run test:all    # 十套脚本全量回归（440+ 断言，随版本增长）
+npm run test:v11    # 单独运行某一版本专项
 ```
 
 ## 代码结构（v19 阶段十起：模块化源码 + 单体产物）
 
 ```
-js/          ★ 开发源码（49 个模块，按 scripts/modules.json 顺序拼接）
+js/          ★ 开发源码（50 个模块，按 scripts/modules.json 顺序拼接）
   core/      基建：utils/anim/art/narrative/ambience/meta/achieve/guide/autocult/codex
              /log/save/player-factory/stat/time
   data/      game-data.js（静态数据 + 剧情脚本库）
   systems/   玩法系统 30+：cultivate/gongfa/bag/forge/cave/beast/shop/sect/explore
              /dao/karma/daoxin/auction/xinmo/craft/tribulation/world/bounty/black
-             /rank/npc/dungeon/reincarnation/status-fx/festival…
+             /rank/npc/dungeon/tower/reincarnation/status-fx/festival…
   battle/    battle.js（战斗：意图预演/破招反击/必杀成长/多波）
   ui/        tutorial/story/quest/ui/start-screen
   game.js    Game 主控（动作分发/初始化）
 game.js      ★ 构建产物（由 js/ 拼接生成，逐字节可复现；index.html 引用不变）
 style.css    宣纸水墨主题（按版本增量分区块）
-index.html   唯一入口（引用 game.js?v=37，改版时递增 N 清缓存）
+index.html   唯一入口（引用 game.js?v=40，改版时递增 N 清缓存）
 server.mjs   本地静态服务器（:8341，no-cache）
 verify-*.mjs puppeteer E2E 回归脚本（npm test:xxx）
 icons/      PWA 图标（scripts/make-icons.mjs 生成：宣纸水墨 + 朱砂道印）

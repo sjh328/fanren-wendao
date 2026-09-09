@@ -1,6 +1,6 @@
 
 /* ======================================================================
- * §1.10 增量扩展（v6）：成就系统 Achieve（v24 起共 51 项，含境界九档/职业/战斗/奇遇/转世/经营/大比）
+ * §1.10 增量扩展（v6）：成就系统 Achieve（v25 起共 56 项，含境界九档/职业/战斗/奇遇/转世/经营/大比/天塔/终章）
  * 完成奖励少量气运或灵石；进度存于 Meta，随档、转世不重置。
  * ====================================================================== */
 const Achieve = {
@@ -67,6 +67,12 @@ const Achieve = {
     { id: 'v12', cat: 'dao', name: '奥义宗师', desc: '三部功法修至大成', reward: { fortune: 10 }, test: p => Object.entries(p.gongfa || {}).filter(([id, g]) => GameData.ITEMS[id] && g.level >= GongfaSys.maxLevel(GameData.ITEMS[id])).length >= 3 },
     /* ---- v22 宗门大比 ---- */
     { id: 'w1', cat: 'battle', name: '大比魁首', desc: '于宗门大比三轮全胜夺魁', reward: { fortune: 10 }, test: p => (p.flags && p.flags.tourneyChamp) || false },
+    /* ---- v25 登天塔与真仙终章 ---- */
+    { id: 'tw1', cat: 'battle', name: '初登天塔', desc: '登天塔抵达第五层', reward: { stones: 800 }, prog: p => `${Math.min(5, p.counters.towerBest || 0)}/5`, test: p => (p.counters.towerBest || 0) >= 5 },
+    { id: 'tw2', cat: 'battle', name: '拾级而上', desc: '登天塔抵达第十二层', reward: { fortune: 6 }, prog: p => `${Math.min(12, p.counters.towerBest || 0)}/12`, test: p => (p.counters.towerBest || 0) >= 12 },
+    { id: 'tw3', cat: 'battle', name: '塔影同高', desc: '登天塔抵达第二十层', reward: { fortune: 10 }, prog: p => `${Math.min(20, p.counters.towerBest || 0)}/20`, test: p => (p.counters.towerBest || 0) >= 20 },
+    { id: 'tw4', cat: 'battle', name: '塔顶之风', desc: '登天塔抵达第三十层', reward: { fortune: 15 }, prog: p => `${Math.min(30, p.counters.towerBest || 0)}/30`, test: p => (p.counters.towerBest || 0) >= 30 },
+    { id: 'c10a', cat: 'exp', name: '仙门之外', desc: '踏出仙门，亲见门后天地', reward: { fortune: 20 }, test: p => (p.flags && p.flags.beyondGate) || false },
   ],
   /** 每次行动收尾时检查：解锁则发奖并播报 */
   check() {
