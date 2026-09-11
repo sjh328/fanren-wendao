@@ -53,6 +53,14 @@ node server.mjs     # http://localhost:8341/index.html
    绑定已备案域名（CNAME 解析，免费 SSL 自动签发）
 5. 绑定后，每次推 GitHub 会与 Cloudflare 线**同步自动更新**，双线互为备份
 
+## 在线地址
+
+- **正式入口（Cloudflare Workers，永久免费、免备案）**：
+  https://fanren-wendao.sunjihao0328.workers.dev
+- 手机可直接打开并「添加到主屏幕」当 App 用（PWA，断网可玩）；
+  电脑若打不开多为 DNS 层干扰——开代理，或浏览器设置里开启「安全 DNS（DoH）」选 Cloudflare/Google 即可。
+- 推送即上线：本地 commit → 钩子推 GitHub → Cloudflare 自动重新部署（无需任何手动操作）。
+
 ## 测试
 
 测试为 puppeteer-core 驱动真实 Chrome 的 E2E 回归（需先启动 `node server.mjs`，并保证本机装有 Chrome）：
