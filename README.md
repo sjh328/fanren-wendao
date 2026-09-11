@@ -37,6 +37,17 @@ node server.mjs     # http://localhost:8341/index.html
 之后**每次 commit（post-commit 钩子自动推送）都会触发自动部署**，无需任何手动操作。
 跨设备搬存档用游戏内置：菜单 → 存档/读档 → 导出/导入文本码。
 
+## 双线部署 · 腾讯 EdgeOne Pages（国内直连备用线）
+
+与 Cloudflare 同源同更新，大陆访问通常更稳（默认 `*.edgeone.app` 域名免备案）：
+
+1. 注册并**实名认证**腾讯云 → 打开 [EdgeOne Pages 控制台](https://console.cloud.tencent.com/edgeone/pages)
+2. **创建项目 → 从 Git 仓库导入** → 授权 GitHub → 选中 `sjh328/fanren-wendao`
+3. 构建配置：项目名 `fanren-wendao` · 生产分支 `master` · 框架预设「无」
+   · **构建命令 `node scripts/cf-prepare.mjs`** · **输出目录 `dist`** · 安装命令保持默认
+4. 部署完成即得 `https://fanren-wendao.edgeone.app` 一类默认域名——以后每次推 GitHub
+   与 Cloudflare 线**同步自动更新**，双线互为备份。
+
 ## 测试
 
 测试为 puppeteer-core 驱动真实 Chrome 的 E2E 回归（需先启动 `node server.mjs`，并保证本机装有 Chrome）：
