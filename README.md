@@ -37,16 +37,21 @@ node server.mjs     # http://localhost:8341/index.html
 之后**每次 commit（post-commit 钩子自动推送）都会触发自动部署**，无需任何手动操作。
 跨设备搬存档用游戏内置：菜单 → 存档/读档 → 导出/导入文本码。
 
-## 双线部署 · 腾讯 EdgeOne Pages（国内直连备用线）
+## 可选 · 腾讯 EdgeOne Pages（国内直连线，需备案）
 
-与 Cloudflare 同源同更新，大陆访问通常更稳（默认 `*.edgeone.app` 域名免备案）：
+> ⚠️ 政策前提（2026 实测）：EdgeOne Pages 的**默认域名仅 3 小时限时预览**（超时 401），
+> 长期访问**必须绑定自定义域名**；且只要选了含中国大陆的加速区域，
+> **自定义域名必须完成工信部 ICP 备案**（选「不含中国大陆」则免备案，但大陆访问仍受限）。
+> 也就是说：**不想备案就留在 Cloudflare 单线，EdgeOne 反而没有优势。**
+> 仅当你已有/愿意办**已备案域名**时，下面这条路才值得走。
 
-1. 注册并**实名认证**腾讯云 → 打开 [EdgeOne Pages 控制台](https://console.cloud.tencent.com/edgeone/pages)
+1. 注册并实名认证腾讯云 → [EdgeOne Pages 控制台](https://console.cloud.tencent.com/edgeone/pages)
 2. **创建项目 → 从 Git 仓库导入** → 授权 GitHub → 选中 `sjh328/fanren-wendao`
-3. 构建配置：项目名 `fanren-wendao` · 生产分支 `master` · 框架预设「无」
-   · **构建命令 `node scripts/cf-prepare.mjs`** · **输出目录 `dist`** · 安装命令保持默认
-4. 部署完成即得 `https://fanren-wendao.edgeone.app` 一类默认域名——以后每次推 GitHub
-   与 Cloudflare 线**同步自动更新**，双线互为备份。
+3. 构建配置（本项目已验证可用）：项目名 `fanren-wendao` · 生产分支 `master` · 框架预设「Other」
+   · **构建命令 `node scripts/cf-prepare.mjs`** · **输出目录 `dist`** · 安装命令留空 · 环境变量留空
+4. 构建产物可用（会给出 3 小时预览链接）；要长期访问，再到**域名管理 → 添加自定义域名**
+   绑定已备案域名（CNAME 解析，免费 SSL 自动签发）
+5. 绑定后，每次推 GitHub 会与 Cloudflare 线**同步自动更新**，双线互为备份
 
 ## 测试
 
