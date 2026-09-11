@@ -11,7 +11,7 @@ const AutoCult = {
     const p = Game.player;
     if (this.active) { UI.toast('自动修炼已在进行中'); return; }
     const realmOpts = GameData.REALM_NAMES.map((n, i) => `<option value="${i}">${n}期</option>`).join('');
-    const ok = await UI.popup({
+    const popupPending = UI.popup({   // v26：先发起弹窗（DOM 同步注入），接线后再 await
       title: '自动修炼',
       html: `心无旁骛，自行吐纳——期间将自动进行普通修炼，收益尽数入账。<br>
         <div class="auto-row">
@@ -26,6 +26,23 @@ const AutoCult = {
         <div class="tip-line">· 修为圆满或遭遇战斗时将<b>自动停下</b>，等待你亲手冲关／应对。</div>`,
       options: [{ text: '开 始', value: true, primary: true }, { text: '取 消', value: false }],
     });
+    // v26 修瑕：按目标类型显隐输入控件（攒修为/限时两目标此前输入框恒隐藏，形同不可用）。
+    // 注意：UI.popup 同步注入 DOM 后才返回 Promise——接线必须在 await 之前完成，弹窗关闭后节点即销毁。
+    {
+      const kindSel = document.getElementById('auto-kind');
+      const realmSel = document.getElementById('auto-realm');
+      const valInput = document.getElementById('auto-val');
+      if (kindSel && realmSel && valInput) {
+        const sync = () => {
+          const isRealm = kindSel.value === 'realm';
+          realmSel.classList.toggle('hidden', !isRealm);
+          valInput.classList.toggle('hidden', isRealm);
+        };
+        kindSel.addEventListener('change', sync);
+        sync();
+      }
+    }
+    const ok = await popupPending;
     if (!ok) return;
     const kind = document.getElementById('auto-kind').value;
     let target = null;
@@ -51,6 +68,7 @@ const AutoCult = {
     this.startExp = Guide.totalExp(p);
     this.startDay = p.day;
     this.startReal = Date.now();
+    if (typeof Save !== 'undefined' && Save.setThrottle) Save.setThrottle(true);   // v26：挂机期存档节流（行动结算照常，仅去重落盘）
     Log.add(`你入定自行吐纳——<b>自动修炼</b>开启，目标：${target.label}。`, 'system');
     UI.renderAll();
     this.run();
@@ -88,16 +106,26 @@ const AutoCult = {
   },
   pause(reason) {
     this.active = false;
+    this.settle();
     Log.add(`【自动修炼 · 暂停】${reason}`, 'warn');
     this.summary();
   },
   finish(reason) {
     this.active = false;
+    this.settle();
     Log.add(`【自动修炼 · 完成】${reason}`, 'system');
     this.summary();
   },
   /** 读档 / 返回开始界面时静默中止 */
-  abort() { this.active = false; },
+  abort() { this.active = false; this.settle(); },
+  /** v26：停止时解除节流并强制落盘一次，保证挂机成果即时落袋 */
+  settle() {
+    if (typeof Save !== 'undefined' && Save.setThrottle) {
+      const wasThr = Save._thr;
+      Save.setThrottle(false);
+      if (wasThr && Game.player && !Game.player.dead) Save.autoSave(true);
+    }
+  },
   summary() {
     const p = Game.player;
     if (!p) { UI.renderAll(); return; }

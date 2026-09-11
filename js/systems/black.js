@@ -107,8 +107,9 @@ const BlackSys = {
     } else {
       KarmaSys.addKarma(4, true);
       const fine = Math.round(100 * GameData.stoneEco(p.realmIdx));
-      if (p.stones.low >= fine) p.stones.low -= fine;
-      Log.add(`袋中只有几块破布——这是一桩栽赃的买卖！失主寻来，你只得赔钱了事：灵石 -${Utils.fmtNum(fine)}，还沾了一身晦气（孽障 +4）。`, 'loss');
+      // v26 修瑕：罚款实扣实报（此前下品灵石不足时分文未扣，日志却照写扣钱）
+      const paid = Bag.spendStonesMax(fine);
+      Log.add(`袋中只有几块破布——这是一桩栽赃的买卖！失主寻来，你只得赔钱了事：灵石 -${Utils.fmtNum(paid)}${paid < fine ? '（囊中羞涩，尽数奉上）' : ''}，还沾了一身晦气（孽障 +4）。`, 'loss');
       UI.toast('破财免灾……', true);
     }
     Game.afterAction();

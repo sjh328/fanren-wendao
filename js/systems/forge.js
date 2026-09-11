@@ -72,14 +72,18 @@ const ForgeSys = {
       success = Utils.chance(rate);
     }
     if (success) {
-      p.enhanced = p.enhanced || {};
-      p.enhanced[itemId] = lv + 1;
+      // v26 修瑕：强化直接写已穿戴装备实例（lvOf/Stat 均以实例为准）——
+      // 此前只写 p.enhanced 共享档，实例已有强化时属性永不提升、灵石白花
+      const eq = p.equipped[slot];
+      if (eq && typeof eq === 'object') eq.enhance = Math.min(this.MAX_LV, lv + 1);
+      else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv + 1; }
       Ambience.sfx('forge');
       Log.add(`炉火纯青——<b class="grade-${def.grade}">${def.name}</b> 祭炼功成，升至 <b>+${lv + 1}</b>！法宝灵光更胜往昔。`, 'gain');
       if (lv + 1 >= 7) UI.announce(`✦ ${def.name} +${lv + 1}`, 'gold');
     } else if (lv >= 7) {
-      p.enhanced = p.enhanced || {};
-      p.enhanced[itemId] = lv - 1;
+      const eq2 = p.equipped[slot];
+      if (eq2 && typeof eq2 === 'object') eq2.enhance = Math.max(0, lv - 1);
+      else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv - 1; }
       Log.add(`炉火骤然失控！<b class="grade-${def.grade}">${def.name}</b> 祭炼失利，灵纹黯淡——强化跌至 <b>+${lv - 1}</b>。`, 'loss');
       UI.toast('祭炼失败，强化跌落一级', true);
     } else {

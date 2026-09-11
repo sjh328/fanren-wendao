@@ -102,8 +102,9 @@ const PlayerFactory = {
       },
       // v13: 强化/洞府/灵兽/悬赏/天骄榜
       (out) => {
+        // v26 修瑕：旧值须读【原始存档】p（v16 同款先例）——此前先清零再读 out，旧档强化读档即蒸发
         out.enhanced = {};
-        const srcEnh = (out.enhanced && typeof out.enhanced === 'object') ? out.enhanced : {};
+        const srcEnh = (p.enhanced && typeof p.enhanced === 'object') ? p.enhanced : {};
         for (const [id, lv] of Object.entries(srcEnh)) {
           if (!GameData.ITEMS[id] || GameData.ITEMS[id].type !== 'artifact') continue;
           const n = Math.floor(Number(lv));

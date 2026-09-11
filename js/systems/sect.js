@@ -45,7 +45,7 @@ const SectSys = {
       options: this.COMMANDS.map((c, i) => ({ text: c.name, value: c.id, primary: i === 0 })).concat([{ text: '再议', value: null }]),
     });
     if (!pickCmd) return;
-    p.sect.command = { kind: pickCmd, day: today, until: today + 2 };
+    p.sect.command = { kind: pickCmd, day: today, until: today + 1 };   // v26 修瑕：与「至明日／次日更张」文案对齐（原 today+2 白得两日）
     const c = this.COMMANDS.find(x => x.id === pickCmd);
     Log.add(`【长老令】<b>${c.name}</b>——${c.desc}`, 'system');
     Story.chron(`宗门下令「${c.name}」`);

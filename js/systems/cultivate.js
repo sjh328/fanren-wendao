@@ -131,8 +131,9 @@ const Cultivate = {
     const st = Stat.compute(p);
     p.hp = Math.min(st.maxHp, p.hp + Math.round(st.maxHp * 0.5));
     p.mp = Math.min(st.maxMp, p.mp + Math.round(st.maxMp * 0.5));
-    // v10 境界特性 · 胎息（练气）：调息时气机自转，额外化解丹毒
-    const detox = p.realmIdx >= 0 ? 5 : 0;
+    // v10 境界特性 · 胎息（练气）：调息时气机自转，化解丹毒更胜他境
+    // v26 修瑕：原条件 realmIdx>=0 恒真，「胎息」形同虚设——练气 5 点、其余境界 3 点
+    const detox = p.realmIdx === 0 ? 5 : 3;
     if (detox) p.poison = Math.max(0, p.poison - detox);
     Time.add(1);
     if (p.dead) return;

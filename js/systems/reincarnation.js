@@ -99,7 +99,8 @@ const ReincarnationSys = {
     // v20 传承树九、十层
     if (treeTier >= 9) p2.flags.daoYunEcho = true;   // 道韵残响：转世保留一条已激活道韵（Stat 消费）
     if (treeTier >= 10) p2.rerollBest = true;   // 逆天改命：创角四维重掷三次取最优
-    if (kept) p2.bag[kept] = 1;
+    // v26 修瑕：第三层「多带一件法宝」加的那件不再被这里覆盖回 1
+    if (kept && !p2.bag[kept]) p2.bag[kept] = 1;
     for (const gid of grudges) {
       const s = p2.npcs[gid];
       if (s) { s.rel = -35; s.grudge = true; s.pastLife = true; }

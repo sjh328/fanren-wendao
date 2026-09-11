@@ -1637,9 +1637,9 @@ const Battle = {
         <div class="bt-name-row"><span class="bt-name me">${Utils.esc(p.name)}${B.combo >= 2 ? ` <span class="tag combo">连击×${B.combo}</span>` : ''}${B.auto ? ' <span class="tag safe">自动</span>' : ''}</span><span class="bt-realm">攻${this.myAtk(st)} 防${this.myDef(st)} · 暴击${this.myCrit(st).toFixed(0)}%</span></div>
         <div class="bt-figure me-fig" aria-hidden="true"></div>
         <div class="bar" title="气血 ${p.hp} / ${st.maxHp}"><div class="bar-fill hp${hpPct <= 30 ? ' low' : ''}" style="width:${hpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-hp" data-nv="${p.hp}">${p.hp}</span> / ${st.maxHp}</span></div>
-        <div class="bar" title="灵力 ${p.mp} / ${st.maxMp}"><div class="bar-fill mp" style="width:${mpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-mp" data-nv="${p.mp}">${p.mp}</span> / ${st.maxMp}</span></div>
-        <div class="bar morale-bar" title="战意：连击提升，受挫回落（每点 +0.4% 伤害）"><div class="bar-fill morale" style="width:${B.morale || 0}%"></div><span class="bar-text">战意 ${B.morale || 0}${(B.morale || 0) >= 100 ? '（伤害 +40%）' : ''}</span></div>
-        <div class="bar morale-bar" title="真元：普攻命中+1，会心+2，防御+1（用于职业必杀；道境三重上限扩至8）"><div class="bar-fill" style="width:${(B.zhenyuan || 0) / (B.zmax || 6) * 100}%;background:linear-gradient(90deg,#5a6ac7,#a04ab0)"></div><span class="bar-text">真元 ${B.zhenyuan || 0}/${B.zmax || 6}</span></div>
+        <div class="bar" title="灵力 ${p.mp} / ${st.maxMp}"><div class="bar-fill mp" style="width:${mpPct}%"></div><span class="bar-text${(p.mp || 0) <= 0 ? ' dim' : ''}"><span class="num-anim" data-nk="bt-mp" data-nv="${p.mp}">${p.mp}</span> / ${st.maxMp}</span></div>
+        <div class="bar morale-bar" title="战意：连击提升，受挫回落（每点 +0.4% 伤害）"><div class="bar-fill morale" style="width:${B.morale || 0}%"></div><span class="bar-text${(B.morale || 0) <= 0 ? ' dim' : ''}">战意 ${B.morale || 0}${(B.morale || 0) >= 100 ? '（伤害 +40%）' : ''}</span></div>
+        <div class="bar morale-bar" title="真元：普攻命中+1，会心+2，防御+1（用于职业必杀；道境三重上限扩至8）"><div class="bar-fill" style="width:${(B.zhenyuan || 0) / (B.zmax || 6) * 100}%;background:linear-gradient(90deg,#5a6ac7,#a04ab0)"></div><span class="bar-text${(B.zhenyuan || 0) <= 0 ? ' dim' : ''}">真元 ${B.zhenyuan || 0}/${B.zmax || 6}</span></div>
         <div class="fx-tags">${StatusFx.tagsHtml(B.myFx)}</div>
       </div>
       <div id="bt-log"></div>

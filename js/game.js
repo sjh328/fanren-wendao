@@ -7,6 +7,7 @@ const Game = {
   bagSort: 'quality',   // v20 背包排序：quality 品质 / type 类型 / name 名字
   subTab: {},   // v22 页签内子页签记忆（shop/cave/map 各自记住上次所在分栏）
   foldState: {},   // v24 折叠分组开合记忆（data-fold 键）——行动后重渲染不再把用户展开的分组收回去
+  scrollMem: {},   // v26 页签滚动位置记忆——切走再回来，长列表回到原处
 
   init() {
     UI.cache();
@@ -41,6 +42,15 @@ const Game = {
     document.getElementById('popup-modal').addEventListener('click', (e) => {
       if (e.target.id === 'popup-modal' && UI._popupResolve) UI.popupChoose(-1);
     });
+    // v26 回到顶部：内容区下滑过深时浮出，一键回顶（移动端壳的单一滚动源）
+    const backTop = document.getElementById('back-top');
+    const tcBox = document.getElementById('tab-content');
+    if (backTop && tcBox) {
+      backTop.addEventListener('click', () => tcBox.scrollTo({ top: 0, behavior: 'smooth' }));
+      tcBox.addEventListener('scroll', () => {
+        backTop.classList.toggle('show', tcBox.scrollTop > tcBox.clientHeight * 1.2);
+      }, { passive: true });
+    }
     // v7：背包双击快捷操作（服用 / 装备 / 学习；丢弃按钮除外）
     document.addEventListener('dblclick', (e) => {
       const item = e.target.closest('.bag-item');
@@ -151,7 +161,9 @@ const Game = {
     return true;
   },
 
-  /** v18：离线进度计算——灵田按真实时间生长 */
+  /** v18：离线进度计算——灵田按真实时间生长
+   *  v26 修瑕：离线天数改按日回放 Time.add(1)——跨年结算（年龄整化 / NPC 成长 / 世界大事 / 寿元判定）
+   *  不再被整体跳过，年龄也不再出现 16.0821… 式小数。 */
   computeOfflineProgress() {
     const p = this.player;
     if (!p || p.dead || p.day === 0) return;
@@ -163,16 +175,14 @@ const Game = {
     if (elapsedMs < 60000) return; // 少于 1 分钟不算离线
     // 按真实时间推算游戏天数（现实 1 分钟 ≈ 游戏 1 天，上限 30 天）
     const realDays = Math.min(30, Math.floor(elapsedMs / 60000));
-    // 灵田生长
+    // 灵田生长（收获判定由洞府页/行动收尾按日界完成）
     let offlineCrops = 0;
     if (p.cave && p.cave.plots) {
       for (const plot of p.cave.plots) {
         if (!plot || !plot.seed) continue;
         const def = GameData.ITEMS[plot.seed];
         if (!def || !def.days) continue;
-        // 按离线天数推进生长
         plot.plantedDay = Math.max(plot.plantedDay, p.day - realDays);
-        // 收获检查会由下次进入洞府页签时计算
         offlineCrops++;
       }
     }
@@ -186,21 +196,20 @@ const Game = {
         if (offlineExp > 0) Cultivate.addExp(p, offlineExp);
       } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; }
     }
+    // 时间照常流逝（逐日回放，跨年/寿元/世界线照常结算；寿元尽则照常坐化）
+    for (let i = 0; i < realDays && !p.dead; i++) Time.add(1);
     if (offlineCrops > 0) {
       Log.add(`你不在的${realDays}个时辰里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
     }
     if (offlineExp > 0) {
       Log.add(`离山的日子裡你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（离线修行按四成效率折算，共 ${realDays} 日）。`, 'gain');
     }
-    if (offlineCrops > 0 || offlineExp > 0) {
-      p.day += realDays;
-      p.age += realDays / 365;
-    }
   },
 
   enterGame() {
     Anim.reset();   // v4：换档后数字动画记忆清零
     this.subTab = {};   // v22：换档后子页签记忆一并复位
+    this.scrollMem = {};   // v26：滚动记忆一并复位
     Meta.load();    // v6：装载本存档位的成就与图鉴
     AutoCult.abort();
     this.computeOfflineProgress();  // v18：离线进度
@@ -300,7 +309,11 @@ const Game = {
       if (sub) Game.subTab[tab] = sub;
       UI.closeDrawers();   // v22：移动端切页后收起抽屉，回到内容视图
       if (Game.activeTab !== tab && typeof Ambience !== 'undefined' && Ambience.sfxOn) Ambience.sfx('tab');   // v20 切页轻音
+      // v26 页签滚动记忆：离开前记下滚动位置，回到该页时还原（长列表不再从头翻起）
+      const tc = UI.el['tab-content'];
+      if (tc) Game.scrollMem[Game.activeTab] = tc.scrollTop;
       Game.activeTab = tab; UI.renderTabs(); UI.renderTabContent();
+      if (tc) tc.scrollTop = Game.scrollMem[tab] || 0;
       // v20 情境 BGM：进秘境页/坊市页切换氛围（战斗/剧情情境各自接管）
       if (typeof Ambience !== 'undefined' && Ambience.musicOn && !Battle.active && !Story.active()) {
         Ambience.setMood(tab === 'map' && this.player && this.player.dungeon ? 'secret' : tab === 'shop' ? 'market' : 'calm');
@@ -308,7 +321,6 @@ const Game = {
       // 面板切换平滑过渡：短暂加动效类，避免生硬跳变
       const box = UI.el['tab-content'];
       if (box) {
-        box.scrollTop = 0;   // v13：切换页签后回到顶部，避免残露上一页签中段内容
         box.classList.remove('tab-switch'); void box.offsetWidth; box.classList.add('tab-switch');
       }
     },
@@ -470,6 +482,7 @@ const Game = {
     'act-alchemy': (d) => CraftSys.alchemy(d.recipe),
     'act-study-recipe': (d) => CraftSys.studyRecipe(d.recipe),
     'act-alchemy-multi': (d) => CraftSys.alchemy(d.recipe, Number(d.times) || 5),
+    'craft-fire': (d) => CraftSys.setFire(d.fire || null),   // v26 火候选择
     'act-draw': () => CraftSys.drawTalisman(),
     /* --- v13 祭炼强化 / 炼器 --- */
     'act-enhance': (d) => ForgeSys.enhance(d.slot),
@@ -541,7 +554,11 @@ const Game = {
     'quest-review': () => QuestSys.openArchive(),
     'quest-archive-tab': (d) => { UI.closePopup(); QuestSys.openArchive(d.tab); },
     'quest-reread': (d) => QuestSys.reread(d.sid),
-    'quest-goto': (d) => { Game.actions['act-tab']({ tab: d.tab }); },
+    'quest-goto': (d) => {
+      // v26：切页后滚动定位到目标卡片并鎏金闪光（锚点来自 data-anchor / QuestSys.GO_ANCHOR）
+      Game.actions['act-tab']({ tab: d.tab });
+      UI.glimmer(d.anchor);
+    },
   },
 };
 

@@ -373,6 +373,24 @@ const QuestSys = {
     c9: ['cultivate', 'map:atlas', 'cultivate'],
     c10: ['cultivate', 'map:tower', 'map:atlas'],   // v25：塔影照心/斩妖证道直达天塔舆图
   },
+  /** v26 直达锚点（与 GO 平行，键 = 章 id + ':' + 步骤下标 → 目标卡文字）：切页后滚动定位并闪光 */
+  GO_ANCHOR: {
+    'c1:1': '新手村', 'c1:2': '新手村',
+    'c2:0': '青峰山', 'c2:1': '青峰山',
+    'c5:1': '炼丹炉',
+    'c10:1': '登天塔',
+  },
+  anchorOf(chId, idx) { return this.GO_ANCHOR[chId + ':' + idx] || ''; },
+  /** v26 目的地字典：tab:sub → 展示名（焦点条与问道页「前往」标注，点之前先知道去哪） */
+  DEST: {
+    cultivate: '修炼', quest: '问道',
+    cave: '洞府', 'cave:home': '洞府 · 洞府主楼', 'cave:farm': '洞府 · 灵田', 'cave:beast': '洞府 · 灵兽',
+    map: '游历', 'map:atlas': '游历 · 舆图', 'map:realm': '游历 · 秘境', 'map:world': '游历 · 天下', 'map:tower': '游历 · 天塔',
+    jianghu: '江湖', shop: '坊市',
+    'shop:market': '坊市 · 万宝阁', 'shop:craft': '坊市 · 炼制坊', 'shop:forge': '坊市 · 祭炼堂', 'shop:bounty': '坊市 · 悬赏板', 'shop:odd': '坊市 · 奇 市',
+    sect: '宗门', gongfa: '功法',
+  },
+  destLabel(go) { return this.DEST[go] || ''; },
   /** v12 有效章节序号：跳过「境界已领先、目标全部自动追认」的章节（正式结算仍在 check 中逐章进行） */
   currentChapterIdx(p) {
     const q = p.quest || { ch: 0 };
@@ -384,7 +402,7 @@ const QuestSys = {
     }
     return ch;
   },
-  /** v12 当前主线焦点：{ title, text, go 页签 }，全部完成时返回 null */
+  /** v12 当前主线焦点：{ ch, title, stepIdx, stepTotal, text, prog, go 页签 }；v26 结构化进度供焦点条与问道页共用；全部完成时返回 null */
   focus() {
     const p = Game.player;
     if (!p) return null;
@@ -392,7 +410,15 @@ const QuestSys = {
     const def = this.CHAPTERS[ch];
     const idx = def.steps.findIndex(st => !this.stepDone(st, p, def.supR));
     if (idx < 0) return null;
-    return { ch, title: def.title, text: def.steps[idx].desc, go: (this.GO[def.id] || [])[idx] || 'cultivate' };
+    const st = def.steps[idx];
+    return {
+      ch, title: def.title,
+      stepIdx: idx + 1, stepTotal: def.steps.length,
+      text: st.desc,
+      prog: st.prog ? st.prog(p) : '',
+      go: (this.GO[def.id] || [])[idx] || 'cultivate',
+      anchor: this.anchorOf(def.id, idx),
+    };
   },
   stepDone(step, p, supR) {
     if (p.realmIdx >= (supR || 999)) return true;   // 境界领先：旧章目标自动追认
@@ -579,7 +605,10 @@ const QuestSys = {
   renderTab() {
     const p = Game.player;
     const q = p.quest = p.quest || { ch: 0, side: {} };
-    const ch = Math.min(q.ch, this.CHAPTERS.length);
+    // v26 修瑕：展示章改用「境界追认后」的有效章（与焦点条/顶栏一致）——此前用原始 q.ch，
+    // 境界领先时问道页仍显示早已完结的旧章，与行动横幅相互矛盾
+    const chRaw = Math.min(q.ch, this.CHAPTERS.length);
+    const ch = chRaw >= this.CHAPTERS.length ? chRaw : this.currentChapterIdx(p);
     // 九章进度轨
     const rail = this.CHAPTERS.map((def, i) => {
       const state = i < ch ? 'done' : i === ch ? 'cur' : 'lock';
@@ -604,12 +633,24 @@ const QuestSys = {
     } else {
       const def = this.CHAPTERS[ch];
       const goTabs = this.GO[def.id] || [];
-      const steps = def.steps.map((st, si) => {
+      // v26：步骤行升级——序号圆标 + 数值目标微进度条 + 「前往」带目的地标注
+      const stepRow = (st, si, goRaw) => {
         const ok = this.stepDone(st, p, def.supR);
-        const prog = (!ok && st.prog) ? `<span class="q-prog">${st.prog(p)}</span>` : '';
-        const go = (!ok && goTabs[si]) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${goTabs[si]}">前往</button>` : '';
-        return `<div class="q-step ${ok ? 'done' : ''}"><span class="q-mark">${ok ? '✓' : '○'}</span><span class="q-desc">${st.desc}</span>${prog}${go}</div>`;
-      }).join('');
+        const prog = (!ok && st.prog) ? st.prog(p) : '';
+        let bar = '';
+        if (!ok && prog) {
+          const m = String(prog).match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+          if (m && Number(m[2]) > 0) {
+            const pct = Utils.clamp(Number(m[1]) / Number(m[2]) * 100, 0, 100);
+            bar = `<span class="q-bar"><i style="width:${pct}%"></i></span>`;
+          }
+        }
+        const goTab = String(goRaw || '');
+        const anchor = this.anchorOf(def.id, si);
+        const go = (!ok && goRaw) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${goTab}" ${anchor ? `data-anchor="${anchor}"` : ''} title="直达 · ${this.destLabel(goTab) || goTab}${anchor ? ' · ' + anchor : ''}">前往 ›</button>` : '';
+        return `<div class="q-step ${ok ? 'done' : ''}"><span class="q-mark">${ok ? '✓' : si + 1}</span><span class="q-main">${st.desc}</span>${bar}${prog ? `<span class="q-prog">${prog}</span>` : ''}${go}</div>`;
+      };
+      const steps = def.steps.map((st, si) => stepRow(st, si, goTabs[si])).join('');
       // v24 章助缘：可选支目标行（不挡章末，完成后额外领赏）
       let bonusHtml = '';
       if (def.bonus) {
@@ -617,10 +658,12 @@ const QuestSys = {
         const claimed = !!(q2.bonus || {})[def.id];
         const ok = claimed || this.bonusDone(def, p);
         const prog = (!ok && def.bonus.prog) ? `<span class="q-prog">${def.bonus.prog(p)}</span>` : '';
-        const goBtn = (!ok && def.bonus.go) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${def.bonus.go}">前往</button>` : '';
+        const bonusGo = def.bonus.go || '';
+        const bonusAnchor = bonusGo === 'cave:home' ? '洞府' : '';
+        const goBtn = (!ok && bonusGo) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${bonusGo}" ${bonusAnchor ? `data-anchor="${bonusAnchor}"` : ''} title="直达 · ${this.destLabel(bonusGo) || ''}">前往 ›</button>` : '';
         const act = claimed ? '<span class="q-prog">已领赏</span>'
           : ok ? `<button class="btn btn-sm btn-primary" data-action="quest-bonus">领 赏</button>` : '';
-        bonusHtml = `<div class="q-step bonus ${ok ? 'done' : ''}"><span class="q-mark">${claimed ? '✓' : '✦'}</span><span class="q-desc"><b>助缘</b> · ${def.bonus.desc}</span>${prog}${act}${goBtn}</div>
+        bonusHtml = `<div class="q-step bonus ${ok ? 'done' : ''}"><span class="q-mark">${claimed ? '✓' : '✦'}</span><span class="q-main"><b>助缘</b> · ${def.bonus.desc}</span>${prog}${act}${goBtn}</div>
         <div class="tip-line">· 助缘不挡章末推进——完成可额外领取：${this.rewardText(def.bonus.reward)}。</div>`;
       }
       mainHtml = `

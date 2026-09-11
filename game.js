@@ -60,6 +60,7 @@ const Utils = {
     const entries = Array.isArray(list)
       ? list.map(x => [x.id ?? x, x.weight ?? 1])
       : Object.entries(list);
+    if (!entries.length) return null;   // v26：空权重表防崩（原直取末项会抛 TypeError）
     const total = entries.reduce((s, [, w]) => s + w, 0);
     let r = Math.random() * total;
     for (const [v, w] of entries) { r -= w; if (r <= 0) return v; }
@@ -1011,7 +1012,7 @@ const AutoCult = {
     const p = Game.player;
     if (this.active) { UI.toast('自动修炼已在进行中'); return; }
     const realmOpts = GameData.REALM_NAMES.map((n, i) => `<option value="${i}">${n}期</option>`).join('');
-    const ok = await UI.popup({
+    const popupPending = UI.popup({   // v26：先发起弹窗（DOM 同步注入），接线后再 await
       title: '自动修炼',
       html: `心无旁骛，自行吐纳——期间将自动进行普通修炼，收益尽数入账。<br>
         <div class="auto-row">
@@ -1026,6 +1027,23 @@ const AutoCult = {
         <div class="tip-line">· 修为圆满或遭遇战斗时将<b>自动停下</b>，等待你亲手冲关／应对。</div>`,
       options: [{ text: '开 始', value: true, primary: true }, { text: '取 消', value: false }],
     });
+    // v26 修瑕：按目标类型显隐输入控件（攒修为/限时两目标此前输入框恒隐藏，形同不可用）。
+    // 注意：UI.popup 同步注入 DOM 后才返回 Promise——接线必须在 await 之前完成，弹窗关闭后节点即销毁。
+    {
+      const kindSel = document.getElementById('auto-kind');
+      const realmSel = document.getElementById('auto-realm');
+      const valInput = document.getElementById('auto-val');
+      if (kindSel && realmSel && valInput) {
+        const sync = () => {
+          const isRealm = kindSel.value === 'realm';
+          realmSel.classList.toggle('hidden', !isRealm);
+          valInput.classList.toggle('hidden', isRealm);
+        };
+        kindSel.addEventListener('change', sync);
+        sync();
+      }
+    }
+    const ok = await popupPending;
     if (!ok) return;
     const kind = document.getElementById('auto-kind').value;
     let target = null;
@@ -1051,6 +1069,7 @@ const AutoCult = {
     this.startExp = Guide.totalExp(p);
     this.startDay = p.day;
     this.startReal = Date.now();
+    if (typeof Save !== 'undefined' && Save.setThrottle) Save.setThrottle(true);   // v26：挂机期存档节流（行动结算照常，仅去重落盘）
     Log.add(`你入定自行吐纳——<b>自动修炼</b>开启，目标：${target.label}。`, 'system');
     UI.renderAll();
     this.run();
@@ -1088,16 +1107,26 @@ const AutoCult = {
   },
   pause(reason) {
     this.active = false;
+    this.settle();
     Log.add(`【自动修炼 · 暂停】${reason}`, 'warn');
     this.summary();
   },
   finish(reason) {
     this.active = false;
+    this.settle();
     Log.add(`【自动修炼 · 完成】${reason}`, 'system');
     this.summary();
   },
   /** 读档 / 返回开始界面时静默中止 */
-  abort() { this.active = false; },
+  abort() { this.active = false; this.settle(); },
+  /** v26：停止时解除节流并强制落盘一次，保证挂机成果即时落袋 */
+  settle() {
+    if (typeof Save !== 'undefined' && Save.setThrottle) {
+      const wasThr = Save._thr;
+      Save.setThrottle(false);
+      if (wasThr && Game.player && !Game.player.dead) Save.autoSave(true);
+    }
+  },
   summary() {
     const p = Game.player;
     if (!p) { UI.renderAll(); return; }
@@ -4408,9 +4437,13 @@ write(key, player) {
   /** 每次行动实时落盘（保持外部读取 localStorage 所见即所得）；
    *  force 参数保留兼容（关页 / 切后台等关键时机调用），当前策略下与常规写入一致。 */
   _lastAuto: 0,
+  /** v26：节流开关——仅挂机热路径（AutoCult）启用：每轮 ~0.3s 全量 JSON 双写曾达上万次/小时 */
+  setThrottle(on) { this._thr = !!on; if (!on) this._lastAuto = 0; },
   autoSave(force = false) {
     if (!Game.player || Game.player.dead) return;
-    this._lastAuto = Date.now();
+    const now = Date.now();
+    if (!force && this._thr && now - (this._lastAuto || 0) < 2500) return;
+    this._lastAuto = now;
     this.write('auto', Game.player);
   },
 };
@@ -4518,8 +4551,9 @@ const PlayerFactory = {
       },
       // v13: 强化/洞府/灵兽/悬赏/天骄榜
       (out) => {
+        // v26 修瑕：旧值须读【原始存档】p（v16 同款先例）——此前先清零再读 out，旧档强化读档即蒸发
         out.enhanced = {};
-        const srcEnh = (out.enhanced && typeof out.enhanced === 'object') ? out.enhanced : {};
+        const srcEnh = (p.enhanced && typeof p.enhanced === 'object') ? p.enhanced : {};
         for (const [id, lv] of Object.entries(srcEnh)) {
           if (!GameData.ITEMS[id] || GameData.ITEMS[id].type !== 'artifact') continue;
           const n = Math.floor(Number(lv));
@@ -5091,8 +5125,9 @@ const Cultivate = {
     const st = Stat.compute(p);
     p.hp = Math.min(st.maxHp, p.hp + Math.round(st.maxHp * 0.5));
     p.mp = Math.min(st.maxMp, p.mp + Math.round(st.maxMp * 0.5));
-    // v10 境界特性 · 胎息（练气）：调息时气机自转，额外化解丹毒
-    const detox = p.realmIdx >= 0 ? 5 : 0;
+    // v10 境界特性 · 胎息（练气）：调息时气机自转，化解丹毒更胜他境
+    // v26 修瑕：原条件 realmIdx>=0 恒真，「胎息」形同虚设——练气 5 点、其余境界 3 点
+    const detox = p.realmIdx === 0 ? 5 : 3;
     if (detox) p.poison = Math.max(0, p.poison - detox);
     Time.add(1);
     if (p.dead) return;
@@ -5423,6 +5458,21 @@ const Bag = {
     if (p.stones.low < amount) return false;
     p.stones.low -= amount;
     return true;
+  },
+  /** v26：尽力扣款——不足则倾囊全扣，返回实扣数（罚款/罚没类场景，杜绝「分文未扣却宣称赔了钱」） */
+  spendStonesMax(amount) {
+    const p = Game.player;
+    const total = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
+    const take = Math.min(total, amount);
+    if (take <= 0) return 0;
+    // 全部整兑到下品再扣，保证恰好扣掉 take
+    while (p.stones.high > 0) { p.stones.high--; p.stones.mid += 100; }
+    while (p.stones.mid > 0) { p.stones.mid--; p.stones.low += 100; }
+    p.stones.low -= take;
+    // 大额余钱回兑中品，避免下品堆积到夸张数量
+    p.stones.mid += Math.floor(p.stones.low / 100);
+    p.stones.low %= 100;
+    return take;
   },
   stonesText() {
     const s = Game.player.stones;
@@ -5769,14 +5819,18 @@ const ForgeSys = {
       success = Utils.chance(rate);
     }
     if (success) {
-      p.enhanced = p.enhanced || {};
-      p.enhanced[itemId] = lv + 1;
+      // v26 修瑕：强化直接写已穿戴装备实例（lvOf/Stat 均以实例为准）——
+      // 此前只写 p.enhanced 共享档，实例已有强化时属性永不提升、灵石白花
+      const eq = p.equipped[slot];
+      if (eq && typeof eq === 'object') eq.enhance = Math.min(this.MAX_LV, lv + 1);
+      else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv + 1; }
       Ambience.sfx('forge');
       Log.add(`炉火纯青——<b class="grade-${def.grade}">${def.name}</b> 祭炼功成，升至 <b>+${lv + 1}</b>！法宝灵光更胜往昔。`, 'gain');
       if (lv + 1 >= 7) UI.announce(`✦ ${def.name} +${lv + 1}`, 'gold');
     } else if (lv >= 7) {
-      p.enhanced = p.enhanced || {};
-      p.enhanced[itemId] = lv - 1;
+      const eq2 = p.equipped[slot];
+      if (eq2 && typeof eq2 === 'object') eq2.enhance = Math.max(0, lv - 1);
+      else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv - 1; }
       Log.add(`炉火骤然失控！<b class="grade-${def.grade}">${def.name}</b> 祭炼失利，灵纹黯淡——强化跌至 <b>+${lv - 1}</b>。`, 'loss');
       UI.toast('祭炼失败，强化跌落一级', true);
     } else {
@@ -6053,13 +6107,13 @@ const CaveSys = {
     const cost = this.rushCost(p);
     const ok = await UI.popup({
       title: '聚灵加速',
-      html: `燃烧灵石为聚灵阵供能——<b>今日修炼效率 ×1.5</b>（每轮修炼约 \${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 1.5))} 修为）。<br>需灵石 <span class="hl">\${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 日限一次；闭关与自动修炼同样受益。</span>`,
+      html: `燃烧灵石为聚灵阵供能——<b>今日修炼效率 ×1.5</b>（每轮修炼约 ${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 1.5))} 修为）。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 日限一次；闭关与自动修炼同样受益。</span>`,
       options: [{ text: '点燃聚灵阵', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     p.rushDay = today;
-    Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -\${Utils.fmtNum(cost)}）`, 'system');
+    Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
     Story.chron('点燃聚灵阵（日修加速）');
     Game.afterAction();
   },
@@ -6545,6 +6599,7 @@ const BeastSys = {
     if (!ok) return;
     p.beasts.list = p.beasts.list.filter(x => x.uid !== uid);
     if (p.beasts.active === uid) p.beasts.active = null;
+    if (p.beasts.active2 === uid) p.beasts.active2 = null;   // v26 修瑕：放归「护持中」灵兽后副位不再悬挂
     Log.add(`你解开灵契，${b.name} 绕你三匝，长啸一声遁入山林。`, 'info');
     Game.afterAction();
   },
@@ -6722,7 +6777,7 @@ const SectSys = {
       options: this.COMMANDS.map((c, i) => ({ text: c.name, value: c.id, primary: i === 0 })).concat([{ text: '再议', value: null }]),
     });
     if (!pickCmd) return;
-    p.sect.command = { kind: pickCmd, day: today, until: today + 2 };
+    p.sect.command = { kind: pickCmd, day: today, until: today + 1 };   // v26 修瑕：与「至明日／次日更张」文案对齐（原 today+2 白得两日）
     const c = this.COMMANDS.find(x => x.id === pickCmd);
     Log.add(`【长老令】<b>${c.name}</b>——${c.desc}`, 'system');
     Story.chron(`宗门下令「${c.name}」`);
@@ -7647,7 +7702,7 @@ const KarmaSys = {
     const p = Game.player;
     // v18 道心烙印【戾/杀/厉/慈/容】：孽障增减（仅正向放大，负向/减免取整不低于1）
     if (n > 0 && typeof DaoxinSys !== 'undefined') n = Math.max(1, Math.round(n * DaoxinSys.gainMult(p, 'karmaMult')));
-    p.karma = (p.karma || 0) + n;
+    p.karma = Math.max(0, (p.karma || 0) + n);   // v26 修瑕：消业不至负（负孽障曾反向加成突破成算）
     if (!silent) Log.add(`因果簿上又添一笔血墨——孽障 +${n}。`, 'loss');
   },
   /** 气运：好事事件（宝箱/机缘/贵人）权重倍率，每10点+5% */
@@ -8127,7 +8182,14 @@ const DailySign = {
  * §21 百艺坊 CraftSys（炼丹 / 画符）
  * ====================================================================== */
 const CraftSys = {
-  /** v18：火候选择（影响成丹率与品质） */
+  /** v26：当前选中火候（null=平火随心；会话级选择，单炉生效，连炉不受影响） */
+  _fire: null,
+  setFire(f) {
+    this._fire = (f && this.FIRES[f]) ? f : null;
+    UI.markDirty('content');
+    UI.renderAll();
+  },
+  /** v18：火候选择（影响成丹率与品质）；v26 起拥有炼制坊内联入口 */
   FIRES: {
     wen: { name: '文火', key: 0, desc: '文火慢煨，药性绵长（成丹率+5%）' },
     wu: { name: '武火', key: 1, desc: '武火急攻，药力霸道（成丹率-3%，上品率+10%）' },
@@ -8197,11 +8259,8 @@ const CraftSys = {
     // v19 失传丹方：须先以残页参悟
     if (r.needPages && !(p.flags.recipeOk || {})[r.id]) { UI.toast('此丹方失传——需先集齐丹方残页参悟'); return; }
     times = Utils.clamp(Math.floor(Number(times)) || 1, 1, 99);
-    // 单炉时弹出火候选择
-    let fire = null;
-    if (times === 1) {
-      // 火候选择在渲染时已通过按钮传入
-    }
+    // v26：单炉按炼制坊当前选中火候行火（连炉保持平火，批量收益不受赌博式火候影响）
+    const fire = times === 1 ? (this._fire || null) : null;
     const rate = this.rate(p, r, fire);
     const out = GameData.ITEMS[r.out];
     let tried = 0, made = 0, critN = 0, supN = 0, supremeN = 0;
@@ -8216,30 +8275,33 @@ const CraftSys = {
       if (Utils.chance(rate)) {
         DaoSys.gain(p, 25);
         const isCrit = Utils.chance(p.dao === 'pill' && DaoSys.tierLevel(p) >= 4 ? 15 : 10);
-        const qty = isCrit ? 2 : 1;
+        let qty = isCrit ? 2 : 1;   // v26：极品翻倍需要可变（原 const 与 ×2 冲突）
         Bag.addItem(r.out, qty);
         p.counters.craftsOk = (p.counters.craftsOk || 0) + 1;
         DaoSys.gain(p, 8);
         made += qty;
         if (isCrit) critN++;
-        // v18：品质判定
+        // v18 品质判定 + v26 激活：上品凝丹道感悟，极品当炉产出翻倍——「可遇不可求」落到实处
         const qual = this.rollQuality(p, r);
-        if (qual === 'supreme') { supremeN++; }
-        else if (qual === 'superior') { supN++; }
+        if (qual === 'supreme') { supremeN++; qty *= 2; DaoSys.gain(p, 10); }
+        else if (qual === 'superior') { supN++; DaoSys.gain(p, 5); }
         gainMap[r.out] = (gainMap[r.out] || 0) + qty;
       }
     }
     if (!tried) { UI.toast('药材不足'); return; }
+    const fireTxt = fire ? `（${this.FIRES[fire].name}）` : '';
     if (times === 1 && tried === 1) {
-      // 单炉：保持原有文案
+      // 单炉：保持原有文案 + v26 火候/品质注记
       if (made) {
-        Log.add(`丹炉青烟直上，一缕丹香盈野——<b>${out.name}</b> ×${made} 出炉！${critN ? '（丹成上品，一炉双丹！）' : `（成丹率 ${rate.toFixed(0)}%）`}`, 'gain');
+        const qualTxt = supremeN ? '【极品】丹光凝而不散！' : (critN ? '（丹成上品，一炉双丹！）' : (supN ? '（上品，药香清正）' : `（成丹率 ${rate.toFixed(0)}%）`));
+        Log.add(`丹炉青烟直上，一缕丹香盈野——<b>${out.name}</b> ×${made} 出炉！${qualTxt}${fireTxt}`, 'gain');
       } else {
-        Log.add(`丹炉一声闷响，药力尽数散作飞灰……（药材已耗，成丹率 ${rate.toFixed(0)}%）`, 'loss');
+        Log.add(`丹炉一声闷响，药力尽数散作飞灰……（药材已耗，成丹率 ${rate.toFixed(0)}%）${fireTxt}`, 'loss');
       }
     } else {
       const parts = Object.entries(gainMap).map(([id, n]) => `${GameData.ITEMS[id].name} ×${n}`);
-      Log.add(`你连开 ${tried} 炉：${made ? `成丹 ${parts.join('、')}${critN ? `（含上品双丹 ×${critN}）` : ''}` : '药材尽毁，未得丹药'}。（成丹率 ${rate.toFixed(0)}%）`, made ? 'gain' : 'loss');
+      const qualBits = [critN ? `上品双丹 ×${critN}` : '', supN ? `上品 ×${supN}` : '', supremeN ? `极品 ×${supremeN}` : ''].filter(Boolean).join('、');
+      Log.add(`你连开 ${tried} 炉：${made ? `成丹 ${parts.join('、')}${qualBits ? `（${qualBits}）` : ''}` : '药材尽毁，未得丹药'}。（成丹率 ${rate.toFixed(0)}%）`, made ? 'gain' : 'loss');
     }
     Game.afterAction();
   },
@@ -8948,8 +9010,9 @@ const BlackSys = {
     } else {
       KarmaSys.addKarma(4, true);
       const fine = Math.round(100 * GameData.stoneEco(p.realmIdx));
-      if (p.stones.low >= fine) p.stones.low -= fine;
-      Log.add(`袋中只有几块破布——这是一桩栽赃的买卖！失主寻来，你只得赔钱了事：灵石 -${Utils.fmtNum(fine)}，还沾了一身晦气（孽障 +4）。`, 'loss');
+      // v26 修瑕：罚款实扣实报（此前下品灵石不足时分文未扣，日志却照写扣钱）
+      const paid = Bag.spendStonesMax(fine);
+      Log.add(`袋中只有几块破布——这是一桩栽赃的买卖！失主寻来，你只得赔钱了事：灵石 -${Utils.fmtNum(paid)}${paid < fine ? '（囊中羞涩，尽数奉上）' : ''}，还沾了一身晦气（孽障 +4）。`, 'loss');
       UI.toast('破财免灾……', true);
     }
     Game.afterAction();
@@ -10667,7 +10730,8 @@ const ReincarnationSys = {
     // v20 传承树九、十层
     if (treeTier >= 9) p2.flags.daoYunEcho = true;   // 道韵残响：转世保留一条已激活道韵（Stat 消费）
     if (treeTier >= 10) p2.rerollBest = true;   // 逆天改命：创角四维重掷三次取最优
-    if (kept) p2.bag[kept] = 1;
+    // v26 修瑕：第三层「多带一件法宝」加的那件不再被这里覆盖回 1
+    if (kept && !p2.bag[kept]) p2.bag[kept] = 1;
     for (const gid of grudges) {
       const s = p2.npcs[gid];
       if (s) { s.rel = -35; s.grudge = true; s.pastLife = true; }
@@ -12322,9 +12386,9 @@ const Battle = {
         <div class="bt-name-row"><span class="bt-name me">${Utils.esc(p.name)}${B.combo >= 2 ? ` <span class="tag combo">连击×${B.combo}</span>` : ''}${B.auto ? ' <span class="tag safe">自动</span>' : ''}</span><span class="bt-realm">攻${this.myAtk(st)} 防${this.myDef(st)} · 暴击${this.myCrit(st).toFixed(0)}%</span></div>
         <div class="bt-figure me-fig" aria-hidden="true"></div>
         <div class="bar" title="气血 ${p.hp} / ${st.maxHp}"><div class="bar-fill hp${hpPct <= 30 ? ' low' : ''}" style="width:${hpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-hp" data-nv="${p.hp}">${p.hp}</span> / ${st.maxHp}</span></div>
-        <div class="bar" title="灵力 ${p.mp} / ${st.maxMp}"><div class="bar-fill mp" style="width:${mpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-mp" data-nv="${p.mp}">${p.mp}</span> / ${st.maxMp}</span></div>
-        <div class="bar morale-bar" title="战意：连击提升，受挫回落（每点 +0.4% 伤害）"><div class="bar-fill morale" style="width:${B.morale || 0}%"></div><span class="bar-text">战意 ${B.morale || 0}${(B.morale || 0) >= 100 ? '（伤害 +40%）' : ''}</span></div>
-        <div class="bar morale-bar" title="真元：普攻命中+1，会心+2，防御+1（用于职业必杀；道境三重上限扩至8）"><div class="bar-fill" style="width:${(B.zhenyuan || 0) / (B.zmax || 6) * 100}%;background:linear-gradient(90deg,#5a6ac7,#a04ab0)"></div><span class="bar-text">真元 ${B.zhenyuan || 0}/${B.zmax || 6}</span></div>
+        <div class="bar" title="灵力 ${p.mp} / ${st.maxMp}"><div class="bar-fill mp" style="width:${mpPct}%"></div><span class="bar-text${(p.mp || 0) <= 0 ? ' dim' : ''}"><span class="num-anim" data-nk="bt-mp" data-nv="${p.mp}">${p.mp}</span> / ${st.maxMp}</span></div>
+        <div class="bar morale-bar" title="战意：连击提升，受挫回落（每点 +0.4% 伤害）"><div class="bar-fill morale" style="width:${B.morale || 0}%"></div><span class="bar-text${(B.morale || 0) <= 0 ? ' dim' : ''}">战意 ${B.morale || 0}${(B.morale || 0) >= 100 ? '（伤害 +40%）' : ''}</span></div>
+        <div class="bar morale-bar" title="真元：普攻命中+1，会心+2，防御+1（用于职业必杀；道境三重上限扩至8）"><div class="bar-fill" style="width:${(B.zhenyuan || 0) / (B.zmax || 6) * 100}%;background:linear-gradient(90deg,#5a6ac7,#a04ab0)"></div><span class="bar-text${(B.zhenyuan || 0) <= 0 ? ' dim' : ''}">真元 ${B.zhenyuan || 0}/${B.zmax || 6}</span></div>
         <div class="fx-tags">${StatusFx.tagsHtml(B.myFx)}</div>
       </div>
       <div id="bt-log"></div>
@@ -13177,6 +13241,24 @@ const QuestSys = {
     c9: ['cultivate', 'map:atlas', 'cultivate'],
     c10: ['cultivate', 'map:tower', 'map:atlas'],   // v25：塔影照心/斩妖证道直达天塔舆图
   },
+  /** v26 直达锚点（与 GO 平行，键 = 章 id + ':' + 步骤下标 → 目标卡文字）：切页后滚动定位并闪光 */
+  GO_ANCHOR: {
+    'c1:1': '新手村', 'c1:2': '新手村',
+    'c2:0': '青峰山', 'c2:1': '青峰山',
+    'c5:1': '炼丹炉',
+    'c10:1': '登天塔',
+  },
+  anchorOf(chId, idx) { return this.GO_ANCHOR[chId + ':' + idx] || ''; },
+  /** v26 目的地字典：tab:sub → 展示名（焦点条与问道页「前往」标注，点之前先知道去哪） */
+  DEST: {
+    cultivate: '修炼', quest: '问道',
+    cave: '洞府', 'cave:home': '洞府 · 洞府主楼', 'cave:farm': '洞府 · 灵田', 'cave:beast': '洞府 · 灵兽',
+    map: '游历', 'map:atlas': '游历 · 舆图', 'map:realm': '游历 · 秘境', 'map:world': '游历 · 天下', 'map:tower': '游历 · 天塔',
+    jianghu: '江湖', shop: '坊市',
+    'shop:market': '坊市 · 万宝阁', 'shop:craft': '坊市 · 炼制坊', 'shop:forge': '坊市 · 祭炼堂', 'shop:bounty': '坊市 · 悬赏板', 'shop:odd': '坊市 · 奇 市',
+    sect: '宗门', gongfa: '功法',
+  },
+  destLabel(go) { return this.DEST[go] || ''; },
   /** v12 有效章节序号：跳过「境界已领先、目标全部自动追认」的章节（正式结算仍在 check 中逐章进行） */
   currentChapterIdx(p) {
     const q = p.quest || { ch: 0 };
@@ -13188,7 +13270,7 @@ const QuestSys = {
     }
     return ch;
   },
-  /** v12 当前主线焦点：{ title, text, go 页签 }，全部完成时返回 null */
+  /** v12 当前主线焦点：{ ch, title, stepIdx, stepTotal, text, prog, go 页签 }；v26 结构化进度供焦点条与问道页共用；全部完成时返回 null */
   focus() {
     const p = Game.player;
     if (!p) return null;
@@ -13196,7 +13278,15 @@ const QuestSys = {
     const def = this.CHAPTERS[ch];
     const idx = def.steps.findIndex(st => !this.stepDone(st, p, def.supR));
     if (idx < 0) return null;
-    return { ch, title: def.title, text: def.steps[idx].desc, go: (this.GO[def.id] || [])[idx] || 'cultivate' };
+    const st = def.steps[idx];
+    return {
+      ch, title: def.title,
+      stepIdx: idx + 1, stepTotal: def.steps.length,
+      text: st.desc,
+      prog: st.prog ? st.prog(p) : '',
+      go: (this.GO[def.id] || [])[idx] || 'cultivate',
+      anchor: this.anchorOf(def.id, idx),
+    };
   },
   stepDone(step, p, supR) {
     if (p.realmIdx >= (supR || 999)) return true;   // 境界领先：旧章目标自动追认
@@ -13383,7 +13473,10 @@ const QuestSys = {
   renderTab() {
     const p = Game.player;
     const q = p.quest = p.quest || { ch: 0, side: {} };
-    const ch = Math.min(q.ch, this.CHAPTERS.length);
+    // v26 修瑕：展示章改用「境界追认后」的有效章（与焦点条/顶栏一致）——此前用原始 q.ch，
+    // 境界领先时问道页仍显示早已完结的旧章，与行动横幅相互矛盾
+    const chRaw = Math.min(q.ch, this.CHAPTERS.length);
+    const ch = chRaw >= this.CHAPTERS.length ? chRaw : this.currentChapterIdx(p);
     // 九章进度轨
     const rail = this.CHAPTERS.map((def, i) => {
       const state = i < ch ? 'done' : i === ch ? 'cur' : 'lock';
@@ -13408,12 +13501,24 @@ const QuestSys = {
     } else {
       const def = this.CHAPTERS[ch];
       const goTabs = this.GO[def.id] || [];
-      const steps = def.steps.map((st, si) => {
+      // v26：步骤行升级——序号圆标 + 数值目标微进度条 + 「前往」带目的地标注
+      const stepRow = (st, si, goRaw) => {
         const ok = this.stepDone(st, p, def.supR);
-        const prog = (!ok && st.prog) ? `<span class="q-prog">${st.prog(p)}</span>` : '';
-        const go = (!ok && goTabs[si]) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${goTabs[si]}">前往</button>` : '';
-        return `<div class="q-step ${ok ? 'done' : ''}"><span class="q-mark">${ok ? '✓' : '○'}</span><span class="q-desc">${st.desc}</span>${prog}${go}</div>`;
-      }).join('');
+        const prog = (!ok && st.prog) ? st.prog(p) : '';
+        let bar = '';
+        if (!ok && prog) {
+          const m = String(prog).match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)$/);
+          if (m && Number(m[2]) > 0) {
+            const pct = Utils.clamp(Number(m[1]) / Number(m[2]) * 100, 0, 100);
+            bar = `<span class="q-bar"><i style="width:${pct}%"></i></span>`;
+          }
+        }
+        const goTab = String(goRaw || '');
+        const anchor = this.anchorOf(def.id, si);
+        const go = (!ok && goRaw) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${goTab}" ${anchor ? `data-anchor="${anchor}"` : ''} title="直达 · ${this.destLabel(goTab) || goTab}${anchor ? ' · ' + anchor : ''}">前往 ›</button>` : '';
+        return `<div class="q-step ${ok ? 'done' : ''}"><span class="q-mark">${ok ? '✓' : si + 1}</span><span class="q-main">${st.desc}</span>${bar}${prog ? `<span class="q-prog">${prog}</span>` : ''}${go}</div>`;
+      };
+      const steps = def.steps.map((st, si) => stepRow(st, si, goTabs[si])).join('');
       // v24 章助缘：可选支目标行（不挡章末，完成后额外领赏）
       let bonusHtml = '';
       if (def.bonus) {
@@ -13421,10 +13526,12 @@ const QuestSys = {
         const claimed = !!(q2.bonus || {})[def.id];
         const ok = claimed || this.bonusDone(def, p);
         const prog = (!ok && def.bonus.prog) ? `<span class="q-prog">${def.bonus.prog(p)}</span>` : '';
-        const goBtn = (!ok && def.bonus.go) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${def.bonus.go}">前往</button>` : '';
+        const bonusGo = def.bonus.go || '';
+        const bonusAnchor = bonusGo === 'cave:home' ? '洞府' : '';
+        const goBtn = (!ok && bonusGo) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${bonusGo}" ${bonusAnchor ? `data-anchor="${bonusAnchor}"` : ''} title="直达 · ${this.destLabel(bonusGo) || ''}">前往 ›</button>` : '';
         const act = claimed ? '<span class="q-prog">已领赏</span>'
           : ok ? `<button class="btn btn-sm btn-primary" data-action="quest-bonus">领 赏</button>` : '';
-        bonusHtml = `<div class="q-step bonus ${ok ? 'done' : ''}"><span class="q-mark">${claimed ? '✓' : '✦'}</span><span class="q-desc"><b>助缘</b> · ${def.bonus.desc}</span>${prog}${act}${goBtn}</div>
+        bonusHtml = `<div class="q-step bonus ${ok ? 'done' : ''}"><span class="q-mark">${claimed ? '✓' : '✦'}</span><span class="q-main"><b>助缘</b> · ${def.bonus.desc}</span>${prog}${act}${goBtn}</div>
         <div class="tip-line">· 助缘不挡章末推进——完成可额外领取：${this.rewardText(def.bonus.reward)}。</div>`;
       }
       mainHtml = `
@@ -13719,7 +13826,7 @@ const UI = {
     this.setHTML(this.el['top-info'], `
       ${chapter}${stoneChip}${miniBars}
       <span class="res-chip" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</span>
-      <span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${p.age}岁 / 寿元${st.lifespan}</span>
+      <span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${Math.floor(p.age)}岁 / 寿元${st.lifespan}</span>
       <span class="top-meta2"><span class="save-dot"></span>已自动存档</span>`);
   },
 
@@ -13747,7 +13854,7 @@ const UI = {
       <div class="id-card">
         <div class="id-name">${Utils.esc(p.name)}</div>
         <div class="id-row"><span class="realm-badge" style="--realm-c:${realmColor}">${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}</span></div>
-        <div class="id-line"><span>大道 <b class="hl">${DaoSys.name(p)}</b></span><span>寿元 <b>${p.age} / ${st.lifespan}</b></span></div>
+        <div class="id-line"><span>大道 <b class="hl">${DaoSys.name(p)}</b></span><span>寿元 <b>${Math.floor(p.age)} / ${st.lifespan}</b></span></div>
       </div>`;
     // v14 核心条：色点标题 + 大数值，进度一眼可读
     const coreBar = (label, cls, nk, val, max, maxText, fmt) => `
@@ -13755,7 +13862,7 @@ const UI = {
         <span class="cs-name ${cls}">${label}</span>
         <span class="cs-val">${fmt ? `<span class="num-anim" data-nk="${nk}" data-fmt="fmt" data-nv="${val}">${Utils.fmtNum(val)}</span>` : `<span class="num-anim" data-nk="${nk}" data-nv="${val}">${Math.round(val)}</span>`} <span class="cs-max">/ ${maxText}</span></span>
       </div>
-      <div class="bar" title="${label} ${Math.round(val)} / ${max}"><div class="bar-fill ${cls}${cls === 'hp' && val / max <= 0.3 ? ' low' : ''}" style="width:${Utils.clamp(val / max * 100, 0, 100)}%"></div><span class="bar-text">${Math.round(val / max * 100)}%</span></div>`;
+      <div class="bar" title="${label} ${Math.round(val)} / ${max}"><div class="bar-fill ${cls}${cls === 'hp' && val / max <= 0.3 ? ' low' : ''}" style="width:${Utils.clamp(val / max * 100, 0, 100)}%"></div><span class="bar-text${val <= 0 ? ' dim' : ''}">${Math.round(val / max * 100)}%</span></div>`;
     // v14 道行状态芯片
     const chips = [];
     if (p.insight > 0) chips.push(`<span class="chip" title="突破感悟：冲关时的额外成算">感悟 <b>${p.insight}</b></span>`);
@@ -13766,7 +13873,7 @@ const UI = {
     if ((p.flags && p.flags.xinmoCleared)) chips.push(`<span class="chip lucky" title="心魔凝练：每降伏心魔一次，全属性永久 +1%">凝练 <b>+${p.flags.xinmoCleared}%</b></span>`);   // v19
     const chipsHtml = `
       <div class="chip-row">${chips.join('')}</div>
-      <div class="bar" title="丹毒 ${Math.round(p.poison)} / ${poisonCap}"><div class="bar-fill poison" style="width:${Utils.clamp(p.poison / poisonCap * 100, 0, 100)}%"></div><span class="bar-text">${Math.round(p.poison / poisonCap * 100)}%</span></div>`;
+      <div class="bar" title="丹毒 ${Math.round(p.poison)} / ${poisonCap}"><div class="bar-fill poison" style="width:${Utils.clamp(p.poison / poisonCap * 100, 0, 100)}%"></div><span class="bar-text${p.poison <= 0 ? ' dim' : ''}">${Math.round(p.poison / poisonCap * 100)}%</span></div>`;
     this.setHTML(this.el['panel-left'], `
       <div class="panel-title">✦ 道途</div>
       ${idCard}
@@ -13806,7 +13913,8 @@ const UI = {
 
   /* ---------- v14 行动横幅：进游戏第一眼看到"现在该做什么" ----------
    * 主卡（墨底金字）：主线目标优先；无主线时"里程碑行动"（冲关/飞升/择道/斩三尸/合成）顶上。
-   * 副卡（朱砂）：紧急提醒（气血/丹毒/可结案等）。 */
+   * 副卡（朱砂实底）：紧急提醒（气血/丹毒/可结案等）。
+   * v26：主线卡带「目标 x/y · 进度」与目的地副行——点「前往」之前就知道去哪、差多少。 */
   renderFocus() {
     const p = Game.player;
     if (!p) return;
@@ -13825,26 +13933,32 @@ const UI = {
     else if (p.hp < st.maxHp * 0.3) alert = { text: '气血衰微，宜调息服丹', go: 'cultivate' };
 
     const mf = QuestSys.focus();
+    const destOf = go => QuestSys.destLabel(String(go));
     const parts = [];
-    const main = mf ? { label: '主 线', title: mf.title, sub: mf.text, go: mf.go }
-      : (alert && alert.major ? { label: '当前要务', title: alert.text, sub: '道途紧要关头，一念定进退', go: alert.go } : null);
+    const main = mf ? {
+      label: '主 线', title: mf.title,
+      sub: `目标 ${mf.stepIdx}/${mf.stepTotal} · ${mf.text}${mf.prog ? `（${mf.prog}）` : ''}`,
+      dest: destOf(mf.go), go: mf.go, anchor: mf.anchor || '',
+    } : (alert && alert.major ? { label: '当前要务', title: alert.text, sub: '道途紧要关头，一念定进退', dest: destOf(alert.go), go: alert.go, anchor: '' } : null);
     if (main) {
       parts.push(`<div class="focus-main">
         <span class="focus-label">${main.label}</span>
         <div class="focus-body">
           <div class="focus-title">${Utils.esc(main.title)}</div>
           <div class="focus-sub">${Utils.esc(main.sub)}</div>
+          ${main.dest ? `<div class="focus-dest">前往 · ${Utils.esc(main.dest)}</div>` : ''}
         </div>
-        <button class="focus-go" data-action="act-tab" data-tab="${main.go}">前 往</button>
+        <button class="focus-go" data-action="quest-goto" data-tab="${main.go}" ${main.anchor ? `data-anchor="${Utils.esc(main.anchor)}"` : ''} title="直达 · ${Utils.esc(main.dest || '')}">前 往</button>
       </div>`);
     }
     // 副提醒：与主卡不同源才显示（主线在挂时提醒事项照常展示）
     const alertAsMain = !mf && alert && alert.major;
     if (alert && !alertAsMain) {
+      const aDest = destOf(alert.go);
       parts.push(`<div class="focus-alert">
         <span class="focus-label">提醒</span>
-        <span class="focus-title">${Utils.esc(alert.text)}</span>
-        <button class="focus-go" data-action="act-tab" data-tab="${alert.go}">前往</button>
+        <span class="focus-title">${Utils.esc(alert.text)}${aDest ? `<span class="focus-dest">前往 · ${Utils.esc(aDest)}</span>` : ''}</span>
+        <button class="focus-go" data-action="act-tab" data-tab="${alert.go}" title="直达 · ${Utils.esc(aDest)}">前往</button>
       </div>`);
     }
     this.setHTML(this.el['focus-strip'], parts.join(''));
@@ -14168,7 +14282,8 @@ const UI = {
       const isOn = p.beasts.active === b.uid;
       const isOn2 = p.beasts.active2 === b.uid;
       const pk = BeastSys.PASSIVE[b.species] || 'atkPct';
-      const pv = Math.round(b.power * 0.6 + b.level * 0.8);
+      // v26 修瑕：展示值与 BeastSys.passive 口径对齐（蜕变 ×1.4 此前漏算，面板低于实际）
+      const pv = Math.round((b.power * 0.6 + b.level * 0.8) * (b.evolved ? 1.4 : 1));
       const needExp = b.level * 400;
       const bTag = isOn ? '<span class="tag safe">出战中</span>' : isOn2 ? '<span class="tag warn">护持中</span>' : b.trip ? '<span class="tag magic">寻宝途中</span>' : '<span class="tag">栏中</span>';
       const tripTxt = b.trip
@@ -14604,11 +14719,24 @@ const UI = {
       </div>`;
   },
 
+  /** v26 炼丹火候选择（v18 现成机制实装入口）：内联于炼制坊丹炉区，单炉生效、连炉平火 */
+  fireSelectorHtml(p) {
+    const fireT = (p.dao === 'pill' && DaoSys.tierLevel && DaoSys.tierLevel(p) >= 3) ? 30 : 0;
+    const btn = (key, label) => `<button class="fire-btn ${(CraftSys._fire || '') === key ? 'on' : ''}" data-action="craft-fire" data-fire="${key}">${label}</button>`;
+    return `<div class="fire-row"><span class="fire-note" style="margin:0 4px 0 0">火候</span>
+      ${btn('', '平火 · 随心')}
+      ${btn('wen', '文火 · 成丹+5%')}
+      ${btn('wu', '武火 · 上品+10%')}
+      ${btn('both', '文武交替 · 契合+12%')}</div>
+    <div class="fire-note">· 火候只影响单炉炼制（×5 连炉为平火）；文武交替有 ${35 + fireT}% 几率契合大涨${fireT ? '（丹火境·已提升）' : ''}；上品出丹凝感悟，极品当炉翻倍。</div>`;
+  },
+
   shopCraft() {
     const p = Game.player;
-    // 炼丹炉（人人可用，丹道成丹率大涨）
+    // 炼丹炉（人人可用，丹道成丹率大涨）；v26：火候选择入口（v18 现成机制实装）
     const alchemySection = `
       <div class="shop-section-title">◈ 炼丹炉${p.dao === 'pill' ? '（丹道加持，成丹率大增）' : ''}</div>
+      ${this.fireSelectorHtml(p)}
       ${GameData.ALCHEMY_RECIPES.map(r => {
         const out = GameData.ITEMS[r.out];
         const locked = r.needPages && !(p.flags.recipeOk || {})[r.id];
@@ -14617,12 +14745,12 @@ const UI = {
         const lockTxt = locked ? `<span class="tag danger" title="集齐丹方残页后可参悟解锁">失传 · 残页 ${Bag.count('m_danfang')}/${r.needPages}</span> ` : '';
         const drawBtn = locked
           ? `<button class="btn btn-sm" data-action="act-study-recipe" data-recipe="${r.id}" ${Bag.count('m_danfang') >= r.needPages ? '' : 'disabled'}>参悟</button>`
-          : `<button class="btn btn-sm" data-action="act-alchemy" data-recipe="${r.id}" ${can ? '' : 'disabled'}>炼制</button>
-            <button class="btn btn-sm" data-action="act-alchemy-multi" data-recipe="${r.id}" data-times="5" ${can ? '' : 'disabled'} title="连开五炉，药材不足自动停炉">×5</button>`;
+          : `<button class="btn btn-sm" data-action="act-alchemy" data-recipe="${r.id}" ${can ? '' : 'disabled'} title="以当前火候单开一炉">炼制</button>
+            <button class="btn btn-sm" data-action="act-alchemy-multi" data-recipe="${r.id}" data-times="5" ${can ? '' : 'disabled'} title="连开五炉（平火），药材不足自动停炉">×5</button>`;
         return `
         <div class="shop-row">
           <div class="gf-info">
-            <div class="gf-name">${this.gradeSpan(out.name, out.grade)}（成丹率 ${CraftSys.rate(p, r).toFixed(0)}%）${lockTxt}</div>
+            <div class="gf-name">${this.gradeSpan(out.name, out.grade)}（成丹率 ${CraftSys.rate(p, r, CraftSys._fire).toFixed(0)}%）${lockTxt}</div>
             <div class="gf-desc">需 ${mats}</div>
           </div>
           <div class="gf-actions">
@@ -14774,7 +14902,7 @@ const UI = {
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${t.name} ${done ? '<span class="tag safe">已达成</span>' : `<span class="tag">进度 ${t.progress}/${t.need}</span>`}${(t === B.list.find(x => x)) ? repTag : ''}</div>
+          <div class="gf-name">${t.name} ${done ? '<span class="tag safe">已达成</span>' : `<span class="tag">进度 ${t.progress}/${t.need}</span>`}${repTag}</div>
           <div class="gf-desc">${t.desc} · 赏格：灵石 ${Utils.fmtNum(Math.round(r.stones * (t.chain ? 1 + t.chain * 0.6 : 1)))}${p.sect ? `、贡献 ${Math.round(r.contrib * (t.chain ? 1 + t.chain * 0.6 : 1))}` : ''}</div>
         </div>
         <div class="gf-actions">${btn}</div>
@@ -15448,9 +15576,23 @@ const UI = {
     document.getElementById('app').appendChild(div);
     setTimeout(() => div.remove(), 1500);
   },
+  /** v26 引导直达：页签切换后滚动定位到含指定文字的卡片并鎏金闪光——「去了但不知道干嘛」消失 */
+  glimmer(anchorText) {
+    if (!anchorText) return;
+    setTimeout(() => {
+      const box = this.el['tab-content'];
+      if (!box) return;
+      const targets = box.querySelectorAll('.card, .shop-row, .gf-row');
+      let hit = null;
+      for (const el of targets) { if (el.textContent.includes(anchorText)) { hit = el; break; } }
+      if (!hit) return;
+      hit.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      hit.classList.remove('glimmer'); void hit.offsetWidth; hit.classList.add('glimmer');
+      setTimeout(() => hit.classList.remove('glimmer'), 2300);
+    }, 90);
+  },
   /** v21：剧情 / 战斗 / 弹窗进行中，公告移至顶栏下方播放，不再遮住中央演出文字 */
-  syncAnnouncePos() {
-    const wrap = document.getElementById('announce');
+  syncAnnouncePos() {    const wrap = document.getElementById('announce');
     if (!wrap) return;
     const anyModal = [...document.querySelectorAll('.modal')].some(m => !m.classList.contains('hidden'));
     wrap.classList.toggle('at-top', anyModal);
@@ -15547,6 +15689,7 @@ const Game = {
   bagSort: 'quality',   // v20 背包排序：quality 品质 / type 类型 / name 名字
   subTab: {},   // v22 页签内子页签记忆（shop/cave/map 各自记住上次所在分栏）
   foldState: {},   // v24 折叠分组开合记忆（data-fold 键）——行动后重渲染不再把用户展开的分组收回去
+  scrollMem: {},   // v26 页签滚动位置记忆——切走再回来，长列表回到原处
 
   init() {
     UI.cache();
@@ -15581,6 +15724,15 @@ const Game = {
     document.getElementById('popup-modal').addEventListener('click', (e) => {
       if (e.target.id === 'popup-modal' && UI._popupResolve) UI.popupChoose(-1);
     });
+    // v26 回到顶部：内容区下滑过深时浮出，一键回顶（移动端壳的单一滚动源）
+    const backTop = document.getElementById('back-top');
+    const tcBox = document.getElementById('tab-content');
+    if (backTop && tcBox) {
+      backTop.addEventListener('click', () => tcBox.scrollTo({ top: 0, behavior: 'smooth' }));
+      tcBox.addEventListener('scroll', () => {
+        backTop.classList.toggle('show', tcBox.scrollTop > tcBox.clientHeight * 1.2);
+      }, { passive: true });
+    }
     // v7：背包双击快捷操作（服用 / 装备 / 学习；丢弃按钮除外）
     document.addEventListener('dblclick', (e) => {
       const item = e.target.closest('.bag-item');
@@ -15691,7 +15843,9 @@ const Game = {
     return true;
   },
 
-  /** v18：离线进度计算——灵田按真实时间生长 */
+  /** v18：离线进度计算——灵田按真实时间生长
+   *  v26 修瑕：离线天数改按日回放 Time.add(1)——跨年结算（年龄整化 / NPC 成长 / 世界大事 / 寿元判定）
+   *  不再被整体跳过，年龄也不再出现 16.0821… 式小数。 */
   computeOfflineProgress() {
     const p = this.player;
     if (!p || p.dead || p.day === 0) return;
@@ -15703,16 +15857,14 @@ const Game = {
     if (elapsedMs < 60000) return; // 少于 1 分钟不算离线
     // 按真实时间推算游戏天数（现实 1 分钟 ≈ 游戏 1 天，上限 30 天）
     const realDays = Math.min(30, Math.floor(elapsedMs / 60000));
-    // 灵田生长
+    // 灵田生长（收获判定由洞府页/行动收尾按日界完成）
     let offlineCrops = 0;
     if (p.cave && p.cave.plots) {
       for (const plot of p.cave.plots) {
         if (!plot || !plot.seed) continue;
         const def = GameData.ITEMS[plot.seed];
         if (!def || !def.days) continue;
-        // 按离线天数推进生长
         plot.plantedDay = Math.max(plot.plantedDay, p.day - realDays);
-        // 收获检查会由下次进入洞府页签时计算
         offlineCrops++;
       }
     }
@@ -15726,21 +15878,20 @@ const Game = {
         if (offlineExp > 0) Cultivate.addExp(p, offlineExp);
       } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; }
     }
+    // 时间照常流逝（逐日回放，跨年/寿元/世界线照常结算；寿元尽则照常坐化）
+    for (let i = 0; i < realDays && !p.dead; i++) Time.add(1);
     if (offlineCrops > 0) {
       Log.add(`你不在的${realDays}个时辰里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
     }
     if (offlineExp > 0) {
       Log.add(`离山的日子裡你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（离线修行按四成效率折算，共 ${realDays} 日）。`, 'gain');
     }
-    if (offlineCrops > 0 || offlineExp > 0) {
-      p.day += realDays;
-      p.age += realDays / 365;
-    }
   },
 
   enterGame() {
     Anim.reset();   // v4：换档后数字动画记忆清零
     this.subTab = {};   // v22：换档后子页签记忆一并复位
+    this.scrollMem = {};   // v26：滚动记忆一并复位
     Meta.load();    // v6：装载本存档位的成就与图鉴
     AutoCult.abort();
     this.computeOfflineProgress();  // v18：离线进度
@@ -15840,7 +15991,11 @@ const Game = {
       if (sub) Game.subTab[tab] = sub;
       UI.closeDrawers();   // v22：移动端切页后收起抽屉，回到内容视图
       if (Game.activeTab !== tab && typeof Ambience !== 'undefined' && Ambience.sfxOn) Ambience.sfx('tab');   // v20 切页轻音
+      // v26 页签滚动记忆：离开前记下滚动位置，回到该页时还原（长列表不再从头翻起）
+      const tc = UI.el['tab-content'];
+      if (tc) Game.scrollMem[Game.activeTab] = tc.scrollTop;
       Game.activeTab = tab; UI.renderTabs(); UI.renderTabContent();
+      if (tc) tc.scrollTop = Game.scrollMem[tab] || 0;
       // v20 情境 BGM：进秘境页/坊市页切换氛围（战斗/剧情情境各自接管）
       if (typeof Ambience !== 'undefined' && Ambience.musicOn && !Battle.active && !Story.active()) {
         Ambience.setMood(tab === 'map' && this.player && this.player.dungeon ? 'secret' : tab === 'shop' ? 'market' : 'calm');
@@ -15848,7 +16003,6 @@ const Game = {
       // 面板切换平滑过渡：短暂加动效类，避免生硬跳变
       const box = UI.el['tab-content'];
       if (box) {
-        box.scrollTop = 0;   // v13：切换页签后回到顶部，避免残露上一页签中段内容
         box.classList.remove('tab-switch'); void box.offsetWidth; box.classList.add('tab-switch');
       }
     },
@@ -16010,6 +16164,7 @@ const Game = {
     'act-alchemy': (d) => CraftSys.alchemy(d.recipe),
     'act-study-recipe': (d) => CraftSys.studyRecipe(d.recipe),
     'act-alchemy-multi': (d) => CraftSys.alchemy(d.recipe, Number(d.times) || 5),
+    'craft-fire': (d) => CraftSys.setFire(d.fire || null),   // v26 火候选择
     'act-draw': () => CraftSys.drawTalisman(),
     /* --- v13 祭炼强化 / 炼器 --- */
     'act-enhance': (d) => ForgeSys.enhance(d.slot),
@@ -16081,7 +16236,11 @@ const Game = {
     'quest-review': () => QuestSys.openArchive(),
     'quest-archive-tab': (d) => { UI.closePopup(); QuestSys.openArchive(d.tab); },
     'quest-reread': (d) => QuestSys.reread(d.sid),
-    'quest-goto': (d) => { Game.actions['act-tab']({ tab: d.tab }); },
+    'quest-goto': (d) => {
+      // v26：切页后滚动定位到目标卡片并鎏金闪光（锚点来自 data-anchor / QuestSys.GO_ANCHOR）
+      Game.actions['act-tab']({ tab: d.tab });
+      UI.glimmer(d.anchor);
+    },
   },
 };
 

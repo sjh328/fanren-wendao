@@ -314,6 +314,7 @@ const BeastSys = {
     if (!ok) return;
     p.beasts.list = p.beasts.list.filter(x => x.uid !== uid);
     if (p.beasts.active === uid) p.beasts.active = null;
+    if (p.beasts.active2 === uid) p.beasts.active2 = null;   // v26 修瑕：放归「护持中」灵兽后副位不再悬挂
     Log.add(`你解开灵契，${b.name} 绕你三匝，长啸一声遁入山林。`, 'info');
     Game.afterAction();
   },

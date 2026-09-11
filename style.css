@@ -18,7 +18,7 @@
   --ink: #2e2a22;
   --text: #3a3428;
   --text-dim: #5a5540;
-  --text-faint: #7a6e58;
+  --text-faint: #6d614c;
   --hp: #b8433e;
   --mp: #3a6ea8;
   --exp: #5e8a4a;
@@ -559,7 +559,8 @@ body::after {
   font-size: 11px;
   color: #fff;
   letter-spacing: 1px;
-  text-shadow: 0 1px 2px rgba(40, 30, 14, 0.85);
+  /* v26：重墨晕影——低填充时数字落在浅色空轨上依然可读（白字 + 四向墨晕），高填充时白字照常 */
+  text-shadow: 0 0 3px rgba(40, 30, 14, 0.95), 0 1px 2px rgba(40, 30, 14, 0.95), 0 0 7px rgba(40, 30, 14, 0.75);
 }
 
 .equip-slot { display: flex; justify-content: space-between; align-items: center; padding: 4px 2px; font-size: 12.5px; color: var(--text-dim); }
@@ -1280,19 +1281,29 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
   .menu-panel { flex: 0 0 220px; }
 }
 
+/* v26 App-Shell：≤860px 不再退化为文档流滚动——游戏即壳：
+   顶栏 / 行动横幅常驻视口，底部导航贴底，#tab-content 是唯一滚动容器（单一滚动源） */
 @media (max-width: 860px) {
-  body { overflow: auto; }
-  #app, #game-screen { height: auto; min-height: 100vh; }
+  #app, #game-screen { height: 100vh; height: 100dvh; }
   #layout {
     display: flex;
     flex-direction: column;
-    height: auto;
+    padding: 8px 10px 0;
+    gap: 0;
   }
-  #panel-left { order: 0; max-height: none; }
-  .center-panel { order: 1; min-height: 70vh; }
-  #panel-right { order: 2; flex-direction: column; }
-  #tab-content { max-height: none; overflow: visible; }
-  #log-wrap:not(.collapsed) { min-height: 200px; max-height: 320px; }
+  /* 左右面板由 v22 抽屉接管（position:fixed），不参与壳内文档流排布。
+     面板底部预留固定底导航高度，日志工具条等尾随元素不再被底栏遮挡 */
+  .center-panel { flex: 1 1 auto; min-height: 0; padding: 10px 2px calc(64px + env(safe-area-inset-bottom, 0px)); }
+  #tab-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    max-height: none;
+    padding: 0 2px 12px;
+  }
+  #log-wrap:not(.collapsed) { flex: 0 0 auto; height: 232px; min-height: 0; max-height: none; }
   .title-seal { display: none; }
   .game-title { letter-spacing: 10px; text-indent: 10px; }
   .menu-btns { grid-template-columns: 1fr; }
@@ -1893,29 +1904,62 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   z-index: 1;
 }
 .focus-main .focus-go:hover { filter: brightness(1.08); transform: translateY(-1px); }
-/* 紧急提醒：朱砂卡 */
+/* 紧急提醒：朱砂实底卡（v26 对比度重做——浅粉字压浅底 ≈1.5:1 不可读，改深底浅字 ≥7:1） */
 .focus-alert {
   flex: 0 1 auto;
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
-  background: linear-gradient(120deg, rgba(176, 56, 48, 0.14), rgba(176, 56, 48, 0.06));
-  border: 1px solid rgba(160, 56, 48, 0.55);
+  background: linear-gradient(120deg, #93362c 0%, #752720 55%, #8c3128 100%);
+  border: 1px solid rgba(255, 216, 200, 0.30);
   border-radius: 10px;
+  box-shadow: 0 3px 12px rgba(90, 30, 24, 0.32), inset 0 1px 0 rgba(255, 236, 226, 0.16);
+  position: relative;
+  overflow: hidden;
+}
+.focus-alert::before {
+  content: '';
+  position: absolute;
+  top: 0; bottom: 0; left: 0;
+  width: 4px;
+  background: linear-gradient(180deg, #f0b9a4, #b05a44);
+}
+.focus-alert::after {
+  content: '急';
+  position: absolute;
+  right: -6px;
+  bottom: -18px;
+  font-family: var(--font-kai);
+  font-size: 64px;
+  color: rgba(255, 224, 208, 0.08);
+  pointer-events: none;
 }
 .focus-alert .focus-label {
   font-family: var(--font-kai);
   font-size: 12px;
   letter-spacing: 2px;
-  color: #f6e8de;
-  background: linear-gradient(160deg, #b04438, #8a2c24);
+  color: #fff1e7;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 226, 212, 0.4);
   padding: 3px 10px;
   border-radius: 12px;
   flex: 0 0 auto;
+  position: relative;
+  z-index: 1;
 }
-.focus-alert .focus-title { font-size: 13.5px; color: #fce8e0; letter-spacing: 0.5px; }
-.focus-alert .focus-go { min-height: 30px; padding: 4px 14px; font-size: 12.5px; letter-spacing: 1px; flex: 0 0 auto; }
+.focus-alert .focus-title { font-size: 13.5px; color: #ffece0; letter-spacing: 0.5px; position: relative; z-index: 1; font-weight: bold; }
+.focus-alert .focus-go {
+  min-height: 30px; padding: 4px 14px; font-size: 12.5px; letter-spacing: 1px; flex: 0 0 auto;
+  background: linear-gradient(180deg, #f2d6a4, #d9ab5e);
+  color: #4c2c10;
+  border: 1px solid #bd8f42;
+  font-weight: bold;
+  box-shadow: 0 1px 5px rgba(40, 12, 8, 0.4), inset 0 1px 0 rgba(255, 250, 232, 0.65);
+  position: relative;
+  z-index: 1;
+}
+.focus-alert .focus-go:hover { filter: brightness(1.06); }
 
 /* ---------- v12 左栏战斗属性双列 ---------- */
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; column-gap: 12px; margin: 2px 0; }
@@ -2305,9 +2349,14 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   .shop-row { padding: 10px; }
   .panel-title { font-size: 16px; padding: 10px; }
 }
+/* v26：窄屏焦点条纵向堆叠（两卡不再并排互相挤压），卡内保持横排行、按钮右置不占整行 */
+@media (max-width: 640px) {
+  #focus-strip { flex-direction: column; gap: 6px; }
+  .focus-main, .focus-alert { flex: 1 1 auto; padding: 8px 12px; gap: 8px; }
+  .focus-main .focus-title { font-size: 14px; }
+  .focus-main .focus-go { min-height: 36px; padding: 6px 14px; font-size: 13px; letter-spacing: 2px; }
+}
 @media (max-width: 480px) {
-  .focus-main, .focus-alert { flex-direction: column; align-items: stretch; }
-  .focus-go { width: 100%; margin-top: 4px; }
   .stat-grid { grid-template-columns: 1fr 1fr; gap: 2px; }
   .chip-row { flex-wrap: wrap; }
   .chip { font-size: 11px; padding: 4px 8px; }
@@ -2590,12 +2639,9 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   }
   .tab-btn.active { border-radius: 10px; }
   .tab-btn.active::after { display: none; }
-  /* 主内容区预留底部导航高度，不再被遮挡 */
-  #layout { padding-bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
-  .center-panel { padding-bottom: 8px; }
+  /* 主内容区滚动余量由壳规则统一预留（v26 App-Shell：.center-panel 预留底导航高度） */
 
-  /* 焦点条吸顶：随时可见「现在该做什么」 */
-  #focus-strip { position: sticky; top: 0; z-index: 30; }
+  /* 焦点条：v26 起固定于壳内顶栏之下（.center-panel 不滚动），sticky 退役 */
 
   /* 左右面板 → 侧滑抽屉（渲染管线不变，仅收进屏外） */
   #panel-left, #panel-right {
@@ -2794,7 +2840,7 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
     margin: 0;
     vertical-align: baseline;
   }
-  #layout { padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }   /* 页签更紧凑，预留相应收窄 */
+  /* v26 App-Shell：底部导航高度不再由 #layout 预留，滚动余量在 #tab-content 内 */
 
   /* ---- A5 Toast 让位：双行顶栏之下、不遮抽屉按钮 ---- */
   #toast { top: auto; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
@@ -2855,3 +2901,161 @@ body:has(.modal:not(.hidden)) { overflow: hidden; }
   #tab-content.grid2 > .card { margin-bottom: 0; }
   #tab-content.grid2 > .span2 { grid-column: 1 / -1; }
 }
+
+
+/* ==================== v26「拨云」：App-Shell 收尾 · 可读性 · 引导直达 ==================== */
+
+/* ---------- S1 开始界面 dvh 兜底（小屏地址栏收放不跳变） ---------- */
+@media (max-width: 860px) {
+  #start-screen { height: 100vh; height: 100dvh; }
+}
+
+/* ---------- S2 战斗壳（≤860px）：立绘与条目定高、战报内滚、操作常驻——
+   长战报不再把普攻/遁走顶出屏幕，全程一屏可见 ---------- */
+@media (max-width: 860px) {
+  #battle-modal { align-items: flex-end; padding: 0; }
+  .battle-box {
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    max-width: 100vw;
+    max-height: none;
+    height: 100dvh;
+    border-radius: 16px 16px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    overflow: hidden;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+  .battle-head { flex: 0 0 auto; }
+  .bt-side { flex: 0 0 auto; }
+  .bt-vs { flex: 0 0 auto; margin: 2px 0; }
+  #bt-log {
+    flex: 1 1 auto;
+    min-height: 72px;
+    height: auto;
+    margin: 8px 0;
+  }
+  .bt-sub { flex: 0 0 auto; max-height: 30vh; overflow-y: auto; }
+  .bt-actions { flex: 0 0 auto; }
+  .bt-ctl { flex: 0 0 auto; }
+  .bt-fx-layer, .battle-box > div { min-height: 0; }
+}
+
+/* ---------- S3 触控反馈：去系统高亮 + 按钮压感（全局，含桌面鼠标 :active） ---------- */
+body { -webkit-tap-highlight-color: transparent; }
+.btn, .tab-btn, .subtab-btn, .bag-tab, .log-tool {
+  touch-action: manipulation;
+}
+.btn:active:not(:disabled) { transform: translateY(1px) scale(0.985); }
+
+/* ---------- S4 空条刻度可读：0% 时白字压浅轨改墨字（JS 挂 .dim） ---------- */
+.bar .bar-text.dim { color: #6a5c40; text-shadow: none; font-weight: bold; }
+
+/* ---------- S5 引导直达鎏金闪光：前往按钮落地后目标卡高亮 2 秒 ---------- */
+.glimmer {
+  animation: glimmerIn 2.1s ease-out;
+  border-radius: var(--radius);
+}
+@keyframes glimmerIn {
+  0% { box-shadow: 0 0 0 0 rgba(201, 150, 46, 0); border-color: var(--border); }
+  12% { box-shadow: 0 0 0 4px rgba(201, 150, 46, 0.45), 0 0 22px rgba(201, 150, 46, 0.35); border-color: #c9962e; }
+  55% { box-shadow: 0 0 0 3px rgba(201, 150, 46, 0.3), 0 0 16px rgba(201, 150, 46, 0.22); border-color: #c9962e; }
+  100% { box-shadow: 0 0 0 0 rgba(201, 150, 46, 0); }
+}
+
+/* ---------- S6 回到顶部浮钮（滚动容器内下滑过深时出现） ---------- */
+#back-top {
+  position: fixed;
+  right: 14px;
+  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  z-index: 55;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(150, 112, 46, 0.5);
+  background: rgba(252, 247, 234, 0.92);
+  color: var(--gold-bright);
+  font-size: 16px;
+  cursor: pointer;
+  box-shadow: 0 3px 12px rgba(80, 60, 28, 0.25);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s ease, transform 0.15s ease;
+}
+#back-top.show { display: flex; }
+#back-top:active { transform: scale(0.92); }
+@media (min-width: 861px) { #back-top { display: none !important; } }
+
+/* ---------- S7 问道页：步骤微进度条（.q-step 内 .q-bar） ---------- */
+.q-step .q-main { flex: 0 1 auto; }
+.q-bar {
+  flex: 1 1 60px;
+  max-width: 130px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(96, 76, 40, 0.14);
+  overflow: hidden;
+  margin: 0 2px;
+}
+.q-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #b99650, #d9ab5e); transition: width 0.3s ease; }
+.q-step.done .q-bar i { background: linear-gradient(90deg, #7ca55e, #96bb80); }
+
+/* ---------- S8 焦点条目的地副行（.focus-dest） ---------- */
+.focus-dest { font-size: 11px; color: rgba(233, 218, 178, 0.8); letter-spacing: 0.5px; margin-top: 1px; }
+.focus-alert .focus-dest { color: rgba(255, 231, 218, 0.75); }
+.focus-sub { display: block; }
+.focus-sub + .focus-dest { margin-top: 2px; }
+
+/* ---------- S9 炼丹火候选择（现成机制 v26 实装入口） ---------- */
+.fire-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 2px; }
+.fire-btn {
+  font-family: var(--font-kai);
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 4px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: rgba(255, 253, 244, 0.65);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: 30px;
+}
+.fire-btn:hover { border-color: var(--gold-dim); color: var(--text); }
+.fire-btn.on {
+  color: #fff8e8;
+  background: linear-gradient(180deg, #a06a2c, #7e4e1c);
+  border-color: #7e4e1c;
+  font-weight: bold;
+  box-shadow: 0 1px 5px rgba(126, 78, 28, 0.4);
+}
+.fire-note { font-size: 11.5px; color: var(--text-faint); margin-top: 2px; }
+
+/* ---------- S10 键盘可达性：焦点可见（键盘用户） ---------- */
+.btn:focus-visible, .tab-btn:focus-visible, .subtab-btn:focus-visible {
+  outline: 2px solid rgba(150, 112, 46, 0.7);
+  outline-offset: 1px;
+}
+
+/* ---------- S11 壳内日志工具条：单行横滑（原被剩余空间挤成竖排碎块） ---------- */
+@media (max-width: 860px) {
+  #log-wrap { padding: 8px 10px; margin-top: 8px; }
+  .log-head {
+    flex-wrap: nowrap;
+    align-items: center;
+    overflow-x: auto;
+    scrollbar-width: none;
+    gap: 6px;
+  }
+  .log-head::-webkit-scrollbar { display: none; }
+  .log-head .log-tools { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; }
+  .log-head .log-filters { flex: 0 0 auto; }
+  .log-head .log-tool, .log-head .log-toggle { white-space: nowrap; flex: 0 0 auto; min-height: 30px; }
+}
+
+/* ---------- S12 提醒卡目的地副行块级化（span 内嵌套需要显式块级） ---------- */
+.focus-dest { display: block; }
+.log-head { white-space: nowrap; }

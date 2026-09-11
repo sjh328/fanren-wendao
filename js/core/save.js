@@ -54,9 +54,13 @@ write(key, player) {
   /** 每次行动实时落盘（保持外部读取 localStorage 所见即所得）；
    *  force 参数保留兼容（关页 / 切后台等关键时机调用），当前策略下与常规写入一致。 */
   _lastAuto: 0,
+  /** v26：节流开关——仅挂机热路径（AutoCult）启用：每轮 ~0.3s 全量 JSON 双写曾达上万次/小时 */
+  setThrottle(on) { this._thr = !!on; if (!on) this._lastAuto = 0; },
   autoSave(force = false) {
     if (!Game.player || Game.player.dead) return;
-    this._lastAuto = Date.now();
+    const now = Date.now();
+    if (!force && this._thr && now - (this._lastAuto || 0) < 2500) return;
+    this._lastAuto = now;
     this.write('auto', Game.player);
   },
 };

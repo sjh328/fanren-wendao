@@ -3,7 +3,14 @@
  * §21 百艺坊 CraftSys（炼丹 / 画符）
  * ====================================================================== */
 const CraftSys = {
-  /** v18：火候选择（影响成丹率与品质） */
+  /** v26：当前选中火候（null=平火随心；会话级选择，单炉生效，连炉不受影响） */
+  _fire: null,
+  setFire(f) {
+    this._fire = (f && this.FIRES[f]) ? f : null;
+    UI.markDirty('content');
+    UI.renderAll();
+  },
+  /** v18：火候选择（影响成丹率与品质）；v26 起拥有炼制坊内联入口 */
   FIRES: {
     wen: { name: '文火', key: 0, desc: '文火慢煨，药性绵长（成丹率+5%）' },
     wu: { name: '武火', key: 1, desc: '武火急攻，药力霸道（成丹率-3%，上品率+10%）' },
@@ -73,11 +80,8 @@ const CraftSys = {
     // v19 失传丹方：须先以残页参悟
     if (r.needPages && !(p.flags.recipeOk || {})[r.id]) { UI.toast('此丹方失传——需先集齐丹方残页参悟'); return; }
     times = Utils.clamp(Math.floor(Number(times)) || 1, 1, 99);
-    // 单炉时弹出火候选择
-    let fire = null;
-    if (times === 1) {
-      // 火候选择在渲染时已通过按钮传入
-    }
+    // v26：单炉按炼制坊当前选中火候行火（连炉保持平火，批量收益不受赌博式火候影响）
+    const fire = times === 1 ? (this._fire || null) : null;
     const rate = this.rate(p, r, fire);
     const out = GameData.ITEMS[r.out];
     let tried = 0, made = 0, critN = 0, supN = 0, supremeN = 0;
@@ -92,30 +96,33 @@ const CraftSys = {
       if (Utils.chance(rate)) {
         DaoSys.gain(p, 25);
         const isCrit = Utils.chance(p.dao === 'pill' && DaoSys.tierLevel(p) >= 4 ? 15 : 10);
-        const qty = isCrit ? 2 : 1;
+        let qty = isCrit ? 2 : 1;   // v26：极品翻倍需要可变（原 const 与 ×2 冲突）
         Bag.addItem(r.out, qty);
         p.counters.craftsOk = (p.counters.craftsOk || 0) + 1;
         DaoSys.gain(p, 8);
         made += qty;
         if (isCrit) critN++;
-        // v18：品质判定
+        // v18 品质判定 + v26 激活：上品凝丹道感悟，极品当炉产出翻倍——「可遇不可求」落到实处
         const qual = this.rollQuality(p, r);
-        if (qual === 'supreme') { supremeN++; }
-        else if (qual === 'superior') { supN++; }
+        if (qual === 'supreme') { supremeN++; qty *= 2; DaoSys.gain(p, 10); }
+        else if (qual === 'superior') { supN++; DaoSys.gain(p, 5); }
         gainMap[r.out] = (gainMap[r.out] || 0) + qty;
       }
     }
     if (!tried) { UI.toast('药材不足'); return; }
+    const fireTxt = fire ? `（${this.FIRES[fire].name}）` : '';
     if (times === 1 && tried === 1) {
-      // 单炉：保持原有文案
+      // 单炉：保持原有文案 + v26 火候/品质注记
       if (made) {
-        Log.add(`丹炉青烟直上，一缕丹香盈野——<b>${out.name}</b> ×${made} 出炉！${critN ? '（丹成上品，一炉双丹！）' : `（成丹率 ${rate.toFixed(0)}%）`}`, 'gain');
+        const qualTxt = supremeN ? '【极品】丹光凝而不散！' : (critN ? '（丹成上品，一炉双丹！）' : (supN ? '（上品，药香清正）' : `（成丹率 ${rate.toFixed(0)}%）`));
+        Log.add(`丹炉青烟直上，一缕丹香盈野——<b>${out.name}</b> ×${made} 出炉！${qualTxt}${fireTxt}`, 'gain');
       } else {
-        Log.add(`丹炉一声闷响，药力尽数散作飞灰……（药材已耗，成丹率 ${rate.toFixed(0)}%）`, 'loss');
+        Log.add(`丹炉一声闷响，药力尽数散作飞灰……（药材已耗，成丹率 ${rate.toFixed(0)}%）${fireTxt}`, 'loss');
       }
     } else {
       const parts = Object.entries(gainMap).map(([id, n]) => `${GameData.ITEMS[id].name} ×${n}`);
-      Log.add(`你连开 ${tried} 炉：${made ? `成丹 ${parts.join('、')}${critN ? `（含上品双丹 ×${critN}）` : ''}` : '药材尽毁，未得丹药'}。（成丹率 ${rate.toFixed(0)}%）`, made ? 'gain' : 'loss');
+      const qualBits = [critN ? `上品双丹 ×${critN}` : '', supN ? `上品 ×${supN}` : '', supremeN ? `极品 ×${supremeN}` : ''].filter(Boolean).join('、');
+      Log.add(`你连开 ${tried} 炉：${made ? `成丹 ${parts.join('、')}${qualBits ? `（${qualBits}）` : ''}` : '药材尽毁，未得丹药'}。（成丹率 ${rate.toFixed(0)}%）`, made ? 'gain' : 'loss');
     }
     Game.afterAction();
   },

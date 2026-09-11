@@ -48,6 +48,21 @@ const Bag = {
     p.stones.low -= amount;
     return true;
   },
+  /** v26：尽力扣款——不足则倾囊全扣，返回实扣数（罚款/罚没类场景，杜绝「分文未扣却宣称赔了钱」） */
+  spendStonesMax(amount) {
+    const p = Game.player;
+    const total = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
+    const take = Math.min(total, amount);
+    if (take <= 0) return 0;
+    // 全部整兑到下品再扣，保证恰好扣掉 take
+    while (p.stones.high > 0) { p.stones.high--; p.stones.mid += 100; }
+    while (p.stones.mid > 0) { p.stones.mid--; p.stones.low += 100; }
+    p.stones.low -= take;
+    // 大额余钱回兑中品，避免下品堆积到夸张数量
+    p.stones.mid += Math.floor(p.stones.low / 100);
+    p.stones.low %= 100;
+    return take;
+  },
   stonesText() {
     const s = Game.player.stones;
     const parts = [`下品 ${Utils.fmtNum(s.low)}`];

@@ -60,6 +60,7 @@ const Utils = {
     const entries = Array.isArray(list)
       ? list.map(x => [x.id ?? x, x.weight ?? 1])
       : Object.entries(list);
+    if (!entries.length) return null;   // v26：空权重表防崩（原直取末项会抛 TypeError）
     const total = entries.reduce((s, [, w]) => s + w, 0);
     let r = Math.random() * total;
     for (const [v, w] of entries) { r -= w; if (r <= 0) return v; }

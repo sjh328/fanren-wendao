@@ -14,7 +14,7 @@ const KarmaSys = {
     const p = Game.player;
     // v18 道心烙印【戾/杀/厉/慈/容】：孽障增减（仅正向放大，负向/减免取整不低于1）
     if (n > 0 && typeof DaoxinSys !== 'undefined') n = Math.max(1, Math.round(n * DaoxinSys.gainMult(p, 'karmaMult')));
-    p.karma = (p.karma || 0) + n;
+    p.karma = Math.max(0, (p.karma || 0) + n);   // v26 修瑕：消业不至负（负孽障曾反向加成突破成算）
     if (!silent) Log.add(`因果簿上又添一笔血墨——孽障 +${n}。`, 'loss');
   },
   /** 气运：好事事件（宝箱/机缘/贵人）权重倍率，每10点+5% */

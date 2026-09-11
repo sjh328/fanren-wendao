@@ -93,7 +93,7 @@ const UI = {
     this.setHTML(this.el['top-info'], `
       ${chapter}${stoneChip}${miniBars}
       <span class="res-chip" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</span>
-      <span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${p.age}岁 / 寿元${st.lifespan}</span>
+      <span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${Math.floor(p.age)}岁 / 寿元${st.lifespan}</span>
       <span class="top-meta2"><span class="save-dot"></span>已自动存档</span>`);
   },
 
@@ -121,7 +121,7 @@ const UI = {
       <div class="id-card">
         <div class="id-name">${Utils.esc(p.name)}</div>
         <div class="id-row"><span class="realm-badge" style="--realm-c:${realmColor}">${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}</span></div>
-        <div class="id-line"><span>大道 <b class="hl">${DaoSys.name(p)}</b></span><span>寿元 <b>${p.age} / ${st.lifespan}</b></span></div>
+        <div class="id-line"><span>大道 <b class="hl">${DaoSys.name(p)}</b></span><span>寿元 <b>${Math.floor(p.age)} / ${st.lifespan}</b></span></div>
       </div>`;
     // v14 核心条：色点标题 + 大数值，进度一眼可读
     const coreBar = (label, cls, nk, val, max, maxText, fmt) => `
@@ -129,7 +129,7 @@ const UI = {
         <span class="cs-name ${cls}">${label}</span>
         <span class="cs-val">${fmt ? `<span class="num-anim" data-nk="${nk}" data-fmt="fmt" data-nv="${val}">${Utils.fmtNum(val)}</span>` : `<span class="num-anim" data-nk="${nk}" data-nv="${val}">${Math.round(val)}</span>`} <span class="cs-max">/ ${maxText}</span></span>
       </div>
-      <div class="bar" title="${label} ${Math.round(val)} / ${max}"><div class="bar-fill ${cls}${cls === 'hp' && val / max <= 0.3 ? ' low' : ''}" style="width:${Utils.clamp(val / max * 100, 0, 100)}%"></div><span class="bar-text">${Math.round(val / max * 100)}%</span></div>`;
+      <div class="bar" title="${label} ${Math.round(val)} / ${max}"><div class="bar-fill ${cls}${cls === 'hp' && val / max <= 0.3 ? ' low' : ''}" style="width:${Utils.clamp(val / max * 100, 0, 100)}%"></div><span class="bar-text${val <= 0 ? ' dim' : ''}">${Math.round(val / max * 100)}%</span></div>`;
     // v14 道行状态芯片
     const chips = [];
     if (p.insight > 0) chips.push(`<span class="chip" title="突破感悟：冲关时的额外成算">感悟 <b>${p.insight}</b></span>`);
@@ -140,7 +140,7 @@ const UI = {
     if ((p.flags && p.flags.xinmoCleared)) chips.push(`<span class="chip lucky" title="心魔凝练：每降伏心魔一次，全属性永久 +1%">凝练 <b>+${p.flags.xinmoCleared}%</b></span>`);   // v19
     const chipsHtml = `
       <div class="chip-row">${chips.join('')}</div>
-      <div class="bar" title="丹毒 ${Math.round(p.poison)} / ${poisonCap}"><div class="bar-fill poison" style="width:${Utils.clamp(p.poison / poisonCap * 100, 0, 100)}%"></div><span class="bar-text">${Math.round(p.poison / poisonCap * 100)}%</span></div>`;
+      <div class="bar" title="丹毒 ${Math.round(p.poison)} / ${poisonCap}"><div class="bar-fill poison" style="width:${Utils.clamp(p.poison / poisonCap * 100, 0, 100)}%"></div><span class="bar-text${p.poison <= 0 ? ' dim' : ''}">${Math.round(p.poison / poisonCap * 100)}%</span></div>`;
     this.setHTML(this.el['panel-left'], `
       <div class="panel-title">✦ 道途</div>
       ${idCard}
@@ -180,7 +180,8 @@ const UI = {
 
   /* ---------- v14 行动横幅：进游戏第一眼看到"现在该做什么" ----------
    * 主卡（墨底金字）：主线目标优先；无主线时"里程碑行动"（冲关/飞升/择道/斩三尸/合成）顶上。
-   * 副卡（朱砂）：紧急提醒（气血/丹毒/可结案等）。 */
+   * 副卡（朱砂实底）：紧急提醒（气血/丹毒/可结案等）。
+   * v26：主线卡带「目标 x/y · 进度」与目的地副行——点「前往」之前就知道去哪、差多少。 */
   renderFocus() {
     const p = Game.player;
     if (!p) return;
@@ -199,26 +200,32 @@ const UI = {
     else if (p.hp < st.maxHp * 0.3) alert = { text: '气血衰微，宜调息服丹', go: 'cultivate' };
 
     const mf = QuestSys.focus();
+    const destOf = go => QuestSys.destLabel(String(go));
     const parts = [];
-    const main = mf ? { label: '主 线', title: mf.title, sub: mf.text, go: mf.go }
-      : (alert && alert.major ? { label: '当前要务', title: alert.text, sub: '道途紧要关头，一念定进退', go: alert.go } : null);
+    const main = mf ? {
+      label: '主 线', title: mf.title,
+      sub: `目标 ${mf.stepIdx}/${mf.stepTotal} · ${mf.text}${mf.prog ? `（${mf.prog}）` : ''}`,
+      dest: destOf(mf.go), go: mf.go, anchor: mf.anchor || '',
+    } : (alert && alert.major ? { label: '当前要务', title: alert.text, sub: '道途紧要关头，一念定进退', dest: destOf(alert.go), go: alert.go, anchor: '' } : null);
     if (main) {
       parts.push(`<div class="focus-main">
         <span class="focus-label">${main.label}</span>
         <div class="focus-body">
           <div class="focus-title">${Utils.esc(main.title)}</div>
           <div class="focus-sub">${Utils.esc(main.sub)}</div>
+          ${main.dest ? `<div class="focus-dest">前往 · ${Utils.esc(main.dest)}</div>` : ''}
         </div>
-        <button class="focus-go" data-action="act-tab" data-tab="${main.go}">前 往</button>
+        <button class="focus-go" data-action="quest-goto" data-tab="${main.go}" ${main.anchor ? `data-anchor="${Utils.esc(main.anchor)}"` : ''} title="直达 · ${Utils.esc(main.dest || '')}">前 往</button>
       </div>`);
     }
     // 副提醒：与主卡不同源才显示（主线在挂时提醒事项照常展示）
     const alertAsMain = !mf && alert && alert.major;
     if (alert && !alertAsMain) {
+      const aDest = destOf(alert.go);
       parts.push(`<div class="focus-alert">
         <span class="focus-label">提醒</span>
-        <span class="focus-title">${Utils.esc(alert.text)}</span>
-        <button class="focus-go" data-action="act-tab" data-tab="${alert.go}">前往</button>
+        <span class="focus-title">${Utils.esc(alert.text)}${aDest ? `<span class="focus-dest">前往 · ${Utils.esc(aDest)}</span>` : ''}</span>
+        <button class="focus-go" data-action="act-tab" data-tab="${alert.go}" title="直达 · ${Utils.esc(aDest)}">前往</button>
       </div>`);
     }
     this.setHTML(this.el['focus-strip'], parts.join(''));
@@ -542,7 +549,8 @@ const UI = {
       const isOn = p.beasts.active === b.uid;
       const isOn2 = p.beasts.active2 === b.uid;
       const pk = BeastSys.PASSIVE[b.species] || 'atkPct';
-      const pv = Math.round(b.power * 0.6 + b.level * 0.8);
+      // v26 修瑕：展示值与 BeastSys.passive 口径对齐（蜕变 ×1.4 此前漏算，面板低于实际）
+      const pv = Math.round((b.power * 0.6 + b.level * 0.8) * (b.evolved ? 1.4 : 1));
       const needExp = b.level * 400;
       const bTag = isOn ? '<span class="tag safe">出战中</span>' : isOn2 ? '<span class="tag warn">护持中</span>' : b.trip ? '<span class="tag magic">寻宝途中</span>' : '<span class="tag">栏中</span>';
       const tripTxt = b.trip
@@ -978,11 +986,24 @@ const UI = {
       </div>`;
   },
 
+  /** v26 炼丹火候选择（v18 现成机制实装入口）：内联于炼制坊丹炉区，单炉生效、连炉平火 */
+  fireSelectorHtml(p) {
+    const fireT = (p.dao === 'pill' && DaoSys.tierLevel && DaoSys.tierLevel(p) >= 3) ? 30 : 0;
+    const btn = (key, label) => `<button class="fire-btn ${(CraftSys._fire || '') === key ? 'on' : ''}" data-action="craft-fire" data-fire="${key}">${label}</button>`;
+    return `<div class="fire-row"><span class="fire-note" style="margin:0 4px 0 0">火候</span>
+      ${btn('', '平火 · 随心')}
+      ${btn('wen', '文火 · 成丹+5%')}
+      ${btn('wu', '武火 · 上品+10%')}
+      ${btn('both', '文武交替 · 契合+12%')}</div>
+    <div class="fire-note">· 火候只影响单炉炼制（×5 连炉为平火）；文武交替有 ${35 + fireT}% 几率契合大涨${fireT ? '（丹火境·已提升）' : ''}；上品出丹凝感悟，极品当炉翻倍。</div>`;
+  },
+
   shopCraft() {
     const p = Game.player;
-    // 炼丹炉（人人可用，丹道成丹率大涨）
+    // 炼丹炉（人人可用，丹道成丹率大涨）；v26：火候选择入口（v18 现成机制实装）
     const alchemySection = `
       <div class="shop-section-title">◈ 炼丹炉${p.dao === 'pill' ? '（丹道加持，成丹率大增）' : ''}</div>
+      ${this.fireSelectorHtml(p)}
       ${GameData.ALCHEMY_RECIPES.map(r => {
         const out = GameData.ITEMS[r.out];
         const locked = r.needPages && !(p.flags.recipeOk || {})[r.id];
@@ -991,12 +1012,12 @@ const UI = {
         const lockTxt = locked ? `<span class="tag danger" title="集齐丹方残页后可参悟解锁">失传 · 残页 ${Bag.count('m_danfang')}/${r.needPages}</span> ` : '';
         const drawBtn = locked
           ? `<button class="btn btn-sm" data-action="act-study-recipe" data-recipe="${r.id}" ${Bag.count('m_danfang') >= r.needPages ? '' : 'disabled'}>参悟</button>`
-          : `<button class="btn btn-sm" data-action="act-alchemy" data-recipe="${r.id}" ${can ? '' : 'disabled'}>炼制</button>
-            <button class="btn btn-sm" data-action="act-alchemy-multi" data-recipe="${r.id}" data-times="5" ${can ? '' : 'disabled'} title="连开五炉，药材不足自动停炉">×5</button>`;
+          : `<button class="btn btn-sm" data-action="act-alchemy" data-recipe="${r.id}" ${can ? '' : 'disabled'} title="以当前火候单开一炉">炼制</button>
+            <button class="btn btn-sm" data-action="act-alchemy-multi" data-recipe="${r.id}" data-times="5" ${can ? '' : 'disabled'} title="连开五炉（平火），药材不足自动停炉">×5</button>`;
         return `
         <div class="shop-row">
           <div class="gf-info">
-            <div class="gf-name">${this.gradeSpan(out.name, out.grade)}（成丹率 ${CraftSys.rate(p, r).toFixed(0)}%）${lockTxt}</div>
+            <div class="gf-name">${this.gradeSpan(out.name, out.grade)}（成丹率 ${CraftSys.rate(p, r, CraftSys._fire).toFixed(0)}%）${lockTxt}</div>
             <div class="gf-desc">需 ${mats}</div>
           </div>
           <div class="gf-actions">
@@ -1148,7 +1169,7 @@ const UI = {
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${t.name} ${done ? '<span class="tag safe">已达成</span>' : `<span class="tag">进度 ${t.progress}/${t.need}</span>`}${(t === B.list.find(x => x)) ? repTag : ''}</div>
+          <div class="gf-name">${t.name} ${done ? '<span class="tag safe">已达成</span>' : `<span class="tag">进度 ${t.progress}/${t.need}</span>`}${repTag}</div>
           <div class="gf-desc">${t.desc} · 赏格：灵石 ${Utils.fmtNum(Math.round(r.stones * (t.chain ? 1 + t.chain * 0.6 : 1)))}${p.sect ? `、贡献 ${Math.round(r.contrib * (t.chain ? 1 + t.chain * 0.6 : 1))}` : ''}</div>
         </div>
         <div class="gf-actions">${btn}</div>
@@ -1822,9 +1843,23 @@ const UI = {
     document.getElementById('app').appendChild(div);
     setTimeout(() => div.remove(), 1500);
   },
+  /** v26 引导直达：页签切换后滚动定位到含指定文字的卡片并鎏金闪光——「去了但不知道干嘛」消失 */
+  glimmer(anchorText) {
+    if (!anchorText) return;
+    setTimeout(() => {
+      const box = this.el['tab-content'];
+      if (!box) return;
+      const targets = box.querySelectorAll('.card, .shop-row, .gf-row');
+      let hit = null;
+      for (const el of targets) { if (el.textContent.includes(anchorText)) { hit = el; break; } }
+      if (!hit) return;
+      hit.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      hit.classList.remove('glimmer'); void hit.offsetWidth; hit.classList.add('glimmer');
+      setTimeout(() => hit.classList.remove('glimmer'), 2300);
+    }, 90);
+  },
   /** v21：剧情 / 战斗 / 弹窗进行中，公告移至顶栏下方播放，不再遮住中央演出文字 */
-  syncAnnouncePos() {
-    const wrap = document.getElementById('announce');
+  syncAnnouncePos() {    const wrap = document.getElementById('announce');
     if (!wrap) return;
     const anyModal = [...document.querySelectorAll('.modal')].some(m => !m.classList.contains('hidden'));
     wrap.classList.toggle('at-top', anyModal);
