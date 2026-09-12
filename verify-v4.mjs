@@ -348,8 +348,8 @@ try {
     bag: !!document.querySelector('#bag-panel .panel-title'),
     logWrap: !!document.querySelector('#log-wrap #log'),
   }));
-  layout.left && layout.tabs === 8 && layout.bag && layout.logWrap
-    ? pass('U12 原有三栏布局 / 八标签页完整保留（v13 增洞府页）')
+  layout.left && layout.tabs === 9 && layout.bag && layout.logWrap
+    ? pass('U12 原有三栏布局 / 八标签页完整保留（v13 增洞府页；v28 增「更多」键）')
     : fail('U12 布局完整性', JSON.stringify(layout));
   await shot(page, 'final_ui');
 

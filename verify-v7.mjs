@@ -814,6 +814,9 @@ try {
   // DAO3 炼丹/画符获得道境经验
   const dao3 = await page.evaluate(() => {
     const p = Game.player;
+    const oc = Utils.chance;
+    Utils.chance = () => true;   // v28：G8 丹毒惩罚上线，此断言改显式必成——隔离职业经验判定与成丹率概率/丹毒状态
+    p.poison = 0;
     // 丹道：炼丹
     p.dao = 'pill';
     p.daoExp = { pill: 0 };
@@ -828,6 +831,7 @@ try {
     p.realmIdx = 2;
     CraftSys.drawTalisman();
     const talExp = p.daoExp.talisman || 0;
+    Utils.chance = oc;
     return { pillExp, talExp };
   });
   dao3.pillExp > 0 && dao3.talExp > 0

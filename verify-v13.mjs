@@ -48,8 +48,8 @@ try {
     ? pass('A5 死令牌清理（--bg-soft / --panel-2）') : fail('A5 死令牌', '仍存在');
   css.includes('env(safe-area-inset-top, 0px)) 12px 8px')
     ? pass('A6 刘海避让并入顶栏 padding（不再被简写覆盖）') : fail('A6 刘海避让', '');
-  html.includes('style.css?v=43') && html.includes('game.js?v=43') && swSrc.includes('fanren-wd-v2')
-    ? pass('A7 缓存号 v=43 + SW 版本升级') : fail('A7 缓存号', '');
+  html.includes('style.css?v=44') && html.includes('game.js?v=44') && swSrc.includes('fanren-wd-v3')
+    ? pass('A7 缓存号 v=44 + SW 版本 v3') : fail('A7 缓存号', '');
 
   /* ================= B 启动（移动端视口走查用同一会话） ================= */
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });

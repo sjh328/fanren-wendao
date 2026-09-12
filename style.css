@@ -3210,3 +3210,184 @@ body { -webkit-tap-highlight-color: transparent; }
 @media (max-width: 860px) {
   .fire-btn { min-height: 40px; }
 }
+
+/* ======================================================================
+   v28「重光」：界面重塑 —— 令牌扩容 / 移动端单行顶栏 / 底栏五键+更多面板 /
+   行动卡合一 / 乾坤袋网格 / 诸处速达（追加于文件尾，同特异性下后到胜）
+   ====================================================================== */
+
+/* ---------- T1 设计令牌扩容（卡片/弹层圆角与投影、密度档） ---------- */
+:root {
+  --radius-card: 12px;   /* 卡片与面板圆角（v28 统一） */
+  --radius-pop: 16px;    /* 弹层圆角 */
+  --shadow-pop: 0 10px 40px rgba(60, 44, 18, 0.35);
+  --card-pad: 12px 14px; /* 卡片内边距基准（密度档改此一处） */
+}
+body.density-compact { --card-pad: 9px 11px; }
+body.density-compact .card { margin-bottom: 7px; }
+body.density-compact .card-desc { margin-bottom: 5px; }
+.panel { border-radius: var(--radius-card); }
+.panel::before { border-radius: 8px; }
+.card { border-radius: var(--radius-card); padding: var(--card-pad); }
+.btn { border-radius: 9px; }
+.modal .popup-box, .modal .dao-box, .modal .trib-box, .modal .battle-box, .modal .tutorial-box { border-radius: var(--radius-pop); }
+
+/* ---------- T2 顶栏 token 化 + 身份徽章（双端） ---------- */
+.m-id-chip {
+  display: inline-flex; align-items: center;
+  max-width: 46vw;
+  gap: 5px;
+  padding: 4px 12px;
+  font-family: var(--font-kai);
+  cursor: pointer;
+}
+.m-id-chip .mid-name { font-size: 14px; letter-spacing: 1px; color: var(--gold-bright); max-width: 9em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-id-chip .mid-realm { font-style: normal; font-size: 11.5px; color: var(--text-dim); }
+.m-id-chip .rc-ico { font-style: normal; color: var(--gold); }
+.m-id-chip:active { transform: translateY(1px); }
+.id-line2 { font-size: 11.5px; color: var(--text-dim); letter-spacing: 0.5px; text-align: center; margin-top: 5px; border-top: 1px dashed var(--border); padding-top: 5px; }
+
+/* ---------- T3 乾坤袋家资行 + 物品网格（双端） ---------- */
+.bag-wealth {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  font-size: 12px; color: var(--text-dim); letter-spacing: 0.5px;
+  padding: 6px 10px; margin-bottom: 8px;
+  border: 1px dashed var(--border); border-radius: 9px;
+  background: rgba(255, 253, 244, 0.6);
+  font-variant-numeric: tabular-nums;
+}
+.bag-wealth b { color: var(--gold-bright); }
+@media (min-width: 861px) {
+  .bag-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-items: start; }
+}
+
+/* ---------- T4 诸处速达（修炼页尾） ---------- */
+.quick-go { display: flex; flex-wrap: wrap; gap: 7px; }
+.quick-go-btn {
+  position: relative;
+  min-height: 34px; padding: 5px 14px;
+  font-family: var(--font-kai); font-size: 13px; letter-spacing: 2px;
+  color: var(--text-dim);
+  background: rgba(255, 253, 244, 0.85);
+  border: 1px solid var(--border); border-radius: 17px;
+  cursor: pointer; transition: color .15s, border-color .15s, transform .1s;
+}
+.quick-go-btn:hover { color: var(--gold-bright); border-color: var(--gold); }
+.quick-go-btn:active { transform: translateY(1px); }
+.quick-go-btn.locked { opacity: 0.55; }
+.quick-go-btn .dot { position: absolute; top: -3px; right: -1px; margin: 0; }
+
+/* ---------- T5 移动端：顶栏单行（52px 级）+ 图标化抽屉钮 ---------- */
+@media (max-width: 860px) {
+  #top-bar { padding: 7px 10px 13px; flex-wrap: nowrap; }
+  .top-title { display: none; }
+  .top-right { width: 100%; display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+  #top-info {
+    order: -1;
+    flex: 1 1 auto; min-width: 0;
+    display: flex; flex-wrap: nowrap; align-items: center; gap: 6px;
+    overflow: hidden;
+  }
+  .m-hide { display: none !important; }
+  .m-hide-inline { display: none; }
+  /* 战力/岁月组窄屏退场（抽屉与属性格皆有战力；单行顶栏保身份+家资+三个图标钮） */
+  .top-vit { display: none; }
+  /* 血/修为迷你条：贴顶栏下沿全宽常驻 */
+  .m-mini-bars {
+    position: absolute; left: 10px; right: 10px; bottom: 4px;
+    display: flex; gap: 6px; margin: 0;
+  }
+  .m-mini-bars .mini-bar {
+    flex: 1; height: 3.5px; border-radius: 2px;
+    background: rgba(96, 76, 40, 0.18); overflow: hidden; display: block;
+  }
+  .m-mini-bars .mini-bar i { display: block; height: 100%; border-radius: 2px; }
+  .m-mini-bars .mini-bar.hp i { background: linear-gradient(90deg, #b8433e, #d0685f); }
+  .m-mini-bars .mini-bar.exp i { background: linear-gradient(90deg, #5e8a4a, #83b06e); }
+  /* 抽屉/设置钮图标化：☰ / 🎒 / ⚙ 单符号，字收起 */
+  .m-drawer-btn { padding: 5px 11px; font-size: 15px; min-height: 40px; }
+  .m-drawer-btn .mdb-t { display: none; }
+  .amb-btn .mdb-t { display: none; }
+  .m-id-chip { max-width: 40vw; }
+  .m-id-chip .mid-realm { max-width: 6.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+/* ---------- T6 移动端底栏：五键（4 常驻 + 更多），收拢键与死锁退场 ---------- */
+.tab-btn.m-more { display: none; }   /* 桌面不出「更多」 */
+@media (max-width: 860px) {
+  #tabs { gap: 3px; padding: 4px 6px calc(6px + env(safe-area-inset-bottom, 0px)); }
+  .tab-btn { flex: 1 1 0; min-width: 0; padding: 8px 4px; text-align: center; }
+  .tab-btn.m-sheet { display: none; }
+  .tab-btn.m-more { display: block; }
+  .tab-btn .tab-name { font-style: normal; font-size: 14px; }
+  .tab-btn.locked { opacity: 0.6; }
+  .tab-lock { font-style: normal; font-size: 9.5px; margin-right: 2px; vertical-align: 1px; }
+}
+
+/* ---------- T7 「更多」底部面板（≤860 独占） ---------- */
+#more-sheet { display: none; }
+@media (max-width: 860px) {
+  #more-sheet {
+    display: block;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 86;
+    max-height: 74dvh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding: 16px 14px calc(18px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, #faf4e3, #f0e6cc);
+    border-top: 1px solid var(--border-light);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -10px 40px rgba(60, 44, 18, 0.35);
+    transform: translateY(106%);
+    transition: transform 0.26s cubic-bezier(0.3, 0.9, 0.35, 1);
+  }
+  #more-sheet.on { transform: translateY(0); }
+  .sheet-title { font-family: var(--font-kai); font-size: 16px; letter-spacing: 4px; color: var(--gold-bright); text-align: center; margin-bottom: 12px; }
+  .sheet-mains { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .sheet-main {
+    position: relative;
+    min-height: 58px;
+    font-family: var(--font-kai); font-size: 15px; letter-spacing: 2px;
+    color: var(--text);
+    background: rgba(255, 253, 244, 0.85);
+    border: 1px solid var(--border); border-radius: 12px;
+    cursor: pointer; transition: border-color .15s, transform .1s;
+  }
+  .sheet-main:active { transform: scale(0.97); }
+  .sheet-main.active { border-color: var(--gold); background: #fffdf4; box-shadow: inset 0 0 0 1px rgba(150, 112, 46, 0.4); color: var(--gold-bright); font-weight: bold; }
+  .sheet-main.locked { opacity: 0.55; }
+  .sheet-sep { height: 1px; background: var(--border); margin: 12px 2px; }
+  .sheet-quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .sheet-cell {
+    position: relative;
+    min-height: 44px;
+    font-family: var(--font-kai); font-size: 13px; letter-spacing: 1.5px;
+    color: var(--text-dim);
+    background: rgba(255, 253, 244, 0.7);
+    border: 1px solid var(--border); border-radius: 10px;
+    cursor: pointer; transition: border-color .15s, transform .1s;
+  }
+  .sheet-cell:active { transform: scale(0.97); }
+  .sheet-cell.locked { opacity: 0.5; }
+  .sheet-main .dot, .sheet-cell .dot { position: absolute; top: 5px; right: 7px; margin: 0; }
+  .sheet-tip { margin-top: 12px; font-size: 11.5px; color: var(--text-faint); text-align: center; letter-spacing: 1px; }
+}
+@media (max-width: 355px) {
+  .sheet-quick { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ---------- T8 行动卡合一（≤860：主线+提醒同卡分层） ---------- */
+@media (max-width: 860px) {
+  #focus-strip { flex-direction: column; gap: 0; border-radius: 14px; box-shadow: 0 3px 14px rgba(50, 40, 20, 0.25); }
+  #focus-strip > .focus-main, #focus-strip > .focus-alert { border-radius: 0; }
+  #focus-strip > .focus-main:not(:last-child) { border-bottom: none; border-right: none; border-top: none; }
+  #focus-strip > .focus-alert { border-left: none; border-right: none; }
+  #focus-strip > .focus-alert:not(:first-child) { border-top: none; }
+  #focus-strip > .focus-main { padding: 9px 12px; }
+  #focus-strip > .focus-alert { padding: 7px 12px; }
+  #focus-strip > .focus-alert .focus-title { font-size: 12.5px; }
+  #focus-strip > .focus-main::after { font-size: 52px; }
+}

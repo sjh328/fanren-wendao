@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="凡人问道">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>凡人问道 · 文字修仙</title>
-<link rel="stylesheet" href="style.css?v=43">
+<link rel="stylesheet" href="style.css?v=44">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet">
@@ -58,11 +58,11 @@
     <header id="top-bar">
       <div class="top-title">凡人问道</div>
       <div class="top-right">
-        <!-- v22 移动端抽屉入口（桌面隐藏）：道途 / 乾坤 -->
-        <button class="m-drawer-btn" data-action="act-drawer" data-panel="left" aria-label="打开道途面板">☰ 道途</button>
-        <button class="m-drawer-btn" data-action="act-drawer" data-panel="right" aria-label="打开乾坤袋">🎒 乾坤</button>
+        <!-- v22 移动端抽屉入口（桌面隐藏）；v28 图标化（.mdb-t 字样窄屏收起） -->
+        <button class="m-drawer-btn" data-action="act-drawer" data-panel="left" aria-label="打开道途面板"><i class="mdb-i" aria-hidden="true">☰</i><span class="mdb-t">道途</span></button>
+        <button class="m-drawer-btn" data-action="act-drawer" data-panel="right" aria-label="打开乾坤袋"><i class="mdb-i" aria-hidden="true">🎒</i><span class="mdb-t">乾坤</span></button>
         <div id="amb-ctrl">
-          <button class="amb-btn" id="amb-toggle" data-action="amb-panel" title="设置">⚙ 设置</button>
+          <button class="amb-btn" id="amb-toggle" data-action="amb-panel" title="设置"><i class="mdb-i" aria-hidden="true">⚙</i><span class="mdb-t"> 设置</span></button>
           <div id="amb-panel" class="amb-panel hidden">
             <div class="amb-panel-title">— 设 置 —</div>
             <label class="opt-line"><input type="checkbox" id="amb-sfx"> 事件音效（突破 / 稀有 / 胜利）</label>
@@ -73,6 +73,12 @@
                 <option value="100">标准</option>
                 <option value="110">大</option>
                 <option value="122">特大</option>
+              </select>
+            </div>
+            <div class="amb-vol-row">界面密度
+              <select id="amb-density">
+                <option value="cozy">舒适</option>
+                <option value="compact">紧凑（内容 +15%）</option>
               </select>
             </div>
             <div class="amb-vol-row">战斗速度
@@ -153,6 +159,13 @@
         </div>
       </aside>
     </main>
+
+    <!-- v28 修瑕：遮罩原挂 #app 层（z70），被 #game-screen 的 z-index:1 层叠上下文整体压住——
+         抽屉开了却被遮罩盖住变暗且点哪都是遮罩。移入 #game-screen 内与抽屉同域（遮罩70 < 抽屉80）。 -->
+    <div id="drawer-backdrop" data-action="act-drawer-close" aria-hidden="true"></div>
+
+    <!-- v28 移动端「更多」底部面板：四大页签 + 十处直达（≤860px 显示） -->
+    <div id="more-sheet" class="hidden" role="dialog" aria-modal="true" aria-label="更多去处"></div>
   </div>
 
   <!-- ==================== 战斗弹窗 ==================== -->
@@ -197,14 +210,12 @@
     </div>
   </div>
 
-  <div id="drawer-backdrop" data-action="act-drawer-close" aria-hidden="true"></div>
-
   <button id="back-top" title="回到顶部" aria-label="回到顶部">▲</button>
 
   <div id="toast"></div>
   <div id="announce"></div>
 </div>
-<script src="game.js?v=43"></script>
+<script src="game.js?v=44"></script>
 <script>
   /* v24 PWA：注册 Service Worker——离线可玩、可添加到主屏幕（http/https 环境生效） */
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {

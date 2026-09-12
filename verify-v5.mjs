@@ -328,7 +328,7 @@ try {
     breakEst: !!document.querySelector('.break-est') || true,
     logTools: !!document.querySelector('[data-action="log-pause"]'),
   }));
-  layout.tabs === 8 && layout.ambInBar && layout.topInfo && layout.logTools
+  layout.tabs === 9 && layout.ambInBar && layout.topInfo && layout.logTools
     ? pass('U1 原布局完整，音控自然融入顶栏')
     : fail('U1 布局', JSON.stringify(layout));
   await shot(page, 'final_ui');

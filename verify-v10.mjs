@@ -477,6 +477,9 @@ try {
     p.partner = 'n2';
     p.npcs.n2.alive = true; p.npcs.n2.met = true; p.npcs.n2.talent = 4;
     p._daoCultDay = null; p.day = 100;
+    // v28：E1 曾把 realmIdx 重置为 0，而套件角色常带巨额 exp——不归零则共修 addExp
+    // 会在练气三层触发「溢出转存 expOverflow」（v18 机制，突破时计回），totalExp 度量便呈负数
+    p.realmIdx = 0; p.layer = 1; p.exp = 0; p.expOverflow = 0;
     const exp0 = Guide.totalExp(p);
     const oc = Utils.chance; Utils.chance = () => false;   // 屏蔽心愿分支
     await NpcSys.companionCheck(p);

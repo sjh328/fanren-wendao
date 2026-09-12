@@ -80,21 +80,21 @@ try {
     await sleep(200);
   }
 
-  // AA3 顶栏两行化：chips 行横向滚动、顶栏可换行
+  // AA3 v28 单行顶栏：chips 行不再换行、卷/誉/岁月 chips 收拢隐藏
   const aa3 = await page.evaluate(() => {
     const info = getComputedStyle(document.getElementById('top-info'));
     const bar = getComputedStyle(document.getElementById('top-bar'));
     return { infoOv: info.overflowX, wrap: bar.flexWrap, meta2: getComputedStyle(document.querySelector('.top-meta2') || document.body).display };
   });
-  (aa3.infoOv === 'auto' && aa3.wrap === 'wrap') ? pass('AA3 顶栏两行化：chips 行横滑 + 顶栏 wrap') : fail('AA3 顶栏两行化', JSON.stringify(aa3));
+  (aa3.infoOv === 'hidden' && aa3.wrap === 'nowrap' && aa3.meta2 === 'none') ? pass('AA3 v28 单行顶栏：chips 单行不换行 + 旧元信息收拢') : fail('AA3 单行顶栏', JSON.stringify(aa3));
 
-  // AA4 底部导航：锁定页签只显示锁形；红点绝对定位角标
+  // AA4 v28 底部导航：锁定页签保留名字 + 小锁角标（不再一排死锁）
   const aa4 = await page.evaluate(() => {
     const shop = document.querySelector('.tab-btn[data-tab="shop"]');
     const cultivate = document.querySelector('.tab-btn[data-tab="cultivate"]');
     return { lockedTxt: shop ? shop.textContent.trim() : null, cultTxt: cultivate ? cultivate.textContent.trim() : null };
   });
-  (aa4.lockedTxt === '🔒' && aa4.cultTxt === '修炼') ? pass('AA4 锁定页签图标化（窄屏不撑爆）') : fail('AA4 锁定图标化', JSON.stringify(aa4));
+  (aa4.lockedTxt === '🔒坊市' && aa4.cultTxt === '修炼') ? pass('AA4 锁定页签：名字保留 + 小锁角标（v28）') : fail('AA4 锁定图标化', JSON.stringify(aa4));
 
   // AA5 教程毕抽屉自愈
   const aa5 = await page.evaluate(async () => {
