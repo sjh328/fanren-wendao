@@ -3,11 +3,14 @@
  * §20 气运因果 KarmaSys（气运 / 孽障 / 斩三尸 / 仇家偷袭）
  * ====================================================================== */
 const KarmaSys = {
+  /** v29：气运软上限——秘境 Boss 等大额气运源反复刷曾可无限灌水（突破成算/好事全面虚高） */
+  FORTUNE_CAP: 150,
   addFortune(n, silent = false) {
     const p = Game.player;
     // v18 道心烙印【慎/敛/正/渡】：气运获取加成（仅正向）
     if (n > 0 && typeof DaoxinSys !== 'undefined') n = Math.max(1, Math.round(n * DaoxinSys.gainMult(p, 'fortuneMult')));
-    p.fortune = (p.fortune || 0) + n;
+    if (n > 0 && (p.fortune || 0) >= this.FORTUNE_CAP) { if (!silent) Log.add('你与天道的缘分已臻圆满，暂无进益。', 'info'); return; }
+    p.fortune = Math.min(this.FORTUNE_CAP, (p.fortune || 0) + n);
     if (!silent) Log.add(`冥冥之中似有天意垂青——气运 +${n}。`, 'gain');
   },
   addKarma(n, silent = false) {

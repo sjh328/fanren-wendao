@@ -50,6 +50,9 @@
 /* ======================================================================
  * §1 工具函数
  * ====================================================================== */
+/** 秘境深度对宝箱附加掉率的辅助（v29 自 reincarnation.js 归位：跨文件隐藏依赖解除） */
+function depth2(depth) { return depth * 2; }
+
 const Utils = {
   rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; },
   randF(min, max) { return Math.random() * (max - min) + min; },

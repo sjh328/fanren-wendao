@@ -19,17 +19,22 @@ const DungeonSys = {
     UI.toast(`窥探结果：${info}`);
     Log.add(`你以符箓为媒，灵光一闪窥得前路——${info}。`, 'info');
   },
+  /** v29：秘境门票——按推荐境界灵石经济 ×0.6 定价，入历一次一付 */
+  ticketOf(R) { return Math.round(GameData.stoneEco(R.recRealm) * 0.6); },
   enter(idx) {
     const p = Game.player;
     if (Battle.active || p.dead) return;
     const R = GameData.SECRET_REALMS[idx];
     if (!R) return;
     if (p.realmIdx < R.recRealm) { UI.toast(`需 ${GameData.REALM_NAMES[R.recRealm]}期方可入内`); return; }
+    // v29：秘境准入门票——此前入场无成本且 Boss 固定巨款+气运，秘境成了无本万利的通胀主泵
+    const ticket = this.ticketOf(R);
+    if (!Bag.spendStones(ticket)) { UI.toast(`入秘境需备开门灵石 ${Utils.fmtNum(ticket)} 枚`); return; }
     Meta.see('realm', R.id);   // v6 图鉴
     p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS, choices: [], gains: [], stuck: false };
     this.genRoute(p.dungeon);
     this.genChoices(p.dungeon);
-    Log.add(`你寻得入口，踏入 <b>${R.name}</b>——雾气在身后合拢，退路只剩来时那条。`, 'system');
+    Log.add(`你以 ${Utils.fmtNum(ticket)} 灵石付清开门之资，踏入 <b>${R.name}</b>——雾气在身后合拢，退路只剩来时那条。`, 'system');
     Game.activeTab = 'map';
     Game.subTab = Game.subTab || {};
     Game.subTab.map = 'realm';   // v22 直达游历·秘境分栏
@@ -285,12 +290,22 @@ const DungeonSys = {
       Bag.addItem('m_gupian', 3);
       const stones = Math.round(Utils.rand(60, 100) * GameData.stoneEco(R.recRealm) * 2);
       Bag.addStones(stones);
-      KarmaSys.addFortune(10);
+      // v29：Boss 气运每秘境每日限一次——重复通关不再无限灌气运（配合 KarmaSys 气运软上限 150）
+      p.counters.bossFortuneDay = p.counters.bossFortuneDay || {};
+      const _today = Math.floor(p.day || 0);
+      let fortuneTxt = '';
+      if (p.counters.bossFortuneDay[R.id] !== _today) {
+        p.counters.bossFortuneDay[R.id] = _today;
+        KarmaSys.addFortune(10);
+        fortuneTxt = '（气运 +10）';
+      } else {
+        fortuneTxt = '（今日此间气运已得过，不再进益）';
+      }
       // v27 修瑕：通关秘境从未按 realm 去重计数，成就「秘境征服者」永不可解锁
       p.counters.clearedRealms = p.counters.clearedRealms || {};
       p.counters.clearedRealms[R.id] = 1;
       p.counters.dungeonClears = Object.keys(p.counters.clearedRealms).length;
-      Log.add(`<b>${R.name}</b> 最深处的宝库向你敞开！${gf ? `失传功法【${gf}】、` : '上古法宝碎片 ×2、'}上古法宝碎片 ×3、灵石 ${Utils.fmtNum(stones)}——你满载而归！（气运 +10）`, 'gain');
+      Log.add(`<b>${R.name}</b> 最深处的宝库向你敞开！${gf ? `失传功法【${gf}】、` : '上古法宝碎片 ×2、'}上古法宝碎片 ×3、灵石 ${Utils.fmtNum(stones)}——你满载而归！${fortuneTxt}`, 'gain');
       p.dungeon = null;
       Log.add('你退出秘境，回望雾中洞口，只觉造化玄奇。', 'system');
       return;

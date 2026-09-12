@@ -50,6 +50,9 @@
 /* ======================================================================
  * §1 工具函数
  * ====================================================================== */
+/** 秘境深度对宝箱附加掉率的辅助（v29 自 reincarnation.js 归位：跨文件隐藏依赖解除） */
+function depth2(depth) { return depth * 2; }
+
 const Utils = {
   rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; },
   randF(min, max) { return Math.random() * (max - min) + min; },
@@ -302,7 +305,8 @@ const Art = {
   /** v19：季节色调（孟春嫩/仲夏翠/季秋赭/隆冬灰，按游戏月叠加一层薄色） */
   SEASON_TINT: ['#a8c89a', '#8ab89a', '#c8a878', '#a8b0b8'],
   seasonOf(p) {
-    const month = p ? Math.floor((p.day || 0) / 30) % 12 : 0;
+    // v29 修瑕：与日历同源（365 天/年）——旧算法按 360 天/年，第 6 年起整年错月，季节加成全面漂移
+    const month = p ? Math.floor(((p.day || 0) % 365) / 30) : 0;
     return month <= 2 ? 0 : month <= 5 ? 1 : month <= 8 ? 2 : 3;
   },
   /** v19 天气/昼夜：按地图+游戏日确定性派生（同日同地必同天）——晴/雨/雾 × 昼/夜 */
@@ -522,7 +526,11 @@ const Ambience = {
     try { document.documentElement.style.zoom = scale === 1 ? '' : String(scale); } catch (e) { /* 老内核不支持则退化为字号档 */ }
   },
   persist() {
-    const raw = JSON.stringify({ sfx: this.sfxOn, music: this.musicOn, vol: this.vol });
+    // v29 修瑕：读回旧偏好合并后再写——此前只写音效三项，切一次音效会把字号/性能/逐字/日志密度全部静默重置
+    let pref = {};
+    try { const raw0 = Save.storage.getItem ? Save.storage.getItem(this.KEY) : Save.mem[this.KEY]; pref = JSON.parse(raw0 || '{}') || {}; } catch (e) {}
+    pref.sfx = this.sfxOn; pref.music = this.musicOn; pref.vol = this.vol;
+    const raw = JSON.stringify(pref);
     try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, raw); else Save.mem[this.KEY] = raw; } catch (e) { /* ignore */ }
   },
   ensureCtx() {
@@ -738,6 +746,12 @@ const Achieve = {
   CATS: { realm: '境界', dao: '职业', battle: '战斗', exp: '奇遇', reinc: '转世' },
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
   rewardText(r) { return r.fortune ? `气运 +${r.fortune}` : `灵石 +${Utils.fmtNum(r.stones)}`; },
+  /** v29：成就灵石奖励随境界经济缩放——固定面值在大后期形同虚设 */
+  rewardOf(d, p) {
+    const r = { ...d.reward };
+    if (r.stones) r.stones = Math.round(r.stones * GameData.stoneEco(Math.min(6, p ? p.realmIdx || 0 : 0)));
+    return r;
+  },
   DEFS: [
     /* ---- 境界 ---- */
     { id: 'r1', cat: 'realm', name: '初入道途', desc: '突破至筑基期', reward: { fortune: 3 }, test: p => p.realmIdx >= 1 },
@@ -820,9 +834,10 @@ const Achieve = {
     if (!unlocked.length) return;
     for (const d of unlocked) {
       got[d.id] = Math.floor(p.day);
-      if (d.reward.stones) Bag.addStones(d.reward.stones);
-      if (d.reward.fortune) KarmaSys.addFortune(d.reward.fortune, true);
-      Log.add(`✦ 成就达成 <b>【${d.name}】</b>——${d.desc}。（${this.rewardText(d.reward)}）`, 'system');
+      const rw = this.rewardOf(d, p);
+      if (rw.stones) Bag.addStones(rw.stones);
+      if (rw.fortune) KarmaSys.addFortune(rw.fortune, true);
+      Log.add(`✦ 成就达成 <b>【${d.name}】</b>——${d.desc}。（${this.rewardText(rw)}）`, 'system');
       UI.toast(`成就达成：${d.name}`);
     }
     Meta.save();
@@ -1297,70 +1312,10 @@ const GameData = {
       FLEE_BASE: 45,              // 遁走基础成功率
     },
     // 突破
-    BREAKTHROUGH: {
-      BASE_CHANCE: 40,            // 基准成算
-      COMP_FACTOR: 2,             // 悟性系数
-      FORTUNE_FACTOR: 0.2,        // 气运系数
-      KARMA_FACTOR: 0.2,          // 孽障系数
-      BODY_MULT: 1.4,             // 体修渡劫加成
-      SWORD_MULT: 0.77,           // 剑修渡劫惩罚
-      STREAK_BONUS_MAX: 15,       // 连败保底上限
-      QUIET_CULT_BONUS: 15,       // 静修冲关加成
-      REALM_PENALTY_PER: 0.035,   // 每境界劫难折损
-      REALM_PENALTY_MIN: 0.5,     // 劫难折损下限
-      REALM_PENALTY_MAX: 1.0,     // 劫难折损上限
-      FAIL_HP_RETAIN: 0.1,        // 失败保留气血比例
-      FAIL_EXP_RETAIN: 0.6,       // 失败保留修为比例
-      FAIL_INSIGHT_GAIN: 15,      // 失败获得感悟
-      HARD_MULT: 0.82,            // 硬抗系数
-      ARTIFACT_MULT: 1.3,         // 法宝系数
-      HIDE_MULT: 1.0,             // 借地系数
-    },
     // 属性上限
-    STATS: {
-      ATTR_MAX: 10,               // 先天属性上限
-      CRIT_MAX: 75,               // 暴击率上限
-      DODGE_MAX: 35,              // 闪避率上限
-      BLOCK_MAX: 60,              // 格挡率上限
-      POISON_BASE: 60,            // 丹毒基础上限
-      POISON_BODY_FACTOR: 8,      // 体魄丹毒系数
-      POISON_REALM_BONUS: 20,     // 合道丹毒上限加成
-    },
     // 驯服
-    TAME: {
-      BASE_RATE: 45,              // 驯服基准成功率
-      LUCK_FACTOR: 2,             // 福缘系数
-      RATE_MIN: 8,                // 成功率下限
-      RATE_MAX: 90,               // 成功率上限
-      SKILL_FACTOR: 10,           // 驯熟练度每多少点+1%
-      HP_THRESHOLD: 0.2,          // 可驯服血量阈值
-      TAMEABLE: ['beast', 'snake', 'swarm', 'plant', 'element'],
-    },
     // 修炼
-    CULTIVATE: {
-      BASE_GAIN_FACTOR: 12,       // 基础修为：12 + 悟性*2
-      COMP_FACTOR: 2,
-      REALM_GROWTH: 4.6,          // 每境界修为放大系数
-      LAYER_GROWTH: 0.15,         // 每小层修为加成
-      SECLUDE_MULT: 1.6,          // 闭关倍率
-      SECLUDE_MAX_ROUNDS: 120,    // 最大闭关轮数
-      AUTO_CULT_SPEED: 280,       // 自动修炼间隔 ms
-      EVENT_CHANCE: 8,            // 灵机事件触发概率%
-      EVENT_SURGE_MULT: 2.5,      // 灵气潮涌倍率
-      EVENT_EPIPHANY_MULT: 1.5,   // 醍醐灌顶倍率
-      EVENT_HEART_MULT: 0.55,     // 心魔滋扰倍率
-    },
     // 经济
-    ECONOMY: {
-      ECO_BASE: 4.6,              // 修为经济基数
-      STONE_ECO_BASE: 3.8,        // 灵石经济基数
-      SELL_RATIO: 0.4,            // 出售价比例
-      SHOP_FLUCTUATION: 0.2,      // 坊市行情波动±
-      BOUNTY_DAYS: 2,             // 悬赏保留天数
-      BLACK_MARKET_INTERVAL: 30,  // 黑市间隔
-      BLACK_MARKET_DURATION: 3,   // 黑市持续天数
-      BLACK_MARKET_PRICE: 1.6,    // 黑市价格倍率
-    },
     // v18 种族克制：七族循环克制，克制时 +15%伤害
     SPECIES_COUNTER: {
       order: ['beast', 'plant', 'element', 'ghost', 'human', 'construct', 'swarm', 'snake'],
@@ -1427,15 +1382,15 @@ const GameData = {
    */
   ITEMS: {
     /* ---- 丹药 ---- */
-    pill_juqi:     { name: '聚气丹',   type: 'pill', grade: 0, price: 60,     desc: '凝聚散逸灵气，服之可得六十点修为。', use: { exp: 60 }, poison: 6 },
+    pill_juqi:     { name: '聚气丹',   type: 'pill', grade: 0, price: 130,     desc: '凝聚散逸灵气，服之可得六十点修为。', use: { exp: 60 }, poison: 6 },
     pill_ningqi:   { name: '凝气丹',   type: 'pill', grade: 1, price: 220,    desc: '筑基修士常备丹药，服之可得二百四十点修为。', use: { exp: 240 }, poison: 14 },
-    pill_peiyuan:  { name: '培元丹',   type: 'pill', grade: 1, price: 550,    desc: '温养元气，服之可得六百点修为。', use: { exp: 600 }, poison: 25 },
-    pill_pojing:   { name: '破境丹',   type: 'pill', grade: 2, price: 1800,   desc: '药力霸道，服之可得两千点修为，丹毒颇深。', use: { exp: 2000 }, poison: 45 },
-    pill_jiuzhuan: { name: '九转金丹', type: 'pill', grade: 3, price: 13000,  desc: '丹中极品，服之得一万五千点修为。', use: { exp: 15000 }, poison: 60 },
-    pill_taichu:   { name: '太初神丹', type: 'pill', grade: 4, price: 70000,  desc: '蕴含太初之气，服之得八万点修为。', use: { exp: 80000 }, poison: 75 },
+    pill_peiyuan:  { name: '培元丹',   type: 'pill', grade: 1, price: 1100,    desc: '温养元气，服之可得六百点修为。', use: { exp: 600 }, poison: 25 },
+    pill_pojing:   { name: '破境丹',   type: 'pill', grade: 2, price: 2600,   desc: '药力霸道，服之可得两千点修为，丹毒颇深。', use: { exp: 2000 }, poison: 45 },
+    pill_jiuzhuan: { name: '九转金丹', type: 'pill', grade: 3, price: 24000,  desc: '丹中极品，服之得一万五千点修为。', use: { exp: 15000 }, poison: 60 },
+    pill_taichu:   { name: '太初神丹', type: 'pill', grade: 4, price: 210000,  desc: '蕴含太初之气，服之得八万点修为。', use: { exp: 80000 }, poison: 75 },
     pill_zaohua:   { name: '造化仙丹', type: 'pill', grade: 5, price: 350000, desc: '夺天地造化，服之得四十万点修为。', use: { exp: 400000 }, poison: 90 },
     pill_zhuji:    { name: '筑基丹',   type: 'pill', grade: 2, price: 5000,   desc: '冲击瓶颈至宝，服之顿悟，突破感悟 +50。', use: { insight: 50 }, poison: 10 },
-    pill_liaoshang:{ name: '疗伤丹',   type: 'pill', grade: 0, price: 80,     desc: '止血生肌，恢复六成气血。', use: { hpPct: 60 }, poison: 2, battle: true },
+    pill_liaoshang:{ name: '疗伤丹',   type: 'pill', grade: 0, price: 120,     desc: '止血生肌，恢复六成气血。', use: { hpPct: 60 }, poison: 2, battle: true },
     pill_huiling:  { name: '回灵丹',   type: 'pill', grade: 0, price: 60,     desc: '凝神静气，恢复八成灵力。', use: { mpPct: 80 }, poison: 2, battle: true },
     pill_jiedu:    { name: '解毒丹',   type: 'pill', grade: 0, price: 120,    desc: '化解丹毒四十点。', use: { curePoison: 40 }, poison: 0, battle: true },
     pill_xisui:    { name: '洗髓丹',   type: 'pill', grade: 2, price: 0,      desc: '洗涤经脉，随机先天属性 +1（上限十点）。', use: { stat: 1 }, poison: 20, battle: false },
@@ -1444,29 +1399,34 @@ const GameData = {
     pill_tiegu:    { name: '铁骨丹',   type: 'pill', grade: 2, price: 1000,   desc: '服之筋骨如铁——防御 +40%，持续三回合（战斗中可用）。', buff: { defPct: 40, rounds: 3 }, poison: 10, battle: true },
     pill_qingshen: { name: '轻身丹',   type: 'pill', grade: 1, price: 800,    desc: '服之身轻如燕——身法 +30%、闪避 +10%，持续三回合（战斗中可用）。', buff: { spdPct: 30, dodge: 10, rounds: 3 }, poison: 6, battle: true },
     pill_mingmu:   { name: '明目丹',   type: 'pill', grade: 1, price: 800,    desc: '服之目若朗星——暴击 +12%，持续三回合（战斗中可用）。', buff: { crit: 12, rounds: 3 }, poison: 6, battle: true },
-    pill_dahuan:   { name: '大还丹',   type: 'pill', grade: 3, price: 6000,   desc: '续命奇丹，气血尽复，兼化二十点丹毒。', use: { hpPct: 100, curePoison: 20 }, poison: 15, battle: true },
+    pill_dahuan:   { name: '大还丹',   type: 'pill', grade: 3, price: 11000,   desc: '续命奇丹，气血尽复，兼化二十点丹毒。', use: { hpPct: 100, curePoison: 20 }, poison: 15, battle: true },
     /* ---- v19 丹方残页系（参悟失传丹方后可炼） ---- */
     pill_huiyuan:  { name: '回元丹',   type: 'pill', grade: 4, price: 26000,  desc: '气血灵力一夜尽复——断续之伤亦能弥合。', use: { hpPct: 100, mpPct: 100 }, poison: 22, battle: true },
-    pill_potian:   { name: '破天丹',   type: 'pill', grade: 4, price: 30000,  desc: '以命火淬道心，突破感悟 +80。', use: { insight: 80 }, poison: 25 },
-    pill_poxu:     { name: '破虚丹',   type: 'pill', grade: 4, price: 36000,  desc: '凿窍开脉，四维属性随机 +1。', use: { stat: 1 }, poison: 28 },
+    pill_potian:   { name: '破天丹',   type: 'pill', grade: 4, price: 15000,  desc: '以命火淬道心，突破感悟 +80。', use: { insight: 80 }, poison: 25 },
+    pill_poxu:     { name: '破虚丹',   type: 'pill', grade: 4, price: 400000,  desc: '凿窍开脉，四维属性随机 +1。', use: { stat: 1 }, poison: 28 },
     pill_qingxin:  { name: '清心丹',   type: 'pill', grade: 1, price: 500,    desc: '宁神定魄，服之可解束缚、缓滞诸般禁制（战斗中可用，解除自身负面状态）。', use: { purge: 1 }, poison: 0, battle: true },
-    pill_posha:    { name: '破煞丹',   type: 'pill', grade: 2, price: 2400,   desc: '药力如破军煞气，服之可得五千点修为。', use: { exp: 5000 }, poison: 50 },
-    pill_xuanling: { name: '玄灵丹',   type: 'pill', grade: 3, price: 9000,   desc: '玄灵蕴道，服之突破感悟 +25。', use: { insight: 25 }, poison: 18 },
-    pill_guben:    { name: '固本培元丹', type: 'pill', grade: 2, price: 2000,  desc: '固本培元，气血灵力各复五成。', use: { hpPct: 50, mpPct: 50 }, poison: 10, battle: true },
+    pill_posha:    { name: '破煞丹',   type: 'pill', grade: 2, price: 2800,   desc: '药力如破军煞气，服之可得五千点修为。', use: { exp: 5000 }, poison: 50 },
+    pill_xuanling: { name: '玄灵丹',   type: 'pill', grade: 3, price: 2600,   desc: '玄灵蕴道，服之突破感悟 +25。', use: { insight: 25 }, poison: 18 },
+    pill_guben:    { name: '固本培元丹', type: 'pill', grade: 2, price: 2200,  desc: '固本培元，气血灵力各复五成。', use: { hpPct: 50, mpPct: 50 }, poison: 10, battle: true },
     pill_yulu:     { name: '九花玉露丸', type: 'pill', grade: 2, price: 1600,  desc: '玉露酿就，灵力尽复，兼得八百修为。', use: { mpPct: 100, exp: 800 }, poison: 12, battle: true },
-    pill_yuanshen: { name: '元神丹',   type: 'pill', grade: 4, price: 45000,  desc: '温养元神，服之得四万点修为、突破感悟 +10。', use: { exp: 40000, insight: 10 }, poison: 70 },
-    pill_tianyuan: { name: '天元造化丹', type: 'pill', grade: 5, price: 220000, desc: '丹道至高造化，服之得廿五万点修为。', use: { exp: 250000 }, poison: 85 },
+    pill_yuanshen: { name: '元神丹',   type: 'pill', grade: 4, price: 115000,  desc: '温养元神，服之得四万点修为、突破感悟 +10。', use: { exp: 40000, insight: 10 }, poison: 70 },
+    /* ---- v29 天年：延寿丹线与渡劫丹 ---- */
+    pill_yanshou:  { name: '固本延寿丹', type: 'pill', grade: 3, price: 90000,  desc: '固本培元、续脉延年——寿元 +10 年（每境延寿至多为其基准五成）。', use: { life: 10 }, poison: 8 },
+    pill_yanshou2: { name: '培元延寿丹', type: 'pill', grade: 5, price: 180000, desc: '温养源婴、天梯再续——寿元 +25 年。', use: { life: 25 }, poison: 15 },
+    pill_yanshou3: { name: '天元续命丹', type: 'pill', grade: 5, price: 500000, desc: '夺天地一线生机，寿元 +50 年。', use: { life: 50 }, poison: 25 },
+    pill_dujie:    { name: '渡劫丹',   type: 'pill', grade: 4, price: 400000, desc: '以雷晶为引淬炼道基——下次渡劫成算 +5（服后印记留于识海，一丹一劫）。', use: { dujie: 1 }, poison: 12 },
+    pill_tianyuan: { name: '天元造化丹', type: 'pill', grade: 5, price: 280000, desc: '丹道至高造化，服之得廿五万点修为。', use: { exp: 250000 }, poison: 85 },
     fruit_tianji:  { name: '天机果', type: 'pill', grade: 4, price: 52000, desc: '天地灵机所凝的异果，服之可令一项先天属性突破十点桎梏（至多十二点）。', use: { stat12: 1 }, poison: 30 },
     /* ---- 符箓（符修可画可售，战斗中人人可祭出）---- */
-    tal_huoshe: { name: '火蛇符', type: 'talisman', grade: 1, price: 25, ecoPrice: true, power: 2.2, desc: '朱砂勾火蛇之形，掷出化焰伤敌（战斗中造成约2.2倍攻击伤害，符光必中）。', fkind: 'damage' },
-    tal_zilei:  { name: '紫雷符', type: 'talisman', grade: 2, price: 90, ecoPrice: true, power: 3.5, desc: '紫霄雷符，一击之威如雷劫临身（战斗中造成约3.5倍攻击伤害，符光必中）。', fkind: 'damage' },
+    tal_huoshe: { name: '火蛇符', type: 'talisman', grade: 1, price: 22, ecoPrice: true, power: 2.2, desc: '朱砂勾火蛇之形，掷出化焰伤敌（战斗中造成约2.2倍攻击伤害，符光必中）。', fkind: 'damage' },
+    tal_zilei:  { name: '紫雷符', type: 'talisman', grade: 2, price: 80, ecoPrice: true, power: 3.5, desc: '紫霄雷符，一击之威如雷劫临身（战斗中造成约3.5倍攻击伤害，符光必中）。', fkind: 'damage' },
     /* ---- v13 新增符箓：护身 / 限制 / 增益全谱 ---- */
-    tal_jinguang: { name: '金光符', type: 'talisman', grade: 1, price: 45, ecoPrice: true, desc: '金光护体——两回合内所受伤害减轻四成（战斗中可用）。', fkind: 'shield', power: 40, rounds: 2 },
-    tal_jifengfu: { name: '疾风符', type: 'talisman', grade: 1, price: 40, ecoPrice: true, desc: '身化疾风——两回合内闪避大增（+25%）（战斗中可用）。', fkind: 'dodge', power: 25, rounds: 2 },
-    tal_fuling:   { name: '缚灵符', type: 'talisman', grade: 2, price: 70, ecoPrice: true, desc: '符光化索缚敌身——敌方身法迟滞三成，持续两回合（战斗中可用，必中）。', fkind: 'slow', power: 30, rounds: 2 },
-    tal_shigu:    { name: '蚀骨符', type: 'talisman', grade: 2, price: 75, ecoPrice: true, desc: '蚀骨腐甲——敌方防御剧降三成五，持续两回合（战斗中可用，必中）。', fkind: 'defdown', power: 35, rounds: 2 },
-    tal_bingpo:   { name: '冰魄符', type: 'talisman', grade: 3, price: 160, ecoPrice: true, desc: '冰魄封形——寒气封敌周身，使其下一回合无法动弹（战斗中可用，必中；强敌抵抗几率略高）。', fkind: 'freeze', rounds: 1 },
-    tal_posha:    { name: '破煞符', type: 'talisman', grade: 3, price: 180, ecoPrice: true, power: 4.6, desc: '破军煞符，一符破万法（战斗中造成约4.6倍攻击伤害，符光必中，并使敌方破防两成）。', fkind: 'damage', debuff: { defdown: 20, rounds: 2 } },
+    tal_jinguang: { name: '金光符', type: 'talisman', grade: 1, price: 40, ecoPrice: true, desc: '金光护体——两回合内所受伤害减轻四成（战斗中可用）。', fkind: 'shield', power: 40, rounds: 2 },
+    tal_jifengfu: { name: '疾风符', type: 'talisman', grade: 1, price: 35, ecoPrice: true, desc: '身化疾风——两回合内闪避大增（+25%）（战斗中可用）。', fkind: 'dodge', power: 25, rounds: 2 },
+    tal_fuling:   { name: '缚灵符', type: 'talisman', grade: 2, price: 62, ecoPrice: true, desc: '符光化索缚敌身——敌方身法迟滞三成，持续两回合（战斗中可用，必中）。', fkind: 'slow', power: 30, rounds: 2 },
+    tal_shigu:    { name: '蚀骨符', type: 'talisman', grade: 2, price: 66, ecoPrice: true, desc: '蚀骨腐甲——敌方防御剧降三成五，持续两回合（战斗中可用，必中）。', fkind: 'defdown', power: 35, rounds: 2 },
+    tal_bingpo:   { name: '冰魄符', type: 'talisman', grade: 3, price: 140, ecoPrice: true, desc: '冰魄封形——寒气封敌周身，使其下一回合无法动弹（战斗中可用，必中；强敌抵抗几率略高）。', fkind: 'freeze', rounds: 1 },
+    tal_posha:    { name: '破煞符', type: 'talisman', grade: 3, price: 158, ecoPrice: true, power: 4.6, desc: '破军煞符，一符破万法（战斗中造成约4.6倍攻击伤害，符光必中，并使敌方破防两成）。', fkind: 'damage', debuff: { defdown: 20, rounds: 2 } },
     /* ---- 功法 ---- */
     gf_tuna:    { name: '吐纳诀',       type: 'gongfa', gtype: 'support', grade: 0, price: 200,   desc: '最基础的吐纳法门，可提升修炼效率。', bonus: { cult: [6, 3] } },
     gf_canghai: { name: '沧海剑诀',     type: 'gongfa', gtype: 'attack',  grade: 0, price: 300,   desc: '普通剑修入门剑诀。', bonus: { atkPct: [4, 2] }, skill: { name: '沧浪一剑', kind: 'damage', power: 1.55, mp: 10, desc: '凝聚剑气奋力一斩' } },
@@ -1536,6 +1496,7 @@ const GameData = {
     a_taiyi:    { name: '太乙道袍',   type: 'artifact', slot: 'armor',     grade: 4, price: 0, desc: '太乙真人亲织道袍，万法不侵。', bonus: { def: 180, hp: 800, hpPct: 10 } },
     z_longyu:   { name: '龙魂玉',     type: 'artifact', slot: 'accessory', grade: 4, price: 0, desc: '以真龙残魂炼制的玉佩，龙威护主。', bonus: { atkPct: 10, defPct: 10, hpPct: 10, luck: 2 } },
     z_hunpo:    { name: '魂珀',       type: 'artifact', slot: 'accessory', grade: 3, price: 0, desc: '万年魂珀，温养神魂，修行事半功倍。', bonus: { cult: 10, mp: 200, crit: 3 } },
+    z_taling:   { name: '天塔鸣铃',   type: 'artifact', slot: 'accessory', grade: 3, price: 0, desc: '以镇塔符核为胎、云阶铁为骨炼成的鸣铃——铃音里仍有塔风回响。', bonus: { cult: 6, spd: 25, luck: 1 } },   // v29：塔产奇物的消费端
     /* ---- 材料 ---- */
     m_lingcao:  { name: '百年灵草',   type: 'material', tier: 1, price: 80,    desc: '蕴含百年灵气的药草，炼丹辅药。' },
     m_yaopi:    { name: '妖兽皮革',   type: 'material', tier: 1, price: 60,    desc: '一阶妖兽的皮，坚韧异常。' },
@@ -1558,12 +1519,12 @@ const GameData = {
     /* ---- v13 灵田种子（洞府种植用） ---- */
     m_qianghua: { name: '强化石',     type: 'material', tier: 3, price: 3000,  desc: '蕴含精纯灵性的晶石，祭炼强化法宝时掺入一枚，+7 以上强化必定成功。' },
     m_danfang:  { name: '丹方残页',   type: 'material', tier: 3, price: 2600,  desc: '前辈丹师遗稿的残页。集齐数页，可在炼丹炉前参悟失传的丹方。' },
-    seed_lingcao:  { name: '灵草种',   type: 'seed', grade: 1, price: 40,    crop: 'm_lingcao',  days: 10, desc: '播入灵田，十日可收【百年灵草】。' },
-    seed_lingzhi:  { name: '灵芝种',   type: 'seed', grade: 2, price: 500,   crop: 'm_lingzhi',  days: 25, desc: '播入灵田，廿五日可收【千年灵芝】。' },
-    seed_bingpo:   { name: '冰魄花种', type: 'seed', grade: 2, price: 900,   crop: 'm_bingpo',   days: 30, desc: '播入灵田，三十日可收【冰魄石】。' },
-    seed_xuelian:  { name: '雪莲种',   type: 'seed', grade: 3, price: 4500,  crop: 'm_xuelian',  days: 45, desc: '播入灵田，四十五日可收【万年雪莲】。' },
-    seed_lianhun:  { name: '炼魂花种', type: 'seed', grade: 3, price: 5200,  crop: 'm_lianhun',  days: 50, desc: '播入灵田，五十日可收【炼魂石】。' },
-    seed_xingchen: { name: '星辉草种', type: 'seed', grade: 4, price: 30000, crop: 'm_xingchen', days: 60, desc: '播入灵田，六十日可收【星辰砂】。' },
+    seed_lingcao:  { name: '灵草种',   type: 'seed', grade: 1, price: 30,    crop: 'm_lingcao',  days: 10, desc: '播入灵田，十日可收【百年灵草】。' },
+    seed_lingzhi:  { name: '灵芝种',   type: 'seed', grade: 2, price: 220,   crop: 'm_lingzhi',  days: 25, desc: '播入灵田，廿五日可收【千年灵芝】。' },
+    seed_bingpo:   { name: '冰魄花种', type: 'seed', grade: 2, price: 2600,  crop: 'm_bingpo',   days: 30, desc: '播入灵田，三十日可收【冰魄石】。' },
+    seed_xuelian:  { name: '雪莲种',   type: 'seed', grade: 3, price: 1800,  crop: 'm_xuelian',  days: 45, desc: '播入灵田，四十五日可收【万年雪莲】。' },
+    seed_lianhun:  { name: '炼魂花种', type: 'seed', grade: 3, price: 2200,  crop: 'm_lianhun',  days: 50, desc: '播入灵田，五十日可收【炼魂石】。' },
+    seed_xingchen: { name: '星辉草种', type: 'seed', grade: 4, price: 15000, crop: 'm_xingchen', days: 60, desc: '播入灵田，六十日可收【星辰砂】。' },
     /* ---- v3 秘境专属：失传功法 / 上古法宝碎片 / 本命法宝 / 派系信物 ---- */
     gf_wangchen:{ name: '忘尘剑意',   type: 'gongfa', gtype: 'attack',  grade: 4, price: 0, desc: '秘境失传剑意，一剑忘尘，物我两断。', bonus: { atkPct: [16, 7], crit: [3, 1.5] }, skill: { name: '忘尘一剑', kind: 'damage', power: 3.3, mp: 28, desc: '忘却尘俗的一剑，快过天雷' } },
     gf_hunyuan: { name: '混元真解',   type: 'gongfa', gtype: 'support', grade: 4, price: 0, desc: '秘境失传心法，混元一气，百脉皆通。', bonus: { cult: [15, 6], hpPct: [12, 5], mpPct: [12, 5] } },
@@ -1584,7 +1545,7 @@ const GameData = {
     gf_leishen: { name: '九天雷神经', type: 'gongfa', gtype: 'attack',  grade: 5, price: 0, desc: '雷狱主宰所修的上古雷法，一雷出而万法寂。', bonus: { atkPct: 22, crit: 4, mpPct: 12 }, skill: { name: '九天雷罚', kind: 'damage', power: 4.2, mp: 35, desc: '引九天雷罚轰落，万钧之势' } },
     m_xiancui:  { name: '仙灵翠',     type: 'material', tier: 4, price: 120000, desc: '灵墟仙泽灵气凝结的翡翠，内蕴仙道法则。' },
     m_leijing:  { name: '雷晶核',     type: 'material', tier: 4, price: 150000, desc: '九霄雷狱中雷兽体内凝结的雷晶，雷法至宝。' },
-    seed_xianling: { name: '仙灵种',   type: 'seed', grade: 5, price: 80000, crop: 'm_xiancui', days: 80, desc: '播入灵田，八十日可收【仙灵翠】。' },
+    seed_xianling: { name: '仙灵种',   type: 'seed', grade: 5, price: 45000, crop: 'm_xiancui', days: 80, desc: '播入灵田，八十日可收【仙灵翠】。' },
   },
 
   /** 按档次取材料列表 */
@@ -1785,6 +1746,8 @@ const GameData = {
     { item: 'm_lingcao', minRealm: 0 }, { item: 'm_xuantie', minRealm: 0 },
     { item: 'seed_lingcao', minRealm: 1 }, { item: 'seed_lingzhi', minRealm: 1 }, { item: 'seed_bingpo', minRealm: 2 },
     { item: 'seed_xuelian', minRealm: 3 }, { item: 'seed_lianhun', minRealm: 3 },
+    { item: 'seed_xianling', minRealm: 8 },   // v29：补齐灵界种植线（仙灵种原无任何获取渠道）
+    { item: 'pill_yanshou', minRealm: 3 }, { item: 'pill_yanshou2', minRealm: 6 }, { item: 'pill_yanshou3', minRealm: 8 },   // v29 天年：延寿丹上架（高境灵石新去向）
   ],
 
   /* ---------- v13 套装（集齐 pieces 中全部装备于身时触发 bonus） ---------- */
@@ -2048,25 +2011,29 @@ const GameData = {
 
   /* ---------- §20 炼丹配方（坊市炼丹炉，人人可用，丹道大成率大涨）---------- */
   ALCHEMY_RECIPES: [
-    { id: 'r1', out: 'pill_juqi',     need: { m_lingcao: 2 },                  rate: 65 },
-    { id: 'r2', out: 'pill_liaoshang', need: { m_yaopi: 1, m_lingcao: 1 },     rate: 65 },
-    { id: 'r3', out: 'pill_peiyuan',  need: { m_lingzhi: 2 },                  rate: 55 },
-    { id: 'r4', out: 'pill_pojing',   need: { m_neidan: 2 },                   rate: 50 },
+    { id: 'r1', out: 'pill_juqi',     need: { m_lingcao: 1 },                  rate: 65 },   // v29 减负
+    { id: 'r2', out: 'pill_liaoshang', need: { m_lingcao: 1 },                 rate: 65 },   // v29 减负
+    { id: 'r3', out: 'pill_peiyuan',  need: { m_lingzhi: 1, m_yaopi: 1 },      rate: 55 },   // v29 减负
+    { id: 'r4', out: 'pill_pojing',   need: { m_neidan: 1, m_lingzhi: 1 },     rate: 50 },   // v29 减负
     { id: 'r5', out: 'pill_jiuzhuan', need: { m_xuelian: 1, m_longxue: 1 },    rate: 45 },
     { id: 'r6', out: 'pill_taichu',   need: { m_xianjing: 1, m_shentie: 1 },   rate: 40 },
     /* ---- v13 新增配方 ---- */
     { id: 'r7', out: 'pill_kuangbao', need: { m_yaopi: 2 },                    rate: 60 },
     { id: 'r8', out: 'pill_tiegu',    need: { m_xuantie: 2 },                  rate: 60 },
     { id: 'r9', out: 'pill_guben',    need: { m_lingzhi: 1, m_neidan: 1 },     rate: 55 },
-    { id: 'r10', out: 'pill_dahuan',  need: { m_xuelian: 2 },                  rate: 45 },
-    { id: 'r11', out: 'pill_posha',   need: { m_neidan: 2, m_xuantie: 1 },     rate: 50 },
-    { id: 'r12', out: 'pill_xuanling', need: { m_lianhun: 2 },                 rate: 45 },
-    { id: 'r13', out: 'pill_yuanshen', need: { m_xianjing: 2 },                rate: 40 },
+    { id: 'r10', out: 'pill_dahuan',  need: { m_xuelian: 1, m_lingzhi: 2 },    rate: 45 },   // v29 减负
+    { id: 'r11', out: 'pill_posha',   need: { m_neidan: 1, m_lingzhi: 1 },     rate: 50 },   // v29 减负
+    { id: 'r12', out: 'pill_xuanling', need: { m_lianhun: 1, m_neidan: 1 },   rate: 45 },   // v29 减负
+    { id: 'r13', out: 'pill_yuanshen', need: { m_xianjing: 1, m_longxue: 2 }, rate: 40 },   // v29 减负
     { id: 'r14', out: 'pill_tianyuan', need: { m_shentie: 1, m_haixin: 1 },    rate: 35 },
     /* ---- v19 失传丹方（需丹方残页参悟解锁：flags.recipeOk） ---- */
-    { id: 'a1', out: 'pill_huiyuan', need: { m_lingzhi: 2, m_haixin: 1 },   rate: 45, needPages: 2 },
-    { id: 'a2', out: 'pill_potian',  need: { m_neidan: 3, m_shentie: 1 },   rate: 40, needPages: 4 },
-    { id: 'a3', out: 'pill_poxu',    need: { m_shenmu: 2, m_xiancui: 2 },   rate: 35, needPages: 6 },
+    { id: 'a1', out: 'pill_huiyuan', need: { m_haixin: 1, m_xuelian: 1 },   rate: 45, needPages: 2 },   // v29 减负
+    { id: 'a2', out: 'pill_potian',  need: { m_shentie: 1, m_neidan: 2 },   rate: 40, needPages: 4 },   // v29 减负
+    { id: 'a3', out: 'pill_poxu',    need: { m_shenmu: 1, m_xiancui: 1 },   rate: 35, needPages: 6 },   // v29 减负
+    /* ---- v29 天年：延寿与渡劫失传丹方（雷晶核自此有了稳定消费端） ---- */
+    { id: 'a4', out: 'pill_yanshou2', need: { m_xuelian: 1, m_haixin: 1 },  rate: 40, needPages: 5 },
+    { id: 'a5', out: 'pill_yanshou3', need: { m_shenmu: 1, m_leijing: 1 },  rate: 30, needPages: 8 },
+    { id: 'a6', out: 'pill_dujie',    need: { m_leijing: 1, m_xianjing: 1 }, rate: 35, needPages: 6 },
   ],
 
   /* ---------- v13 炼器配方（坊市炼器坊，消耗材料锻造装备；产出天级神兵的唯一途径） ---------- */
@@ -2089,6 +2056,8 @@ const GameData = {
     { id: 'f12', out: 's_cx_jian',  need: { m_huolin: 2, m_jiaojin: 1 },             rate: 50 },
     { id: 'f13', out: 's_cx_pao',   need: { m_huolin: 2, m_yaopi: 3 },               rate: 50 },
     { id: 'f14', out: 's_cx_gou',   need: { m_huolin: 1, m_neidan: 2 },              rate: 50 },
+    /* ---- v29 天塔纪念（天塔灵砂/云阶铁/镇塔符核自此有了消费端） ---- */
+    { id: 'f18', out: 'z_taling',   need: { tw_core: 1, tw_iron: 2, tw_sand: 4 },        rate: 55 },
   ],
 
   /* ---------- §20 红尘劫剧本（历练道德三选一）---------- */
@@ -4317,6 +4286,17 @@ const Log = {
     if (!this.el || this.skim(type)) return;
     const p = Game.player;
     const year = p ? Math.floor(p.day / 365) + 1 : 1;
+    // v29：相邻重复日志合并为 ×N——连刷同图/离线逐日回放不再逐条刷屏
+    const _n = this.entries.length;
+    if (_n > 0 && this.entries[_n - 1] === text && this.el.lastElementChild) {
+      this._dupN = (this._dupN || 0) + 1;
+      let badge = this.el.lastElementChild.querySelector('.log-dup');
+      if (!badge) { badge = document.createElement('span'); badge.className = 'log-dup'; this.el.lastElementChild.appendChild(badge); }
+      badge.textContent = ` ×${this._dupN + 1}`;
+      if (!this.paused) this.el.scrollTop = this.el.scrollHeight;
+      return;
+    }
+    this._dupN = 0;
     const div = document.createElement('div');
     div.className = `log-entry log-${type}`;
     div.innerHTML = `<span class="t-time">第${year}年</span>${text}`;
@@ -4919,7 +4899,8 @@ const Stat = {
       pillPct: (sb.pillPct || 0) + (pl.pillPct || 0),
       poisonReduce: sb.poisonReduce || 0,
       shopDiscount: sb.shopDiscount || 0,
-      lifespan: GameData.LIFESPAN[p.realmIdx],
+      // v29 天年：折寿扣减 + 延寿丹增益（下限 60，延寿不超该境基准——增益入 p.lifeGain）
+      lifespan: Math.max(60, GameData.LIFESPAN[p.realmIdx] - (p.lifeCut || 0) + (p.lifeGain || 0)),
     };
   },
   /** 防御减伤后的伤害期望值 */
@@ -4954,11 +4935,11 @@ const Stat = {
     }[key] || 0;
     const src = [
       { name: '基础（先天+境界）', v: base },
-      { name: '功法' + (this.activeDaoYun(p).length ? '（含道韵/奥义）' : ''), v: key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' ? pctOf(gf, key) : key.endsWith('Pct') || key === 'maxHp' || key === 'maxMp' ? (key === 'maxHp' ? pctOf(gf, 'hpPct') : key === 'maxMp' ? pctOf(gf, 'mpPct') : key === 'speed' ? pctOf(gf, 'spdPct') : pctOf(gf, key + 'Pct')) : pctOf(gf, key) },
-      { name: '装备（强化/词缀/套装）', v: key === 'maxHp' ? (eq.hp || 0) + pctOf(eq, 'hpPct') : key === 'maxMp' ? (eq.mp || 0) + pctOf(eq, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'luck' ? pctOf(eq, key) : key === 'speed' ? (eq.spd || 0) + pctOf(eq, 'spdPct') : pctOf(eq, key === 'atk' || key === 'def' ? key : key + 'Pct') },
-      { name: '宗门与职位', v: key === 'atk' || key === 'def' ? pctOf(sb, key + 'Pct') : key === 'maxHp' ? pctOf(sb, 'hpPct') : key === 'maxMp' ? pctOf(sb, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' || key === 'luck' ? pctOf(sb, key) : 0 },
+      { name: '功法' + (this.activeDaoYun(p).length ? '（含道韵/奥义）' : ''), v: key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' ? pctOf(gf, key === 'cultPct' ? 'cult' : key) : key.endsWith('Pct') || key === 'maxHp' || key === 'maxMp' ? (key === 'maxHp' ? pctOf(gf, 'hpPct') : key === 'maxMp' ? pctOf(gf, 'mpPct') : key === 'speed' ? pctOf(gf, 'spdPct') : pctOf(gf, key + 'Pct')) : pctOf(gf, key) },
+      { name: '装备（强化/词缀/套装）', v: key === 'maxHp' ? (eq.hp || 0) + pctOf(eq, 'hpPct') : key === 'maxMp' ? (eq.mp || 0) + pctOf(eq, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'luck' ? pctOf(eq, key === 'cultPct' ? 'cult' : key) : key === 'speed' ? (eq.spd || 0) + pctOf(eq, 'spdPct') : pctOf(eq, key === 'atk' || key === 'def' ? key : key + 'Pct') },
+      { name: '宗门与职位', v: key === 'atk' || key === 'def' ? pctOf(sb, key + 'Pct') : key === 'maxHp' ? pctOf(sb, 'hpPct') : key === 'maxMp' ? pctOf(sb, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' || key === 'luck' ? pctOf(sb, key === 'cultPct' ? 'cult' : key) : 0 },
       { name: '大道与道境', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' ? pctOf(dao, key === 'maxHp' ? 'hpPct' : key === 'maxMp' ? 'mpPct' : key + 'Pct') : 0 },
-      { name: '灵兽（含护持）', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(beastPass, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(beastPass, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
+      { name: '灵兽（含护持）', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(beastPass, key === 'cultPct' ? 'cult' : key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(beastPass, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '道心烙印', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(dx, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(dx, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '个人线', v: key === 'crit' || key === 'dodge' || key === 'pillPct' ? pctOf(pl, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(pl, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '洞府（聚灵/藏宝/演武）', v: key === 'cultPct' ? ((p.cave && p.cave.lv) || 0) * 4 : key === 'stonePct' ? (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3) : key === 'atk' || key === 'def' ? (((p.cave && p.cave.builds && p.cave.builds.train) || 0) * 2) : 0 },
@@ -4992,6 +4973,13 @@ const Time = {
       if (p.age > st.lifespan * 0.9) Log.add('你隐隐感到体内生机流逝，寿元无多了……', 'warn');
       if (p.age > st.lifespan) { Game.gameOver('寿元'); return; }
     }
+  },
+  /** v29 天年：折寿——天劫失利/转道/心魔劫败等大挫折损寿元（lifeCut 持久化，读写 ||0 自愈） */
+  cutLife(p, years, reason = '') {
+    if (!p || p.dead) return;
+    p.lifeCut = (p.lifeCut || 0) + years;
+    Log.add(`<b>天夺其年</b>——${reason}，寿元折损 ${years} 年。`, 'loss');
+    UI.toast(`寿元 -${years} 年`, true);
   },
   label(p) {
     const year = Math.floor(p.day / 365) + 1;
@@ -5040,8 +5028,6 @@ const Cultivate = {
     if (p.rushDay === Math.floor(p.day || 0)) g *= 1.5;   // v20 聚灵加速
     return g;
   },
-  /** v20 聚灵加速：当日 ×1.5（洞府点燃，日限一次） */
-  rushMul(p) { return (p.rushDay === Math.floor(p.day || 0)) ? 1.5 : 1; },
   /** v20 闭关效率：隆冬蛰伏 +10% */
   secludeMul(p) { return (typeof Art !== 'undefined' && Art.seasonOf(p) === 3) ? 1.1 : 1; },
   gainMult() {
@@ -5249,6 +5235,11 @@ const Cultivate = {
     const rep = { rounds: 0, exp: 0, days: 0, advanced: 0, from: this.realmLabel(p) };   // v21 结算报告累计
     while (rounds++ < 120) {
       if (!p || p.dead || Game.player !== p) return;   // 兵解/回溯等更换玩家对象时，旧循环立即作废
+      // v29 修瑕：剧情/弹窗挂起时闭关暂停——此前节庆弹窗会被下一轮闭关的自动取消逻辑顶掉
+      if ((typeof Story !== 'undefined' && Story.active && Story.active()) || UI._popupResolve) {
+        Log.add('外事来扰，你暂敛心神，出关一顾。', 'warn');
+        break;
+      }
       const beforeLayer = p.layer, beforeRealm = p.realmIdx;
       const cost = this.secludeCost(p);
       if (!Bag.spendStones(cost)) {
@@ -5764,6 +5755,18 @@ const Pill = {
     if (effect.mpPct) { p.mp = Math.min(st.maxMp, p.mp + Math.round(st.maxMp * effect.mpPct / 100)); effectText.push(`灵力 +${effect.mpPct}%`); }
     if (effect.curePoison) { p.poison = Math.max(0, p.poison - effect.curePoison); effectText.push(`丹毒 -${effect.curePoison}`); }
     if (effect.insight) { p.insight = Math.min(100, p.insight + effect.insight); effectText.push(`突破感悟 +${effect.insight}`); }
+    // v29 天年：延寿丹（增益上限为该境基准五成）与渡劫丹（一丹一劫的识海印记）
+    if (effect.life) {
+      const base = GameData.LIFESPAN[p.realmIdx] || 120;
+      const gain = Math.max(0, Math.min(effect.life, Math.round(base * 0.5) - (p.lifeGain || 0)));
+      if (gain > 0) { p.lifeGain = (p.lifeGain || 0) + gain; effectText.push(`寿元 +${gain} 年`); }
+      else effectText.push('寿元已延至此境之极，余药化作一缕暖意');
+    }
+    if (effect.dujie) {
+      p.flags = p.flags || {};
+      p.flags.dujieDan = (p.flags.dujieDan || 0) + 1;
+      effectText.push('下次渡劫成算 +5');
+    }
     if (effect.stat) {
       const keys = Object.keys(p.attrs).filter(k => p.attrs[k] < 10);
       if (keys.length) {
@@ -6038,7 +6041,7 @@ const ForgeSys = {
     if (!p.benming) p.benming = { lv: 0 };
     if (p.benming.lv >= this.BENMING_MAX) { UI.toast('本命法宝已达十阶圆满'); return; }
     const lv = p.benming.lv;
-    const cost = Math.round(3000 * (lv + 1) * Math.pow(2.2, Math.min(6, p.realmIdx)));
+    const cost = Math.round(3000 * (lv + 1) * Math.pow(2.2, Math.min(8, p.realmIdx)));   // v29：封顶 6→8
     const ore = 5 + lv * 2;
     const ok = await UI.popup({
       title: `本命法宝喂养 · 第${lv + 1}阶`,
@@ -6200,7 +6203,7 @@ const CaveSys = {
     const today = Math.floor(p.day || 0);
     if (p.cave._springDay === today) return;
     p.cave._springDay = today;
-    const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(4, p.realmIdx)));
+    const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(6, p.realmIdx)));   // v29：封顶 4→6，后期灵泉不再是摆设
     Bag.addStones(gain);
     if (!auto) Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。`, 'gain');
   },
@@ -6570,7 +6573,7 @@ const BeastSys = {
     if (!b) return;
     if (b.evolved) { UI.toast('它已完成蜕变'); return; }
     if (b.level < 10) { UI.toast('需修至十阶圆满方可蜕变'); return; }
-    const cost = Math.round(8000 * Math.pow(2.2, Math.min(5, p.realmIdx)));
+    const cost = Math.round(8000 * Math.pow(2.2, Math.min(8, p.realmIdx)));   // v29：封顶 5→8
     const ok = await UI.popup({
       title: `灵兽蜕变 · ${b.name}`,
       html: `${b.name} 已至十阶圆满，妖气内蕴——以五枚【妖兽内丹】引其蜕凡成王。<br>蜕变后：<b>战力 +5、被动 ×1.4、协战 ×1.3</b>，名称冠以「王」号。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span> 与【妖兽内丹】×5（持有 ${Bag.count('m_neidan')}）。`,
@@ -6634,7 +6637,7 @@ const BeastSys = {
     const mat = Utils.pick(GameData.matsByTier(tier));
     // v28 联动：亲昵近六十的灵兽，外出更肯用心——多衔一份材料回来
     const qty = (b.trip.days >= 7 ? 2 : 1) + ((b.bond || 0) >= 60 ? 1 : 0);
-    const stones = Math.round((30 + b.power * 2) * b.trip.days * GameData.stoneEco(Math.min(4, p.realmIdx)) / 3);
+    const stones = Math.round((30 + b.power * 2) * b.trip.days * GameData.stoneEco(Math.min(6, p.realmIdx)) / 3);   // v29：封顶 4→6
     Bag.addItem(mat, qty);
     Bag.addStones(stones);
     b.exp += b.trip.days * 120;
@@ -6643,7 +6646,7 @@ const BeastSys = {
     b.trip = null;
     Game.afterAction();
   },
-  /** v20 斗兽场：押注观战，胜得 1.8 倍彩头 */
+  /** v20 斗兽场：押注观战，胜得 1.6 倍彩头 */
   async arena() {
     const p = Game.player;
     const b = this.activeBeast(p);
@@ -6656,19 +6659,24 @@ const BeastSys = {
     ];
     const pick = await UI.popup({
       title: `斗兽场 · ${b.name}`,
-      html: `洞府演武场难得热闹—— ${b.name}（${b.level} 阶${b.evolved ? ' · 蜕变' : ''}）对阵山野妖王。<br>押它一注，胜者得 1.8 倍彩头。`,
+      html: `洞府演武场难得热闹—— ${b.name}（${b.level} 阶${b.evolved ? ' · 蜕变' : ''}）对阵山野妖王。<br>押它一注，胜者得 1.6 倍彩头。`,
       options: tiers.map((t, i) => ({ text: `${t.name}（${Utils.fmtNum(Math.round(t.base * eco))}灵石）`, value: i, primary: i === 0 })).concat([{ text: '看看就好', value: null }]),
     });
     if (pick == null) return;
     const cost = Math.round(tiers[pick].base * eco);
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     Time.add(1);
+    // v29 修瑕：对手同权重吃养成项（阶数/蜕变/亲昵）——此前 oppScore 只看 power，
+    // 养成后胜率远超盈亏点（赔付 1.8 倍），斗兽场成了正期望印钞机
     const oppPower = Utils.clamp(Math.round(b.power * Utils.randF(0.8, 1.3)), 1, 60);
+    const oppLevel = Math.max(1, b.level + Utils.rand(-1, 2));
+    const oppEvo = Utils.chance(Utils.clamp(15 + b.level * 7, 0, 55));
+    const oppBond = Utils.rand(0, Math.max(12, b.bond || 0));
     const myScore = b.power + b.level * 2 + (b.evolved ? 8 : 0) + (b.bond || 0) / 10 + Utils.rand(0, 10);
-    const oppScore = oppPower + Utils.rand(0, 14);
+    const oppScore = oppPower + oppLevel * 2 + (oppEvo ? 8 : 0) + oppBond / 10 + Utils.rand(0, 10);
     const win = myScore >= oppScore;
     if (win) {
-      const prize = Math.round(cost * 1.8);
+      const prize = Math.round(cost * 1.6);
       Bag.addStones(prize);
       p.counters.arenaWins = (p.counters.arenaWins || 0) + 1;
       Log.add(`⚔ 斗兽场——<b>${b.name}</b> 三招逼退对手，满场喝彩！彩头灵石 ${Utils.fmtNum(prize)}。（斗兽连胜 ${p.counters.arenaWins} 场）`, 'gain');
@@ -6719,16 +6727,18 @@ const ShopSys = {
     // 符箓为时价之物：随境界经济浮动
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
     let v = Math.max(1, Math.floor(base * 0.4));
-    // 丹道：出售丹药价格提升五成
-    if (p.dao === 'pill' && def.type === 'pill') v = Math.round(v * 1.5);
-    if (p.dao === 'pill' && def.type === 'pill' && DaoSys.tierLevel(p) >= 2) v = Math.round(v * 1.25);   // v10 丹道六境·药理境
-    return Math.max(1, Math.round(v * WorldSys.priceMul(p)));
+    // 丹道：出售丹药价格提升两成五
+    if (p.dao === 'pill' && def.type === 'pill') v = Math.round(v * 1.25);
+    if (p.dao === 'pill' && def.type === 'pill' && DaoSys.tierLevel(p) >= 2) v = Math.round(v * 1.15);   // v10 丹道六境·药理境
+    // v29 修瑕：卖价同吃坊市行情——此前丹道卖价 0.75 倍固定不吃行情/声望，买价最低 0.61 倍，
+    // 「批量买入+立即全售」构成稳赚 23% 的倒卖印钞机；两侧乘数同源后即时倒卖必亏，跨行情低买高卖成为正经营生
+    return Math.max(1, Math.round(v * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId)));
   },
   buy(itemId) {
     const p = Game.player;
     const def = GameData.ITEMS[itemId];
     const cost = this.price(itemId);
-    if (def.type === 'gongfa' && p.gongfa[itemId]) { UI.toast('你已修习此功法'); return; }
+    if (def.type === 'gongfa' && (p.gongfa[itemId] || p.bag[itemId])) { UI.toast('你已修习或已藏有此功法'); return; }   // v29 修瑕：补背包判重
     if (def.type === 'gongfa' && !DaoSys.canLearnGongfa(p, def)) return; // 体修难悟高阶法诀
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     Bag.addItem(itemId, 1);
@@ -6840,6 +6850,12 @@ const SectSys = {
       if (contrib >= this.RANKS[i].contribNeed) return this.RANKS[i];
     }
     return this.RANKS[0];
+  },
+  /** v29：下一职位（宗门页晋升进度条用） */
+  rankNext(p) {
+    if (!p.sect) return null;
+    const c = p.sect.contrib || 0;
+    return this.RANKS.find(r => r.contribNeed > c) || null;
   },
   taskMonsters(rp) {
     return Object.entries(GameData.MONSTERS)
@@ -6986,7 +7002,7 @@ const SectSys = {
     const row = GameData.SECT_EXCHANGE[idx];
     if (!row) return;
     const def = GameData.ITEMS[row.item];
-    if (def.type === 'gongfa' && p.gongfa[row.item]) { UI.toast('你已修习此功法'); return; }
+    if (def.type === 'gongfa' && (p.gongfa[row.item] || p.bag[row.item])) { UI.toast('你已修习或已藏有此功法'); return; }   // v29 修瑕：补背包判重
     if (def.type === 'gongfa' && !DaoSys.canLearnGongfa(p, def)) return; // 体修难悟高阶法诀
     if (p.sect.contrib < row.cost) { UI.toast('贡献点不足'); return; }
     p.sect.contrib -= row.cost;
@@ -7026,7 +7042,7 @@ const SectSys = {
     const row = f.exclusive[idx];
     if (!row) return;
     const def = GameData.ITEMS[row.item];
-    if (def.type === 'gongfa' && p.gongfa[row.item]) { UI.toast('你已修习此功法'); return; }
+    if (def.type === 'gongfa' && (p.gongfa[row.item] || p.bag[row.item])) { UI.toast('你已修习或已藏有此功法'); return; }   // v29 修瑕：补背包判重
     if (def.type === 'gongfa' && !DaoSys.canLearnGongfa(p, def)) return;
     if (p.sect.contrib < row.cost) { UI.toast('贡献点不足'); return; }
     p.sect.contrib -= row.cost;
@@ -7067,9 +7083,14 @@ const SectSys = {
     if (!p.sect) return;
     const y = WorldSys.year(p);
     if (y <= 0 || y % this.TOURNEY_EVERY !== 0) return;
+    // v29 修瑕：开赛 30 日未战自动下届再开——此前一届永不落幕，「大比未战」引导提醒永久挂起
+    if (p.sect.tourney && Math.floor(p.day) - (p.sect.tourney.openDay != null ? p.sect.tourney.openDay : Math.floor(p.day)) > 30) {
+      p.sect.tourney = null;
+      Log.add('本届大比已落幕——你错过了赛程，只得待下届再登台。', 'info');
+    }
     if ((p.sect.lastTourney || 0) >= y) return;
     if (p.sect.tourney) return;
-    p.sect.tourney = { round: 0, wins: 0 };
+    p.sect.tourney = { round: 0, wins: 0, openDay: Math.floor(p.day) };
     p.sect.lastTourney = y;
     Log.add('锣鼓喧天——<b>宗门大比</b>开幕了！三轮车轮战，同门比试点到为止；胜场越多彩头越厚，三连胜者魁首扬名。', 'system');
     Story.chron('宗门大比开幕');
@@ -7078,9 +7099,10 @@ const SectSys = {
   /** 生成当轮对手：同门弟子（兽形灵技拟态），一轮强过一轮 */
   tourneyOpponent(p, round) {
     const rp = p.realmIdx * 4 + p.layer;
-    const pool = this.taskMonsters(rp + round);
+    const delta = Math.min(round, 1);   // v29 修瑕：对手至多 +1 档——决胜轮原为 rp+2，刚突破新境界时最难受
+    const pool = this.taskMonsters(rp + delta);
     const mid = pool.length ? Utils.pick(pool) : Utils.pick(Object.keys(GameData.MONSTERS));
-    const e = buildMonster(mid, Math.max(0, rp + round - GameData.MONSTERS[mid].power));
+    const e = buildMonster(mid, Math.max(0, rp + delta - GameData.MONSTERS[mid].power));
     e.name = `${this.TOURNEY_FOES[round] || '同门弟子'}·${Utils.pick(GameData.NAMES)}`;
     e.elite = false;
     return e;
@@ -7756,14 +7778,19 @@ const DaoSys = {
     // v27 修瑕：转道清空原道 daoExp——此前重拾原道立即继承全部道境层数，「弃道重修」形同虚设
     if (p.daoExp) delete p.daoExp[p.dao];
     p.realmIdx -= 1; p.layer = 0; p.exp = 0; p.insight = 0; p.dao = null;
+    // v29 修瑕：转道名实相符——溢出折存/连败保底一并清去；自废道基折寿五年
+    p.expOverflow = 0; p.breakStreak = 0;
+    Time.cutLife(p, 5, '自废道基，逆转阴阳');
     const st = Stat.compute(p);
     p.hp = Math.min(p.hp, st.maxHp); p.mp = Math.min(p.mp, st.maxMp);
     Log.add('你自废道基，逆天转道！一声长啸中境界跌落、修为尽散——自此之后，前路重新来过。', 'warn');
     UI.toast('大道已弃，前尘尽消');
     Game.afterAction();
-    // 转道后重新叩问大道
-    await Utils.sleep(400);
-    this.openModal();
+    // 转道后重新叩问大道（v29 修瑕：跌落练气者不弹——「筑基解锁大道」门槛不可绕过）
+    if (p.realmIdx >= 1) {
+      await Utils.sleep(400);
+      this.openModal();
+    }
   },
   /** 体修不可修习玄级及以上法诀；v13 大道专属功法道途不合者不可修 */
   canLearnGongfa(p, def) {
@@ -7790,11 +7817,14 @@ const DaoSys = {
  * §20 气运因果 KarmaSys（气运 / 孽障 / 斩三尸 / 仇家偷袭）
  * ====================================================================== */
 const KarmaSys = {
+  /** v29：气运软上限——秘境 Boss 等大额气运源反复刷曾可无限灌水（突破成算/好事全面虚高） */
+  FORTUNE_CAP: 150,
   addFortune(n, silent = false) {
     const p = Game.player;
     // v18 道心烙印【慎/敛/正/渡】：气运获取加成（仅正向）
     if (n > 0 && typeof DaoxinSys !== 'undefined') n = Math.max(1, Math.round(n * DaoxinSys.gainMult(p, 'fortuneMult')));
-    p.fortune = (p.fortune || 0) + n;
+    if (n > 0 && (p.fortune || 0) >= this.FORTUNE_CAP) { if (!silent) Log.add('你与天道的缘分已臻圆满，暂无进益。', 'info'); return; }
+    p.fortune = Math.min(this.FORTUNE_CAP, (p.fortune || 0) + n);
     if (!silent) Log.add(`冥冥之中似有天意垂青——气运 +${n}。`, 'gain');
   },
   addKarma(n, silent = false) {
@@ -8030,35 +8060,52 @@ window.DaoxinSys = DaoxinSys;
  * §11.9 v19 拍卖行 AuctionSys（每六十日一件稀有拍品，三档出价博弈）
  * ====================================================================== */
 const AuctionSys = {
+  /* v29：补 minRealm 门槛（底价随境界经济浮动，低境不再白捡毕业神装） */
   LOT_POOL: [
-    { item: 's_hj_sha', base: 16000 }, { item: 's_hj_pao', base: 15000 }, { item: 's_hj_ling', base: 14000 },
-    { item: 's_xy_jian', base: 30000 }, { item: 's_xy_ling', base: 28000 },
-    { item: 'm_danfang', base: 4000 },
-    { item: 'gf_zhoutian', base: 6000 }, { item: 'gf_leishen', base: 9000 },
-    { item: 'gf_hunyuan', base: 9000 }, { item: 'gf_niepan', base: 9000 },
-    { item: 'w_sanqing', base: 12000 }, { item: 'pill_zaohua', base: 15000 },
-    { item: 'gf_dayan', base: 12000 }, { item: 'm_gupian', base: 10000 },
-    { item: 'gf_wangchen', base: 15000 }, { item: 'gf_feixian', base: 15000 },
-    { item: 'fruit_tianji', base: 22000 },   // v20 天机果（先天破桎）
+    { item: 's_hj_sha', base: 16000, minRealm: 3 }, { item: 's_hj_pao', base: 15000, minRealm: 3 }, { item: 's_hj_ling', base: 14000, minRealm: 3 },
+    { item: 's_xy_jian', base: 30000, minRealm: 4 }, { item: 's_xy_ling', base: 28000, minRealm: 4 },
+    { item: 'm_danfang', base: 4000, minRealm: 1 },
+    { item: 'gf_zhoutian', base: 6000, minRealm: 2 }, { item: 'gf_leishen', base: 9000, minRealm: 2 },
+    { item: 'gf_hunyuan', base: 9000, minRealm: 3 }, { item: 'gf_niepan', base: 9000, minRealm: 3 },
+    { item: 'w_sanqing', base: 12000, minRealm: 3 }, { item: 'pill_zaohua', base: 15000, minRealm: 4 },
+    { item: 'gf_dayan', base: 12000, minRealm: 3 }, { item: 'm_gupian', base: 10000, minRealm: 3 },
+    { item: 'gf_wangchen', base: 15000, minRealm: 4 }, { item: 'gf_feixian', base: 15000, minRealm: 4 },
+    { item: 'fruit_tianji', base: 22000, minRealm: 4 },   // v20 天机果（先天破桎）
   ],
   PERIOD: 60,
-  /** v20 神秘拍品：一成几率拍的是未鉴定之物（低价购入，鉴定为 1~5 品任意物） */
+  /** v20 神秘拍品：一成几率拍的是未鉴定之物（低价购入，鉴定为按境界分层的物品） */
   MYSTERY_POOL: [
     { id: 'pill_juqi', grade: 0 }, { id: 'm_lingcao', grade: 1 }, { id: 'tal_huoshe', grade: 1 },
     { id: 'w_qinggang', grade: 1 }, { id: 'pill_pojing', grade: 2 }, { id: 'z_qiankun', grade: 2 },
     { id: 'gf_tiangang', grade: 2 }, { id: 'm_gupian', grade: 4 }, { id: 'pill_taichu', grade: 4 },
     { id: 'fruit_tianji', grade: 4 }, { id: 'w_zhuxian', grade: 3 }, { id: 'gf_jianxin', grade: 5 },
   ],
+  /** v29：古匣奖池按境界分层——低境只可能开出低品物（原全池恒定，练气 277 灵石博 1.5 万期望） */
+  mysteryPool(p) {
+    const cap = Math.min(5, (p.realmIdx || 0) + 1);
+    return this.MYSTERY_POOL.filter(x => x.grade <= cap);
+  },
+  /** v29：古匣底价按当前奖池期望×0.85 定价——仍是赌博（有方差），但不再是印钞机 */
+  mysteryBase(p) {
+    const pool = this.mysteryPool(p);
+    if (!pool.length) return 500;
+    const wsum = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2, 0);
+    const ev = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2 * ((GameData.ITEMS[x.id] && GameData.ITEMS[x.id].price) || 500), 0) / wsum;
+    return Math.max(200, Math.round(ev * 0.85));
+  },
   state(p) {
     const day = Math.floor(p.day || 0);
     if (!p.auction || p.auction.until < day) {
+      // v29 修瑕：拍品种子带期号 seq——此前同日中标后 hash('auction@'+day) 恒重新掷出同一件，可无限复购
+      const seq = (p.auction && p.auction.seq) || 0;
+      const ecoR = Math.min(8, p.realmIdx);   // v29：底价随境界上限 4 → 8（后期拍行重新成为灵石去向）
       const mystery = Utils.chance(10);
       if (mystery) {
-        // 神秘拍品：底价按中位拍品折半，鉴定期满揭晓
-        p.auction = { item: 'mystery', base: Math.round(4000 * GameData.stoneEco(Math.min(4, p.realmIdx)) / GameData.stoneEco(2)), until: day + this.PERIOD };
+        p.auction = { item: 'mystery', seq, base: this.mysteryBase(p), until: day + this.PERIOD };
       } else {
-        const lot = this.LOT_POOL[Utils.hashStr('auction@' + day) % this.LOT_POOL.length];
-        p.auction = { item: lot.item, base: Math.round(lot.base * GameData.stoneEco(Math.min(4, p.realmIdx)) / GameData.stoneEco(2)), until: day + this.PERIOD };
+        const lot = this.LOT_POOL[Utils.hashStr('auction@' + day + '#' + seq) % this.LOT_POOL.length];
+        const gate = Math.min(8, lot.minRealm || 0);
+        p.auction = { item: lot.item, seq, base: Math.round(lot.base * GameData.stoneEco(ecoR) / GameData.stoneEco(gate)), until: day + this.PERIOD };
       }
     }
     return p.auction;
@@ -8067,6 +8114,11 @@ const AuctionSys = {
     const p = Game.player;
     const a = this.state(p);
     const isMystery = a.item === 'mystery';
+    // v29：拍品境界门槛——低境不再能低价竞得远超自身境界的拍品
+    if (!isMystery) {
+      const lot = this.LOT_POOL.find(x => x.item === a.item);
+      if (lot && (p.realmIdx || 0) < lot.minRealm) { UI.toast(`此拍品非当前境界可用之物（需${GameData.REALM_NAMES[lot.minRealm]}期以上）`); return; }
+    }
     const def = isMystery ? { name: '未鉴定·蒙尘古匣', desc: '匣上封皮剥落，看不出内里乾坤——可能是废纸，也可能是仙家至宝。' } : GameData.ITEMS[a.item];
     // 三档：稳健 ×1.15 必成九成五 / 激进 ×0.9 六成 / 天价 ×1.6 必成
     const opts = {
@@ -8085,7 +8137,7 @@ const AuctionSys = {
       title: `竞拍 · ${def.name}`,
       html: `${def.desc}<br>底价 <span class="hl">${Utils.fmtNum(a.base)}</span> 灵石。<br>
         【${opts.label}】出价 <b>${Utils.fmtNum(price)}</b> 灵石，成算约 <b>${opts.rate}%</b>${opts.rate < 100 ? '；落标则灵石原路退回' : ''}。<br>
-        拍期还剩 ${a.until - Math.floor(p.day)} 日。`,
+        本期第 ${(a.seq || 0) + 1} 件拍品，拍期还剩 ${a.until - Math.floor(p.day)} 日。`,
       options: [{ text: '落 槌', value: true, primary: true }, { text: '再看看', value: false }],
     });
     if (!ok) return;
@@ -8112,6 +8164,7 @@ const AuctionSys = {
         Story.chron(`拍卖行竞得「${def.name}」`);
       }
       p.auction.until = 0;   // 本期拍品易主，刷新下一件
+      p.auction.seq = (p.auction.seq || 0) + 1;   // v29：期号递进——同日不再掷出同一件拍品
       Ambience.sfx('auction');   // v19 落槌音
     } else {
       // v27 修瑕：退款走原额入账（不吃灵石获取加成）——此前退款被加成放大，落标反而净赚
@@ -8135,7 +8188,7 @@ const DonateSys = {
     const p = Game.player;
     const t = this.TIERS.find(x => x.id === id);
     if (!t) return;
-    const stones = Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(5, p.realmIdx) - 1) / 1));
+    const stones = Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(8, p.realmIdx) - 1) / 1));   // v29：封顶 5→8，大后期仍是消孽出口
     const ok = await UI.popup({
       title: `布施 · ${t.name}`,
       html: `散财于世间疾苦——声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。<br>需灵石 <span class="hl">${Utils.fmtNum(stones)}</span>。`,
@@ -8230,6 +8283,7 @@ const XinmoSys = {
           pp.xinmo = 45;
           const lost = Math.round(pp.exp * 0.05);
           pp.exp = Math.max(0, pp.exp - lost);
+          Time.cutLife(pp, 5, '心魔反噬，神魂耗损');   // v29 天年
           Log.add(`心魔难伏，它化作黑雾散去，临散前留下一声嗤笑。心魔值回落至 45，层修为 -${Utils.fmtNum(lost)}。
 道心之劫，败亦是修行——整理心境，再来。`, 'loss');
           Story.chron('心魔劫失利，心魔暂伏');
@@ -8258,8 +8312,8 @@ const DailySign = {
       apply(p) {
         const hpLoss = Math.max(1, Math.round(Stat.compute(p).maxHp * 0.12));
         p.hp = Math.max(1, p.hp - hpLoss);
-        const sLoss = Math.min(p.stones.low, Math.round(15 * GameData.stoneEco(p.realmIdx)));
-        p.stones.low -= sLoss;
+        // v29 修瑕：走总资产折算扣款——此前只从下品扣，资金归并进中/上品后「破财」恒为 0
+        const sLoss = Bag.spendStonesMax(Math.round(15 * GameData.stoneEco(p.realmIdx)));
         return `气血 -${Math.round(hpLoss)}、灵石 -${Utils.fmtNum(sLoss)}`;
       } },
   ],
@@ -8429,7 +8483,7 @@ const CraftSys = {
     if (p._drawDay !== today) { p._drawDay = today; p._drawCount = 0; }
     p._drawCount = (p._drawCount || 0) + 1;
     p.counters.talRounds = (p.counters.talRounds || 0) + 1;   // v27 修瑕：画符轮次从未计数，成就「画符千张」永不可解锁
-    const costMult = 1 + Math.min(4, (p._drawCount - 1) * 0.5);
+    const costMult = 1 + Math.min(4, (p._drawCount - 1) * 0.75);   // v29：递增斜率 0.5→0.75（符修一家独大削幅，不砍死职业）
     const cost = Math.round(this.drawCost(p) * costMult);
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足，置不起朱砂灵纸'); return; }
     Time.add(1);
@@ -8467,14 +8521,16 @@ const Tribulation = {
   realmPenalty(target) { return Utils.clamp(1 - (target || 2) * 0.035, 0.5, 1); },
   /** 护身法宝所需品级 ≈ 目标境界（筑基用灵级护心镜、金丹用玄级玄龟甲、元婴起用地级龙鳞宝甲） */
   artifactGrade(targetRealm) { return Utils.clamp(targetRealm, 1, 3); },
+  /** v29 修瑕：品级放宽为「不低于所需」——天级/仙级护甲此前反而无资格挡劫；脏档失效装备 id 判空防炸 */
   findArtifact(p, grade) {
     for (const id of Object.keys(p.bag)) {
       const d = GameData.ITEMS[id];
-      if (d && d.type === 'artifact' && d.slot === 'armor' && d.grade === grade) return { from: 'bag', id };
+      if (d && d.type === 'artifact' && d.slot === 'armor' && (d.grade || 0) >= grade) return { from: 'bag', id };
     }
     const eq = p.equipped.armor;
     const eqId = eq ? Utils.eqId(eq) : null;
-    if (eqId && GameData.ITEMS[eqId].grade === grade) return { from: 'equipped', id: eqId };
+    const eqDef = eqId ? GameData.ITEMS[eqId] : null;
+    if (eqDef && eqDef.type === 'artifact' && (eqDef.grade || 0) >= grade) return { from: 'equipped', id: eqId };
     return null;
   },
   chances() {
@@ -8491,9 +8547,17 @@ const Tribulation = {
     const p = Game.player;
     const target = p.realmIdx + 1;
     Save.write('bak', Game.player);   // v6：冲关之前，自动备份至临时槽位，失利可回溯
+    // v29 天年：渡劫丹——药力应劫而化，成算 +5（一丹一劫，引动天劫即耗，失利不返还）
+    p.flags = p.flags || {};
+    let dujieBonus = 0;
+    if ((p.flags.dujieDan || 0) > 0) {
+      p.flags.dujieDan--;
+      dujieBonus = 5;
+      Log.add('识海中渡劫丹的药力轰然化开，道基如蒙金光（成算 +5）。', 'gain');
+    }
     this.state = {
       target,
-      base: Cultivate.breakthroughChance(p, bonus),
+      base: Cultivate.breakthroughChance(p, bonus + dujieBonus),
       power: this.power(p, target),
       artifact: this.findArtifact(p, this.artifactGrade(target)),
       busy: false, logs: [],
@@ -8673,6 +8737,8 @@ const Tribulation = {
         return;
       }
     }
+    // v29 天年：渡劫失利折寿十年（选择回溯者本次渡劫已尽数抹去，不折寿）
+    if (!p.dead) Time.cutLife(p, 10, '天劫反噬');
     // §24 渡劫虚弱期：宿敌趁火打劫
     let ambushNpc = null;
     if (!p.dead) {
@@ -8707,7 +8773,8 @@ const Tribulation = {
  * ====================================================================== */
 const WorldSys = {
   freshWorld() {
-    return { nextEventYear: 100, pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null };
+    // v29：首次大事 32~40 年（原 100——多数周目寿元坐化前根本见不到，v20 四个新事件形同虚设）
+    return { nextEventYear: 32 + Utils.rand(0, 8), pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null };
   },
   year(p) { return Math.floor((p.day || 0) / 365) + 1; },
   isMagic(p, mapId) { const w = p.world; return !!(w && w.magicMaps && w.magicMaps.includes(mapId)); },
@@ -8743,6 +8810,8 @@ const WorldSys = {
   onYear(p, y) {
     const w = p.world;
     if (!w) return;
+    // v29：旧档一次性迁移——百年周期改短后，从未触发过大事的旧档重掷首次年份
+    if (w.nextEventYear > 50 && !(w.history && w.history.length)) w.nextEventYear = Math.min(w.nextEventYear, 32 + Utils.rand(0, 8));
     NpcSys.yearTick(p, y);
     if (w.preachUntil && y > w.preachUntil) { w.preachUntil = 0; Log.add('圣地讲道落幕，道音散入天地之间。', 'system'); }
     if (w.ruinsUntil && y > w.ruinsUntil) { w.ruinsUntil = 0; Log.add('上古秘境重归虚妄，机缘之门缓缓关闭。', 'system'); }
@@ -8752,7 +8821,7 @@ const WorldSys = {
       const rest = w.beastMaps.filter(b => y <= b.until);
       if (rest.length !== w.beastMaps.length) { w.beastMaps = rest; if (!rest.length) Log.add('兽潮退去，出山的群兽重归深山。', 'system'); }
     }
-    if (y >= w.nextEventYear) { w.nextEventYear = y + 100; this.fireEvent(p, y); }
+    if (y >= w.nextEventYear) { w.nextEventYear = y + 50 + Utils.rand(0, 20); this.fireEvent(p, y); }   // v29：此后 50~70 年一遇
   },
   fireEvent(p, y) {
     const w = p.world;
@@ -8970,6 +9039,11 @@ const BountySys = {
     const t = B.list[idx];
     if (!t || t.progress < t.need) return;
     let r = this.rewards(p);
+    // v29 修瑕：收材料悬赏的赏格兜底——此前境界 0 交 3~6 个一阶材料（卖店值 72~240）只赏 60 灵石，交悬赏不如摆摊
+    if (t.type === 'collect') {
+      const matValue = ShopSys.sellPrice(t.target) * t.need;
+      r.stones = Math.max(r.stones, Math.round(matValue * 2));
+    }
     // v27 联动：声望赏格真正入账——此前 UI 标注 ×1.15/×1.3/×1.5 而实发从未乘算
     const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
     if (repBonus > 1) r = { stones: Math.round(r.stones * repBonus), contrib: Math.round(r.contrib * repBonus) };
@@ -9034,6 +9108,7 @@ const BlackSys = {
     { id: 'tal_bingpo', w: 10 }, { id: 'tal_posha', w: 8 }, { id: 'pill_xuanling', w: 10 },
     { id: 's_cx_gou', w: 5 }, { id: 's_xt_pei', w: 5 }, { id: 'gf_feixian', w: 5 },
     { id: 'm_bingpo', w: 12 }, { id: 'seed_xingchen', w: 4 }, { id: 'm_xuecan', w: 10 },
+    { id: 'm_jiaojin', w: 6 },   // v29：蛟筋断头路补全——原仅 r6+ 掉落与 22000 贡献一条路，赤霄神剑（grade3 内容）中期无料
   ],
   /** 暗巷货（确定性哈希）：今日四件货物 */
   goods(p) {
@@ -9081,13 +9156,16 @@ const BlackSys = {
     if (!first || first === 'leave') return;
     if (first === 'haggle') {
       // v19 讨价还价：悟性/福缘判定（v28 联动：有效悟性/福缘——装备与讲道加成一并计入）
-      const rate = Utils.clamp(20 + Stat.compOf(p) * 4 + Stat.compute(p).luck * 4, 10, 75);
+      // v29 修瑕：当日还价失败过再还必败——此前失败后关弹窗重开即可免费重掷，「触怒商人」形同虚设
+      const shamed = (p._haggleFailDay || -1) === Math.floor(p.day);
+      const rate = shamed ? 0 : Utils.clamp(20 + Stat.compOf(p) * 4 + Stat.compute(p).luck * 4, 10, 75);
       if (Utils.chance(rate)) {
         cost = Math.round(cost * 0.75);
         Log.add(`你巧舌如簧，蒙面商贾咬牙认了——索价降至 <b>${Utils.fmtNum(cost)}</b> 灵石。`, 'gain');
       } else {
         cost = Math.round(cost * 1.15);
-        Log.add(`还价触怒了商贾——「不识抬举！」索价涨至 <b>${Utils.fmtNum(cost)}</b> 灵石。`, 'warn');
+        p._haggleFailDay = Math.floor(p.day);
+        Log.add(`还价触怒了商贾——「不识抬举！」索价涨至 <b>${Utils.fmtNum(cost)}</b> 灵石。${shamed ? '（他已认得你，今日休想再砍价）' : ''}`, 'warn');
       }
     }
     const ok = await UI.popup({
@@ -9109,6 +9187,8 @@ const BlackSys = {
     const cost = Math.round(200 * GameData.stoneEco(p.realmIdx));
     const tier = Utils.clamp(Math.floor(p.realmIdx / 2) + 1, 1, 4);
     const mat = Utils.pick(GameData.matsByTier(tier));
+    // v29 修瑕：袋中之物随境界经济加量——此前成本随 eco 膨胀而奖品是固定 1~2 份材料，高境负期望 350 倍
+    const matQty = Utils.clamp(Math.round(cost * 0.6 / Math.max(1, GameData.ITEMS[mat].price)), 2, 999);
     const ok = await UI.popup({
       title: '来路不明的储物袋',
       html: `巷角有一个血渍未干的储物袋，摊主开价 <span class="hl">${Utils.fmtNum(cost)}</span> 灵石——袋里似有<b>${GameData.ITEMS[mat].name}</b>的光泽。<br><span class="neg">福缘高者或可捡漏，福缘低者……恐怕要破财免灾。</span>`,
@@ -9120,13 +9200,13 @@ const BlackSys = {
     const luck = Stat.compute(p).luck + Math.floor((p.fortune || 0) / 20);   // v28 联动：装备福缘亦护身
     const roll = Math.random() * 100;
     if (roll < 25 + luck * 4) {
-      Bag.addItem(mat, 2);
+      Bag.addItem(mat, matQty * 2);
       Bag.addItem('m_gupian', 1);
-      Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×2，夹层里还藏着一枚上古法宝碎片——今日的运气，值了。`, 'gain');
+      Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×${matQty * 2}，夹层里还藏着一枚上古法宝碎片——今日的运气，值了。`, 'gain');
       Ambience.sfx('rare');
     } else if (roll < 60) {
-      Bag.addItem(mat, 1);
-      Log.add(`袋中确有${GameData.ITEMS[mat].name} ×1，不算亏，也不算赚。`, 'info');
+      Bag.addItem(mat, matQty);
+      Log.add(`袋中确有${GameData.ITEMS[mat].name} ×${matQty}，不算亏，也不算赚。`, 'info');
     } else {
       KarmaSys.addKarma(4, true);
       const fine = Math.round(100 * GameData.stoneEco(p.realmIdx));
@@ -9397,11 +9477,13 @@ const NpcSys = {
     if (!s) return '萍水';
     if (p.partner === id) return '道侣';
     if ((p.sworn || []).includes(id)) return '结拜';
-    if (s.rel >= 60) return '莫逆';
+    // v29：档名与 TIERS 机制档对齐——原先两套口径并存（此处 60 称莫逆，机制档 70 才是知己）
+    if (s.rel >= 90) return '生死之交';
+    if (s.rel >= 70) return '莫逆';
     if (s.rel >= 30) return '友善';
     if (s.rel >= 8) return '相熟';
     if (s.rel > -15) return '萍水';
-    if (s.rel > -40) return '敌视';
+    if (s.rel > -40) return '冷漠';
     return '宿敌';
   },
   /* ---------- v19：关系五档（机制层） ---------- */
@@ -9892,7 +9974,7 @@ const NpcSys = {
       html: `${this.dialogText(d.temper, 'greeting')}<br><span class="tip-line">TA 平素喜好：${catName || '随缘'}——投其所好，事半功倍。</span><br><span class="tip-line">关系愈深，礼愈难打动人——相交贵在知心。${midautumn ? '<b>今日中秋：情谊加倍！</b>' : ''}</span>`,
       options: [
         { text: `寻常贺礼（${Utils.fmtNum(cost)}灵石）`, value: 'normal', primary: true },
-        { text: `投其所好·${catName}（${Utils.fmtNum(likeCost)}灵石${likeItemId ? '' : '·未备' + catName}）`, value: 'like' },
+        { text: `投其所好${likeItemId ? `·${GameData.ITEMS[likeItemId].name}` : `·${catName}（未备）`}（${Utils.fmtNum(likeCost)}灵石）`, value: 'like' },   // v29：明示将送出哪件，防顶阶法宝被盲送
         { text: '作罢', value: false },
       ],
     });
@@ -10101,7 +10183,11 @@ const PersonalSys = {
     const s = NpcSys.state(p, id);
     if (!s || !s.alive || !s.met) return null;
     if (p.realmIdx < act.need.realm) return null;
-    if (NpcSys.tierOf(Math.max(0, s.rel)).id !== act.need.tier) return null;
+    // v29 修瑕：档位改序号比较——原先精确匹配，好感越档（如提前结拜）后低档幕永久无法触发（个人线死锁）
+    const TI = NpcSys.TIERS;
+    const curIdx = TI.findIndex(t => t.id === NpcSys.tierOf(Math.max(0, s.rel)).id);
+    const needIdx = TI.findIndex(t => t.id === act.need.tier);
+    if (curIdx < needIdx) return null;
     return act;
   },
   anyAvailable(p) {
@@ -10180,17 +10266,22 @@ const DungeonSys = {
     UI.toast(`窥探结果：${info}`);
     Log.add(`你以符箓为媒，灵光一闪窥得前路——${info}。`, 'info');
   },
+  /** v29：秘境门票——按推荐境界灵石经济 ×0.6 定价，入历一次一付 */
+  ticketOf(R) { return Math.round(GameData.stoneEco(R.recRealm) * 0.6); },
   enter(idx) {
     const p = Game.player;
     if (Battle.active || p.dead) return;
     const R = GameData.SECRET_REALMS[idx];
     if (!R) return;
     if (p.realmIdx < R.recRealm) { UI.toast(`需 ${GameData.REALM_NAMES[R.recRealm]}期方可入内`); return; }
+    // v29：秘境准入门票——此前入场无成本且 Boss 固定巨款+气运，秘境成了无本万利的通胀主泵
+    const ticket = this.ticketOf(R);
+    if (!Bag.spendStones(ticket)) { UI.toast(`入秘境需备开门灵石 ${Utils.fmtNum(ticket)} 枚`); return; }
     Meta.see('realm', R.id);   // v6 图鉴
     p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS, choices: [], gains: [], stuck: false };
     this.genRoute(p.dungeon);
     this.genChoices(p.dungeon);
-    Log.add(`你寻得入口，踏入 <b>${R.name}</b>——雾气在身后合拢，退路只剩来时那条。`, 'system');
+    Log.add(`你以 ${Utils.fmtNum(ticket)} 灵石付清开门之资，踏入 <b>${R.name}</b>——雾气在身后合拢，退路只剩来时那条。`, 'system');
     Game.activeTab = 'map';
     Game.subTab = Game.subTab || {};
     Game.subTab.map = 'realm';   // v22 直达游历·秘境分栏
@@ -10446,12 +10537,22 @@ const DungeonSys = {
       Bag.addItem('m_gupian', 3);
       const stones = Math.round(Utils.rand(60, 100) * GameData.stoneEco(R.recRealm) * 2);
       Bag.addStones(stones);
-      KarmaSys.addFortune(10);
+      // v29：Boss 气运每秘境每日限一次——重复通关不再无限灌气运（配合 KarmaSys 气运软上限 150）
+      p.counters.bossFortuneDay = p.counters.bossFortuneDay || {};
+      const _today = Math.floor(p.day || 0);
+      let fortuneTxt = '';
+      if (p.counters.bossFortuneDay[R.id] !== _today) {
+        p.counters.bossFortuneDay[R.id] = _today;
+        KarmaSys.addFortune(10);
+        fortuneTxt = '（气运 +10）';
+      } else {
+        fortuneTxt = '（今日此间气运已得过，不再进益）';
+      }
       // v27 修瑕：通关秘境从未按 realm 去重计数，成就「秘境征服者」永不可解锁
       p.counters.clearedRealms = p.counters.clearedRealms || {};
       p.counters.clearedRealms[R.id] = 1;
       p.counters.dungeonClears = Object.keys(p.counters.clearedRealms).length;
-      Log.add(`<b>${R.name}</b> 最深处的宝库向你敞开！${gf ? `失传功法【${gf}】、` : '上古法宝碎片 ×2、'}上古法宝碎片 ×3、灵石 ${Utils.fmtNum(stones)}——你满载而归！（气运 +10）`, 'gain');
+      Log.add(`<b>${R.name}</b> 最深处的宝库向你敞开！${gf ? `失传功法【${gf}】、` : '上古法宝碎片 ×2、'}上古法宝碎片 ×3、灵石 ${Utils.fmtNum(stones)}——你满载而归！${fortuneTxt}`, 'gain');
       p.dungeon = null;
       Log.add('你退出秘境，回望雾中洞口，只觉造化玄奇。', 'system');
       return;
@@ -10609,7 +10710,9 @@ const TowerSys = {
   /** 塔内守影：以本档妖兽池为底，按境界 + 层数深度缩放（词缀/习性天然继承） */
   foeFor(p, floor) {
     const target = Utils.clamp(p.realmIdx * 4 + Math.floor((floor - 1) / 2), 0, 60);
-    const id = Utils.pick(Object.keys(GameData.MONSTERS));
+    // v29 修瑕：按缩放后战力就近取形——此前全池随机，练气期会打出「塔影·雷狱主宰」的穿帮
+    const nearIds = Object.keys(GameData.MONSTERS).filter(k => Math.abs(GameData.MONSTERS[k].power - target) <= 4);
+    const id = Utils.pick(nearIds.length ? nearIds : Object.keys(GameData.MONSTERS));
     const e = buildMonster(id, target - GameData.MONSTERS[id].power);
     e.name = '塔影 · ' + e.name;
     const m = this.modsOf(p);
@@ -10782,18 +10885,29 @@ const TowerSys = {
 };
 
 window.TowerSys = TowerSys;   // v25：暴露全局以便调试与自动化测试
-/** 秘境深度对宝箱附加掉率的辅助 */
-function depth2(depth) { return depth * 2; }
-
 /* ======================================================================
  * §26 兵解转生 ReincarnationSys（多周目 / 轮回印记 / 前世恩怨）
  * ====================================================================== */
 const ReincarnationSys = {
-  /** 轮回 legacy 按存档位独立存放，不污染玩家存档结构 */
-  legacyKey() { return 'legacy_' + (Game.slot == null ? 'auto' : Game.slot); },
+  /** v29 修瑕：轮回 legacy 改全局单键——血脉跨存档位不再断绝（读取时并合旧分键数据，只增不减） */
+  legacyKey() { return 'legacy_global'; },
   readLegacy() {
+    const fresh = { lives: 0, marks: 0, kept: null, grudges: [] };
+    let cur = null;
     const d = Save.read(this.legacyKey());
-    return d && typeof d === 'object' ? d : { lives: 0, marks: 0, kept: null, grudges: [] };
+    if (d && typeof d === 'object') cur = { ...d };
+    // 旧版按存档位分键（legacy_auto/1/2/3）：各项取最大值并合，一次性迁移、不回写旧键
+    for (const k of ['legacy_auto', 'legacy_1', 'legacy_2', 'legacy_3']) {
+      const o = Save.read(k);
+      if (!o || typeof o !== 'object') continue;
+      cur = cur || { ...fresh };
+      cur.lives = Math.max(cur.lives || 0, o.lives || 0);
+      cur.marks = Math.max(cur.marks || 0, o.marks || 0);
+      cur.towerBest = Math.max(cur.towerBest || 0, o.towerBest || 0);
+      if (!cur.kept && o.kept) cur.kept = o.kept;
+      if ((!cur.grudges || !cur.grudges.length) && Array.isArray(o.grudges)) cur.grudges = o.grudges;
+    }
+    return cur || fresh;
   },
   writeLegacy(l) {
     const raw = JSON.stringify(l);
@@ -10802,13 +10916,14 @@ const ReincarnationSys = {
       else Save.mem[Save.KEY + this.legacyKey()] = raw;
     } catch (e) { /* ignore */ }
   },
-  async open() {
+  /** v29 天年：opts.force=坐化转世（寿元尽亦入轮回）；opts.extraMarks=额外印记（寿满天年） */
+  async open(opts = {}) {
     const p = Game.player;
-    if (!p.canReincarnate) { UI.toast('尚无兵解转世之机'); return; }
+    if (!p.canReincarnate && !opts.force) { UI.toast('尚无兵解转世之机'); return; }
     const legacy = this.readLegacy();
     const ok = await UI.popup({
       title: '兵解转世',
-      html: `渡劫失利，大道蒙尘。兵解者，散去肉身、以神魂投胎再修——<br>
+      html: `${opts.deathNote ? opts.deathNote + '<br>' : ''}渡劫失利，大道蒙尘。兵解者，散去肉身、以神魂投胎再修——<br>
         · 转世继承 <b>10% 悟性加成</b>与<b>前世记忆</b>（游历中偶得前世洞府机缘）<br>
         · 可携<b>一件法宝</b>入轮回<br>
         · 得 1 枚<b>轮回印记</b>：永久 +1% 全属性上限，可叠加（现累计 ${legacy.marks || 0} 枚）<br>
@@ -10839,13 +10954,13 @@ const ReincarnationSys = {
     });
     if (originId === undefined) return;
     const origin = GameData.ORIGINS.find(o => o.id === originId) || null;
-    await this.execute(p, legacy, kept, origin);
+    await this.execute(p, legacy, kept, origin, opts.extraMarks || 0);
   },
-  async execute(oldP, legacy, kept, origin) {
+  async execute(oldP, legacy, kept, origin, extraMarks = 0) {
     // 前世仇怨：只带走此生尚存的心结（已化解者不入轮回）
     const grudges = Object.keys(oldP.npcs || {}).filter(id => oldP.npcs[id].grudge && oldP.npcs[id].alive);
     legacy.lives = (legacy.lives || 0) + 1;
-    legacy.marks = (legacy.marks || 0) + 1;
+    legacy.marks = (legacy.marks || 0) + 1 + (extraMarks || 0);
     legacy.kept = kept || null;
     legacy.grudges = grudges;
     // v28 联动：跨世塔绩入传承——登天塔的足印不随轮回散去
@@ -10873,7 +10988,7 @@ const ReincarnationSys = {
     if (echo) p2.reinc.echo = echo;   // v20 道韵残响
     // v18 传承树：每3枚印记解锁一层天赋
     const treeTier = Math.floor((legacy.marks || 0) / 3);
-    if (treeTier >= 1) p2.stones.low += Math.round(origin ? origin.start.stones || 0 : 0); // 初始灵石翻倍
+    if (treeTier >= 1) p2.stones.low += Math.round((origin ? origin.start.stones : 150) || 0); // 初始灵石翻倍（v29 修瑕：随遇而安按默认 150 计，此前 +0 落空）
     if (treeTier >= 2) p2.attrs.comp = Math.min(10, p2.attrs.comp + 2); // 悟性+2
     if (treeTier >= 3 && kept) p2.bag[kept] = (p2.bag[kept] || 0) + 1; // 多带一件法宝
     if (treeTier >= 4) p2.attrs.luck = Math.min(10, p2.attrs.luck + 2); // 福缘+2
@@ -10897,6 +11012,7 @@ const ReincarnationSys = {
     }
     Game.player = p2;
     p2.pendingDao = true; // 前世记忆：可即刻叩问大道
+    Save.write('auto', p2);   // v29：坐化档的 dead 标记随新身落盘清除，防「已坐化无法读取」误锁
     Log.clear();
     Log.add('<b>兵解转世</b>——一道流光划破夜空，落入凡间某处。啼哭声中，你重开一世。', 'system');
     Log.add(`此为第 <b>${legacy.lives}</b> 世：轮回印记 ×${legacy.marks}（全属性 +${legacy.marks}%）、前世悟性传承 +10%${kept ? `、携【${GameData.ITEMS[kept].name}】转世` : ''}。`, 'gain');
@@ -11219,7 +11335,7 @@ const Battle = {
       }
       if (fid === 'e_tstorm') { e._fxTstorm = true; e.atk = Math.round(e.atk * 0.7); }
     }
-    if (e.hpMax && !e.hp) e.hp = e.hpMax;
+    e.hp = e.hpMax;   // v29 修瑕：词缀改完血上限即回满——此前「守财」精英自带约 17% 隐形掉血
     this.log(`【${e.name}】词缀：${B.enemyFxIds.map(fid => { const d = GameData.ELITE_AFFIXES.find(x => x.id === fid); return d ? `◆${d.name}` : ''; }).join('')}——点其名旁 🔍 可查情报。`, 'log-warn');
   },
 
@@ -11246,18 +11362,29 @@ const Battle = {
     const debuffSkill = hasSkill ? e.skills.find(s => ['defdown', 'slow', 'weaken', 'poison', 'burn', 'bleed'].includes(s.kind)) : null;
     const controlSkill = hasSkill ? e.skills.find(s => ['stun', 'freeze'].includes(s.kind)) : null;
     const drainSkill = hasSkill ? e.skills.find(s => s.kind === 'drain') : null;
-    const roarSkill = hasSkill ? e.skills.find(s => s.kind === 'roar') : null;
+    // v29：咆哮每场限一次、治疗每场限两次——终结「叠攻/奶量螺旋」的拖沓对局
+    const roarSkill = hasSkill && !e._roared ? e.skills.find(s => s.kind === 'roar') : null;
+    if (healSkill) e._healCount = e._healCount || 0;
     if (e.charging) return { kind: 'finisher' };
-    if (hpPct < 0.25 && healSkill && Utils.chance(70)) return { kind: 'skill', sk: healSkill };
+    // v29：习性偏好——同一模板不再只改数值：速攻偏冲锋、铁壁偏坚守、狂战偏重击、狡诈偏削益、坚韧偏自愈
+    const pref = e.tpl;
+    if (pref === 'iron' && guardSkill && !e.guardRounds && Utils.chance(45)) return { kind: 'skill', sk: guardSkill };
+    if (pref === 'cunning' && debuffSkill && Utils.chance(40 + rageBonus)) return { kind: 'skill', sk: debuffSkill };
+    if (pref === 'tough' && healSkill && (e._healCount || 0) < 2 && hpPct < 0.6 && Utils.chance(45)) return { kind: 'skill', sk: healSkill };
+    if (pref === 'swift' && Utils.chance(35 + rageBonus)) return { kind: 'charge' };
+    if (pref === 'berserk') return { kind: 'strike', heavy: Utils.chance(55 + rageBonus) };
+    if (hpPct < 0.25 && healSkill && (e._healCount || 0) < 2 && Utils.chance(70)) return { kind: 'skill', sk: healSkill };
     if (hpPct < 0.35 && guardSkill && !e.guardRounds && Utils.chance(60)) return { kind: 'skill', sk: guardSkill };
     if (playerBuffed && debuffSkill && Utils.chance(50 + rageBonus)) return { kind: 'skill', sk: debuffSkill };
     if (playerLowHp && drainSkill && Utils.chance(50 + rageBonus)) return { kind: 'skill', sk: drainSkill };
     if (!playerLowHp && controlSkill && !StatusFx.has(B.myFx, 'stun') && Utils.chance(35 + rageBonus)) return { kind: 'skill', sk: controlSkill };
     if (hpPct < 0.5 && !e.raged && roarSkill && Utils.chance(45 + rageBonus)) return { kind: 'skill', sk: roarSkill };
     if (hasSkill && Utils.chance(50 + rageBonus)) {
-      const total = e.skills.reduce((s, x) => s + (x.w || 1), 0);
-      let r = Math.random() * total, sk = e.skills[e.skills.length - 1];
-      for (const s of e.skills) { r -= (s.w || 1); if (r <= 0) { sk = s; break; } }
+      const pool2 = e.skills.filter(s => !((s.kind === 'roar' && e._roared) || (s.kind === 'heal' && (e._healCount || 0) >= 2)));
+      if (!pool2.length) return { kind: 'strike', heavy: Utils.chance(30) };
+      const total = pool2.reduce((s, x) => s + (x.w || 1), 0);
+      let r = Math.random() * total, sk = pool2[pool2.length - 1];
+      for (const s of pool2) { r -= (s.w || 1); if (r <= 0) { sk = s; break; } }
       return { kind: 'skill', sk };
     }
     if (Utils.chance((e.elite ? 30 : 20) + rageBonus)) return { kind: 'charge' };
@@ -11428,6 +11555,7 @@ const Battle = {
       }
       if (dotDmg > 0) {
         p.hp = Math.max(0, p.hp - dotDmg);
+        B.stats.in += dotDmg;   // v29 修瑕：DOT 计入承受伤害（无伤胜/结算口径）
         this.pushFloat('me', `-${dotDmg}`, 'dmg');
         parts.push(`（毒火蚀体，气血 -${dotDmg}）`);
       }
@@ -11484,7 +11612,7 @@ const Battle = {
         const daoTier = DaoSys.tierLevel(p);
         const enSpd = this.enSpd(B.enemy);
         // v10 剑心六境·剑仙境：普攻必中
-        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)) + (B.fogDodge || 0), 2, 40);
+        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)) + (B.fogDodge || 0) + (B.enemy.dodge || 0), 2, 40);   // v29：敌方闪避自此生效（原死属性）
         if (Utils.chance(miss)) {
           this.log(`你奋力一击，却被 ${B.enemy.name} 敏捷地避开了！`);
           this.pushFloat('enemy', '闪避', 'miss');
@@ -11600,7 +11728,7 @@ const Battle = {
         // v20 雨天：雷系法诀 +20%
         if (B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain' && /雷/.test(def.name)) power *= 1.2;
         if (sk.kind === 'damage') {
-          const miss = Utils.clamp(3 + (this.enSpd(B.enemy) - this.mySpd(st)), 2, 35);
+          const miss = Utils.clamp(3 + (this.enSpd(B.enemy) - this.mySpd(st)) + (B.enemy.dodge || 0), 2, 35);   // v29：敌方闪避生效
           if (Utils.chance(miss)) {
             this.log(`你施展【${sk.name}】，却被对方堪堪避过！`);
             this.pushFloat('enemy', '闪避', 'miss');
@@ -12074,12 +12202,14 @@ const Battle = {
         this.log(`【${sk.name}】${e.name} 硬甲铿锵——防御大增（+${sk.def || 40}%），持续 ${sk.rounds || 2} 回合！`, 'log-warn');
       },
       roar: () => {
+        e._roared = true;   // v29：每场限一次
         e.atk = Math.round(e.atk * (1 + (sk.atk || 25) / 100));
         this.pushFloat('enemy', '咆哮', 'crit');
         this.log(`【${sk.name}】${e.name} 发出震天咆哮——攻击提升${sk.atk || 25}%！`, 'log-warn');
         Ambience.sfx('rage');
       },
       heal: () => {
+        e._healCount = (e._healCount || 0) + 1;   // v29：每场限两次
         const healed = Math.max(1, Math.round(e.hpMax * (sk.pct || 15) / 100));
         e.hp = Math.min(e.hpMax, e.hp + healed);
         this.pushFloat('enemy', `+${healed}`, 'heal');
@@ -12108,6 +12238,7 @@ const Battle = {
     else if (speciesRel < 0) dmg *= 0.85;
     const crit = Utils.chance(e.crit);
     if (crit) dmg *= 1.6;
+    const preMit = dmg;   // v29：总减伤封顶锚点（攻防/克制/暴击之后）
     const blocked = Utils.chance(st.block);
     if (blocked) dmg *= 0.45;
     if (B.defending) dmg *= 0.4;
@@ -12119,6 +12250,8 @@ const Battle = {
     // v10 境界特性 · 金丹护体：单次伤害超过三成气血上限时减免两成
     let guarded = false;
     if (p.realmIdx >= 2 && dmg > st.maxHp * 0.3) { dmg *= 0.8; guarded = true; }
+    // v29：多层减伤连乘曾可趋近零伤——总减免封顶 85%，防御流仍强但不再无敌
+    dmg = Math.max(preMit * 0.15, dmg);
     dmg = Math.max(1, Math.round(dmg));
     p.hp = Math.max(0, p.hp - dmg);
     B.stats.in += dmg;   // v19 统计
@@ -12361,7 +12494,10 @@ const Battle = {
           ${srcTxt ? `<div class="tip-line">· 伤害构成：${srcTxt}</div>` : ''}
           <div class="tip-line">· 终局真元 ${B.zhenyuan || 0}/${B.zmax || 6}</div>`;
         el.appendChild(box);
-        setTimeout(() => { box.remove(); }, 2600);
+        box.style.cursor = 'pointer';
+        box.title = '点击关闭';
+        box.addEventListener('click', () => box.remove());
+        setTimeout(() => { box.remove(); }, 5000);   // v29：2.6s→5s 且点击可提前关——结算卡曾一闪即焚无从细看
       }
     }
     Log.add(`你击败了 <b>${B.enemy.name}</b>，获得修为 ${Utils.fmtNum(expGain)}、灵石 ${Utils.fmtNum(stoneGain)}${drops.length ? `、${drops.join('、')}` : ''}${p.dao === 'demonic' ? `，并吞噬其精元（修为额外 +${Utils.fmtNum(Math.round(expGain * (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 1 ? 0.3 : 0.2)))}）` : ''}。`, 'gain');
@@ -12661,7 +12797,7 @@ const Battle = {
  * ====================================================================== */
 const Tutorial = {
   steps: [
-    { icon: '☯', title: '欢迎踏入仙途', text: '这里是弱肉强食的修真界。你将以凡人之躯，一步步修炼至飞升成仙。<br>境界面板、行动操作、背包菜单都在眼前——且听我一一道来。', target: null },
+    { icon: '☯', title: '欢迎踏入仙途', text: `这里是弱肉强食的修真界。你将以凡人之躯，一步步修炼至飞升成仙。<br>${window.innerWidth <= 860 ? '面板都收在顶栏与底部页签里，随用随开' : '境界面板、行动操作、背包菜单都在眼前'}——且听我一一道来。`, target: null },
     { icon: '📜', title: '道途面板 · 你的根骨', text: '这里随时可查<b>境界修为</b>、气血灵力、先天四维（根骨 / 悟性 / 福缘 / 体魄）与战斗属性。<br>修为攒满即可突破，寿元耗尽则道消身殒。<br><span style="color:var(--text-faint)">手机上它收进了顶栏「☰ 道途」，点开即见。</span>', target: '#panel-left' },
     { icon: '⚔', title: '中央 · 行动与游历', text: '<b>修炼</b>积攒修为，<b>游历</b>历练搏杀，<b>坊市</b>置办丹药法宝，筑基后可拜入<b>宗门</b>。<br>大页签内还有<b>子页签</b>分栏：坊市分万宝阁/炼制坊/祭炼堂/悬赏板/奇市，洞府分洞府/灵田/灵兽，游历分舆图/秘境/天下。<br><span style="color:var(--text-faint)">手机上页签在屏幕底部，一指可达。</span>', target: '#panel-center' },
     { icon: '🎒', title: '乾坤袋 · 存档与行囊', text: '丹药、功法、法宝、材料分类收纳。法宝可装备，功法可参悟升级。<br>菜单中可随时存读档（共三档 + 自动存档）。<br><span style="color:var(--text-faint)">手机上它收进了顶栏「🎒 乾坤」。</span>', target: '#panel-right' },
@@ -12697,6 +12833,8 @@ const Tutorial = {
   prev() { if (this.idx > 0) { this.idx--; this.render(); } },
   finish() {
     document.getElementById('tutorial').classList.add('hidden');
+    // v29：完毕回调——开篇剧情由这里串起（此前与教程双层叠开）
+    if (typeof this.onDone === 'function') { const cb = this.onDone; this.onDone = null; cb(); }
     document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
     UI.closeDrawers();   // v25：教程毕抽屉自愈——开局第一屏永远从完整主界面开始
     try {
@@ -12830,7 +12968,7 @@ const Story = {
     if (!c) return;
     if (this.twComplete()) return;   // v21 逐字未完：首次点击先补全本页
     const prev = c.scenes[c.idx];
-    if (prev && prev.t === 'montage' && prev.days) Time.add(prev.days);   // 岁月流逝过场
+    if (!c.readonly && prev && prev.t === 'montage' && prev.days) Time.add(prev.days);   // 岁月流逝过场（v29 修瑕：回顾重读不再真实推进游戏日）
     c.idx++;
     if (c.idx >= c.scenes.length) return this.finish();
     while (c.idx < c.scenes.length && !this._vis(c.scenes[c.idx])) c.idx++;   // 旗标条件跳过
@@ -12909,7 +13047,35 @@ const Story = {
       },
     } });
   },
+  /** v29：跳过本章——快速翻至章末（抉择/战斗自停，决策仍须亲断） */
+  skip() {
+    if (!this.cur || this.cur.readonly) return;
+    let guard = 0;
+    while (this.cur && guard++ < 300) {
+      const sc = this.cur.scenes[this.cur.idx];
+      if (sc && (sc.t === 'choice' || sc.t === 'battle')) break;
+      this.next();
+    }
+    this.stopAuto();
+    if (this.cur) this.render();
+  },
+  /** v29：自动播放——每 2.4s 自动翻页，遇抉择/战斗/章末自停 */
+  toggleAuto() {
+    if (this._auto) { this.stopAuto(); this.render(); return; }
+    this._auto = setInterval(() => {
+      const c = this.cur;
+      if (!c || c.readonly) return this.stopAuto();
+      const sc = c.scenes[c.idx];
+      if (sc && (sc.t === 'choice' || sc.t === 'battle')) { this.stopAuto(); this.render(); return; }
+      this.next();
+      if (!this.cur) this.stopAuto();
+    }, 2400);
+    this.next();
+    if (!this.cur) this.stopAuto(); else this.render();
+  },
+  stopAuto() { if (this._auto) { clearInterval(this._auto); this._auto = null; } },
   finish() {
+    this.stopAuto();
     const c = this.cur;
     this.cur = null;
     this.twComplete();   // v21 清理逐字计时器
@@ -13002,7 +13168,10 @@ const Story = {
       <div class="story-body">${body}</div>
       ${sc.t === 'choice' || sc.t === 'battle' ? '' : `<div class="story-foot">
         <span class="story-page">${c.idx + 1} / ${c.scenes.length}</span>
-        <button class="btn btn-primary" data-action="story-next">${c.readonly ? '合 上' : (last ? '终 ✦' : '继 续 ▸')}</button>
+        <span style="display:flex;gap:8px;align-items:center">
+          ${c.readonly ? '' : `<button class="btn btn-sm" data-action="story-auto">${this._auto ? '⏸ 自动中' : '▶ 自动'}</button><button class="btn btn-sm" data-action="story-skip" title="快速翻至章末，抉择与战斗处自停">⏭ 跳过本章</button>`}
+          <button class="btn btn-primary" data-action="story-next">${c.readonly ? '合 上' : (last ? '终 ✦' : '继 续 ▸')}</button>
+        </span>
       </div>`}
       ${c.readonly ? '<button class="story-close-x" data-action="story-close" title="关闭">✕</button>' : ''}`;
     // 旁白渐显
@@ -13516,7 +13685,8 @@ const QuestSys = {
     const q = p.quest || { bonus: {} };
     return this.CHAPTERS
       .map((def, i) => ({ def, i }))
-      .filter(({ def, i }) => i < Math.min(q.ch, this.CHAPTERS.length - 1) && def.bonus && !(q.bonus || {})[def.id] && this.bonusDone(def, p));
+      // v29 修瑕：补领上限含终章 c10——原上限减一，先通关再补领的「塔顶之风」永久不可得
+      .filter(({ def, i }) => i < Math.min(q.ch, this.CHAPTERS.length) && def.bonus && !(q.bonus || {})[def.id] && this.bonusDone(def, p));
   },
   /** v24 百科新词条解锁提示（story markSeen 后调用） */
   loreToast(sid) {
@@ -14076,7 +14246,7 @@ const UI = {
       <span class="top-group top-id m-hide">${chapter}</span>
       <span class="top-group top-res">${stoneChip}<span class="m-hide-inline">${repChip}</span></span>
       ${miniBars}
-      <span class="top-group top-vit"><span class="res-chip res-power" title="综合战力：攻防血速暴闪格加权"><i class="rc-ico">武</i>${Utils.fmtNum(Stat.power(p))}</span><span class="top-meta m-hide">${Time.labelLong(p)}</span><span class="top-meta2 m-hide">${Math.floor(p.age)}岁 / 寿元${st.lifespan}</span></span>
+      <span class="top-group top-vit"><span class="res-chip res-power" title="综合战力：攻防血速暴闪格加权"><i class="rc-ico">武</i>${Utils.fmtNum(Stat.power(p))}</span><span class="top-meta m-hide">${Time.labelLong(p)}</span><span class="top-meta2 m-hide${(st.lifespan - p.age) < st.lifespan * 0.2 ? ' life-warn' : ''}" title="寿元：余年不足两成时朱砂示警">${Math.floor(p.age)}岁 / 寿元${st.lifespan}</span></span>
       <span class="top-meta2 m-hide"><span class="save-dot"></span>已自动存档</span>`);
   },
 
@@ -14487,10 +14657,15 @@ const UI = {
     const rpTrack = Array.from({ length: 10 }, (_, r) => rpNode(r))
       .join('<span class="rp-line"></span>');
     // v25：仙途条横向滚动容器——渲染后自动把当前境界滚进视野（窄屏十境不再溢出裁切）
-    setTimeout(() => {
-      const cur = document.querySelector('#tab-content .rp-node.cur');
-      cur?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-    }, 60);
+    // v29 修瑕：切页或境界变化时才把仙途条滚进视野——此前每次行动都强拽滚动打断阅读
+    if (Game._tabSwitched || Game._lastRpRealm !== p.realmIdx) {
+      Game._tabSwitched = false;
+      Game._lastRpRealm = p.realmIdx;
+      setTimeout(() => {
+        const cur = document.querySelector('#tab-content .rp-node.cur');
+        cur?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+      }, 60);
+    }
     return `
       <div class="card span2 realm-path-card">
         <div class="card-title">✦ 仙途 <span style="font-size:12px;color:var(--text-dim)">十境三十六层 · 步步登天</span></div>
@@ -14628,7 +14803,7 @@ const UI = {
         <div class="gf-actions">
           <button class="btn btn-sm" data-action="act-beast-active" data-uid="${b.uid}">${isOn ? '歇 息' : '出 战'}</button>
           <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
-          <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${Bag.count('m_neidan') ? '' : 'disabled'}>喂内丹（${Bag.count('m_neidan')}）</button>
+          <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${(Bag.count('m_neidan') && b.level < 10) ? '' : 'disabled'}>${b.level >= 10 ? '十阶圆满' : `喂内丹（${Bag.count('m_neidan')}）`}</button>
           ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
           <details class="fold npc-more"><summary>照管 ▾</summary><div class="gf-actions" style="margin-top:6px">
             <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
@@ -15011,7 +15186,9 @@ const UI = {
       .filter(id => (GameData.ITEMS[id].price || 0) > 0)
       .sort((a, b) => ShopSys.sellPrice(b) * (p.bag[b] || 0) - ShopSys.sellPrice(a) * (p.bag[a] || 0));
     const sellTotal = sellable.reduce((sum, id) => sum + ShopSys.sellPrice(id) * (p.bag[id] || 0), 0);
-    const sellRows = sellable.map(id => {
+    // v29：惰性渲染——超过 80 种只渲染前 80（低性能设备展开折叠区不再整列重排）
+    const SELL_CAP = 80;
+    const sellRows = sellable.slice(0, SELL_CAP).map(id => {
       const def = GameData.ITEMS[id];
       const sp = ShopSys.sellPrice(id);
       return `
@@ -15027,8 +15204,8 @@ const UI = {
     const sellFold = sellable.length ? `
       <details class="fold shop-sell-fold" data-fold="shop-sell" ${Game.foldState['shop-sell'] ? 'open' : ''}>
         <summary>◈ 出售物品（${sellable.length} 种 · 可售总值 <b class="hl">${Utils.fmtNum(sellTotal)}</b> 灵石 ▾）</summary>
-        <div class="tip-line" style="margin:6px 0">· 四折回收${p.dao === 'pill' ? '，丹药另有五成加成' : ''}；全售需二次确认。凡品杂物可在乾坤袋「一键卖凡品」。</div>
-        ${sellRows}
+        <div class="tip-line" style="margin:6px 0">· 四折回收${p.dao === 'pill' ? '，丹药另有丹道加成' : ''}；全售需二次确认。凡品杂物可在乾坤袋「一键卖凡品」。</div>
+        ${sellRows}${sellable.length > SELL_CAP ? `<div class="tip-line" style="margin:6px 0">· 其余 ${sellable.length - SELL_CAP} 种贱价之物从略——可用「一键卖凡品」或逐类全售处理。</div>` : ''}
       </details>` : '<div class="tip-line">背包中暂无可售之物。</div>';
     return `
       <div class="card">
@@ -15414,7 +15591,14 @@ const UI = {
     return `
       <div class="card">
         <div class="card-title">✦ ${sect.name} <span class="tag safe">${sect.bonusText}</span>${elderBtn}</div>
-        <div class="card-desc">当前贡献：<b class="hl">${Utils.fmtNum(p.sect.contrib)}</b> 点。完成宗门任务可获得贡献与灵石。</div>
+        <div class="card-desc">当前贡献：<b class="hl">${Utils.fmtNum(p.sect.contrib)}</b> 点。完成宗门任务可获得贡献与灵石。${(() => {
+          // v29：职位线可视化——RANKS 加成真实生效却从未展示，玩家不知晋升为何物、长老令为何灰着
+          const rk = SectSys.rank(p);
+          const nxt = SectSys.rankNext(p);
+          if (!nxt) return `现任 <b class="hl">${rk.name}</b>——一宗柱石，位极人臣。`;
+          const pct = Utils.clamp(Math.round(p.sect.contrib / nxt.contribNeed * 100), 0, 100);
+          return `现任 <b class="hl">${rk.name}</b>——距【${nxt.name}】还差 <b>${Utils.fmtNum(nxt.contribNeed - p.sect.contrib)}</b> 贡献。<div class="bar" style="height:10px;margin-top:6px"><div class="bar-fill exp" style="width:${pct}%"></div><span class="bar-text">${Utils.fmtNum(p.sect.contrib)}/${Utils.fmtNum(nxt.contribNeed)}</span></div>`;
+        })()}</div>
         ${taskRows}
       </div>
       ${facSection}
@@ -15777,7 +15961,7 @@ const UI = {
           return `<div class="achv-row ${on ? 'on' : 'off'}">
             <div class="achv-main"><span class="achv-name">${on ? '✦' : '◇'} ${d.name}</span>${prog}
               <div class="achv-desc">${d.desc}</div></div>
-            <div class="achv-reward">${on ? '<span style="color:var(--ok)">已达成</span>' : Achieve.rewardText(d.reward)}</div>
+            <div class="achv-reward">${on ? '<span style="color:var(--ok)">已达成</span>' : Achieve.rewardText(Achieve.rewardOf(d, Game.player))}</div>
           </div>`;
         }).join('');
         const gotN = defs.filter(d => got[d.id]).length;
@@ -16143,6 +16327,9 @@ const Game = {
       if (amb && !amb.classList.contains('hidden')) { amb.classList.add('hidden'); return; }
       const dao = document.getElementById('dao-modal');
       if (dao && !dao.classList.contains('hidden')) dao.classList.add('hidden');
+      // v29：只读剧情（问道录回顾）随 ESC 合上
+      const storyM = document.getElementById('story-modal');
+      if (storyM && !storyM.classList.contains('hidden') && typeof Story !== 'undefined' && Story.cur && Story.cur.readonly) { Story.close(); return; }
       // v28：更多面板 / 抽屉随 ESC 收起
       const sheet = document.getElementById('more-sheet');
       if (sheet && !sheet.classList.contains('hidden')) { UI.toggleMore(false); return; }
@@ -16193,8 +16380,14 @@ const Game = {
     Log.clear();
     Log.add(`天地灵气复苏之年，凡俗少年 <b>${Utils.esc(name)}</b> 得了一册残缺功法，自此踏上仙途。`, 'system');
     Log.add('（提示：先在后山「游历」磨砺，或就地「修炼」积攒修为。遇到不懂的可点菜单里的「玩法说明」。）', 'info');
-    QuestSys.showStory(0);   // v11：主线第一章开篇叙事
-    if (!this.player.flags.tutorialDone) Tutorial.show();
+    // v29 修瑕：教程(z140)曾压着第一章剧情(z135)双层叠开——改为教程完毕再开剧情
+    if (!this.player.flags.tutorialDone) {
+      Tutorial.onDone = () => QuestSys.showStory(0);
+      Tutorial.show();
+      // v29 修瑕：show() 早退（本机已看过教程）时 onDone 悬空——立即接力开剧情
+      if (typeof Tutorial.onDone === 'function') { const cb = Tutorial.onDone; Tutorial.onDone = null; cb(); }
+    }
+    else QuestSys.showStory(0);   // v11：主线第一章开篇叙事
     Save.autoSave();
     if (slot !== 'auto') Save.write(slot, this.player);
   },
@@ -16337,11 +16530,20 @@ const Game = {
     p.dead = true;
     Save.write('auto', p);   // 直接写盘：autoSave 会跳过已死亡角色，此处须落盘死亡标记
     Log.add('油尽灯枯，你的道途走到了尽头……', 'loss');
-    await UI.popup({
-      title: '✦ 道消身殒 ✦',
-      html: `寿元耗尽，天道无情。<br><br>${Utils.esc(p.name)}，${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}修士，享年 ${p.age} 岁。<br><br>此尘缘已了，愿君来世再问大道。`,
-      options: [{ text: '重返起点', value: true, primary: true }],
+    // v29 天年：坐化不再是一堵墙——可兵解转世（寿满天年额外 +1 印记），就此终了亦可
+    const choice = await UI.popup({
+      title: '✦ 坐 化 ✦',
+      html: `寿元耗尽，天道无情。<br><br>${Utils.esc(p.name)}，${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}修士，享年 ${p.age} 岁。<br><br>肉身虽朽，神魂尚清——是散去修为、投胎再修一世，还是就此归于天地？<br><span class="tip-line">· 兵解转世：此世尽付东流，传承却得延续，且因<b>寿满天年</b>额外多得一枚轮回印记。</span>`,
+      options: [{ text: '兵解转世', value: 'reinc', primary: true }, { text: '就此终了', value: 'end' }],
     });
+    if (choice === 'reinc') {
+      const livesBefore = ReincarnationSys.readLegacy().lives || 0;
+      p.dead = false;   // 暂解死亡封档，允许转世流程写盘
+      await ReincarnationSys.open({ force: true, extraMarks: 1, deathNote: '坐化之时神魂不昧，轮回之门为你而开。' });
+      const done = Game.player && !Game.player.dead && (ReincarnationSys.readLegacy().lives || 0) > livesBefore;
+      if (done) return;   // 转世已成，继续新的一生
+      if (Game.player) Game.player.dead = true;   // 中途作罢：重新封档，不留「寿元尽而不死」的悬置态
+    }
     this.exitToStart();
   },
 
@@ -16384,11 +16586,12 @@ const Game = {
       // v26 页签滚动记忆：离开前记下滚动位置，回到该页时还原（长列表不再从头翻起）
       const tc = UI.el['tab-content'];
       if (tc) Game.scrollMem[Game.activeTab] = tc.scrollTop;
+      Game._tabSwitched = true;   // v29：供修炼页仙途条判断「本次渲染是切页」
       Game.activeTab = tab; UI.renderTabs(); UI.renderTabContent();
       if (tc) tc.scrollTop = Game.scrollMem[tab] || 0;
       // v20 情境 BGM：进秘境页/坊市页切换氛围（战斗/剧情情境各自接管）
       if (typeof Ambience !== 'undefined' && Ambience.musicOn && !Battle.active && !Story.active()) {
-        Ambience.setMood(tab === 'map' && this.player && this.player.dungeon ? 'secret' : tab === 'shop' ? 'market' : 'calm');
+        Ambience.setMood(tab === 'map' && Game.player && Game.player.dungeon ? 'secret' : tab === 'shop' ? 'market' : 'calm');   // v29 修瑕：箭头函数里 this≠Game，情境 BGM 曾永不切换
       }
       // 面板切换平滑过渡：短暂加动效类，避免生硬跳变
       const box = UI.el['tab-content'];
@@ -16640,6 +16843,8 @@ const Game = {
     'story-choice': (d) => Story.choose(Number(d.storyChoice)),
     'story-battle': () => Story.startBattle(),
     'story-close': () => Story.close(),
+    'story-skip': () => Story.skip(),
+    'story-auto': () => Story.toggleAuto(),
     'quest-review': () => QuestSys.openArchive(),
     'quest-archive-tab': (d) => { UI.closePopup(); QuestSys.openArchive(d.tab); },
     'quest-reread': (d) => QuestSys.reread(d.sid),

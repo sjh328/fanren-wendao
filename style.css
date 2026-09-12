@@ -3391,3 +3391,19 @@ body.density-compact .card-desc { margin-bottom: 5px; }
   #focus-strip > .focus-alert .focus-title { font-size: 12.5px; }
   #focus-strip > .focus-main::after { font-size: 52px; }
 }
+
+/* ======================================================================
+ * v29 天年：寿元告警（余年不足两成，朱砂脉动）
+ * ====================================================================== */
+.life-warn {
+  color: #d0643a !important;
+  font-weight: 700;
+  animation: lifePulse 2.4s ease-in-out infinite;
+}
+@keyframes lifePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) { .life-warn { animation: none; } }
+
+/* ======================================================================
+ * v29 体验：日志相邻去重徽记
+ * ====================================================================== */
+.log-dup { color: var(--text-faint); font-size: 11px; margin-left: 6px; }

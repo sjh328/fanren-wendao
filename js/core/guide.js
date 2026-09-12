@@ -177,6 +177,15 @@ LOCKS: {
       }
       if (bn) done.push(`悬赏领赏 ×${bn}`);
     }
+    // 4.5 v28 扩容：已达成的宗门任务一并领取（贡献/灵石入账，任务板自动换新）
+    if (p.sect && Array.isArray(p.sect.tasks)) {
+      let sn = 0;
+      for (let i = 0; i < p.sect.tasks.length; i++) {
+        const t = p.sect.tasks[i];
+        if (t && t.progress >= t.need) { SectSys.claim(i); sn++; }
+      }
+      if (sn) done.push(`宗门任务领赏 ×${sn}`);
+    }
     if (!done.length) { UI.toast('今日诸事皆已办妥——安心修行便是'); return; }
     await UI.popup({
       title: '✦ 一键行权 · 小账',

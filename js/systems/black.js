@@ -13,6 +13,7 @@ const BlackSys = {
     { id: 'tal_bingpo', w: 10 }, { id: 'tal_posha', w: 8 }, { id: 'pill_xuanling', w: 10 },
     { id: 's_cx_gou', w: 5 }, { id: 's_xt_pei', w: 5 }, { id: 'gf_feixian', w: 5 },
     { id: 'm_bingpo', w: 12 }, { id: 'seed_xingchen', w: 4 }, { id: 'm_xuecan', w: 10 },
+    { id: 'm_jiaojin', w: 6 },   // v29：蛟筋断头路补全——原仅 r6+ 掉落与 22000 贡献一条路，赤霄神剑（grade3 内容）中期无料
   ],
   /** 暗巷货（确定性哈希）：今日四件货物 */
   goods(p) {
@@ -31,13 +32,15 @@ const BlackSys = {
     return out;
   },
   /** 黑市售价：基准 × 1.6 × 境界经济（材料类随行情）。
-   *  v20 修瑕：定价 0 的稀有物（套装件/秘境功法等）按品阶折算基准价，杜绝 800 灵石捡漏地级套装。 */
+   *  v20 修瑕：定价 0 的稀有物（套装件/秘境功法等）按品阶折算基准价，杜绝 800 灵石捡漏地级套装。
+   *  v28 联动：声望亦及于暗巷——侠名在外，蒙面人也给面子（吃 RepSys.priceMul ±15%）。 */
   price(p, id) {
     const def = GameData.ITEMS[id];
     let base = def.price || 0;
     if (!base) base = Math.round(2000 * Math.pow(3, Utils.clamp(def.grade ?? def.tier ?? 1, 0, 5)));
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
-    return Math.max(1, Math.round(base * 1.6));
+    const repMul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
+    return Math.max(1, Math.round(base * 1.6 * repMul));
   },
   buy(id) {
     const p = Game.player;
@@ -57,14 +60,17 @@ const BlackSys = {
     });
     if (!first || first === 'leave') return;
     if (first === 'haggle') {
-      // v19 讨价还价：悟性/福缘判定
-      const rate = Utils.clamp(20 + p.attrs.comp * 4 + p.attrs.luck * 4, 10, 75);
+      // v19 讨价还价：悟性/福缘判定（v28 联动：有效悟性/福缘——装备与讲道加成一并计入）
+      // v29 修瑕：当日还价失败过再还必败——此前失败后关弹窗重开即可免费重掷，「触怒商人」形同虚设
+      const shamed = (p._haggleFailDay || -1) === Math.floor(p.day);
+      const rate = shamed ? 0 : Utils.clamp(20 + Stat.compOf(p) * 4 + Stat.compute(p).luck * 4, 10, 75);
       if (Utils.chance(rate)) {
         cost = Math.round(cost * 0.75);
         Log.add(`你巧舌如簧，蒙面商贾咬牙认了——索价降至 <b>${Utils.fmtNum(cost)}</b> 灵石。`, 'gain');
       } else {
         cost = Math.round(cost * 1.15);
-        Log.add(`还价触怒了商贾——「不识抬举！」索价涨至 <b>${Utils.fmtNum(cost)}</b> 灵石。`, 'warn');
+        p._haggleFailDay = Math.floor(p.day);
+        Log.add(`还价触怒了商贾——「不识抬举！」索价涨至 <b>${Utils.fmtNum(cost)}</b> 灵石。${shamed ? '（他已认得你，今日休想再砍价）' : ''}`, 'warn');
       }
     }
     const ok = await UI.popup({
@@ -86,6 +92,8 @@ const BlackSys = {
     const cost = Math.round(200 * GameData.stoneEco(p.realmIdx));
     const tier = Utils.clamp(Math.floor(p.realmIdx / 2) + 1, 1, 4);
     const mat = Utils.pick(GameData.matsByTier(tier));
+    // v29 修瑕：袋中之物随境界经济加量——此前成本随 eco 膨胀而奖品是固定 1~2 份材料，高境负期望 350 倍
+    const matQty = Utils.clamp(Math.round(cost * 0.6 / Math.max(1, GameData.ITEMS[mat].price)), 2, 999);
     const ok = await UI.popup({
       title: '来路不明的储物袋',
       html: `巷角有一个血渍未干的储物袋，摊主开价 <span class="hl">${Utils.fmtNum(cost)}</span> 灵石——袋里似有<b>${GameData.ITEMS[mat].name}</b>的光泽。<br><span class="neg">福缘高者或可捡漏，福缘低者……恐怕要破财免灾。</span>`,
@@ -94,16 +102,16 @@ const BlackSys = {
     if (!ok) return;
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     p.mysteryDay = day;
-    const luck = p.attrs.luck + Math.floor((p.fortune || 0) / 20);
+    const luck = Stat.compute(p).luck + Math.floor((p.fortune || 0) / 20);   // v28 联动：装备福缘亦护身
     const roll = Math.random() * 100;
     if (roll < 25 + luck * 4) {
-      Bag.addItem(mat, 2);
+      Bag.addItem(mat, matQty * 2);
       Bag.addItem('m_gupian', 1);
-      Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×2，夹层里还藏着一枚上古法宝碎片——今日的运气，值了。`, 'gain');
+      Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×${matQty * 2}，夹层里还藏着一枚上古法宝碎片——今日的运气，值了。`, 'gain');
       Ambience.sfx('rare');
     } else if (roll < 60) {
-      Bag.addItem(mat, 1);
-      Log.add(`袋中确有${GameData.ITEMS[mat].name} ×1，不算亏，也不算赚。`, 'info');
+      Bag.addItem(mat, matQty);
+      Log.add(`袋中确有${GameData.ITEMS[mat].name} ×${matQty}，不算亏，也不算赚。`, 'info');
     } else {
       KarmaSys.addKarma(4, true);
       const fine = Math.round(100 * GameData.stoneEco(p.realmIdx));

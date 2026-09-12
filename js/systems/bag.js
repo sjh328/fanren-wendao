@@ -306,6 +306,18 @@ const Pill = {
     if (effect.mpPct) { p.mp = Math.min(st.maxMp, p.mp + Math.round(st.maxMp * effect.mpPct / 100)); effectText.push(`灵力 +${effect.mpPct}%`); }
     if (effect.curePoison) { p.poison = Math.max(0, p.poison - effect.curePoison); effectText.push(`丹毒 -${effect.curePoison}`); }
     if (effect.insight) { p.insight = Math.min(100, p.insight + effect.insight); effectText.push(`突破感悟 +${effect.insight}`); }
+    // v29 天年：延寿丹（增益上限为该境基准五成）与渡劫丹（一丹一劫的识海印记）
+    if (effect.life) {
+      const base = GameData.LIFESPAN[p.realmIdx] || 120;
+      const gain = Math.max(0, Math.min(effect.life, Math.round(base * 0.5) - (p.lifeGain || 0)));
+      if (gain > 0) { p.lifeGain = (p.lifeGain || 0) + gain; effectText.push(`寿元 +${gain} 年`); }
+      else effectText.push('寿元已延至此境之极，余药化作一缕暖意');
+    }
+    if (effect.dujie) {
+      p.flags = p.flags || {};
+      p.flags.dujieDan = (p.flags.dujieDan || 0) + 1;
+      effectText.push('下次渡劫成算 +5');
+    }
     if (effect.stat) {
       const keys = Object.keys(p.attrs).filter(k => p.attrs[k] < 10);
       if (keys.length) {

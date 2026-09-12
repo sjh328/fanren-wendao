@@ -22,16 +22,18 @@ const ShopSys = {
     // 符箓为时价之物：随境界经济浮动
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
     let v = Math.max(1, Math.floor(base * 0.4));
-    // 丹道：出售丹药价格提升五成
-    if (p.dao === 'pill' && def.type === 'pill') v = Math.round(v * 1.5);
-    if (p.dao === 'pill' && def.type === 'pill' && DaoSys.tierLevel(p) >= 2) v = Math.round(v * 1.25);   // v10 丹道六境·药理境
-    return Math.max(1, Math.round(v * WorldSys.priceMul(p)));
+    // 丹道：出售丹药价格提升两成五
+    if (p.dao === 'pill' && def.type === 'pill') v = Math.round(v * 1.25);
+    if (p.dao === 'pill' && def.type === 'pill' && DaoSys.tierLevel(p) >= 2) v = Math.round(v * 1.15);   // v10 丹道六境·药理境
+    // v29 修瑕：卖价同吃坊市行情——此前丹道卖价 0.75 倍固定不吃行情/声望，买价最低 0.61 倍，
+    // 「批量买入+立即全售」构成稳赚 23% 的倒卖印钞机；两侧乘数同源后即时倒卖必亏，跨行情低买高卖成为正经营生
+    return Math.max(1, Math.round(v * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId)));
   },
   buy(itemId) {
     const p = Game.player;
     const def = GameData.ITEMS[itemId];
     const cost = this.price(itemId);
-    if (def.type === 'gongfa' && p.gongfa[itemId]) { UI.toast('你已修习此功法'); return; }
+    if (def.type === 'gongfa' && (p.gongfa[itemId] || p.bag[itemId])) { UI.toast('你已修习或已藏有此功法'); return; }   // v29 修瑕：补背包判重
     if (def.type === 'gongfa' && !DaoSys.canLearnGongfa(p, def)) return; // 体修难悟高阶法诀
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     Bag.addItem(itemId, 1);

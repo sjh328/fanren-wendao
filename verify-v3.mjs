@@ -486,7 +486,7 @@ try {
     await reloadSlot3();
     const price = await page.evaluate(() => ShopSys.price('pill_juqi'));
     // v5 起坊市叠加 ±20% 行情波动，期望值按当前行情系数计算（战时涨价逻辑不变）
-    const expected = await page.evaluate(() => Math.round(60 * 1.15 * WorldSys.marketMul(Game.player, 'pill_juqi')));
+    const expected = await page.evaluate(() => Math.round(GameData.ITEMS.pill_juqi.price * 1.15 * WorldSys.marketMul(Game.player, 'pill_juqi')));   // v29：随丹价新表
     price === expected ? pass('V4 宗门大战：坊市物价上涨15%（含行情浮动）') : fail('V4 物价', `${price} vs ${expected}`);
   }
 
@@ -548,6 +548,7 @@ try {
       bag: { w_zhuxian: 1, pill_liaoshang: 3 },
       npcs: { n3: { realmIdx: 1, layer: 0, exp: 0, rel: -50, alive: true, map: 'village', met: true, grudge: true, pastLife: false } },
     });
+    await page.evaluate(() => { NpcSys.tribAmbush = () => null; });   // v29：禁随机偷袭弹窗——渡劫后 14% 概率弹「宿敌偷袭」，打乱后续兵解弹窗序列（测试确定性）
     await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
     await sleep(300);
     await clickSel(page, '[data-action="act-breakthrough"]');
@@ -562,6 +563,7 @@ try {
       if (p.realmIdx >= 8) { // 3% 天幸成功 → 重试一次
         console.log('  - V6 天劫意外成功，重试');
         await seedAndLoad({ name: '转世道人', realmIdx: 7, layer: 3, exp: 8000000, karma: 300, insight: 0, dao: 'sword', sect: null, canReincarnate: false, reinc: null });
+        await page.evaluate(() => { NpcSys.tribAmbush = () => null; });
         await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
         await sleep(300);
         await clickSel(page, '[data-action="act-breakthrough"]');
@@ -590,7 +592,7 @@ try {
       p2.bag.w_zhuxian === 1 ? pass('V6 携法宝【诛仙剑影】入轮回') : fail('V6 携宝', JSON.stringify(p2.bag));
       p2.npcs && p2.npcs.n3 && p2.npcs.n3.grudge && p2.npcs.n3.pastLife ? pass('V6 前世恩怨NPC带入新世（pastLife标记）') : fail('V6 前世恩怨', JSON.stringify(p2.npcs && p2.npcs.n3));
       p2.origin === 'hunter' ? pass('V6 山村猎户出身') : fail('V6 出身', String(p2.origin));
-      const legacy = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_legacy_3') || 'null'));
+      const legacy = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_legacy_global') || localStorage.getItem('fanren_wd_legacy_3') || 'null'));   // v29：legacy 全局单键
       legacy && legacy.lives === 1 && legacy.marks === 1 ? pass('V6 轮回legacy按存档位保存') : fail('V6 legacy', JSON.stringify(legacy));
       const panel = await text(page, '#panel-left');
       panel.includes('第1世') ? pass('V6 面板显示前世/印记') : fail('V6 面板前世', panel.slice(0, 100));

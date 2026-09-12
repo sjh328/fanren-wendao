@@ -84,6 +84,20 @@ const Ambience = {
         UI.toast(`战斗速度：${{ 1: '×1 原速', 2: '×2 两倍', 3: '极速' }[Battle.speed] || '×1'}`);
       });
     }
+    // v28 设置中心：界面密度（紧凑档缩卡片内边距，小屏多显示约 15% 内容）
+    const den2 = document.getElementById('amb-density');
+    if (den2) {
+      const saved = (Save.read('amb') || {}).density || 'cozy';
+      this.applyDensity(saved);
+      den2.value = saved;
+      den2.addEventListener('change', e => {
+        this.applyDensity(e.target.value);
+        const pref = Save.read('amb') || {};
+        pref.density = e.target.value;
+        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        UI.toast(e.target.value === 'compact' ? '界面密度：紧凑' : '界面密度：舒适');
+      });
+    }
     this.render();
     // 浏览器自动播放限制：若上次开着声音，待首次手势再无声启动
     if (this.musicOn) {
@@ -100,6 +114,10 @@ const Ambience = {
     if (typeof Anim !== 'undefined') Anim.enabled = this.animOn;
     try { document.body.classList.toggle('anim-off', !this.animOn); } catch (e) {}   // v21 入场/过渡动画同受性能开关门控
   },
+  /** v28 界面密度：紧凑档挂 body.density-compact（卡片内边距/间距由 CSS 变量统收） */
+  applyDensity(v) {
+    try { document.body.classList.toggle('density-compact', v === 'compact'); } catch (e) {}
+  },
   /** v19 字号档位；v27 修瑕：样式表全为 px、根字号档位形同虚设——改用根级 zoom 真实缩放整个界面 */
   applyFontScale(v) {
     document.documentElement.style.fontSize = (v === 110 ? 17 : v === 122 ? 19 : 15.5) + 'px';
@@ -107,7 +125,11 @@ const Ambience = {
     try { document.documentElement.style.zoom = scale === 1 ? '' : String(scale); } catch (e) { /* 老内核不支持则退化为字号档 */ }
   },
   persist() {
-    const raw = JSON.stringify({ sfx: this.sfxOn, music: this.musicOn, vol: this.vol });
+    // v29 修瑕：读回旧偏好合并后再写——此前只写音效三项，切一次音效会把字号/性能/逐字/日志密度全部静默重置
+    let pref = {};
+    try { const raw0 = Save.storage.getItem ? Save.storage.getItem(this.KEY) : Save.mem[this.KEY]; pref = JSON.parse(raw0 || '{}') || {}; } catch (e) {}
+    pref.sfx = this.sfxOn; pref.music = this.musicOn; pref.vol = this.vol;
+    const raw = JSON.stringify(pref);
     try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, raw); else Save.mem[this.KEY] = raw; } catch (e) { /* ignore */ }
   },
   ensureCtx() {

@@ -67,7 +67,7 @@ const XinmoSys = {
           pp.xinmo = 0;
           pp.flags = pp.flags || {};
           pp.flags.xinmoCleared = (pp.flags.xinmoCleared || 0) + 1;
-          pp.insight = Math.min(100, (pp.insight || 0) + 10);
+          Cultivate.addInsight(pp, 10);   // v28：满百溢出折算修为
           Log.add(`<b>心魔伏诛！</b>你于幻境中直视本心，道心愈发凝练通透——全属性永久 +${pp.flags.xinmoCleared}%。（突破感悟 +10）`, 'realm');
           UI.announce('✦ 心魔劫 · 降伏 ✦', 'gold');
           Ambience.sfx('victory');
@@ -76,6 +76,7 @@ const XinmoSys = {
           pp.xinmo = 45;
           const lost = Math.round(pp.exp * 0.05);
           pp.exp = Math.max(0, pp.exp - lost);
+          Time.cutLife(pp, 5, '心魔反噬，神魂耗损');   // v29 天年
           Log.add(`心魔难伏，它化作黑雾散去，临散前留下一声嗤笑。心魔值回落至 45，层修为 -${Utils.fmtNum(lost)}。
 道心之劫，败亦是修行——整理心境，再来。`, 'loss');
           Story.chron('心魔劫失利，心魔暂伏');

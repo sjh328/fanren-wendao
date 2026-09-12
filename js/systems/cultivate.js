@@ -15,8 +15,6 @@ const Cultivate = {
     if (p.rushDay === Math.floor(p.day || 0)) g *= 1.5;   // v20 聚灵加速
     return g;
   },
-  /** v20 聚灵加速：当日 ×1.5（洞府点燃，日限一次） */
-  rushMul(p) { return (p.rushDay === Math.floor(p.day || 0)) ? 1.5 : 1; },
   /** v20 闭关效率：隆冬蛰伏 +10% */
   secludeMul(p) { return (typeof Art !== 'undefined' && Art.seasonOf(p) === 3) ? 1.1 : 1; },
   gainMult() {
@@ -49,6 +47,21 @@ const Cultivate = {
       }
     }
     return leveled;
+  },
+  /** v28 联动：感悟单源入口——满百后溢出不再蒸发，按境界经济折算修为（感悟圆融，化作修为）。
+   *  大额感悟源（讲道/心魔劫/个人线/前世机缘/上签等）统一走此口，小处直写不受影响。 */
+  addInsight(p, n) {
+    if (!n) return;
+    const before = p.insight || 0;
+    p.insight = Math.min(100, before + n);
+    const spill = n - (p.insight - before);
+    if (spill > 0) {
+      const exp = Math.round(spill * 80 * GameData.eco(p.realmIdx));
+      if (exp > 0) {
+        this.addExp(p, exp, true);
+        Log.add(`感悟已臻圆融，余韵化作修为 <b>+${Utils.fmtNum(exp)}</b>。`, 'gain');
+      }
+    }
   },
   normal() {
     const p = Game.player;
@@ -209,6 +222,11 @@ const Cultivate = {
     const rep = { rounds: 0, exp: 0, days: 0, advanced: 0, from: this.realmLabel(p) };   // v21 结算报告累计
     while (rounds++ < 120) {
       if (!p || p.dead || Game.player !== p) return;   // 兵解/回溯等更换玩家对象时，旧循环立即作废
+      // v29 修瑕：剧情/弹窗挂起时闭关暂停——此前节庆弹窗会被下一轮闭关的自动取消逻辑顶掉
+      if ((typeof Story !== 'undefined' && Story.active && Story.active()) || UI._popupResolve) {
+        Log.add('外事来扰，你暂敛心神，出关一顾。', 'warn');
+        break;
+      }
       const beforeLayer = p.layer, beforeRealm = p.realmIdx;
       const cost = this.secludeCost(p);
       if (!Bag.spendStones(cost)) {
@@ -251,6 +269,7 @@ const Cultivate = {
     if ((p.jade || 0) >= 9) chance += 3;
     chance += (p.fortune || 0) * 0.2;   // 气运：每10点 +2%
     chance -= (p.karma || 0) * 0.2;     // 孽障：每10点 -2%
+    chance -= Math.floor((p.xinmo || 0) / 10);   // v28 联动：心魔蚀道——未降伏的心魔每10点 -1% 成算（满百另有心魔劫）
     chance += Math.min(15, (p.breakStreak || 0) * 5);   // v8 挫而愈坚：连败保底，每次失利 +5%（上限 +15%）
     if (p.realmIdx >= 8) chance += 8;   // v10 境界特性 · 劫体（渡劫）：半身已在雷海
     if (p.dao === 'sword') chance *= 0.77;  // 剑心桀骜：渡劫难度+30%

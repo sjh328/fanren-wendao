@@ -256,12 +256,13 @@ try {
     return {
       mul: WorldSys.marketMul(p, 'pill_juqi'),
       price: ShopSys.price('pill_juqi'),
+      base: GameData.ITEMS.pill_juqi.price,   // v29：基价随丹价新表
       left: WorldSys.marketDaysLeft(p),
       seed: p.world.market.seed,
     };
   });
   mkt1.mul >= 0.8 && mkt1.mul <= 1.2 ? pass(`M1 行情系数在 ±20% 内（×${mkt1.mul.toFixed(3)}）`) : fail('M1 行情范围', String(mkt1.mul));
-  mkt1.price === Math.max(1, Math.round(60 * mkt1.mul)) ? pass('M1 售价 = 基价 × 行情') : fail('M1 价格', `${mkt1.price} vs ${Math.round(60 * mkt1.mul)}`);
+  mkt1.price === Math.max(1, Math.round(mkt1.base * mkt1.mul)) ? pass('M1 售价 = 基价 × 行情') : fail('M1 价格', `${mkt1.price} vs ${Math.round(mkt1.base * mkt1.mul)}`);   // v29：随丹价新表
   mkt1.left > 0 && mkt1.left <= 30 ? pass(`M1 距下次市集刷新 ${mkt1.left} 日`) : fail('M1 刷新倒计时', String(mkt1.left));
   const mulSame = await page.evaluate(() => {
     UI.renderAll();

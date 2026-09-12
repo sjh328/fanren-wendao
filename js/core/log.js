@@ -28,6 +28,17 @@ const Log = {
     if (!this.el || this.skim(type)) return;
     const p = Game.player;
     const year = p ? Math.floor(p.day / 365) + 1 : 1;
+    // v29：相邻重复日志合并为 ×N——连刷同图/离线逐日回放不再逐条刷屏
+    const _n = this.entries.length;
+    if (_n > 0 && this.entries[_n - 1] === text && this.el.lastElementChild) {
+      this._dupN = (this._dupN || 0) + 1;
+      let badge = this.el.lastElementChild.querySelector('.log-dup');
+      if (!badge) { badge = document.createElement('span'); badge.className = 'log-dup'; this.el.lastElementChild.appendChild(badge); }
+      badge.textContent = ` ×${this._dupN + 1}`;
+      if (!this.paused) this.el.scrollTop = this.el.scrollHeight;
+      return;
+    }
+    this._dupN = 0;
     const div = document.createElement('div');
     div.className = `log-entry log-${type}`;
     div.innerHTML = `<span class="t-time">第${year}年</span>${text}`;

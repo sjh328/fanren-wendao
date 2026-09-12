@@ -18,6 +18,12 @@ const SectSys = {
     }
     return this.RANKS[0];
   },
+  /** v29：下一职位（宗门页晋升进度条用） */
+  rankNext(p) {
+    if (!p.sect) return null;
+    const c = p.sect.contrib || 0;
+    return this.RANKS.find(r => r.contribNeed > c) || null;
+  },
   taskMonsters(rp) {
     return Object.entries(GameData.MONSTERS)
       .filter(([, m]) => m && !m.elite && m.power >= rp - 4 && m.power <= rp + 2)
@@ -163,7 +169,7 @@ const SectSys = {
     const row = GameData.SECT_EXCHANGE[idx];
     if (!row) return;
     const def = GameData.ITEMS[row.item];
-    if (def.type === 'gongfa' && p.gongfa[row.item]) { UI.toast('你已修习此功法'); return; }
+    if (def.type === 'gongfa' && (p.gongfa[row.item] || p.bag[row.item])) { UI.toast('你已修习或已藏有此功法'); return; }   // v29 修瑕：补背包判重
     if (def.type === 'gongfa' && !DaoSys.canLearnGongfa(p, def)) return; // 体修难悟高阶法诀
     if (p.sect.contrib < row.cost) { UI.toast('贡献点不足'); return; }
     p.sect.contrib -= row.cost;
@@ -203,7 +209,7 @@ const SectSys = {
     const row = f.exclusive[idx];
     if (!row) return;
     const def = GameData.ITEMS[row.item];
-    if (def.type === 'gongfa' && p.gongfa[row.item]) { UI.toast('你已修习此功法'); return; }
+    if (def.type === 'gongfa' && (p.gongfa[row.item] || p.bag[row.item])) { UI.toast('你已修习或已藏有此功法'); return; }   // v29 修瑕：补背包判重
     if (def.type === 'gongfa' && !DaoSys.canLearnGongfa(p, def)) return;
     if (p.sect.contrib < row.cost) { UI.toast('贡献点不足'); return; }
     p.sect.contrib -= row.cost;
@@ -244,9 +250,14 @@ const SectSys = {
     if (!p.sect) return;
     const y = WorldSys.year(p);
     if (y <= 0 || y % this.TOURNEY_EVERY !== 0) return;
+    // v29 修瑕：开赛 30 日未战自动下届再开——此前一届永不落幕，「大比未战」引导提醒永久挂起
+    if (p.sect.tourney && Math.floor(p.day) - (p.sect.tourney.openDay != null ? p.sect.tourney.openDay : Math.floor(p.day)) > 30) {
+      p.sect.tourney = null;
+      Log.add('本届大比已落幕——你错过了赛程，只得待下届再登台。', 'info');
+    }
     if ((p.sect.lastTourney || 0) >= y) return;
     if (p.sect.tourney) return;
-    p.sect.tourney = { round: 0, wins: 0 };
+    p.sect.tourney = { round: 0, wins: 0, openDay: Math.floor(p.day) };
     p.sect.lastTourney = y;
     Log.add('锣鼓喧天——<b>宗门大比</b>开幕了！三轮车轮战，同门比试点到为止；胜场越多彩头越厚，三连胜者魁首扬名。', 'system');
     Story.chron('宗门大比开幕');
@@ -255,9 +266,10 @@ const SectSys = {
   /** 生成当轮对手：同门弟子（兽形灵技拟态），一轮强过一轮 */
   tourneyOpponent(p, round) {
     const rp = p.realmIdx * 4 + p.layer;
-    const pool = this.taskMonsters(rp + round);
+    const delta = Math.min(round, 1);   // v29 修瑕：对手至多 +1 档——决胜轮原为 rp+2，刚突破新境界时最难受
+    const pool = this.taskMonsters(rp + delta);
     const mid = pool.length ? Utils.pick(pool) : Utils.pick(Object.keys(GameData.MONSTERS));
-    const e = buildMonster(mid, Math.max(0, rp + round - GameData.MONSTERS[mid].power));
+    const e = buildMonster(mid, Math.max(0, rp + delta - GameData.MONSTERS[mid].power));
     e.name = `${this.TOURNEY_FOES[round] || '同门弟子'}·${Utils.pick(GameData.NAMES)}`;
     e.elite = false;
     return e;

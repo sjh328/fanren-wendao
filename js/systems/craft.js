@@ -32,6 +32,7 @@ const CraftSys = {
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 1) r += 10;
     r += Utils.clamp((p.fortune || 0) * 0.1, 0, 15);
     if (typeof CaveSys !== 'undefined' && CaveSys.pillBonus) r += CaveSys.pillBonus(p);
+    if ((p.poison || 0) > Stat.poisonCap(p) * 0.5) r -= 5;   // v28 联动：手有浮毒，丹火不稳（丹毒过半成丹率 -5）
     if (fire) r += this.fireMatch(p, recipe, fire);
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 6) return Utils.clamp(r, 40, 95);
     return Utils.clamp(r, 5, 95);
@@ -141,7 +142,7 @@ const CraftSys = {
     if (p._drawDay !== today) { p._drawDay = today; p._drawCount = 0; }
     p._drawCount = (p._drawCount || 0) + 1;
     p.counters.talRounds = (p.counters.talRounds || 0) + 1;   // v27 修瑕：画符轮次从未计数，成就「画符千张」永不可解锁
-    const costMult = 1 + Math.min(4, (p._drawCount - 1) * 0.5);
+    const costMult = 1 + Math.min(4, (p._drawCount - 1) * 0.75);   // v29：递增斜率 0.5→0.75（符修一家独大削幅，不砍死职业）
     const cost = Math.round(this.drawCost(p) * costMult);
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足，置不起朱砂灵纸'); return; }
     Time.add(1);

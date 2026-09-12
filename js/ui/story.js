@@ -108,7 +108,7 @@ const Story = {
     if (!c) return;
     if (this.twComplete()) return;   // v21 逐字未完：首次点击先补全本页
     const prev = c.scenes[c.idx];
-    if (prev && prev.t === 'montage' && prev.days) Time.add(prev.days);   // 岁月流逝过场
+    if (!c.readonly && prev && prev.t === 'montage' && prev.days) Time.add(prev.days);   // 岁月流逝过场（v29 修瑕：回顾重读不再真实推进游戏日）
     c.idx++;
     if (c.idx >= c.scenes.length) return this.finish();
     while (c.idx < c.scenes.length && !this._vis(c.scenes[c.idx])) c.idx++;   // 旗标条件跳过
@@ -187,7 +187,35 @@ const Story = {
       },
     } });
   },
+  /** v29：跳过本章——快速翻至章末（抉择/战斗自停，决策仍须亲断） */
+  skip() {
+    if (!this.cur || this.cur.readonly) return;
+    let guard = 0;
+    while (this.cur && guard++ < 300) {
+      const sc = this.cur.scenes[this.cur.idx];
+      if (sc && (sc.t === 'choice' || sc.t === 'battle')) break;
+      this.next();
+    }
+    this.stopAuto();
+    if (this.cur) this.render();
+  },
+  /** v29：自动播放——每 2.4s 自动翻页，遇抉择/战斗/章末自停 */
+  toggleAuto() {
+    if (this._auto) { this.stopAuto(); this.render(); return; }
+    this._auto = setInterval(() => {
+      const c = this.cur;
+      if (!c || c.readonly) return this.stopAuto();
+      const sc = c.scenes[c.idx];
+      if (sc && (sc.t === 'choice' || sc.t === 'battle')) { this.stopAuto(); this.render(); return; }
+      this.next();
+      if (!this.cur) this.stopAuto();
+    }, 2400);
+    this.next();
+    if (!this.cur) this.stopAuto(); else this.render();
+  },
+  stopAuto() { if (this._auto) { clearInterval(this._auto); this._auto = null; } },
   finish() {
+    this.stopAuto();
     const c = this.cur;
     this.cur = null;
     this.twComplete();   // v21 清理逐字计时器
@@ -280,7 +308,10 @@ const Story = {
       <div class="story-body">${body}</div>
       ${sc.t === 'choice' || sc.t === 'battle' ? '' : `<div class="story-foot">
         <span class="story-page">${c.idx + 1} / ${c.scenes.length}</span>
-        <button class="btn btn-primary" data-action="story-next">${c.readonly ? '合 上' : (last ? '终 ✦' : '继 续 ▸')}</button>
+        <span style="display:flex;gap:8px;align-items:center">
+          ${c.readonly ? '' : `<button class="btn btn-sm" data-action="story-auto">${this._auto ? '⏸ 自动中' : '▶ 自动'}</button><button class="btn btn-sm" data-action="story-skip" title="快速翻至章末，抉择与战斗处自停">⏭ 跳过本章</button>`}
+          <button class="btn btn-primary" data-action="story-next">${c.readonly ? '合 上' : (last ? '终 ✦' : '继 续 ▸')}</button>
+        </span>
       </div>`}
       ${c.readonly ? '<button class="story-close-x" data-action="story-close" title="关闭">✕</button>' : ''}`;
     // 旁白渐显

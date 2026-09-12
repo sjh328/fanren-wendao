@@ -87,7 +87,9 @@ const TowerSys = {
   /** 塔内守影：以本档妖兽池为底，按境界 + 层数深度缩放（词缀/习性天然继承） */
   foeFor(p, floor) {
     const target = Utils.clamp(p.realmIdx * 4 + Math.floor((floor - 1) / 2), 0, 60);
-    const id = Utils.pick(Object.keys(GameData.MONSTERS));
+    // v29 修瑕：按缩放后战力就近取形——此前全池随机，练气期会打出「塔影·雷狱主宰」的穿帮
+    const nearIds = Object.keys(GameData.MONSTERS).filter(k => Math.abs(GameData.MONSTERS[k].power - target) <= 4);
+    const id = Utils.pick(nearIds.length ? nearIds : Object.keys(GameData.MONSTERS));
     const e = buildMonster(id, target - GameData.MONSTERS[id].power);
     e.name = '塔影 · ' + e.name;
     const m = this.modsOf(p);

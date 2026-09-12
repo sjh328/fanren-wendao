@@ -80,9 +80,10 @@ const UI = {
     const st = Stat.compute(p);
     // v21：顶栏资源条——灵石三档 + 战力 + 主线章程，全局常驻一眼可读
     const stone = (nk, v) => `<span class="num-anim" data-nk="${nk}" data-fmt="fmt" data-nv="${v}">${Utils.fmtNum(v)}</span>`;
+    // v28：中/上品在窄屏收起（乾坤袋家资行有全量），单行顶栏不再溢出裁切
     const stoneChip = `<span class="res-chip res-stone" title="灵石 · 下品 / 中品 / 上品"><i class="rc-ico">◈</i>${stone('stones.low', p.stones.low)}`
-      + (p.stones.mid ? ` <i>·</i> ${stone('stones.mid', p.stones.mid)}` : '')
-      + (p.stones.high ? ` <i>·</i> ${stone('stones.high', p.stones.high)}` : '') + `</span>`;
+      + (p.stones.mid ? ` <i class="m-hide-inline">·</i> <span class="m-hide-inline">${stone('stones.mid', p.stones.mid)}</span>` : '')
+      + (p.stones.high ? ` <i class="m-hide-inline">·</i> <span class="m-hide-inline">${stone('stones.high', p.stones.high)}</span>` : '') + `</span>`;
     const chIdx = QuestSys.currentChapterIdx(p);
     const chapter = `<span class="res-chip res-chapter" title="主线进度 · 问道十章"><i class="rc-ico">卷</i>${chIdx + 1} / ${QuestSys.CHAPTERS.length} 章</span>`;
     const needTop = GameData.layerNeed(p.realmIdx, p.layer);
@@ -93,12 +94,17 @@ const UI = {
     // v27：声望徽记——声望自此真实参与悬赏赏格与买价，值得常驻一栏
     const repLv = (typeof RepSys !== 'undefined' && RepSys.level) ? RepSys.level(p) : null;
     const repChip = `<span class="res-chip res-rep" title="江湖声望：影响悬赏赏格与坊市买价">誉 ${p.reputation || 0}<i class="rc-sub">${repLv ? repLv.name : ''}</i></span>`;
+    // v28 移动端单行顶栏：身份徽章（道号+境界，点按开道途抽屉）；卷/誉/岁月在窄屏由 CSS 收进抽屉
+    const realmText = `${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}`;
+    const idChip = `<button class="res-chip m-id-chip" data-action="act-drawer" data-panel="left" title="道途 · 点击展开身份面板">
+      <i class="rc-ico">道</i><b class="mid-name">${Utils.esc(p.name)}</b><i class="mid-realm">${realmText}</i></button>`;
     this.setHTML(this.el['top-info'], `
-      <span class="top-group top-id">${chapter}</span>
-      <span class="top-group top-res">${stoneChip}${repChip}</span>
+      ${idChip}
+      <span class="top-group top-id m-hide">${chapter}</span>
+      <span class="top-group top-res">${stoneChip}<span class="m-hide-inline">${repChip}</span></span>
       ${miniBars}
-      <span class="top-group top-vit"><span class="res-chip res-power" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</span><span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${Math.floor(p.age)}岁 / 寿元${st.lifespan}</span></span>
-      <span class="top-meta2"><span class="save-dot"></span>已自动存档</span>`);
+      <span class="top-group top-vit"><span class="res-chip res-power" title="综合战力：攻防血速暴闪格加权"><i class="rc-ico">武</i>${Utils.fmtNum(Stat.power(p))}</span><span class="top-meta m-hide">${Time.labelLong(p)}</span><span class="top-meta2 m-hide${(st.lifespan - p.age) < st.lifespan * 0.2 ? ' life-warn' : ''}" title="寿元：余年不足两成时朱砂示警">${Math.floor(p.age)}岁 / 寿元${st.lifespan}</span></span>
+      <span class="top-meta2 m-hide"><span class="save-dot"></span>已自动存档</span>`);
   },
 
   /* ---------- 左侧状态面板（v14：身份卡 → 核心条 → 属性网格 → 道行状态 → 建议） ---------- */
@@ -120,12 +126,16 @@ const UI = {
       ? activeSets.map(s => `<div class="tip-line set-line" title="${s.text}">· <b class="hl">${s.name}</b> 已成套——${s.text}</div>`).join('')
       : '';
     const realmColor = GameData.REALM_AURA[p.realmIdx] || '#c9a86a';
+    // v28：身份卡补历程行——卷章/历时/声望自顶栏收拢于此（移动端单行顶栏后这里是唯一常驻处）
+    const chIdxS = (typeof QuestSys !== 'undefined') ? QuestSys.currentChapterIdx(p) : 0;
+    const repLvS = (typeof RepSys !== 'undefined' && RepSys.level) ? RepSys.level(p) : null;
     // v14 身份卡：名字居中 + 境界徽章 + 大道寿元
     const idCard = `
       <div class="id-card">
         <div class="id-name">${Utils.esc(p.name)}</div>
         <div class="id-row"><span class="realm-badge" style="--realm-c:${realmColor}">${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}</span></div>
         <div class="id-line"><span>大道 <b class="hl">${DaoSys.name(p)}</b></span><span>寿元 <b>${Math.floor(p.age)} / ${st.lifespan}</b></span></div>
+        <div class="id-line2">卷 ${chIdxS + 1} / ${QuestSys.CHAPTERS.length} · 历时 ${this.durText(Math.floor(p.day || 0))} · 誉 ${p.reputation || 0}${repLvS ? `（${repLvS.name}）` : ''}</div>
       </div>`;
     // v14 核心条：色点标题 + 大数值，进度一眼可读
     const coreBar = (label, cls, nk, val, max, maxText, fmt) => `
@@ -165,7 +175,7 @@ const UI = {
         <div class="stat-line"><span>闪避</span><b class="stat-detail" data-stat="dodge" title="点击查看构成" style="cursor:pointer">${st.dodge.toFixed(0)}% 🔍</b></div>
         <div class="stat-line"><span>格挡</span><b class="stat-detail" data-stat="block" title="点击查看构成" style="cursor:pointer">${st.block.toFixed(0)}% 🔍</b></div>
         <div class="stat-line"><span>气血构成</span><b class="stat-detail" data-stat="maxHp" title="点击查看构成" style="cursor:pointer">🔍 明细</b></div>
-        <div class="stat-line"><span>战力</span><b class="hl" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</b></div>
+        <div class="stat-line"><span>战力</span><b class="hl" title="综合战力：攻防血速暴闪格加权">武 ${Utils.fmtNum(Stat.power(p))}</b></div>
       </div>
       <div class="sec-title">道行状态</div>
       ${chipsHtml}
@@ -269,7 +279,9 @@ const UI = {
       gongfa: false,
     };
   },
-  /* ---------- 中央标签页 ---------- */
+  /* ---------- 中央标签页 ----------
+   * v28 重塑：移动端底栏 4 键常驻（修炼/问道/游历/坊市），其余收进「更多」底部面板；
+   * 桌面仍八键全显。锁定页签不再只渲染一把死锁——名字保留、加小锁角标，点了有解锁提示。 */
   renderTabs() {
     const tabs = [
       { id: 'cultivate', name: '修炼' },
@@ -285,17 +297,67 @@ const UI = {
     const htmls = tabs.map(t => {
       const dot = !!dots[t.id];
       const lock = Guide.tabLocked(t.id);   // v6：分步解锁
-      // v25 移动端：锁定页签只渲染锁形不渲染文字——底部导航 320px 也不再被撑爆
-      return `<button class="tab-btn ${Game.activeTab === t.id ? 'active' : ''} ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${t.id}" ${lock ? `title="${lock}"` : ''}>${lock ? '🔒' : `<i class="tab-name">${t.name}</i>`}${dot ? '<span class="dot"></span>' : ''}</button>`;
+      const mSheet = this.M_SHEET_TABS.includes(t.id) ? ' m-sheet' : '';
+      const inner = `${lock ? '<i class="tab-lock" aria-hidden="true">🔒</i>' : ''}<i class="tab-name">${t.name}</i>${dot ? '<span class="dot"></span>' : ''}`;
+      return `<button class="tab-btn ${Game.activeTab === t.id ? 'active' : ''} ${lock ? 'locked' : ''}${mSheet}" data-action="act-tab" data-tab="${t.id}" ${lock ? `title="${lock}"` : ''}>${inner}</button>`;
     });
-    // v12 页签分组：修炼·问道｜游历·江湖｜坊市·宗门｜功法
+    // v12 页签分组：修炼·问道｜游历·江湖｜坊市·宗门｜功法（桌面分隔线）
     const SEPS = new Set([1, 3, 5]);
     let tabsHtml = '';
     htmls.forEach((h, i) => {
       tabsHtml += h;
       if (SEPS.has(i) && i < htmls.length - 1) tabsHtml += '<span class="tab-sep"></span>';
     });
+    // v28：「更多」聚合键——四收拢页签任一有红点即亮
+    const moreDot = this.M_SHEET_TABS.some(id => dots[id]);
+    tabsHtml += `<button class="tab-btn m-more" data-action="act-more" title="洞府 / 江湖 / 宗门 / 功法 与各处直达">${moreDot ? '<span class="dot"></span>' : ''}<i class="tab-name">更 多</i></button>`;
     this.setHTML(this.el['tabs'], tabsHtml);
+  },
+  /** v28：移动端收进「更多」面板的页签 */
+  M_SHEET_TABS: ['cave', 'jianghu', 'sect', 'gongfa'],
+  /** v28：底部面板直达格（tab:sub 深链） */
+  M_QUICK_CELLS: [
+    { t: 'shop:bounty', name: '悬赏板' }, { t: 'shop:odd', name: '奇 市' },
+    { t: 'shop:market', name: '万宝阁' }, { t: 'shop:craft', name: '炼制坊' },
+    { t: 'shop:forge', name: '祭炼堂' }, { t: 'cave:farm', name: '灵 田' },
+    { t: 'cave:beast', name: '灵 兽' }, { t: 'map:realm', name: '秘 境' },
+    { t: 'map:world', name: '天 下' }, { t: 'map:tower', name: '天 塔' },
+  ],
+  /** v28：「更多」底部面板（移动端）——四大页签 + 十处直达，红点/锁定态与页签同源 */
+  renderMoreSheet() {
+    const dots = this.dots();
+    const names = { cave: '洞府', jianghu: '江湖', sect: '宗门', gongfa: '功法' };
+    const mains = this.M_SHEET_TABS.map(id => {
+      const lock = Guide.tabLocked(id);
+      const dot = !!dots[id];
+      return `<button class="sheet-main ${Game.activeTab === id ? 'active' : ''} ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${id}" ${lock ? `data-lock="${lock}"` : ''}>
+        <i class="tab-name">${names[id]}</i>${lock ? '<i class="tab-lock" aria-hidden="true">🔒</i>' : ''}${dot ? '<span class="dot"></span>' : ''}</button>`;
+    }).join('');
+    const quicks = this.M_QUICK_CELLS.map(c => {
+      const [tab, sub] = c.t.split(':');
+      const lock = Guide.tabLocked(tab);
+      const dot = !!dots[c.t];
+      return `<button class="sheet-cell ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${c.t}" ${lock ? `data-lock="${lock}"` : ''}>
+        <i class="tab-name">${c.name}</i>${lock ? '<i class="tab-lock" aria-hidden="true">🔒</i>' : ''}${dot ? '<span class="dot"></span>' : ''}</button>`;
+    }).join('');
+    return `<div class="sheet-title">✦ 云游诸处</div>
+      <div class="sheet-mains">${mains}</div>
+      <div class="sheet-sep"></div>
+      <div class="sheet-quick">${quicks}</div>
+      <div class="sheet-tip">· 锁定之处随境界渐次开启</div>`;
+  },
+  /** v28：开合「更多」面板（与抽屉共用遮罩，互斥） */
+  toggleMore(open) {
+    const el = document.getElementById('more-sheet');
+    if (!el) return;
+    const willOpen = open === undefined ? el.classList.contains('hidden') : !!open;
+    this.closeDrawers(willOpen ? { keepScrim: true } : {});
+    if (willOpen) {
+      this.setHTML(el, this.renderMoreSheet());
+      el.classList.remove('hidden');
+      requestAnimationFrame(() => el.classList.add('on'));
+      document.getElementById('drawer-backdrop')?.classList.add('on');
+    }
   },
 
   /* ---------- v22 页签内子页签（信息架构归一：大页签拆分栏，深链写法 tab:sub） ---------- */
@@ -452,10 +514,15 @@ const UI = {
     const rpTrack = Array.from({ length: 10 }, (_, r) => rpNode(r))
       .join('<span class="rp-line"></span>');
     // v25：仙途条横向滚动容器——渲染后自动把当前境界滚进视野（窄屏十境不再溢出裁切）
-    setTimeout(() => {
-      const cur = document.querySelector('#tab-content .rp-node.cur');
-      cur?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
-    }, 60);
+    // v29 修瑕：切页或境界变化时才把仙途条滚进视野——此前每次行动都强拽滚动打断阅读
+    if (Game._tabSwitched || Game._lastRpRealm !== p.realmIdx) {
+      Game._tabSwitched = false;
+      Game._lastRpRealm = p.realmIdx;
+      setTimeout(() => {
+        const cur = document.querySelector('#tab-content .rp-node.cur');
+        cur?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+      }, 60);
+    }
     return `
       <div class="card span2 realm-path-card">
         <div class="card-title">✦ 仙途 <span style="font-size:12px;color:var(--text-dim)">十境三十六层 · 步步登天</span></div>
@@ -481,7 +548,27 @@ const UI = {
         </div>
         ${AutoCult.active ? `<div class="tip-line" style="color:#e8c56a">· 自动修炼中：目标${AutoCult.target.label}，已获修为 +${Utils.fmtNum(Math.max(0, Guide.totalExp(p) - AutoCult.startExp))}。</div>` : ''}
         <div class="tip-line">· 修炼与闭关是修为的主要来源；丹药见效快，但丹毒超标会损伤根基。<br>· 每逢圆满（第4层）修为攒满，即可冲击下一个大境界。</div>
-      </div>${this.renderDailyCard()}${extra}`;
+      </div>${this.renderDailyCard()}${extra}${this.renderQuickGo()}`;
+  },
+
+  /* ---------- v28 诸处速达：常用目的地一行直达（修炼页尾部，红点透传） ---------- */
+  renderQuickGo() {
+    const dots = this.dots();
+    const cells = [
+      { t: 'shop:bounty', name: '悬赏板' }, { t: 'cave:farm', name: '灵田' },
+      { t: 'cave:beast', name: '灵兽' }, { t: 'map:realm', name: '秘境' },
+      { t: 'map:tower', name: '天塔' }, { t: 'map:world', name: '天下' },
+      { t: 'shop:market', name: '万宝阁' }, { t: 'shop:craft', name: '炼制坊' },
+      { t: 'shop:forge', name: '祭炼堂' }, { t: 'shop:odd', name: '奇市' },
+      { t: 'gongfa', name: '功法' }, { t: 'sect', name: '宗门' },
+    ];
+    return `<div class="card quick-go-card"><div class="card-title">✦ 诸处速达</div><div class="quick-go">
+      ${cells.map(c => {
+        const [tab] = c.t.split(':');
+        const lock = Guide.tabLocked(tab);
+        return `<button class="quick-go-btn ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${c.t}" ${lock ? `title="${lock}"` : ''}>${c.name}${dots[c.t] ? '<span class="dot"></span>' : ''}</button>`;
+      }).join('')}
+    </div></div>`;
   },
 
   /* ---------- v21 今日修行聚合卡：日常仪式一卡总览，一键直达 ---------- */
@@ -573,7 +660,7 @@ const UI = {
         <div class="gf-actions">
           <button class="btn btn-sm" data-action="act-beast-active" data-uid="${b.uid}">${isOn ? '歇 息' : '出 战'}</button>
           <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
-          <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${Bag.count('m_neidan') ? '' : 'disabled'}>喂内丹（${Bag.count('m_neidan')}）</button>
+          <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${(Bag.count('m_neidan') && b.level < 10) ? '' : 'disabled'}>${b.level >= 10 ? '十阶圆满' : `喂内丹（${Bag.count('m_neidan')}）`}</button>
           ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
           <details class="fold npc-more"><summary>照管 ▾</summary><div class="gf-actions" style="margin-top:6px">
             <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
@@ -956,7 +1043,9 @@ const UI = {
       .filter(id => (GameData.ITEMS[id].price || 0) > 0)
       .sort((a, b) => ShopSys.sellPrice(b) * (p.bag[b] || 0) - ShopSys.sellPrice(a) * (p.bag[a] || 0));
     const sellTotal = sellable.reduce((sum, id) => sum + ShopSys.sellPrice(id) * (p.bag[id] || 0), 0);
-    const sellRows = sellable.map(id => {
+    // v29：惰性渲染——超过 80 种只渲染前 80（低性能设备展开折叠区不再整列重排）
+    const SELL_CAP = 80;
+    const sellRows = sellable.slice(0, SELL_CAP).map(id => {
       const def = GameData.ITEMS[id];
       const sp = ShopSys.sellPrice(id);
       return `
@@ -972,8 +1061,8 @@ const UI = {
     const sellFold = sellable.length ? `
       <details class="fold shop-sell-fold" data-fold="shop-sell" ${Game.foldState['shop-sell'] ? 'open' : ''}>
         <summary>◈ 出售物品（${sellable.length} 种 · 可售总值 <b class="hl">${Utils.fmtNum(sellTotal)}</b> 灵石 ▾）</summary>
-        <div class="tip-line" style="margin:6px 0">· 四折回收${p.dao === 'pill' ? '，丹药另有五成加成' : ''}；全售需二次确认。凡品杂物可在乾坤袋「一键卖凡品」。</div>
-        ${sellRows}
+        <div class="tip-line" style="margin:6px 0">· 四折回收${p.dao === 'pill' ? '，丹药另有丹道加成' : ''}；全售需二次确认。凡品杂物可在乾坤袋「一键卖凡品」。</div>
+        ${sellRows}${sellable.length > SELL_CAP ? `<div class="tip-line" style="margin:6px 0">· 其余 ${sellable.length - SELL_CAP} 种贱价之物从略——可用「一键卖凡品」或逐类全售处理。</div>` : ''}
       </details>` : '<div class="tip-line">背包中暂无可售之物。</div>';
     return `
       <div class="card">
@@ -1359,13 +1448,36 @@ const UI = {
     return `
       <div class="card">
         <div class="card-title">✦ ${sect.name} <span class="tag safe">${sect.bonusText}</span>${elderBtn}</div>
-        <div class="card-desc">当前贡献：<b class="hl">${Utils.fmtNum(p.sect.contrib)}</b> 点。完成宗门任务可获得贡献与灵石。</div>
+        <div class="card-desc">当前贡献：<b class="hl">${Utils.fmtNum(p.sect.contrib)}</b> 点。完成宗门任务可获得贡献与灵石。${(() => {
+          // v29：职位线可视化——RANKS 加成真实生效却从未展示，玩家不知晋升为何物、长老令为何灰着
+          const rk = SectSys.rank(p);
+          const nxt = SectSys.rankNext(p);
+          if (!nxt) return `现任 <b class="hl">${rk.name}</b>——一宗柱石，位极人臣。`;
+          const pct = Utils.clamp(Math.round(p.sect.contrib / nxt.contribNeed * 100), 0, 100);
+          return `现任 <b class="hl">${rk.name}</b>——距【${nxt.name}】还差 <b>${Utils.fmtNum(nxt.contribNeed - p.sect.contrib)}</b> 贡献。<div class="bar" style="height:10px;margin-top:6px"><div class="bar-fill exp" style="width:${pct}%"></div><span class="bar-text">${Utils.fmtNum(p.sect.contrib)}/${Utils.fmtNum(nxt.contribNeed)}</span></div>`;
+        })()}</div>
         ${taskRows}
       </div>
       ${facSection}
       ${tourneyCard}
       <div class="card">
         <div class="card-title">✦ 贡献兑换</div>
+        ${(() => {
+          // v28 联动：贡献溢出的长老去处——听讲一日（日限一次，吃感悟溢出折算）
+          const today = Math.floor(p.day || 0);
+          const done = p.listenDay === today;
+          const afford = p.sect.contrib >= 300;
+          return `<div class="shop-row">
+          <div class="gf-info">
+            <div class="gf-name">听讲一日 <span style="color:var(--text-faint);font-size:12px">（可反复听讲）</span></div>
+            <div class="gf-desc">随长老听讲经义一日，突破感悟 +8（感悟满溢则化作修为）。${done ? '今日已听讲。' : ''}</div>
+          </div>
+          <div class="gf-actions">
+            <span class="price ${afford ? '' : 'lack'}">300贡献</span>
+            <button class="btn btn-sm" data-action="act-sect-listen" ${done || !afford ? 'disabled' : ''}>听讲</button>
+          </div>
+        </div>`;
+        })()}
         ${exRows}
       </div>`;
   },
@@ -1535,6 +1647,9 @@ const UI = {
     </div>`;
     const bagHtml = `
       <div class="panel-title">✦ 乾坤袋</div>
+      <div class="bag-wealth" title="家资一览：灵石三档 / 声望 / 门派贡献">
+        <span>◈ ${Bag.stonesText()}</span><span>誉 ${p.reputation || 0}</span>${p.sect ? `<span>贡献 <b>${p.sect.contrib}</b></span>` : ''}
+      </div>
       <div class="bag-tabs">${types.map(t => `<button class="bag-tab ${Game.bagTab === t.id ? 'active' : ''}" data-action="bag-tab" data-bagtab="${t.id}">${t.name}</button>`).join('')}</div>
       ${quick}
       <div class="bag-list">${rows || '<div class="bag-empty">—— 空空如也 ——</div>'}</div>`;
@@ -1559,22 +1674,28 @@ const UI = {
   /** v18：标记某区域需要重渲染 */
   markDirty(area) { this._dirty = this._dirty || {}; this._dirty[area] = true; },
 
-  /* ---------- v22 移动端抽屉：道途 / 乾坤袋 面板 ≤860px 收进侧滑抽屉 ---------- */
+  /* ---------- v22 移动端抽屉：道途 / 乾坤袋 面板 ≤860px 收进侧滑抽屉 ----------
+   * v28：抽屉与「更多」底部面板共用遮罩，closeDrawers 一并收口（keepScrim 供立即重开者防闪烁） */
   toggleDrawer(panel) {
     const id = panel === 'left' ? 'panel-left' : panel === 'right' ? 'panel-right' : null;
     if (!id) return;
     const el = document.getElementById(id);
     if (!el) return;
     const willOpen = !el.classList.contains('drawer-open');
-    this.closeDrawers();
+    this.closeDrawers(willOpen ? { keepScrim: true } : {});
     if (willOpen) {
       el.classList.add('drawer-open');
       document.getElementById('drawer-backdrop')?.classList.add('on');
     }
   },
-  closeDrawers() {
+  closeDrawers(opts = {}) {
     for (const id of ['panel-left', 'panel-right']) document.getElementById(id)?.classList.remove('drawer-open');
-    document.getElementById('drawer-backdrop')?.classList.remove('on');
+    const sheet = document.getElementById('more-sheet');
+    if (sheet && !sheet.classList.contains('hidden')) {
+      sheet.classList.remove('on');
+      setTimeout(() => { if (!sheet.classList.contains('on')) sheet.classList.add('hidden'); }, 240);
+    }
+    if (!opts.keepScrim) document.getElementById('drawer-backdrop')?.classList.remove('on');
   },
 
   /* ---------- v25 剧情沉浸态：移动端播放剧情时隐藏底部导航与顶栏（桌面样式不分叉，无感） ---------- */
@@ -1697,7 +1818,7 @@ const UI = {
           return `<div class="achv-row ${on ? 'on' : 'off'}">
             <div class="achv-main"><span class="achv-name">${on ? '✦' : '◇'} ${d.name}</span>${prog}
               <div class="achv-desc">${d.desc}</div></div>
-            <div class="achv-reward">${on ? '<span style="color:var(--ok)">已达成</span>' : Achieve.rewardText(d.reward)}</div>
+            <div class="achv-reward">${on ? '<span style="color:var(--ok)">已达成</span>' : Achieve.rewardText(Achieve.rewardOf(d, Game.player))}</div>
           </div>`;
         }).join('');
         const gotN = defs.filter(d => got[d.id]).length;

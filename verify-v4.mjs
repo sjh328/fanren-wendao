@@ -256,6 +256,7 @@ try {
     const p = Game.player;
     p.bag = { pill_juqi: 3, w_tiejian: 1, a_buyi: 1, z_taiji: 1 };
     p.stones.low = 150; p.stones.mid = 0; p.stones.high = 0;
+    window.__u9Gain = ShopSys.sellPrice('w_tiejian') + ShopSys.sellPrice('a_buyi');   // v29：卖价吃行情，期望按售时市价动态取
     UI.renderAll();
   });
   await sleep(150);
@@ -273,9 +274,10 @@ try {
   const afterSell = await page.evaluate(() => ({
     // 灵石有自动归并（100下品→1中品），按总价值核对
     total: Game.player.stones.low + Game.player.stones.mid * 100 + Game.player.stones.high * 10000,
+    gain: window.__u9Gain || 140,   // v29：卖价吃行情 ±20%，期望按售时市价动态取
     bag: Object.keys(Game.player.bag),
   }));
-  afterSell.total === 290 && !afterSell.bag.includes('w_tiejian') && !afterSell.bag.includes('a_buyi') && afterSell.bag.includes('z_taiji')
+  afterSell.total === 150 + afterSell.gain && !afterSell.bag.includes('w_tiejian') && !afterSell.bag.includes('a_buyi') && afterSell.bag.includes('z_taiji')
     ? pass(`U9 凡品已打包出售（灵石 150 → 总计 ${afterSell.total}，高品保留）`)
     : fail('U9 出售结果', JSON.stringify(afterSell));
 

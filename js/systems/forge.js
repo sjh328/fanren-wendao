@@ -229,7 +229,7 @@ const ForgeSys = {
     if (!p.benming) p.benming = { lv: 0 };
     if (p.benming.lv >= this.BENMING_MAX) { UI.toast('本命法宝已达十阶圆满'); return; }
     const lv = p.benming.lv;
-    const cost = Math.round(3000 * (lv + 1) * Math.pow(2.2, Math.min(6, p.realmIdx)));
+    const cost = Math.round(3000 * (lv + 1) * Math.pow(2.2, Math.min(8, p.realmIdx)));   // v29：封顶 6→8
     const ore = 5 + lv * 2;
     const ok = await UI.popup({
       title: `本命法宝喂养 · 第${lv + 1}阶`,

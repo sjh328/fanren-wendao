@@ -310,7 +310,7 @@ const Battle = {
       }
       if (fid === 'e_tstorm') { e._fxTstorm = true; e.atk = Math.round(e.atk * 0.7); }
     }
-    if (e.hpMax && !e.hp) e.hp = e.hpMax;
+    e.hp = e.hpMax;   // v29 修瑕：词缀改完血上限即回满——此前「守财」精英自带约 17% 隐形掉血
     this.log(`【${e.name}】词缀：${B.enemyFxIds.map(fid => { const d = GameData.ELITE_AFFIXES.find(x => x.id === fid); return d ? `◆${d.name}` : ''; }).join('')}——点其名旁 🔍 可查情报。`, 'log-warn');
   },
 
@@ -337,18 +337,29 @@ const Battle = {
     const debuffSkill = hasSkill ? e.skills.find(s => ['defdown', 'slow', 'weaken', 'poison', 'burn', 'bleed'].includes(s.kind)) : null;
     const controlSkill = hasSkill ? e.skills.find(s => ['stun', 'freeze'].includes(s.kind)) : null;
     const drainSkill = hasSkill ? e.skills.find(s => s.kind === 'drain') : null;
-    const roarSkill = hasSkill ? e.skills.find(s => s.kind === 'roar') : null;
+    // v29：咆哮每场限一次、治疗每场限两次——终结「叠攻/奶量螺旋」的拖沓对局
+    const roarSkill = hasSkill && !e._roared ? e.skills.find(s => s.kind === 'roar') : null;
+    if (healSkill) e._healCount = e._healCount || 0;
     if (e.charging) return { kind: 'finisher' };
-    if (hpPct < 0.25 && healSkill && Utils.chance(70)) return { kind: 'skill', sk: healSkill };
+    // v29：习性偏好——同一模板不再只改数值：速攻偏冲锋、铁壁偏坚守、狂战偏重击、狡诈偏削益、坚韧偏自愈
+    const pref = e.tpl;
+    if (pref === 'iron' && guardSkill && !e.guardRounds && Utils.chance(45)) return { kind: 'skill', sk: guardSkill };
+    if (pref === 'cunning' && debuffSkill && Utils.chance(40 + rageBonus)) return { kind: 'skill', sk: debuffSkill };
+    if (pref === 'tough' && healSkill && (e._healCount || 0) < 2 && hpPct < 0.6 && Utils.chance(45)) return { kind: 'skill', sk: healSkill };
+    if (pref === 'swift' && Utils.chance(35 + rageBonus)) return { kind: 'charge' };
+    if (pref === 'berserk') return { kind: 'strike', heavy: Utils.chance(55 + rageBonus) };
+    if (hpPct < 0.25 && healSkill && (e._healCount || 0) < 2 && Utils.chance(70)) return { kind: 'skill', sk: healSkill };
     if (hpPct < 0.35 && guardSkill && !e.guardRounds && Utils.chance(60)) return { kind: 'skill', sk: guardSkill };
     if (playerBuffed && debuffSkill && Utils.chance(50 + rageBonus)) return { kind: 'skill', sk: debuffSkill };
     if (playerLowHp && drainSkill && Utils.chance(50 + rageBonus)) return { kind: 'skill', sk: drainSkill };
     if (!playerLowHp && controlSkill && !StatusFx.has(B.myFx, 'stun') && Utils.chance(35 + rageBonus)) return { kind: 'skill', sk: controlSkill };
     if (hpPct < 0.5 && !e.raged && roarSkill && Utils.chance(45 + rageBonus)) return { kind: 'skill', sk: roarSkill };
     if (hasSkill && Utils.chance(50 + rageBonus)) {
-      const total = e.skills.reduce((s, x) => s + (x.w || 1), 0);
-      let r = Math.random() * total, sk = e.skills[e.skills.length - 1];
-      for (const s of e.skills) { r -= (s.w || 1); if (r <= 0) { sk = s; break; } }
+      const pool2 = e.skills.filter(s => !((s.kind === 'roar' && e._roared) || (s.kind === 'heal' && (e._healCount || 0) >= 2)));
+      if (!pool2.length) return { kind: 'strike', heavy: Utils.chance(30) };
+      const total = pool2.reduce((s, x) => s + (x.w || 1), 0);
+      let r = Math.random() * total, sk = pool2[pool2.length - 1];
+      for (const s of pool2) { r -= (s.w || 1); if (r <= 0) { sk = s; break; } }
       return { kind: 'skill', sk };
     }
     if (Utils.chance((e.elite ? 30 : 20) + rageBonus)) return { kind: 'charge' };
@@ -519,6 +530,7 @@ const Battle = {
       }
       if (dotDmg > 0) {
         p.hp = Math.max(0, p.hp - dotDmg);
+        B.stats.in += dotDmg;   // v29 修瑕：DOT 计入承受伤害（无伤胜/结算口径）
         this.pushFloat('me', `-${dotDmg}`, 'dmg');
         parts.push(`（毒火蚀体，气血 -${dotDmg}）`);
       }
@@ -575,7 +587,7 @@ const Battle = {
         const daoTier = DaoSys.tierLevel(p);
         const enSpd = this.enSpd(B.enemy);
         // v10 剑心六境·剑仙境：普攻必中
-        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)) + (B.fogDodge || 0), 2, 40);
+        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)) + (B.fogDodge || 0) + (B.enemy.dodge || 0), 2, 40);   // v29：敌方闪避自此生效（原死属性）
         if (Utils.chance(miss)) {
           this.log(`你奋力一击，却被 ${B.enemy.name} 敏捷地避开了！`);
           this.pushFloat('enemy', '闪避', 'miss');
@@ -691,7 +703,7 @@ const Battle = {
         // v20 雨天：雷系法诀 +20%
         if (B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain' && /雷/.test(def.name)) power *= 1.2;
         if (sk.kind === 'damage') {
-          const miss = Utils.clamp(3 + (this.enSpd(B.enemy) - this.mySpd(st)), 2, 35);
+          const miss = Utils.clamp(3 + (this.enSpd(B.enemy) - this.mySpd(st)) + (B.enemy.dodge || 0), 2, 35);   // v29：敌方闪避生效
           if (Utils.chance(miss)) {
             this.log(`你施展【${sk.name}】，却被对方堪堪避过！`);
             this.pushFloat('enemy', '闪避', 'miss');
@@ -1165,12 +1177,14 @@ const Battle = {
         this.log(`【${sk.name}】${e.name} 硬甲铿锵——防御大增（+${sk.def || 40}%），持续 ${sk.rounds || 2} 回合！`, 'log-warn');
       },
       roar: () => {
+        e._roared = true;   // v29：每场限一次
         e.atk = Math.round(e.atk * (1 + (sk.atk || 25) / 100));
         this.pushFloat('enemy', '咆哮', 'crit');
         this.log(`【${sk.name}】${e.name} 发出震天咆哮——攻击提升${sk.atk || 25}%！`, 'log-warn');
         Ambience.sfx('rage');
       },
       heal: () => {
+        e._healCount = (e._healCount || 0) + 1;   // v29：每场限两次
         const healed = Math.max(1, Math.round(e.hpMax * (sk.pct || 15) / 100));
         e.hp = Math.min(e.hpMax, e.hp + healed);
         this.pushFloat('enemy', `+${healed}`, 'heal');
@@ -1199,6 +1213,7 @@ const Battle = {
     else if (speciesRel < 0) dmg *= 0.85;
     const crit = Utils.chance(e.crit);
     if (crit) dmg *= 1.6;
+    const preMit = dmg;   // v29：总减伤封顶锚点（攻防/克制/暴击之后）
     const blocked = Utils.chance(st.block);
     if (blocked) dmg *= 0.45;
     if (B.defending) dmg *= 0.4;
@@ -1210,6 +1225,8 @@ const Battle = {
     // v10 境界特性 · 金丹护体：单次伤害超过三成气血上限时减免两成
     let guarded = false;
     if (p.realmIdx >= 2 && dmg > st.maxHp * 0.3) { dmg *= 0.8; guarded = true; }
+    // v29：多层减伤连乘曾可趋近零伤——总减免封顶 85%，防御流仍强但不再无敌
+    dmg = Math.max(preMit * 0.15, dmg);
     dmg = Math.max(1, Math.round(dmg));
     p.hp = Math.max(0, p.hp - dmg);
     B.stats.in += dmg;   // v19 统计
@@ -1452,7 +1469,10 @@ const Battle = {
           ${srcTxt ? `<div class="tip-line">· 伤害构成：${srcTxt}</div>` : ''}
           <div class="tip-line">· 终局真元 ${B.zhenyuan || 0}/${B.zmax || 6}</div>`;
         el.appendChild(box);
-        setTimeout(() => { box.remove(); }, 2600);
+        box.style.cursor = 'pointer';
+        box.title = '点击关闭';
+        box.addEventListener('click', () => box.remove());
+        setTimeout(() => { box.remove(); }, 5000);   // v29：2.6s→5s 且点击可提前关——结算卡曾一闪即焚无从细看
       }
     }
     Log.add(`你击败了 <b>${B.enemy.name}</b>，获得修为 ${Utils.fmtNum(expGain)}、灵石 ${Utils.fmtNum(stoneGain)}${drops.length ? `、${drops.join('、')}` : ''}${p.dao === 'demonic' ? `，并吞噬其精元（修为额外 +${Utils.fmtNum(Math.round(expGain * (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 1 ? 0.3 : 0.2)))}）` : ''}。`, 'gain');

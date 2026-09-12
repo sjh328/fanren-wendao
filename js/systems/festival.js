@@ -32,7 +32,8 @@ const FestivalSys = {
         Log.add('（离线错过灯会——你隔日对着记忆里的谜面想了想，也算略有所得。突破感悟 +2）', 'info');
         return;
       }
-      const right = Utils.chance(50);
+      // v28 联动：灯谜正误率吃有效悟性（40 + 悟性×2，封顶 85）——读得多，猜得准
+      const right = Utils.chance(Math.min(85, 40 + Stat.compOf(p) * 2));
       const ans = await UI.popup({
         title: '上元灯会 · 灯谜',
         html: '一盏走马灯下悬着谜面：「白日隐形，夜里提灯，照尽人间不平。——打一修行之物。」',

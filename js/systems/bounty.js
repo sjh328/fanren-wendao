@@ -58,6 +58,11 @@ const BountySys = {
     const t = B.list[idx];
     if (!t || t.progress < t.need) return;
     let r = this.rewards(p);
+    // v29 修瑕：收材料悬赏的赏格兜底——此前境界 0 交 3~6 个一阶材料（卖店值 72~240）只赏 60 灵石，交悬赏不如摆摊
+    if (t.type === 'collect') {
+      const matValue = ShopSys.sellPrice(t.target) * t.need;
+      r.stones = Math.max(r.stones, Math.round(matValue * 2));
+    }
     // v27 联动：声望赏格真正入账——此前 UI 标注 ×1.15/×1.3/×1.5 而实发从未乘算
     const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
     if (repBonus > 1) r = { stones: Math.round(r.stones * repBonus), contrib: Math.round(r.contrib * repBonus) };

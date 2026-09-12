@@ -23,11 +23,12 @@ const BeastSys = {
     const slotFull = p.beasts.list.length >= this.maxSlots(p);
     const diff = (e.power - (p.realmIdx * 4 + p.layer)) * 5;
     const tameSkill = p.tameSkill || 0;
-    const rate = Utils.clamp(45 + p.attrs.luck * 2 - diff + Math.floor(tameSkill / 10), 8, 90);
+    const luckEff = Stat.compute(p).luck;   // v28 联动：装备福缘（本命法宝等）同样助驯
+    const rate = Utils.clamp(45 + luckEff * 2 - diff + Math.floor(tameSkill / 10), 8, 90);
     const ok = await UI.popup({
       title: `驯服 · ${e.name}`,
       html: `${e.name} 已力竭，野性渐敛。你缓缓探出神识，以灵力温沟通其灵智……<br>
-        · 成功率 <b class="hl">${rate.toFixed(0)}%</b>（福缘 ${p.attrs.luck}${diff > 0 ? `，境界压制 -${diff}` : ''}）<br>
+        · 成功率 <b class="hl">${rate.toFixed(0)}%</b>（福缘 ${luckEff}${diff > 0 ? `，境界压制 -${diff}` : ''}）<br>
         ${slotFull ? `<span class="neg">兽栏已满（${this.maxSlots(p)} 位）——驯服将放归野外。</span>` : `兽栏余位：${this.maxSlots(p) - p.beasts.list.length}。`}`,
       options: [{ text: '尝试驯服', value: true, primary: true }, { text: '罢了，斩之', value: false }],
     });
@@ -201,7 +202,7 @@ const BeastSys = {
     if (!b) return;
     if (b.evolved) { UI.toast('它已完成蜕变'); return; }
     if (b.level < 10) { UI.toast('需修至十阶圆满方可蜕变'); return; }
-    const cost = Math.round(8000 * Math.pow(2.2, Math.min(5, p.realmIdx)));
+    const cost = Math.round(8000 * Math.pow(2.2, Math.min(8, p.realmIdx)));   // v29：封顶 5→8
     const ok = await UI.popup({
       title: `灵兽蜕变 · ${b.name}`,
       html: `${b.name} 已至十阶圆满，妖气内蕴——以五枚【妖兽内丹】引其蜕凡成王。<br>蜕变后：<b>战力 +5、被动 ×1.4、协战 ×1.3</b>，名称冠以「王」号。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span> 与【妖兽内丹】×5（持有 ${Bag.count('m_neidan')}）。`,
@@ -263,8 +264,9 @@ const BeastSys = {
     if (today < b.trip.until) { UI.toast(`尚未归来（还差 ${b.trip.until - today} 日）`); return; }
     const tier = Utils.clamp(Math.floor(b.power / 12) + Math.floor(b.trip.days / 6), 1, 4);
     const mat = Utils.pick(GameData.matsByTier(tier));
-    const qty = b.trip.days >= 7 ? 2 : 1;
-    const stones = Math.round((30 + b.power * 2) * b.trip.days * GameData.stoneEco(Math.min(4, p.realmIdx)) / 3);
+    // v28 联动：亲昵近六十的灵兽，外出更肯用心——多衔一份材料回来
+    const qty = (b.trip.days >= 7 ? 2 : 1) + ((b.bond || 0) >= 60 ? 1 : 0);
+    const stones = Math.round((30 + b.power * 2) * b.trip.days * GameData.stoneEco(Math.min(6, p.realmIdx)) / 3);   // v29：封顶 4→6
     Bag.addItem(mat, qty);
     Bag.addStones(stones);
     b.exp += b.trip.days * 120;
@@ -273,7 +275,7 @@ const BeastSys = {
     b.trip = null;
     Game.afterAction();
   },
-  /** v20 斗兽场：押注观战，胜得 1.8 倍彩头 */
+  /** v20 斗兽场：押注观战，胜得 1.6 倍彩头 */
   async arena() {
     const p = Game.player;
     const b = this.activeBeast(p);
@@ -286,19 +288,24 @@ const BeastSys = {
     ];
     const pick = await UI.popup({
       title: `斗兽场 · ${b.name}`,
-      html: `洞府演武场难得热闹—— ${b.name}（${b.level} 阶${b.evolved ? ' · 蜕变' : ''}）对阵山野妖王。<br>押它一注，胜者得 1.8 倍彩头。`,
+      html: `洞府演武场难得热闹—— ${b.name}（${b.level} 阶${b.evolved ? ' · 蜕变' : ''}）对阵山野妖王。<br>押它一注，胜者得 1.6 倍彩头。`,
       options: tiers.map((t, i) => ({ text: `${t.name}（${Utils.fmtNum(Math.round(t.base * eco))}灵石）`, value: i, primary: i === 0 })).concat([{ text: '看看就好', value: null }]),
     });
     if (pick == null) return;
     const cost = Math.round(tiers[pick].base * eco);
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     Time.add(1);
+    // v29 修瑕：对手同权重吃养成项（阶数/蜕变/亲昵）——此前 oppScore 只看 power，
+    // 养成后胜率远超盈亏点（赔付 1.8 倍），斗兽场成了正期望印钞机
     const oppPower = Utils.clamp(Math.round(b.power * Utils.randF(0.8, 1.3)), 1, 60);
+    const oppLevel = Math.max(1, b.level + Utils.rand(-1, 2));
+    const oppEvo = Utils.chance(Utils.clamp(15 + b.level * 7, 0, 55));
+    const oppBond = Utils.rand(0, Math.max(12, b.bond || 0));
     const myScore = b.power + b.level * 2 + (b.evolved ? 8 : 0) + (b.bond || 0) / 10 + Utils.rand(0, 10);
-    const oppScore = oppPower + Utils.rand(0, 14);
+    const oppScore = oppPower + oppLevel * 2 + (oppEvo ? 8 : 0) + oppBond / 10 + Utils.rand(0, 10);
     const win = myScore >= oppScore;
     if (win) {
-      const prize = Math.round(cost * 1.8);
+      const prize = Math.round(cost * 1.6);
       Bag.addStones(prize);
       p.counters.arenaWins = (p.counters.arenaWins || 0) + 1;
       Log.add(`⚔ 斗兽场——<b>${b.name}</b> 三招逼退对手，满场喝彩！彩头灵石 ${Utils.fmtNum(prize)}。（斗兽连胜 ${p.counters.arenaWins} 场）`, 'gain');

@@ -456,7 +456,8 @@ const QuestSys = {
     const q = p.quest || { bonus: {} };
     return this.CHAPTERS
       .map((def, i) => ({ def, i }))
-      .filter(({ def, i }) => i < Math.min(q.ch, this.CHAPTERS.length - 1) && def.bonus && !(q.bonus || {})[def.id] && this.bonusDone(def, p));
+      // v29 修瑕：补领上限含终章 c10——原上限减一，先通关再补领的「塔顶之风」永久不可得
+      .filter(({ def, i }) => i < Math.min(q.ch, this.CHAPTERS.length) && def.bonus && !(q.bonus || {})[def.id] && this.bonusDone(def, p));
   },
   /** v24 百科新词条解锁提示（story markSeen 后调用） */
   loreToast(sid) {

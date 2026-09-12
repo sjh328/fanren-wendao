@@ -53,7 +53,8 @@ const CaveSys = {
   visitorEvent(p, auto = false) {
     if (!p.cave || p.cave._visitorDay === Math.floor(p.day)) return;
     p.cave._visitorDay = Math.floor(p.day);
-    if (!Utils.chance(15)) return;
+    // v28 联动：福缘深厚者，来访更频（气运每点 +0.5% 触发率）
+    if (!Utils.chance(15 * (typeof KarmaSys !== 'undefined' && KarmaSys.goodEventMult ? KarmaSys.goodEventMult(p) : 1))) return;
     const events = [
       { text: '一位散修前来拜访，与你论道半日，颇有收获。（感悟 +2）', fn: () => { p.insight = Math.min(100, (p.insight || 0) + 2); } },
       { text: '一只灵鹤衔来一枚灵果，落在你的洞府门前。（灵芝 +1）', fn: () => { Bag.addItem('m_lingzhi', 1); } },
@@ -74,6 +75,19 @@ const CaveSys = {
         const st2 = NpcSys.state(p, fid);
         if (st2) { st2.rel = Utils.clamp(st2.rel + 2, -100, 100); NpcSys.mem(p, fid, 'story', '洞府来访'); }
       } });
+      // v28 联动：莫逆之交（rel≥60）登门备厚礼——交情深度第一次反哺洞府日常
+      const bestie = friendIds.map(id => p.npcs[id]).find(s2 => s2.rel >= 60);
+      if (bestie) {
+        const bid = friendIds.find(id => p.npcs[id].rel >= 60);
+        const bnd = NpcSys.def(bid);
+        if (bnd) events.push({ text: `${bnd.name} 携厚礼远道而来——莫逆之交，不寻常礼。（上品灵材 ×1、灵石若干）`, fn: () => {
+          const st2 = NpcSys.state(p, bid);
+          if (st2) { st2.rel = Utils.clamp(st2.rel + 3, -100, 100); NpcSys.mem(p, bid, 'story', '厚礼登门'); }
+          const tier = Utils.clamp(Math.floor(p.realmIdx / 2) + 2, 1, 5);
+          Bag.addItem(Utils.pick(GameData.matsByTier(tier)), 1);
+          Bag.addStones(Math.round(80 * GameData.stoneEco(p.realmIdx)));
+        } });
+      }
     }
     const ev = Utils.pick(events);
     ev.fn();
@@ -107,7 +121,7 @@ const CaveSys = {
     const today = Math.floor(p.day || 0);
     if (p.cave._springDay === today) return;
     p.cave._springDay = today;
-    const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(4, p.realmIdx)));
+    const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(6, p.realmIdx)));   // v29：封顶 4→6，后期灵泉不再是摆设
     Bag.addStones(gain);
     if (!auto) Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。`, 'gain');
   },

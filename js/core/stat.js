@@ -134,7 +134,8 @@ const Stat = {
       pillPct: (sb.pillPct || 0) + (pl.pillPct || 0),
       poisonReduce: sb.poisonReduce || 0,
       shopDiscount: sb.shopDiscount || 0,
-      lifespan: GameData.LIFESPAN[p.realmIdx],
+      // v29 天年：折寿扣减 + 延寿丹增益（下限 60，延寿不超该境基准——增益入 p.lifeGain）
+      lifespan: Math.max(60, GameData.LIFESPAN[p.realmIdx] - (p.lifeCut || 0) + (p.lifeGain || 0)),
     };
   },
   /** 防御减伤后的伤害期望值 */
@@ -169,11 +170,11 @@ const Stat = {
     }[key] || 0;
     const src = [
       { name: '基础（先天+境界）', v: base },
-      { name: '功法' + (this.activeDaoYun(p).length ? '（含道韵/奥义）' : ''), v: key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' ? pctOf(gf, key) : key.endsWith('Pct') || key === 'maxHp' || key === 'maxMp' ? (key === 'maxHp' ? pctOf(gf, 'hpPct') : key === 'maxMp' ? pctOf(gf, 'mpPct') : key === 'speed' ? pctOf(gf, 'spdPct') : pctOf(gf, key + 'Pct')) : pctOf(gf, key) },
-      { name: '装备（强化/词缀/套装）', v: key === 'maxHp' ? (eq.hp || 0) + pctOf(eq, 'hpPct') : key === 'maxMp' ? (eq.mp || 0) + pctOf(eq, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'luck' ? pctOf(eq, key) : key === 'speed' ? (eq.spd || 0) + pctOf(eq, 'spdPct') : pctOf(eq, key === 'atk' || key === 'def' ? key : key + 'Pct') },
-      { name: '宗门与职位', v: key === 'atk' || key === 'def' ? pctOf(sb, key + 'Pct') : key === 'maxHp' ? pctOf(sb, 'hpPct') : key === 'maxMp' ? pctOf(sb, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' || key === 'luck' ? pctOf(sb, key) : 0 },
+      { name: '功法' + (this.activeDaoYun(p).length ? '（含道韵/奥义）' : ''), v: key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' ? pctOf(gf, key === 'cultPct' ? 'cult' : key) : key.endsWith('Pct') || key === 'maxHp' || key === 'maxMp' ? (key === 'maxHp' ? pctOf(gf, 'hpPct') : key === 'maxMp' ? pctOf(gf, 'mpPct') : key === 'speed' ? pctOf(gf, 'spdPct') : pctOf(gf, key + 'Pct')) : pctOf(gf, key) },
+      { name: '装备（强化/词缀/套装）', v: key === 'maxHp' ? (eq.hp || 0) + pctOf(eq, 'hpPct') : key === 'maxMp' ? (eq.mp || 0) + pctOf(eq, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'block' || key === 'cultPct' || key === 'stonePct' || key === 'luck' ? pctOf(eq, key === 'cultPct' ? 'cult' : key) : key === 'speed' ? (eq.spd || 0) + pctOf(eq, 'spdPct') : pctOf(eq, key === 'atk' || key === 'def' ? key : key + 'Pct') },
+      { name: '宗门与职位', v: key === 'atk' || key === 'def' ? pctOf(sb, key + 'Pct') : key === 'maxHp' ? pctOf(sb, 'hpPct') : key === 'maxMp' ? pctOf(sb, 'mpPct') : key === 'crit' || key === 'dodge' || key === 'cultPct' || key === 'stonePct' || key === 'pillPct' || key === 'luck' ? pctOf(sb, key === 'cultPct' ? 'cult' : key) : 0 },
       { name: '大道与道境', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' ? pctOf(dao, key === 'maxHp' ? 'hpPct' : key === 'maxMp' ? 'mpPct' : key + 'Pct') : 0 },
-      { name: '灵兽（含护持）', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(beastPass, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(beastPass, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
+      { name: '灵兽（含护持）', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(beastPass, key === 'cultPct' ? 'cult' : key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(beastPass, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '道心烙印', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(dx, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(dx, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '个人线', v: key === 'crit' || key === 'dodge' || key === 'pillPct' ? pctOf(pl, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(pl, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '洞府（聚灵/藏宝/演武）', v: key === 'cultPct' ? ((p.cave && p.cave.lv) || 0) * 4 : key === 'stonePct' ? (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3) : key === 'atk' || key === 'def' ? (((p.cave && p.cave.builds && p.cave.builds.train) || 0) * 2) : 0 },

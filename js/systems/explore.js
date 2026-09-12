@@ -186,7 +186,7 @@ const EventSys = {
       const gain = Math.round(200 * GameData.eco(p.realmIdx));
       Cultivate.addExp(p, gain);
       Bag.addItem('m_gupian', 1);
-      p.insight = Math.min(100, p.insight + 8);
+      Cultivate.addInsight(p, 8);   // v28：满百溢出折算修为
       Log.add(`冥冥牵引之下，你寻到一处依稀熟悉的洞府——那是<b>前世</b>你埋藏机缘之地！修为 +${Utils.fmtNum(gain)}、上古法宝碎片 ×1、突破感悟 +8。`, 'gain');
       return;
     }
@@ -392,7 +392,7 @@ const EventSys = {
       }
     } else {
       const cost = Math.round(8 * GameData.stoneEco(p.realmIdx));
-      const free = p.attrs.luck >= 7 && Utils.chance(30);
+      const free = Stat.compute(p).luck >= 7 && Utils.chance(30);   // v28 联动：装备福缘亦算数
       Log.add('一位背药篓的妙手郎中坐在道旁，正在整理草药。', 'event');
       if (free) {
         p.hp = Stat.compute(p).maxHp; p.mp = Stat.compute(p).maxMp;

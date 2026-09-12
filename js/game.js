@@ -100,6 +100,13 @@ const Game = {
       if (amb && !amb.classList.contains('hidden')) { amb.classList.add('hidden'); return; }
       const dao = document.getElementById('dao-modal');
       if (dao && !dao.classList.contains('hidden')) dao.classList.add('hidden');
+      // v29：只读剧情（问道录回顾）随 ESC 合上
+      const storyM = document.getElementById('story-modal');
+      if (storyM && !storyM.classList.contains('hidden') && typeof Story !== 'undefined' && Story.cur && Story.cur.readonly) { Story.close(); return; }
+      // v28：更多面板 / 抽屉随 ESC 收起
+      const sheet = document.getElementById('more-sheet');
+      if (sheet && !sheet.classList.contains('hidden')) { UI.toggleMore(false); return; }
+      UI.closeDrawers();
     });
     // v20 页签快捷键：Q 修炼 / W 问道 / E 洞府 / R 游历 / T 江湖 / A 坊市 / S 宗门 / D 功法
     document.addEventListener('keydown', (e) => {
@@ -112,7 +119,13 @@ const Game = {
     });
     // 关页前自动存档
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden' && Game.player && !Game.player.dead) Save.autoSave(true);
+      if (document.visibilityState === 'hidden') {
+        if (Game.player && !Game.player.dead) Save.autoSave(true);
+        // v28：后台页签省电——隐藏时停古琴循环，回前台续上
+        if (typeof Ambience !== 'undefined' && Ambience.musicOn) Ambience.stopMusic();
+      } else {
+        if (typeof Ambience !== 'undefined' && Ambience.musicOn && Game.player && !document.hidden) Ambience.startMusic();
+      }
     });
     window.addEventListener('beforeunload', () => {
       if (Game.player && !Game.player.dead) Save.autoSave(true);
@@ -140,8 +153,14 @@ const Game = {
     Log.clear();
     Log.add(`天地灵气复苏之年，凡俗少年 <b>${Utils.esc(name)}</b> 得了一册残缺功法，自此踏上仙途。`, 'system');
     Log.add('（提示：先在后山「游历」磨砺，或就地「修炼」积攒修为。遇到不懂的可点菜单里的「玩法说明」。）', 'info');
-    QuestSys.showStory(0);   // v11：主线第一章开篇叙事
-    if (!this.player.flags.tutorialDone) Tutorial.show();
+    // v29 修瑕：教程(z140)曾压着第一章剧情(z135)双层叠开——改为教程完毕再开剧情
+    if (!this.player.flags.tutorialDone) {
+      Tutorial.onDone = () => QuestSys.showStory(0);
+      Tutorial.show();
+      // v29 修瑕：show() 早退（本机已看过教程）时 onDone 悬空——立即接力开剧情
+      if (typeof Tutorial.onDone === 'function') { const cb = Tutorial.onDone; Tutorial.onDone = null; cb(); }
+    }
+    else QuestSys.showStory(0);   // v11：主线第一章开篇叙事
     Save.autoSave();
     if (slot !== 'auto') Save.write(slot, this.player);
   },
@@ -284,11 +303,20 @@ const Game = {
     p.dead = true;
     Save.write('auto', p);   // 直接写盘：autoSave 会跳过已死亡角色，此处须落盘死亡标记
     Log.add('油尽灯枯，你的道途走到了尽头……', 'loss');
-    await UI.popup({
-      title: '✦ 道消身殒 ✦',
-      html: `寿元耗尽，天道无情。<br><br>${Utils.esc(p.name)}，${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}修士，享年 ${p.age} 岁。<br><br>此尘缘已了，愿君来世再问大道。`,
-      options: [{ text: '重返起点', value: true, primary: true }],
+    // v29 天年：坐化不再是一堵墙——可兵解转世（寿满天年额外 +1 印记），就此终了亦可
+    const choice = await UI.popup({
+      title: '✦ 坐 化 ✦',
+      html: `寿元耗尽，天道无情。<br><br>${Utils.esc(p.name)}，${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}修士，享年 ${p.age} 岁。<br><br>肉身虽朽，神魂尚清——是散去修为、投胎再修一世，还是就此归于天地？<br><span class="tip-line">· 兵解转世：此世尽付东流，传承却得延续，且因<b>寿满天年</b>额外多得一枚轮回印记。</span>`,
+      options: [{ text: '兵解转世', value: 'reinc', primary: true }, { text: '就此终了', value: 'end' }],
     });
+    if (choice === 'reinc') {
+      const livesBefore = ReincarnationSys.readLegacy().lives || 0;
+      p.dead = false;   // 暂解死亡封档，允许转世流程写盘
+      await ReincarnationSys.open({ force: true, extraMarks: 1, deathNote: '坐化之时神魂不昧，轮回之门为你而开。' });
+      const done = Game.player && !Game.player.dead && (ReincarnationSys.readLegacy().lives || 0) > livesBefore;
+      if (done) return;   // 转世已成，继续新的一生
+      if (Game.player) Game.player.dead = true;   // 中途作罢：重新封档，不留「寿元尽而不死」的悬置态
+    }
     this.exitToStart();
   },
 
@@ -331,11 +359,12 @@ const Game = {
       // v26 页签滚动记忆：离开前记下滚动位置，回到该页时还原（长列表不再从头翻起）
       const tc = UI.el['tab-content'];
       if (tc) Game.scrollMem[Game.activeTab] = tc.scrollTop;
+      Game._tabSwitched = true;   // v29：供修炼页仙途条判断「本次渲染是切页」
       Game.activeTab = tab; UI.renderTabs(); UI.renderTabContent();
       if (tc) tc.scrollTop = Game.scrollMem[tab] || 0;
       // v20 情境 BGM：进秘境页/坊市页切换氛围（战斗/剧情情境各自接管）
       if (typeof Ambience !== 'undefined' && Ambience.musicOn && !Battle.active && !Story.active()) {
-        Ambience.setMood(tab === 'map' && this.player && this.player.dungeon ? 'secret' : tab === 'shop' ? 'market' : 'calm');
+        Ambience.setMood(tab === 'map' && Game.player && Game.player.dungeon ? 'secret' : tab === 'shop' ? 'market' : 'calm');   // v29 修瑕：箭头函数里 this≠Game，情境 BGM 曾永不切换
       }
       // 面板切换平滑过渡：短暂加动效类，避免生硬跳变
       const box = UI.el['tab-content'];
@@ -346,6 +375,9 @@ const Game = {
     /** v22 移动端抽屉：道途 / 乾坤袋 面板在 ≤860px 收进侧滑抽屉 */
     'act-drawer': (d) => UI.toggleDrawer(d.panel),
     'act-drawer-close': () => UI.closeDrawers(),
+    /** v28 移动端「更多」底部面板 */
+    'act-more': () => UI.toggleMore(),
+    'act-more-close': () => UI.toggleMore(false),
     'bag-tab': (d) => { Game.bagTab = d.bagtab; UI.renderBag(); },
     'bag-sort': (d) => { Game.bagSort = d.sort; UI.renderBag(); },   // v20 背包排序
     /* --- v4 日志工具 / 一键减负 --- */
@@ -408,6 +440,20 @@ const Game = {
     'act-task-claim': (d) => SectSys.claim(Number(d.i)),
     'act-task-submit': (d) => SectSys.submit(Number(d.i)),
     'act-exchange': (d) => SectSys.exchange(Number(d.i)),
+    /** v28 联动：宗门听讲一日——贡献 300 兑感悟 +8（日限一次；感悟满溢自动化作修为） */
+    'act-sect-listen': () => {
+      const p = Game.player;
+      if (!p.sect) return;
+      const today = Math.floor(p.day || 0);
+      if (p.listenDay === today) { UI.toast('今日已听讲，明日再来'); return; }
+      if (p.sect.contrib < 300) { UI.toast('贡献点不足'); return; }
+      p.sect.contrib -= 300;
+      p.listenDay = today;
+      const before = p.insight || 0;
+      Cultivate.addInsight(p, 8);
+      Log.add(`你随长老听讲经义一日${before >= 100 ? '，感悟圆融，余韵化作修为。' : '，顿悟处不少。（突破感悟 +8）'}`, 'gain');
+      Game.afterAction();
+    },
     /* --- 功法 --- */
     'act-study': (d) => GongfaSys.study(d.gf),
     'act-learn': (d) => GongfaSys.learn(d.item),
@@ -570,6 +616,8 @@ const Game = {
     'story-choice': (d) => Story.choose(Number(d.storyChoice)),
     'story-battle': () => Story.startBattle(),
     'story-close': () => Story.close(),
+    'story-skip': () => Story.skip(),
+    'story-auto': () => Story.toggleAuto(),
     'quest-review': () => QuestSys.openArchive(),
     'quest-archive-tab': (d) => { UI.closePopup(); QuestSys.openArchive(d.tab); },
     'quest-reread': (d) => QuestSys.reread(d.sid),

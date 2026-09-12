@@ -4,7 +4,7 @@
  * ====================================================================== */
 const Tutorial = {
   steps: [
-    { icon: '☯', title: '欢迎踏入仙途', text: '这里是弱肉强食的修真界。你将以凡人之躯，一步步修炼至飞升成仙。<br>境界面板、行动操作、背包菜单都在眼前——且听我一一道来。', target: null },
+    { icon: '☯', title: '欢迎踏入仙途', text: `这里是弱肉强食的修真界。你将以凡人之躯，一步步修炼至飞升成仙。<br>${window.innerWidth <= 860 ? '面板都收在顶栏与底部页签里，随用随开' : '境界面板、行动操作、背包菜单都在眼前'}——且听我一一道来。`, target: null },
     { icon: '📜', title: '道途面板 · 你的根骨', text: '这里随时可查<b>境界修为</b>、气血灵力、先天四维（根骨 / 悟性 / 福缘 / 体魄）与战斗属性。<br>修为攒满即可突破，寿元耗尽则道消身殒。<br><span style="color:var(--text-faint)">手机上它收进了顶栏「☰ 道途」，点开即见。</span>', target: '#panel-left' },
     { icon: '⚔', title: '中央 · 行动与游历', text: '<b>修炼</b>积攒修为，<b>游历</b>历练搏杀，<b>坊市</b>置办丹药法宝，筑基后可拜入<b>宗门</b>。<br>大页签内还有<b>子页签</b>分栏：坊市分万宝阁/炼制坊/祭炼堂/悬赏板/奇市，洞府分洞府/灵田/灵兽，游历分舆图/秘境/天下。<br><span style="color:var(--text-faint)">手机上页签在屏幕底部，一指可达。</span>', target: '#panel-center' },
     { icon: '🎒', title: '乾坤袋 · 存档与行囊', text: '丹药、功法、法宝、材料分类收纳。法宝可装备，功法可参悟升级。<br>菜单中可随时存读档（共三档 + 自动存档）。<br><span style="color:var(--text-faint)">手机上它收进了顶栏「🎒 乾坤」。</span>', target: '#panel-right' },
@@ -40,6 +40,8 @@ const Tutorial = {
   prev() { if (this.idx > 0) { this.idx--; this.render(); } },
   finish() {
     document.getElementById('tutorial').classList.add('hidden');
+    // v29：完毕回调——开篇剧情由这里串起（此前与教程双层叠开）
+    if (typeof this.onDone === 'function') { const cb = this.onDone; this.onDone = null; cb(); }
     document.querySelectorAll('.tut-highlight').forEach(el => el.classList.remove('tut-highlight'));
     UI.closeDrawers();   // v25：教程毕抽屉自愈——开局第一屏永远从完整主界面开始
     try {

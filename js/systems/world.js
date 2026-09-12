@@ -4,7 +4,8 @@
  * ====================================================================== */
 const WorldSys = {
   freshWorld() {
-    return { nextEventYear: 100, pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null };
+    // v29：首次大事 32~40 年（原 100——多数周目寿元坐化前根本见不到，v20 四个新事件形同虚设）
+    return { nextEventYear: 32 + Utils.rand(0, 8), pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null };
   },
   year(p) { return Math.floor((p.day || 0) / 365) + 1; },
   isMagic(p, mapId) { const w = p.world; return !!(w && w.magicMaps && w.magicMaps.includes(mapId)); },
@@ -40,6 +41,8 @@ const WorldSys = {
   onYear(p, y) {
     const w = p.world;
     if (!w) return;
+    // v29：旧档一次性迁移——百年周期改短后，从未触发过大事的旧档重掷首次年份
+    if (w.nextEventYear > 50 && !(w.history && w.history.length)) w.nextEventYear = Math.min(w.nextEventYear, 32 + Utils.rand(0, 8));
     NpcSys.yearTick(p, y);
     if (w.preachUntil && y > w.preachUntil) { w.preachUntil = 0; Log.add('圣地讲道落幕，道音散入天地之间。', 'system'); }
     if (w.ruinsUntil && y > w.ruinsUntil) { w.ruinsUntil = 0; Log.add('上古秘境重归虚妄，机缘之门缓缓关闭。', 'system'); }
@@ -49,7 +52,7 @@ const WorldSys = {
       const rest = w.beastMaps.filter(b => y <= b.until);
       if (rest.length !== w.beastMaps.length) { w.beastMaps = rest; if (!rest.length) Log.add('兽潮退去，出山的群兽重归深山。', 'system'); }
     }
-    if (y >= w.nextEventYear) { w.nextEventYear = y + 100; this.fireEvent(p, y); }
+    if (y >= w.nextEventYear) { w.nextEventYear = y + 50 + Utils.rand(0, 20); this.fireEvent(p, y); }   // v29：此后 50~70 年一遇
   },
   fireEvent(p, y) {
     const w = p.world;
@@ -118,7 +121,7 @@ const WorldSys = {
     if (ev.type === 'preach') {
       const gain = Math.round(260 * GameData.eco(p.realmIdx));
       Cultivate.addExp(p, gain);
-      p.insight = Math.min(100, p.insight + 15);
+      Cultivate.addInsight(p, 15);   // v28：满百溢出折算修为
       Time.add(10);
       Log.add(`你在圣地一坐十日，听道音如饮甘露——修为 +${Utils.fmtNum(gain)}，突破感悟 +15。`, 'gain');
     } else if (ev.type === 'ruins') {

@@ -114,14 +114,19 @@ const DaoSys = {
     // v27 修瑕：转道清空原道 daoExp——此前重拾原道立即继承全部道境层数，「弃道重修」形同虚设
     if (p.daoExp) delete p.daoExp[p.dao];
     p.realmIdx -= 1; p.layer = 0; p.exp = 0; p.insight = 0; p.dao = null;
+    // v29 修瑕：转道名实相符——溢出折存/连败保底一并清去；自废道基折寿五年
+    p.expOverflow = 0; p.breakStreak = 0;
+    Time.cutLife(p, 5, '自废道基，逆转阴阳');
     const st = Stat.compute(p);
     p.hp = Math.min(p.hp, st.maxHp); p.mp = Math.min(p.mp, st.maxMp);
     Log.add('你自废道基，逆天转道！一声长啸中境界跌落、修为尽散——自此之后，前路重新来过。', 'warn');
     UI.toast('大道已弃，前尘尽消');
     Game.afterAction();
-    // 转道后重新叩问大道
-    await Utils.sleep(400);
-    this.openModal();
+    // 转道后重新叩问大道（v29 修瑕：跌落练气者不弹——「筑基解锁大道」门槛不可绕过）
+    if (p.realmIdx >= 1) {
+      await Utils.sleep(400);
+      this.openModal();
+    }
   },
   /** 体修不可修习玄级及以上法诀；v13 大道专属功法道途不合者不可修 */
   canLearnGongfa(p, def) {

@@ -1,5 +1,28 @@
 
 /* ======================================================================
+ * v24 图鉴收集闭环：五类图鉴每类收满 → 全属性永久 +1%（一次性，flags 记档）
+ * Achieve.check 之后由 Game.afterAction 调用，Meta 随档不重置，flags 自愈无需迁移。
+ * ====================================================================== */
+Codex.CAT_NAMES = { gongfa: '功法', artifact: '法宝', monster: '妖兽', npc: '奇人', realm: '秘境' };
+Codex.catGot = function (cat) { return Object.keys(Meta.data.codex[cat] || {}).length; };
+Codex.checkRewards = function () {
+  const p = Game.player;
+  if (!p || p.dead) return;
+  p.flags = p.flags || {};
+  let hit = '';
+  for (const cat of Object.keys(this.CAT_NAMES)) {
+    const total = this.catalog(cat).length;
+    if (!total || this.catGot(cat) < total || p.flags['codex_' + cat]) continue;
+    p.flags['codex_' + cat] = true;
+    p.codexBonus = (p.codexBonus || 0) + 1;
+    hit = this.CAT_NAMES[cat];
+    UI.announce(`✦ 图鉴大成 · ${hit} ✦`, 'gold');
+    Log.add(`✦ <b>${hit}图鉴</b>业已收录齐全——见多识广，道行精进（全属性永久 +1%，已累计 ${p.codexBonus} 类）。`, 'system');
+  }
+  if (hit) { Save.autoSave(); UI.renderAll(); }
+};
+
+/* ======================================================================
  * §2 静态数据
  * ====================================================================== */
 const GameData = {
@@ -68,70 +91,10 @@ const GameData = {
       FLEE_BASE: 45,              // 遁走基础成功率
     },
     // 突破
-    BREAKTHROUGH: {
-      BASE_CHANCE: 40,            // 基准成算
-      COMP_FACTOR: 2,             // 悟性系数
-      FORTUNE_FACTOR: 0.2,        // 气运系数
-      KARMA_FACTOR: 0.2,          // 孽障系数
-      BODY_MULT: 1.4,             // 体修渡劫加成
-      SWORD_MULT: 0.77,           // 剑修渡劫惩罚
-      STREAK_BONUS_MAX: 15,       // 连败保底上限
-      QUIET_CULT_BONUS: 15,       // 静修冲关加成
-      REALM_PENALTY_PER: 0.035,   // 每境界劫难折损
-      REALM_PENALTY_MIN: 0.5,     // 劫难折损下限
-      REALM_PENALTY_MAX: 1.0,     // 劫难折损上限
-      FAIL_HP_RETAIN: 0.1,        // 失败保留气血比例
-      FAIL_EXP_RETAIN: 0.6,       // 失败保留修为比例
-      FAIL_INSIGHT_GAIN: 15,      // 失败获得感悟
-      HARD_MULT: 0.82,            // 硬抗系数
-      ARTIFACT_MULT: 1.3,         // 法宝系数
-      HIDE_MULT: 1.0,             // 借地系数
-    },
     // 属性上限
-    STATS: {
-      ATTR_MAX: 10,               // 先天属性上限
-      CRIT_MAX: 75,               // 暴击率上限
-      DODGE_MAX: 35,              // 闪避率上限
-      BLOCK_MAX: 60,              // 格挡率上限
-      POISON_BASE: 60,            // 丹毒基础上限
-      POISON_BODY_FACTOR: 8,      // 体魄丹毒系数
-      POISON_REALM_BONUS: 20,     // 合道丹毒上限加成
-    },
     // 驯服
-    TAME: {
-      BASE_RATE: 45,              // 驯服基准成功率
-      LUCK_FACTOR: 2,             // 福缘系数
-      RATE_MIN: 8,                // 成功率下限
-      RATE_MAX: 90,               // 成功率上限
-      SKILL_FACTOR: 10,           // 驯熟练度每多少点+1%
-      HP_THRESHOLD: 0.2,          // 可驯服血量阈值
-      TAMEABLE: ['beast', 'snake', 'swarm', 'plant', 'element'],
-    },
     // 修炼
-    CULTIVATE: {
-      BASE_GAIN_FACTOR: 12,       // 基础修为：12 + 悟性*2
-      COMP_FACTOR: 2,
-      REALM_GROWTH: 4.6,          // 每境界修为放大系数
-      LAYER_GROWTH: 0.15,         // 每小层修为加成
-      SECLUDE_MULT: 1.6,          // 闭关倍率
-      SECLUDE_MAX_ROUNDS: 120,    // 最大闭关轮数
-      AUTO_CULT_SPEED: 280,       // 自动修炼间隔 ms
-      EVENT_CHANCE: 8,            // 灵机事件触发概率%
-      EVENT_SURGE_MULT: 2.5,      // 灵气潮涌倍率
-      EVENT_EPIPHANY_MULT: 1.5,   // 醍醐灌顶倍率
-      EVENT_HEART_MULT: 0.55,     // 心魔滋扰倍率
-    },
     // 经济
-    ECONOMY: {
-      ECO_BASE: 4.6,              // 修为经济基数
-      STONE_ECO_BASE: 3.8,        // 灵石经济基数
-      SELL_RATIO: 0.4,            // 出售价比例
-      SHOP_FLUCTUATION: 0.2,      // 坊市行情波动±
-      BOUNTY_DAYS: 2,             // 悬赏保留天数
-      BLACK_MARKET_INTERVAL: 30,  // 黑市间隔
-      BLACK_MARKET_DURATION: 3,   // 黑市持续天数
-      BLACK_MARKET_PRICE: 1.6,    // 黑市价格倍率
-    },
     // v18 种族克制：七族循环克制，克制时 +15%伤害
     SPECIES_COUNTER: {
       order: ['beast', 'plant', 'element', 'ghost', 'human', 'construct', 'swarm', 'snake'],
@@ -198,15 +161,15 @@ const GameData = {
    */
   ITEMS: {
     /* ---- 丹药 ---- */
-    pill_juqi:     { name: '聚气丹',   type: 'pill', grade: 0, price: 60,     desc: '凝聚散逸灵气，服之可得六十点修为。', use: { exp: 60 }, poison: 6 },
+    pill_juqi:     { name: '聚气丹',   type: 'pill', grade: 0, price: 130,     desc: '凝聚散逸灵气，服之可得六十点修为。', use: { exp: 60 }, poison: 6 },
     pill_ningqi:   { name: '凝气丹',   type: 'pill', grade: 1, price: 220,    desc: '筑基修士常备丹药，服之可得二百四十点修为。', use: { exp: 240 }, poison: 14 },
-    pill_peiyuan:  { name: '培元丹',   type: 'pill', grade: 1, price: 550,    desc: '温养元气，服之可得六百点修为。', use: { exp: 600 }, poison: 25 },
-    pill_pojing:   { name: '破境丹',   type: 'pill', grade: 2, price: 1800,   desc: '药力霸道，服之可得两千点修为，丹毒颇深。', use: { exp: 2000 }, poison: 45 },
-    pill_jiuzhuan: { name: '九转金丹', type: 'pill', grade: 3, price: 13000,  desc: '丹中极品，服之得一万五千点修为。', use: { exp: 15000 }, poison: 60 },
-    pill_taichu:   { name: '太初神丹', type: 'pill', grade: 4, price: 70000,  desc: '蕴含太初之气，服之得八万点修为。', use: { exp: 80000 }, poison: 75 },
+    pill_peiyuan:  { name: '培元丹',   type: 'pill', grade: 1, price: 1100,    desc: '温养元气，服之可得六百点修为。', use: { exp: 600 }, poison: 25 },
+    pill_pojing:   { name: '破境丹',   type: 'pill', grade: 2, price: 2600,   desc: '药力霸道，服之可得两千点修为，丹毒颇深。', use: { exp: 2000 }, poison: 45 },
+    pill_jiuzhuan: { name: '九转金丹', type: 'pill', grade: 3, price: 24000,  desc: '丹中极品，服之得一万五千点修为。', use: { exp: 15000 }, poison: 60 },
+    pill_taichu:   { name: '太初神丹', type: 'pill', grade: 4, price: 210000,  desc: '蕴含太初之气，服之得八万点修为。', use: { exp: 80000 }, poison: 75 },
     pill_zaohua:   { name: '造化仙丹', type: 'pill', grade: 5, price: 350000, desc: '夺天地造化，服之得四十万点修为。', use: { exp: 400000 }, poison: 90 },
     pill_zhuji:    { name: '筑基丹',   type: 'pill', grade: 2, price: 5000,   desc: '冲击瓶颈至宝，服之顿悟，突破感悟 +50。', use: { insight: 50 }, poison: 10 },
-    pill_liaoshang:{ name: '疗伤丹',   type: 'pill', grade: 0, price: 80,     desc: '止血生肌，恢复六成气血。', use: { hpPct: 60 }, poison: 2, battle: true },
+    pill_liaoshang:{ name: '疗伤丹',   type: 'pill', grade: 0, price: 120,     desc: '止血生肌，恢复六成气血。', use: { hpPct: 60 }, poison: 2, battle: true },
     pill_huiling:  { name: '回灵丹',   type: 'pill', grade: 0, price: 60,     desc: '凝神静气，恢复八成灵力。', use: { mpPct: 80 }, poison: 2, battle: true },
     pill_jiedu:    { name: '解毒丹',   type: 'pill', grade: 0, price: 120,    desc: '化解丹毒四十点。', use: { curePoison: 40 }, poison: 0, battle: true },
     pill_xisui:    { name: '洗髓丹',   type: 'pill', grade: 2, price: 0,      desc: '洗涤经脉，随机先天属性 +1（上限十点）。', use: { stat: 1 }, poison: 20, battle: false },
@@ -215,29 +178,34 @@ const GameData = {
     pill_tiegu:    { name: '铁骨丹',   type: 'pill', grade: 2, price: 1000,   desc: '服之筋骨如铁——防御 +40%，持续三回合（战斗中可用）。', buff: { defPct: 40, rounds: 3 }, poison: 10, battle: true },
     pill_qingshen: { name: '轻身丹',   type: 'pill', grade: 1, price: 800,    desc: '服之身轻如燕——身法 +30%、闪避 +10%，持续三回合（战斗中可用）。', buff: { spdPct: 30, dodge: 10, rounds: 3 }, poison: 6, battle: true },
     pill_mingmu:   { name: '明目丹',   type: 'pill', grade: 1, price: 800,    desc: '服之目若朗星——暴击 +12%，持续三回合（战斗中可用）。', buff: { crit: 12, rounds: 3 }, poison: 6, battle: true },
-    pill_dahuan:   { name: '大还丹',   type: 'pill', grade: 3, price: 6000,   desc: '续命奇丹，气血尽复，兼化二十点丹毒。', use: { hpPct: 100, curePoison: 20 }, poison: 15, battle: true },
+    pill_dahuan:   { name: '大还丹',   type: 'pill', grade: 3, price: 11000,   desc: '续命奇丹，气血尽复，兼化二十点丹毒。', use: { hpPct: 100, curePoison: 20 }, poison: 15, battle: true },
     /* ---- v19 丹方残页系（参悟失传丹方后可炼） ---- */
     pill_huiyuan:  { name: '回元丹',   type: 'pill', grade: 4, price: 26000,  desc: '气血灵力一夜尽复——断续之伤亦能弥合。', use: { hpPct: 100, mpPct: 100 }, poison: 22, battle: true },
-    pill_potian:   { name: '破天丹',   type: 'pill', grade: 4, price: 30000,  desc: '以命火淬道心，突破感悟 +80。', use: { insight: 80 }, poison: 25 },
-    pill_poxu:     { name: '破虚丹',   type: 'pill', grade: 4, price: 36000,  desc: '凿窍开脉，四维属性随机 +1。', use: { stat: 1 }, poison: 28 },
+    pill_potian:   { name: '破天丹',   type: 'pill', grade: 4, price: 15000,  desc: '以命火淬道心，突破感悟 +80。', use: { insight: 80 }, poison: 25 },
+    pill_poxu:     { name: '破虚丹',   type: 'pill', grade: 4, price: 400000,  desc: '凿窍开脉，四维属性随机 +1。', use: { stat: 1 }, poison: 28 },
     pill_qingxin:  { name: '清心丹',   type: 'pill', grade: 1, price: 500,    desc: '宁神定魄，服之可解束缚、缓滞诸般禁制（战斗中可用，解除自身负面状态）。', use: { purge: 1 }, poison: 0, battle: true },
-    pill_posha:    { name: '破煞丹',   type: 'pill', grade: 2, price: 2400,   desc: '药力如破军煞气，服之可得五千点修为。', use: { exp: 5000 }, poison: 50 },
-    pill_xuanling: { name: '玄灵丹',   type: 'pill', grade: 3, price: 9000,   desc: '玄灵蕴道，服之突破感悟 +25。', use: { insight: 25 }, poison: 18 },
-    pill_guben:    { name: '固本培元丹', type: 'pill', grade: 2, price: 2000,  desc: '固本培元，气血灵力各复五成。', use: { hpPct: 50, mpPct: 50 }, poison: 10, battle: true },
+    pill_posha:    { name: '破煞丹',   type: 'pill', grade: 2, price: 2800,   desc: '药力如破军煞气，服之可得五千点修为。', use: { exp: 5000 }, poison: 50 },
+    pill_xuanling: { name: '玄灵丹',   type: 'pill', grade: 3, price: 2600,   desc: '玄灵蕴道，服之突破感悟 +25。', use: { insight: 25 }, poison: 18 },
+    pill_guben:    { name: '固本培元丹', type: 'pill', grade: 2, price: 2200,  desc: '固本培元，气血灵力各复五成。', use: { hpPct: 50, mpPct: 50 }, poison: 10, battle: true },
     pill_yulu:     { name: '九花玉露丸', type: 'pill', grade: 2, price: 1600,  desc: '玉露酿就，灵力尽复，兼得八百修为。', use: { mpPct: 100, exp: 800 }, poison: 12, battle: true },
-    pill_yuanshen: { name: '元神丹',   type: 'pill', grade: 4, price: 45000,  desc: '温养元神，服之得四万点修为、突破感悟 +10。', use: { exp: 40000, insight: 10 }, poison: 70 },
-    pill_tianyuan: { name: '天元造化丹', type: 'pill', grade: 5, price: 220000, desc: '丹道至高造化，服之得廿五万点修为。', use: { exp: 250000 }, poison: 85 },
+    pill_yuanshen: { name: '元神丹',   type: 'pill', grade: 4, price: 115000,  desc: '温养元神，服之得四万点修为、突破感悟 +10。', use: { exp: 40000, insight: 10 }, poison: 70 },
+    /* ---- v29 天年：延寿丹线与渡劫丹 ---- */
+    pill_yanshou:  { name: '固本延寿丹', type: 'pill', grade: 3, price: 90000,  desc: '固本培元、续脉延年——寿元 +10 年（每境延寿至多为其基准五成）。', use: { life: 10 }, poison: 8 },
+    pill_yanshou2: { name: '培元延寿丹', type: 'pill', grade: 5, price: 180000, desc: '温养源婴、天梯再续——寿元 +25 年。', use: { life: 25 }, poison: 15 },
+    pill_yanshou3: { name: '天元续命丹', type: 'pill', grade: 5, price: 500000, desc: '夺天地一线生机，寿元 +50 年。', use: { life: 50 }, poison: 25 },
+    pill_dujie:    { name: '渡劫丹',   type: 'pill', grade: 4, price: 400000, desc: '以雷晶为引淬炼道基——下次渡劫成算 +5（服后印记留于识海，一丹一劫）。', use: { dujie: 1 }, poison: 12 },
+    pill_tianyuan: { name: '天元造化丹', type: 'pill', grade: 5, price: 280000, desc: '丹道至高造化，服之得廿五万点修为。', use: { exp: 250000 }, poison: 85 },
     fruit_tianji:  { name: '天机果', type: 'pill', grade: 4, price: 52000, desc: '天地灵机所凝的异果，服之可令一项先天属性突破十点桎梏（至多十二点）。', use: { stat12: 1 }, poison: 30 },
     /* ---- 符箓（符修可画可售，战斗中人人可祭出）---- */
-    tal_huoshe: { name: '火蛇符', type: 'talisman', grade: 1, price: 25, ecoPrice: true, power: 2.2, desc: '朱砂勾火蛇之形，掷出化焰伤敌（战斗中造成约2.2倍攻击伤害，符光必中）。', fkind: 'damage' },
-    tal_zilei:  { name: '紫雷符', type: 'talisman', grade: 2, price: 90, ecoPrice: true, power: 3.5, desc: '紫霄雷符，一击之威如雷劫临身（战斗中造成约3.5倍攻击伤害，符光必中）。', fkind: 'damage' },
+    tal_huoshe: { name: '火蛇符', type: 'talisman', grade: 1, price: 22, ecoPrice: true, power: 2.2, desc: '朱砂勾火蛇之形，掷出化焰伤敌（战斗中造成约2.2倍攻击伤害，符光必中）。', fkind: 'damage' },
+    tal_zilei:  { name: '紫雷符', type: 'talisman', grade: 2, price: 80, ecoPrice: true, power: 3.5, desc: '紫霄雷符，一击之威如雷劫临身（战斗中造成约3.5倍攻击伤害，符光必中）。', fkind: 'damage' },
     /* ---- v13 新增符箓：护身 / 限制 / 增益全谱 ---- */
-    tal_jinguang: { name: '金光符', type: 'talisman', grade: 1, price: 45, ecoPrice: true, desc: '金光护体——两回合内所受伤害减轻四成（战斗中可用）。', fkind: 'shield', power: 40, rounds: 2 },
-    tal_jifengfu: { name: '疾风符', type: 'talisman', grade: 1, price: 40, ecoPrice: true, desc: '身化疾风——两回合内闪避大增（+25%）（战斗中可用）。', fkind: 'dodge', power: 25, rounds: 2 },
-    tal_fuling:   { name: '缚灵符', type: 'talisman', grade: 2, price: 70, ecoPrice: true, desc: '符光化索缚敌身——敌方身法迟滞三成，持续两回合（战斗中可用，必中）。', fkind: 'slow', power: 30, rounds: 2 },
-    tal_shigu:    { name: '蚀骨符', type: 'talisman', grade: 2, price: 75, ecoPrice: true, desc: '蚀骨腐甲——敌方防御剧降三成五，持续两回合（战斗中可用，必中）。', fkind: 'defdown', power: 35, rounds: 2 },
-    tal_bingpo:   { name: '冰魄符', type: 'talisman', grade: 3, price: 160, ecoPrice: true, desc: '冰魄封形——寒气封敌周身，使其下一回合无法动弹（战斗中可用，必中；强敌抵抗几率略高）。', fkind: 'freeze', rounds: 1 },
-    tal_posha:    { name: '破煞符', type: 'talisman', grade: 3, price: 180, ecoPrice: true, power: 4.6, desc: '破军煞符，一符破万法（战斗中造成约4.6倍攻击伤害，符光必中，并使敌方破防两成）。', fkind: 'damage', debuff: { defdown: 20, rounds: 2 } },
+    tal_jinguang: { name: '金光符', type: 'talisman', grade: 1, price: 40, ecoPrice: true, desc: '金光护体——两回合内所受伤害减轻四成（战斗中可用）。', fkind: 'shield', power: 40, rounds: 2 },
+    tal_jifengfu: { name: '疾风符', type: 'talisman', grade: 1, price: 35, ecoPrice: true, desc: '身化疾风——两回合内闪避大增（+25%）（战斗中可用）。', fkind: 'dodge', power: 25, rounds: 2 },
+    tal_fuling:   { name: '缚灵符', type: 'talisman', grade: 2, price: 62, ecoPrice: true, desc: '符光化索缚敌身——敌方身法迟滞三成，持续两回合（战斗中可用，必中）。', fkind: 'slow', power: 30, rounds: 2 },
+    tal_shigu:    { name: '蚀骨符', type: 'talisman', grade: 2, price: 66, ecoPrice: true, desc: '蚀骨腐甲——敌方防御剧降三成五，持续两回合（战斗中可用，必中）。', fkind: 'defdown', power: 35, rounds: 2 },
+    tal_bingpo:   { name: '冰魄符', type: 'talisman', grade: 3, price: 140, ecoPrice: true, desc: '冰魄封形——寒气封敌周身，使其下一回合无法动弹（战斗中可用，必中；强敌抵抗几率略高）。', fkind: 'freeze', rounds: 1 },
+    tal_posha:    { name: '破煞符', type: 'talisman', grade: 3, price: 158, ecoPrice: true, power: 4.6, desc: '破军煞符，一符破万法（战斗中造成约4.6倍攻击伤害，符光必中，并使敌方破防两成）。', fkind: 'damage', debuff: { defdown: 20, rounds: 2 } },
     /* ---- 功法 ---- */
     gf_tuna:    { name: '吐纳诀',       type: 'gongfa', gtype: 'support', grade: 0, price: 200,   desc: '最基础的吐纳法门，可提升修炼效率。', bonus: { cult: [6, 3] } },
     gf_canghai: { name: '沧海剑诀',     type: 'gongfa', gtype: 'attack',  grade: 0, price: 300,   desc: '普通剑修入门剑诀。', bonus: { atkPct: [4, 2] }, skill: { name: '沧浪一剑', kind: 'damage', power: 1.55, mp: 10, desc: '凝聚剑气奋力一斩' } },
@@ -307,6 +275,7 @@ const GameData = {
     a_taiyi:    { name: '太乙道袍',   type: 'artifact', slot: 'armor',     grade: 4, price: 0, desc: '太乙真人亲织道袍，万法不侵。', bonus: { def: 180, hp: 800, hpPct: 10 } },
     z_longyu:   { name: '龙魂玉',     type: 'artifact', slot: 'accessory', grade: 4, price: 0, desc: '以真龙残魂炼制的玉佩，龙威护主。', bonus: { atkPct: 10, defPct: 10, hpPct: 10, luck: 2 } },
     z_hunpo:    { name: '魂珀',       type: 'artifact', slot: 'accessory', grade: 3, price: 0, desc: '万年魂珀，温养神魂，修行事半功倍。', bonus: { cult: 10, mp: 200, crit: 3 } },
+    z_taling:   { name: '天塔鸣铃',   type: 'artifact', slot: 'accessory', grade: 3, price: 0, desc: '以镇塔符核为胎、云阶铁为骨炼成的鸣铃——铃音里仍有塔风回响。', bonus: { cult: 6, spd: 25, luck: 1 } },   // v29：塔产奇物的消费端
     /* ---- 材料 ---- */
     m_lingcao:  { name: '百年灵草',   type: 'material', tier: 1, price: 80,    desc: '蕴含百年灵气的药草，炼丹辅药。' },
     m_yaopi:    { name: '妖兽皮革',   type: 'material', tier: 1, price: 60,    desc: '一阶妖兽的皮，坚韧异常。' },
@@ -329,12 +298,12 @@ const GameData = {
     /* ---- v13 灵田种子（洞府种植用） ---- */
     m_qianghua: { name: '强化石',     type: 'material', tier: 3, price: 3000,  desc: '蕴含精纯灵性的晶石，祭炼强化法宝时掺入一枚，+7 以上强化必定成功。' },
     m_danfang:  { name: '丹方残页',   type: 'material', tier: 3, price: 2600,  desc: '前辈丹师遗稿的残页。集齐数页，可在炼丹炉前参悟失传的丹方。' },
-    seed_lingcao:  { name: '灵草种',   type: 'seed', grade: 1, price: 40,    crop: 'm_lingcao',  days: 10, desc: '播入灵田，十日可收【百年灵草】。' },
-    seed_lingzhi:  { name: '灵芝种',   type: 'seed', grade: 2, price: 500,   crop: 'm_lingzhi',  days: 25, desc: '播入灵田，廿五日可收【千年灵芝】。' },
-    seed_bingpo:   { name: '冰魄花种', type: 'seed', grade: 2, price: 900,   crop: 'm_bingpo',   days: 30, desc: '播入灵田，三十日可收【冰魄石】。' },
-    seed_xuelian:  { name: '雪莲种',   type: 'seed', grade: 3, price: 4500,  crop: 'm_xuelian',  days: 45, desc: '播入灵田，四十五日可收【万年雪莲】。' },
-    seed_lianhun:  { name: '炼魂花种', type: 'seed', grade: 3, price: 5200,  crop: 'm_lianhun',  days: 50, desc: '播入灵田，五十日可收【炼魂石】。' },
-    seed_xingchen: { name: '星辉草种', type: 'seed', grade: 4, price: 30000, crop: 'm_xingchen', days: 60, desc: '播入灵田，六十日可收【星辰砂】。' },
+    seed_lingcao:  { name: '灵草种',   type: 'seed', grade: 1, price: 30,    crop: 'm_lingcao',  days: 10, desc: '播入灵田，十日可收【百年灵草】。' },
+    seed_lingzhi:  { name: '灵芝种',   type: 'seed', grade: 2, price: 220,   crop: 'm_lingzhi',  days: 25, desc: '播入灵田，廿五日可收【千年灵芝】。' },
+    seed_bingpo:   { name: '冰魄花种', type: 'seed', grade: 2, price: 2600,  crop: 'm_bingpo',   days: 30, desc: '播入灵田，三十日可收【冰魄石】。' },
+    seed_xuelian:  { name: '雪莲种',   type: 'seed', grade: 3, price: 1800,  crop: 'm_xuelian',  days: 45, desc: '播入灵田，四十五日可收【万年雪莲】。' },
+    seed_lianhun:  { name: '炼魂花种', type: 'seed', grade: 3, price: 2200,  crop: 'm_lianhun',  days: 50, desc: '播入灵田，五十日可收【炼魂石】。' },
+    seed_xingchen: { name: '星辉草种', type: 'seed', grade: 4, price: 15000, crop: 'm_xingchen', days: 60, desc: '播入灵田，六十日可收【星辰砂】。' },
     /* ---- v3 秘境专属：失传功法 / 上古法宝碎片 / 本命法宝 / 派系信物 ---- */
     gf_wangchen:{ name: '忘尘剑意',   type: 'gongfa', gtype: 'attack',  grade: 4, price: 0, desc: '秘境失传剑意，一剑忘尘，物我两断。', bonus: { atkPct: [16, 7], crit: [3, 1.5] }, skill: { name: '忘尘一剑', kind: 'damage', power: 3.3, mp: 28, desc: '忘却尘俗的一剑，快过天雷' } },
     gf_hunyuan: { name: '混元真解',   type: 'gongfa', gtype: 'support', grade: 4, price: 0, desc: '秘境失传心法，混元一气，百脉皆通。', bonus: { cult: [15, 6], hpPct: [12, 5], mpPct: [12, 5] } },
@@ -355,7 +324,7 @@ const GameData = {
     gf_leishen: { name: '九天雷神经', type: 'gongfa', gtype: 'attack',  grade: 5, price: 0, desc: '雷狱主宰所修的上古雷法，一雷出而万法寂。', bonus: { atkPct: 22, crit: 4, mpPct: 12 }, skill: { name: '九天雷罚', kind: 'damage', power: 4.2, mp: 35, desc: '引九天雷罚轰落，万钧之势' } },
     m_xiancui:  { name: '仙灵翠',     type: 'material', tier: 4, price: 120000, desc: '灵墟仙泽灵气凝结的翡翠，内蕴仙道法则。' },
     m_leijing:  { name: '雷晶核',     type: 'material', tier: 4, price: 150000, desc: '九霄雷狱中雷兽体内凝结的雷晶，雷法至宝。' },
-    seed_xianling: { name: '仙灵种',   type: 'seed', grade: 5, price: 80000, crop: 'm_xiancui', days: 80, desc: '播入灵田，八十日可收【仙灵翠】。' },
+    seed_xianling: { name: '仙灵种',   type: 'seed', grade: 5, price: 45000, crop: 'm_xiancui', days: 80, desc: '播入灵田，八十日可收【仙灵翠】。' },
   },
 
   /** 按档次取材料列表 */
@@ -556,6 +525,8 @@ const GameData = {
     { item: 'm_lingcao', minRealm: 0 }, { item: 'm_xuantie', minRealm: 0 },
     { item: 'seed_lingcao', minRealm: 1 }, { item: 'seed_lingzhi', minRealm: 1 }, { item: 'seed_bingpo', minRealm: 2 },
     { item: 'seed_xuelian', minRealm: 3 }, { item: 'seed_lianhun', minRealm: 3 },
+    { item: 'seed_xianling', minRealm: 8 },   // v29：补齐灵界种植线（仙灵种原无任何获取渠道）
+    { item: 'pill_yanshou', minRealm: 3 }, { item: 'pill_yanshou2', minRealm: 6 }, { item: 'pill_yanshou3', minRealm: 8 },   // v29 天年：延寿丹上架（高境灵石新去向）
   ],
 
   /* ---------- v13 套装（集齐 pieces 中全部装备于身时触发 bonus） ---------- */
@@ -819,25 +790,29 @@ const GameData = {
 
   /* ---------- §20 炼丹配方（坊市炼丹炉，人人可用，丹道大成率大涨）---------- */
   ALCHEMY_RECIPES: [
-    { id: 'r1', out: 'pill_juqi',     need: { m_lingcao: 2 },                  rate: 65 },
-    { id: 'r2', out: 'pill_liaoshang', need: { m_yaopi: 1, m_lingcao: 1 },     rate: 65 },
-    { id: 'r3', out: 'pill_peiyuan',  need: { m_lingzhi: 2 },                  rate: 55 },
-    { id: 'r4', out: 'pill_pojing',   need: { m_neidan: 2 },                   rate: 50 },
+    { id: 'r1', out: 'pill_juqi',     need: { m_lingcao: 1 },                  rate: 65 },   // v29 减负
+    { id: 'r2', out: 'pill_liaoshang', need: { m_lingcao: 1 },                 rate: 65 },   // v29 减负
+    { id: 'r3', out: 'pill_peiyuan',  need: { m_lingzhi: 1, m_yaopi: 1 },      rate: 55 },   // v29 减负
+    { id: 'r4', out: 'pill_pojing',   need: { m_neidan: 1, m_lingzhi: 1 },     rate: 50 },   // v29 减负
     { id: 'r5', out: 'pill_jiuzhuan', need: { m_xuelian: 1, m_longxue: 1 },    rate: 45 },
     { id: 'r6', out: 'pill_taichu',   need: { m_xianjing: 1, m_shentie: 1 },   rate: 40 },
     /* ---- v13 新增配方 ---- */
     { id: 'r7', out: 'pill_kuangbao', need: { m_yaopi: 2 },                    rate: 60 },
     { id: 'r8', out: 'pill_tiegu',    need: { m_xuantie: 2 },                  rate: 60 },
     { id: 'r9', out: 'pill_guben',    need: { m_lingzhi: 1, m_neidan: 1 },     rate: 55 },
-    { id: 'r10', out: 'pill_dahuan',  need: { m_xuelian: 2 },                  rate: 45 },
-    { id: 'r11', out: 'pill_posha',   need: { m_neidan: 2, m_xuantie: 1 },     rate: 50 },
-    { id: 'r12', out: 'pill_xuanling', need: { m_lianhun: 2 },                 rate: 45 },
-    { id: 'r13', out: 'pill_yuanshen', need: { m_xianjing: 2 },                rate: 40 },
+    { id: 'r10', out: 'pill_dahuan',  need: { m_xuelian: 1, m_lingzhi: 2 },    rate: 45 },   // v29 减负
+    { id: 'r11', out: 'pill_posha',   need: { m_neidan: 1, m_lingzhi: 1 },     rate: 50 },   // v29 减负
+    { id: 'r12', out: 'pill_xuanling', need: { m_lianhun: 1, m_neidan: 1 },   rate: 45 },   // v29 减负
+    { id: 'r13', out: 'pill_yuanshen', need: { m_xianjing: 1, m_longxue: 2 }, rate: 40 },   // v29 减负
     { id: 'r14', out: 'pill_tianyuan', need: { m_shentie: 1, m_haixin: 1 },    rate: 35 },
     /* ---- v19 失传丹方（需丹方残页参悟解锁：flags.recipeOk） ---- */
-    { id: 'a1', out: 'pill_huiyuan', need: { m_lingzhi: 2, m_haixin: 1 },   rate: 45, needPages: 2 },
-    { id: 'a2', out: 'pill_potian',  need: { m_neidan: 3, m_shentie: 1 },   rate: 40, needPages: 4 },
-    { id: 'a3', out: 'pill_poxu',    need: { m_shenmu: 2, m_xiancui: 2 },   rate: 35, needPages: 6 },
+    { id: 'a1', out: 'pill_huiyuan', need: { m_haixin: 1, m_xuelian: 1 },   rate: 45, needPages: 2 },   // v29 减负
+    { id: 'a2', out: 'pill_potian',  need: { m_shentie: 1, m_neidan: 2 },   rate: 40, needPages: 4 },   // v29 减负
+    { id: 'a3', out: 'pill_poxu',    need: { m_shenmu: 1, m_xiancui: 1 },   rate: 35, needPages: 6 },   // v29 减负
+    /* ---- v29 天年：延寿与渡劫失传丹方（雷晶核自此有了稳定消费端） ---- */
+    { id: 'a4', out: 'pill_yanshou2', need: { m_xuelian: 1, m_haixin: 1 },  rate: 40, needPages: 5 },
+    { id: 'a5', out: 'pill_yanshou3', need: { m_shenmu: 1, m_leijing: 1 },  rate: 30, needPages: 8 },
+    { id: 'a6', out: 'pill_dujie',    need: { m_leijing: 1, m_xianjing: 1 }, rate: 35, needPages: 6 },
   ],
 
   /* ---------- v13 炼器配方（坊市炼器坊，消耗材料锻造装备；产出天级神兵的唯一途径） ---------- */
@@ -860,6 +835,8 @@ const GameData = {
     { id: 'f12', out: 's_cx_jian',  need: { m_huolin: 2, m_jiaojin: 1 },             rate: 50 },
     { id: 'f13', out: 's_cx_pao',   need: { m_huolin: 2, m_yaopi: 3 },               rate: 50 },
     { id: 'f14', out: 's_cx_gou',   need: { m_huolin: 1, m_neidan: 2 },              rate: 50 },
+    /* ---- v29 天塔纪念（天塔灵砂/云阶铁/镇塔符核自此有了消费端） ---- */
+    { id: 'f18', out: 'z_taling',   need: { tw_core: 1, tw_iron: 2, tw_sand: 4 },        rate: 55 },
   ],
 
   /* ---------- §20 红尘劫剧本（历练道德三选一）---------- */

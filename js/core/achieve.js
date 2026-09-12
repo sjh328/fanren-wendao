@@ -7,6 +7,12 @@ const Achieve = {
   CATS: { realm: '境界', dao: '职业', battle: '战斗', exp: '奇遇', reinc: '转世' },
   stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
   rewardText(r) { return r.fortune ? `气运 +${r.fortune}` : `灵石 +${Utils.fmtNum(r.stones)}`; },
+  /** v29：成就灵石奖励随境界经济缩放——固定面值在大后期形同虚设 */
+  rewardOf(d, p) {
+    const r = { ...d.reward };
+    if (r.stones) r.stones = Math.round(r.stones * GameData.stoneEco(Math.min(6, p ? p.realmIdx || 0 : 0)));
+    return r;
+  },
   DEFS: [
     /* ---- 境界 ---- */
     { id: 'r1', cat: 'realm', name: '初入道途', desc: '突破至筑基期', reward: { fortune: 3 }, test: p => p.realmIdx >= 1 },
@@ -89,9 +95,10 @@ const Achieve = {
     if (!unlocked.length) return;
     for (const d of unlocked) {
       got[d.id] = Math.floor(p.day);
-      if (d.reward.stones) Bag.addStones(d.reward.stones);
-      if (d.reward.fortune) KarmaSys.addFortune(d.reward.fortune, true);
-      Log.add(`✦ 成就达成 <b>【${d.name}】</b>——${d.desc}。（${this.rewardText(d.reward)}）`, 'system');
+      const rw = this.rewardOf(d, p);
+      if (rw.stones) Bag.addStones(rw.stones);
+      if (rw.fortune) KarmaSys.addFortune(rw.fortune, true);
+      Log.add(`✦ 成就达成 <b>【${d.name}】</b>——${d.desc}。（${this.rewardText(rw)}）`, 'system');
       UI.toast(`成就达成：${d.name}`);
     }
     Meta.save();

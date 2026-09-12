@@ -23,6 +23,13 @@ const Time = {
       if (p.age > st.lifespan) { Game.gameOver('寿元'); return; }
     }
   },
+  /** v29 天年：折寿——天劫失利/转道/心魔劫败等大挫折损寿元（lifeCut 持久化，读写 ||0 自愈） */
+  cutLife(p, years, reason = '') {
+    if (!p || p.dead) return;
+    p.lifeCut = (p.lifeCut || 0) + years;
+    Log.add(`<b>天夺其年</b>——${reason}，寿元折损 ${years} 年。`, 'loss');
+    UI.toast(`寿元 -${years} 年`, true);
+  },
   label(p) {
     const year = Math.floor(p.day / 365) + 1;
     const month = this.MONTHS[Math.min(11, Math.floor((p.day % 365) / 30))];

@@ -64,11 +64,13 @@ const NpcSys = {
     if (!s) return '萍水';
     if (p.partner === id) return '道侣';
     if ((p.sworn || []).includes(id)) return '结拜';
-    if (s.rel >= 60) return '莫逆';
+    // v29：档名与 TIERS 机制档对齐——原先两套口径并存（此处 60 称莫逆，机制档 70 才是知己）
+    if (s.rel >= 90) return '生死之交';
+    if (s.rel >= 70) return '莫逆';
     if (s.rel >= 30) return '友善';
     if (s.rel >= 8) return '相熟';
     if (s.rel > -15) return '萍水';
-    if (s.rel > -40) return '敌视';
+    if (s.rel > -40) return '冷漠';
     return '宿敌';
   },
   /* ---------- v19：关系五档（机制层） ---------- */
@@ -380,10 +382,13 @@ const NpcSys = {
     if (!ok) return;
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     s.met = true;
-    s.rel = Utils.clamp(s.rel + Utils.rand(8, 14), -100, 100);
+    // v28 联动：声望先于人先——名望高者结交更受欢迎，恶名远扬者见面先减三分
+    const rep = p.reputation || 0;
+    const repAdj = rep >= 80 ? 5 : rep >= 30 ? 3 : rep < -30 ? -5 : rep < 0 ? -2 : 0;
+    s.rel = Utils.clamp(s.rel + Utils.rand(8, 14) + repAdj, -100, 100);
     p.counters.befriends = (p.counters.befriends || 0) + 1;   // v11 剧情计数
     this.mem(p, id, 'chat', '结交之谊');   // v19 记忆
-    Log.add(`你以礼相待，与 ${d.name} 相谈甚欢。（交情 ${s.rel > 0 ? '+' : ''}${s.rel}）`, 'gain');
+    Log.add(`你以礼相待，与 ${d.name} 相谈甚欢。${repAdj ? `（${repAdj > 0 ? '你的名望令对方高看一眼，' : '你的恶名令对方心存戒备，'}交情 ${repAdj > 0 ? '+' : ''}${repAdj}）` : ''}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}）`, 'gain');
     Game.afterAction();
   },
   async spar(id) {
@@ -556,7 +561,7 @@ const NpcSys = {
       html: `${this.dialogText(d.temper, 'greeting')}<br><span class="tip-line">TA 平素喜好：${catName || '随缘'}——投其所好，事半功倍。</span><br><span class="tip-line">关系愈深，礼愈难打动人——相交贵在知心。${midautumn ? '<b>今日中秋：情谊加倍！</b>' : ''}</span>`,
       options: [
         { text: `寻常贺礼（${Utils.fmtNum(cost)}灵石）`, value: 'normal', primary: true },
-        { text: `投其所好·${catName}（${Utils.fmtNum(likeCost)}灵石${likeItemId ? '' : '·未备' + catName}）`, value: 'like' },
+        { text: `投其所好${likeItemId ? `·${GameData.ITEMS[likeItemId].name}` : `·${catName}（未备）`}（${Utils.fmtNum(likeCost)}灵石）`, value: 'like' },   // v29：明示将送出哪件，防顶阶法宝被盲送
         { text: '作罢', value: false },
       ],
     });
@@ -765,7 +770,11 @@ const PersonalSys = {
     const s = NpcSys.state(p, id);
     if (!s || !s.alive || !s.met) return null;
     if (p.realmIdx < act.need.realm) return null;
-    if (NpcSys.tierOf(Math.max(0, s.rel)).id !== act.need.tier) return null;
+    // v29 修瑕：档位改序号比较——原先精确匹配，好感越档（如提前结拜）后低档幕永久无法触发（个人线死锁）
+    const TI = NpcSys.TIERS;
+    const curIdx = TI.findIndex(t => t.id === NpcSys.tierOf(Math.max(0, s.rel)).id);
+    const needIdx = TI.findIndex(t => t.id === act.need.tier);
+    if (curIdx < needIdx) return null;
     return act;
   },
   anyAvailable(p) {
@@ -785,7 +794,7 @@ const PersonalSys = {
       const done = p.personal[id];
       const a = def.acts[done - 1];
       const r = a.reward || {};
-      if (r.insight) p.insight = Math.min(100, (p.insight || 0) + r.insight);
+      if (r.insight) Cultivate.addInsight(p, r.insight);   // v28：满百溢出折算修为
       if (r.fortune) KarmaSys.addFortune(r.fortune);
       if (r.stones) Bag.addStones(r.stones);
       if (r.items) for (const [k, v] of Object.entries(r.items)) Bag.addItem(k, v);

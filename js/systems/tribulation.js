@@ -10,14 +10,16 @@ const Tribulation = {
   realmPenalty(target) { return Utils.clamp(1 - (target || 2) * 0.035, 0.5, 1); },
   /** 护身法宝所需品级 ≈ 目标境界（筑基用灵级护心镜、金丹用玄级玄龟甲、元婴起用地级龙鳞宝甲） */
   artifactGrade(targetRealm) { return Utils.clamp(targetRealm, 1, 3); },
+  /** v29 修瑕：品级放宽为「不低于所需」——天级/仙级护甲此前反而无资格挡劫；脏档失效装备 id 判空防炸 */
   findArtifact(p, grade) {
     for (const id of Object.keys(p.bag)) {
       const d = GameData.ITEMS[id];
-      if (d && d.type === 'artifact' && d.slot === 'armor' && d.grade === grade) return { from: 'bag', id };
+      if (d && d.type === 'artifact' && d.slot === 'armor' && (d.grade || 0) >= grade) return { from: 'bag', id };
     }
     const eq = p.equipped.armor;
     const eqId = eq ? Utils.eqId(eq) : null;
-    if (eqId && GameData.ITEMS[eqId].grade === grade) return { from: 'equipped', id: eqId };
+    const eqDef = eqId ? GameData.ITEMS[eqId] : null;
+    if (eqDef && eqDef.type === 'artifact' && (eqDef.grade || 0) >= grade) return { from: 'equipped', id: eqId };
     return null;
   },
   chances() {
@@ -34,9 +36,17 @@ const Tribulation = {
     const p = Game.player;
     const target = p.realmIdx + 1;
     Save.write('bak', Game.player);   // v6：冲关之前，自动备份至临时槽位，失利可回溯
+    // v29 天年：渡劫丹——药力应劫而化，成算 +5（一丹一劫，引动天劫即耗，失利不返还）
+    p.flags = p.flags || {};
+    let dujieBonus = 0;
+    if ((p.flags.dujieDan || 0) > 0) {
+      p.flags.dujieDan--;
+      dujieBonus = 5;
+      Log.add('识海中渡劫丹的药力轰然化开，道基如蒙金光（成算 +5）。', 'gain');
+    }
     this.state = {
       target,
-      base: Cultivate.breakthroughChance(p, bonus),
+      base: Cultivate.breakthroughChance(p, bonus + dujieBonus),
       power: this.power(p, target),
       artifact: this.findArtifact(p, this.artifactGrade(target)),
       busy: false, logs: [],
@@ -216,6 +226,8 @@ const Tribulation = {
         return;
       }
     }
+    // v29 天年：渡劫失利折寿十年（选择回溯者本次渡劫已尽数抹去，不折寿）
+    if (!p.dead) Time.cutLife(p, 10, '天劫反噬');
     // §24 渡劫虚弱期：宿敌趁火打劫
     let ambushNpc = null;
     if (!p.dead) {
