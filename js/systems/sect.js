@@ -76,6 +76,8 @@ const SectSys = {
     let contrib = 30 + realm * 22, stones = Math.round(45 * GameData.stoneEco(realm));
     if (task && task.danger) { contrib *= 2; stones *= 2; }        // 高危生死状：赏格翻倍
     if (WorldSys.warActive(p)) { contrib = Math.round(contrib * 1.5); stones = Math.round(stones * 1.5); } // 宗门大战：悬赏暴涨
+    // v27 修瑕：长老令「开炉演武」文案称门派任务与悬赏酬劳 +50%——此前只有悬赏半边生效
+    if (this.commandActive(p, 'drill')) { contrib = Math.round(contrib * 1.5); stones = Math.round(stones * 1.5); }
     return { contrib, stones };
   },
   /** 生成任务并按派系立场折算高危生死状 */
@@ -122,6 +124,8 @@ const SectSys = {
     const r = this.rewards(p, t);
     p.sect.contrib += r.contrib;
     Bag.addStones(r.stones);
+    // v27 联动：门派差事践诺立信——声望 +1（声望体系新产出端）
+    if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 1, '门派差事践诺');
     Log.add(`任务完成！获得 <b>贡献 ${r.contrib}</b> 点、灵石 ${Utils.fmtNum(r.stones)}。`, 'gain');
     p.sect.tasks[taskIdx] = this.newTask(p);
     Game.afterAction();

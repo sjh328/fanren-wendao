@@ -186,7 +186,12 @@ const TowerSys = {
   /** 祝福三选一（第四项永远是离塔出口） */
   async blessStep(p, run, floor) {
     const pool = this.BUFFS.filter(b => !run.buffs.includes(b.id));
-    const picks = pool.sort(() => Math.random() - 0.5).slice(0, 3);
+    // v27 修瑕：sort(random) 非均匀洗牌，靠前祝福系统性偏低——改 Fisher–Yates
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const picks = pool.slice(0, 3);
     const v = await UI.popup({
       title: `✦ 登天塔 · 第 ${floor} 层已克`,
       html: `<div class="tip-line">塔心浮动，三道祝福任择其一——出塔即散，塔内长存。</div>

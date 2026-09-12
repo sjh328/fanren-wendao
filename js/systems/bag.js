@@ -17,6 +17,8 @@ const Bag = {
   removeItem(itemId, qty = 1) {
     const p = Game.player;
     if (!p.bag[itemId]) return;
+    // v27 修瑕：钳制上限——任何调用方持过期数量都不再把库存减成负数
+    qty = Math.min(qty, p.bag[itemId]);
     p.bag[itemId] -= qty;
     if (p.bag[itemId] <= 0) delete p.bag[itemId];
   },
@@ -33,9 +35,22 @@ const Bag = {
     while (p.stones.low >= 100) { const n = Math.floor(p.stones.low / 100); p.stones.mid += n; p.stones.low -= n * 100; }
     while (p.stones.mid >= 100) { const n = Math.floor(p.stones.mid / 100); p.stones.high += n; p.stones.mid -= n * 100; }
   },
-  /** 优先花下品；不足时自动从上品兑换，返回是否成功 */
+  /** v27：原额入账（不吃灵石获取加成、不计入生涯统计）——退款/赔付类场景专用，
+   *  杜绝「精确扣款、放水退款」被获取加成放大成刷钱漏洞（拍卖落标退款即此）。 */
+  addStonesRaw(amount) {
+    const p = Game.player;
+    amount = Math.round(amount);
+    if (!(amount > 0)) return;
+    p.stones.low += amount;
+    while (p.stones.low >= 100) { const n = Math.floor(p.stones.low / 100); p.stones.mid += n; p.stones.low -= n * 100; }
+    while (p.stones.mid >= 100) { const n = Math.floor(p.stones.mid / 100); p.stones.high += n; p.stones.mid -= n * 100; }
+  },
+  /** 优先花下品；不足时自动从上品兑换，返回是否成功
+   *  v27 修瑕：先验总额再做兑换——此前不足时会把中/上品尽数打散成下品仍返回失败（失败操作留副作用） */
   spendStones(amount) {
     const p = Game.player;
+    const total = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
+    if (total < amount) return false;
     if (p.stones.low < amount) {
       while (p.stones.low < amount && (p.stones.mid > 0 || p.stones.high > 0)) {
         if (p.stones.mid > 0) { p.stones.mid--; p.stones.low += 100; }

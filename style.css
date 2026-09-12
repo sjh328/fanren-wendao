@@ -6,9 +6,7 @@
 /* ---------- 变量与基础 ---------- */
 :root {
   --bg: #ece3cd;          /* 宣纸暖米底 */
-  --bg-soft: #e4d9bf;
   --panel: #f6f0df;
-  --panel-2: #efe7d0;
   --border: #cfc2a0;
   --border-light: #ab9b74;
   --gold: #7a5c24;        /* 赭金（v18 对比度修复） */
@@ -33,6 +31,10 @@
   --grade-4: #c04b4b;  --grade-4-bd: rgba(192, 75, 75, 0.6);
   --grade-5: #a8862a;  --grade-5-bd: rgba(168, 134, 42, 0.65);
   --radius: 8px;
+  /* v27 结构令牌：底导航高度（壳内滚动余量与浮钮定位共用一处，改一处全联动）
+     与 --kb（软键盘视口缩放量，由 JS visualViewport 实时写入，弹层据此让位） */
+  --nav-h: 57px;
+  --kb: 0px;
   --font-kai: "LXGW WenKai", "STKaiti", "KaiTi", "楷体", "Noto Serif SC", serif;
   --font-body: "Noto Serif SC", "LXGW WenKai", "Source Han Serif SC", "STSong", "SimSun", "宋体", serif;
 }
@@ -414,6 +416,9 @@ body::after {
 }
 
 .top-info { color: var(--text-dim); font-size: 12.5px; letter-spacing: 1px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+/* v27 顶栏三组式：身份资历｜家资｜战力岁月——chip 成组排列，组分隔竖线 */
+.top-group { display: inline-flex; align-items: center; gap: 6px; }
+.top-group + .top-group { padding-left: 8px; border-left: 1px solid rgba(171, 155, 116, 0.4); }
 /* v21 顶栏资源条：灵石 / 战力 / 章程 徽章化 */
 .res-chip {
   display: inline-flex; align-items: center; gap: 4px;
@@ -425,9 +430,13 @@ body::after {
 }
 .res-chip b, .res-chip .num-anim { color: var(--gold-bright); font-weight: bold; }
 .res-chip i { font-style: normal; color: var(--text-faint); }
+.res-chip .rc-ico { font-style: normal; color: var(--gold); font-size: 11px; }
 .res-stone { border-color: rgba(150, 112, 46, 0.5); }
 .res-chapter { color: #7a5a1e; }
-.res-chapter::before { content: '❖'; font-size: 10px; margin-right: 2px; }
+/* v27 声望 / 战力徽记：声望自此真实参与悬赏赏格与买价，常驻顶栏 */
+.res-rep { border-color: rgba(88, 138, 62, 0.4); color: #4c6a38; }
+.res-rep .rc-sub { font-style: normal; font-size: 10.5px; opacity: 0.8; margin-left: 2px; }
+.res-power { color: var(--gold-bright); border-color: rgba(150, 112, 46, 0.5); font-weight: bold; }
 .top-info .save-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 5px rgba(88, 138, 62, 0.6); margin-right: 4px; vertical-align: 1px; transition: background 0.18s ease; }
 
 #layout {
@@ -544,12 +553,19 @@ body::after {
 .bar-fill.morale { background: linear-gradient(90deg, #96702e, #c9962e); }
 .bar.morale-bar { height: 14px; margin: 2px 0 8px; }
 .bar.morale-bar .bar-text { font-size: 10px; }
-/* 气血危急（≤30%）：脉动警示 */
-.bar-fill.hp.low { animation: hpLow 1.15s ease-in-out infinite; }
-@keyframes hpLow {
-  0%, 100% { box-shadow: 0 0 2px rgba(191, 74, 68, 0.3); }
-  50% { box-shadow: 0 0 12px rgba(191, 74, 68, 0.8); }
+/* 气血危急（≤30%）：脉动警示（v27 性能化：预置光晕层走 opacity，不再逐帧动画 box-shadow） */
+.bar-fill.hp.low { animation: none; }
+.bar-fill.hp.low::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 8px;
+  box-shadow: 0 0 12px rgba(191, 74, 68, 0.85);
+  opacity: 0.2;
+  animation: hpPulse 1.15s ease-in-out infinite;
+  pointer-events: none;
 }
+@keyframes hpPulse { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.95; } }
 .bar-text {
   position: absolute;
   inset: 0;
@@ -992,7 +1008,9 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
   animation: popIn 0.28s cubic-bezier(0.3, 1.25, 0.45, 1);
   width: min(520px, 100%);
   max-height: 92vh;
+  max-height: 92dvh;   /* v27：小屏地址栏收放与壳的 dvh 口径一致 */
   overflow-y: auto;
+  overscroll-behavior: contain;   /* v27：滚到底不再带动整壳橡皮筋 */
   padding: 20px;
 }
 @keyframes popIn { from { opacity: 0; transform: scale(0.94) translateY(10px); } to { opacity: 1; transform: none; } }
@@ -1272,7 +1290,9 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
    响应式布局（保留基础降级，桌面端为主）
    ====================================================================== */
 @media (max-width: 1180px) {
-  #layout { grid-template-columns: 252px 1fr; grid-template-rows: auto 1fr; }
+  /* v27 修瑕：第一行改 minmax(0,1fr) 并约束左栏——原 auto 行会让左栏内容撑破 #game-screen（overflow:hidden）把右栏裁出视口且无滚动 */
+  #layout { grid-template-columns: 252px 1fr; grid-template-rows: minmax(0, 1fr) auto; }
+  #panel-left { min-height: 0; }
   #panel-right {
     grid-column: 1 / -1;
     flex-direction: row;
@@ -1293,7 +1313,9 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
   }
   /* 左右面板由 v22 抽屉接管（position:fixed），不参与壳内文档流排布。
      面板底部预留固定底导航高度，日志工具条等尾随元素不再被底栏遮挡 */
-  .center-panel { flex: 1 1 auto; min-height: 0; padding: 10px 2px calc(64px + env(safe-area-inset-bottom, 0px)); }
+  .center-panel { flex: 1 1 auto; min-height: 0; padding: 10px 2px calc(var(--nav-h) + env(safe-area-inset-bottom, 0px)); }
+  /* v27 性能：壳内 body 不滚动，fixed 贴附在移动端禁用部分合成优化——改为默认滚动 */
+  body { background-attachment: scroll; }
   #tab-content {
     flex: 1 1 auto;
     min-height: 0;
@@ -1303,7 +1325,8 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
     max-height: none;
     padding: 0 2px 12px;
   }
-  #log-wrap:not(.collapsed) { flex: 0 0 auto; height: 232px; min-height: 0; max-height: none; }
+  /* v27：定高改弹性 clamp——矮屏/横屏下不再把内容区挤到归零 */
+  #log-wrap:not(.collapsed) { flex: 0 1 auto; height: clamp(120px, 30dvh, 232px); min-height: 0; max-height: none; }
   .title-seal { display: none; }
   .game-title { letter-spacing: 10px; text-indent: 10px; }
   .menu-btns { grid-template-columns: 1fr; }
@@ -1315,7 +1338,7 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
   .create-attrs { grid-template-columns: 1fr; }
   .slot-card { flex-direction: column; align-items: stretch; }
   .slot-btns { justify-content: flex-end; }
-  .bt-actions .btn { min-width: 70px; font-size: 13px; padding: 8px 6px; }
+  .bt-actions .btn { font-size: 13px; padding: 8px 6px; }
   .top-title { font-size: 16px !important; letter-spacing: 2px; white-space: nowrap; }   /* v21：防标题折行 */
   .res-chip { padding: 2px 7px; font-size: 11px; }
 }
@@ -1433,7 +1456,7 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
 .route-choices .btn { flex: 1; min-width: 130px; text-align: center; }
 
 /* 长弹窗内容滚动，防溢出 */
-#popup-body { max-height: 62vh; overflow-y: auto; }
+#popup-body { max-height: 62vh; max-height: 62dvh; overflow-y: auto; overscroll-behavior: contain; }   /* v27：dvh 口径 + 滚动链封闭 */
 
 /* 江湖页 NPC 行内小字 */
 .gf-name .tag { margin-left: 4px; }
@@ -1643,6 +1666,9 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
   right: 0;
   z-index: 60;
   width: 248px;
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 12px;
   border: 1px solid transparent;
   background:
@@ -1758,7 +1784,7 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
 
 /* ---------- 成就 · 图鉴 ---------- */
 .codex-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
-.codex-list { max-height: 52vh; overflow-y: auto; padding-right: 4px; }
+.codex-list { max-height: 52vh; max-height: 52dvh; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }   /* v27：dvh 口径 + 滚动链封闭 */
 .achv-row {
   display: flex;
   justify-content: space-between;
@@ -2073,12 +2099,13 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
 .btn-hero::after {
   content: '';
   position: absolute;
-  top: 0; left: -70%;
+  top: 0; left: -50%;
   width: 45%; height: 100%;
   background: linear-gradient(105deg, transparent, rgba(240, 223, 174, 0.16), transparent);
+  /* v27 性能化：流光由 transform 推进（原 left 逐帧触发重排） */
   animation: heroSweep 3.2s ease-in-out infinite;
 }
-@keyframes heroSweep { 0%, 55% { left: -70%; } 90%, 100% { left: 130%; } }
+@keyframes heroSweep { 0%, 55% { transform: translateX(0); } 90%, 100% { transform: translateX(420%); } }
 /* 悬停/禁用写全墨底，防止通用 .btn:hover 的浅色纸面背景顶掉深色底（否则浅金副标题不可读） */
 .btn.btn-hero:hover:not(:disabled) {
   background: linear-gradient(180deg, #5a4d38, #3a342a 55%, #4d4232);
@@ -2525,7 +2552,6 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   .btn { min-height: 44px; }
   .btn-sm { min-height: 42px; padding: 6px 10px; }
   .tab-btn { min-height: 44px; }
-  .battle-box { max-height: 88vh; overflow: auto; }
   .bt-actions .btn { min-height: 44px; padding: 8px 10px; }
   .stat-detail { padding: 2px 4px; }
   .bag-quick .btn { min-height: 40px; }
@@ -2716,12 +2742,7 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
 
 /* ---------- v24 移动端补课：刘海屏顶栏 / 底部导航减负 ---------- */
 @media (max-width: 860px) {
-  #top-bar { padding-top: env(safe-area-inset-top, 0px); }   /* 刘海屏/挖孔屏顶栏避让 */
-  .tab-sep { display: none; }                                 /* 分隔线在底部导航里只会挤占横向空间 */
-  #tabs {
-    -webkit-mask-image: linear-gradient(90deg, #000 90%, transparent 99%);
-    mask-image: linear-gradient(90deg, #000 90%, transparent 99%);   /* 可横滑的右缘渐隐提示 */
-  }
+  .tab-sep { display: none; }   /* 分隔线在底部导航里只会挤占横向空间（v24 的右缘雾化已被 v25 等分收缩取代） */
 }
 
 /* ---------- 左栏折叠分组（原生 details，分层不折叠常驻项） ---------- */
@@ -2801,8 +2822,9 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
 
 /* ---------- ≤860px：手机主体 ---------- */
 @media (max-width: 860px) {
-  /* ---- A2 顶栏两行化：上行 标题+抽屉+设置，下行 chips 独占横滑 ---- */
-  #top-bar { flex-wrap: wrap; row-gap: 2px; padding: 8px 12px; }
+  /* ---- A2 顶栏两行化：上行 标题+抽屉+设置，下行 chips 独占横滑 ----
+     v27 修瑕：padding 简写曾覆盖 v24 的刘海避让（viewport-fit=cover 下内容顶进挖孔）——避让并入本条 */
+  #top-bar { flex-wrap: wrap; row-gap: 2px; padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 8px; }
   .top-title { font-size: 17px; letter-spacing: 3px; }
   .top-right { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
   #top-info {
@@ -2843,11 +2865,12 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
   /* v26 App-Shell：底部导航高度不再由 #layout 预留，滚动余量在 #tab-content 内 */
 
   /* ---- A5 Toast 让位：双行顶栏之下、不遮抽屉按钮 ---- */
-  #toast { top: auto; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); }
+  #toast { top: auto; bottom: calc(var(--nav-h) + 14px + env(safe-area-inset-bottom, 0px)); }
   .toast-item { max-width: calc(100vw - 32px); text-align: center; }
 
-  /* ---- A6 问道 rail / 仙途条渐隐（仅窄屏，宽屏不溢出不打雾） ---- */
-  .rail {
+  /* ---- A6 问道 rail / 仙途条渐隐（仅窄屏，宽屏不溢出不打雾）
+     v27 修瑕：原选择器 .rail 是不存在的类，渐隐从未生效——纠正为 .quest-rail ---- */
+  .quest-rail {
     -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 20px), transparent);
     mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 20px), transparent);
   }
@@ -2856,11 +2879,21 @@ textarea.save-code:focus { border-color: var(--gold-dim); }
     mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent);
   }
 
-  /* ---- A7 触控目标与表单：行内小钮抬高度；输入字号 ≥16px 防 iOS 聚焦放大 ---- */
+  /* ---- A7 触控目标与表单：行内小钮抬高度；输入字号 ≥16px 防 iOS 聚焦放大 ----
+     v27：高频战斗小钮 / 引导直达 / 火候 / 背包页签 / 设置入口 / 折叠头 一并抬到 ≥40px ---- */
   input[type="text"], input[type="number"], select, textarea { font-size: 16px; }
+  textarea.save-code { font-size: 16px; }   /* 旧档文本码 11px 聚焦必触发 iOS 缩放 */
   .bag-item-btns .btn { min-height: 36px; }
-  .log-tool, .log-toggle { min-height: 36px; }
+  .log-tool, .log-toggle, .log-head .log-tool, .log-head .log-toggle { min-height: 36px; }
   .bt-actions .btn { min-height: 44px; }
+  .bt-ctl .btn, .bt-sub .btn { min-height: 40px; }
+  .guide-tip .guide-go, .daily-row .guide-go, .focus-alert .focus-go { min-height: 36px; }
+  .bag-tab { min-height: 36px; padding: 7px 12px; }
+  .amb-btn { min-height: 40px; }
+  .m-drawer-btn { min-height: 42px; }
+  .subtab-btn { min-height: 40px; }
+  .fold > summary { padding: 9px 0; font-size: 13px; }
+  .popup-x { width: 36px; height: 36px; font-size: 17px; }
 
   /* ---- A1 剧情沉浸态：播放中隐藏底部导航与顶栏，剧情卷轴全屏化 ---- */
   body.story-playing #tabs,
@@ -2969,7 +3002,7 @@ body { -webkit-tap-highlight-color: transparent; }
 #back-top {
   position: fixed;
   right: 14px;
-  bottom: calc(74px + env(safe-area-inset-bottom, 0px));
+  bottom: calc(var(--nav-h) + 18px + env(safe-area-inset-bottom, 0px));
   z-index: 55;
   width: 40px;
   height: 40px;
@@ -3002,6 +3035,9 @@ body { -webkit-tap-highlight-color: transparent; }
 }
 .q-bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #b99650, #d9ab5e); transition: width 0.3s ease; }
 .q-step.done .q-bar i { background: linear-gradient(90deg, #7ca55e, #96bb80); }
+
+/* ---------- v27 提醒/主线卡标题平衡折行：短句不再折出单字孤行 ---------- */
+.focus-main .focus-title, .focus-alert .focus-title { text-wrap: balance; }
 
 /* ---------- S8 焦点条目的地副行（.focus-dest） ---------- */
 .focus-dest { font-size: 11px; color: rgba(233, 218, 178, 0.8); letter-spacing: 0.5px; margin-top: 1px; }
@@ -3059,3 +3095,118 @@ body { -webkit-tap-highlight-color: transparent; }
 /* ---------- S12 提醒卡目的地副行块级化（span 内嵌套需要显式块级） ---------- */
 .focus-dest { display: block; }
 .log-head { white-space: nowrap; }
+
+
+/* ==================== v27「归一」：触控体检收口 · 键盘与横屏适配 · 界面新组件 ==================== */
+
+/* ---------- V1 软键盘让位：JS 将 visualViewport 缩放量写入 --kb，弹层整体上移 ----------
+   iOS 键盘不改变 dvh，≤480 的底部弹层会被键盘盖住；Android dvh 收缩后弹层贴底同样需要余量 */
+@media (max-width: 860px) {
+  html.kb-open .modal { padding-bottom: calc(16px + var(--kb)); }
+}
+
+/* ---------- V2 滚动链封闭：所有内滚容器 contain，滚到底不再带动整壳橡皮筋 ---------- */
+#log, #bt-log, .bt-sub, .rp-scroll, .subtabs, .quest-rail, .tutorial-box, #log-wrap:not(.collapsed) #log {
+  overscroll-behavior: contain;
+}
+
+/* ---------- V3 小字下限：10~11px 级辅文整体抬到 ≥11.5px（顶栏 chips / 仙途层名 / 排名差 / 时辰） ---------- */
+.rail-name, .rp-layer, .rank-gap, .t-time { font-size: 11.5px; }
+.fx-tag { font-size: 11px; }
+.mkt, .menu-group-label, .hero-sub, .fire-note { font-size: 12px; }
+.focus-dest { font-size: 12px; }
+.bar.morale-bar .bar-text { font-size: 11px; }
+.tab-btn { font-size: clamp(12px, 3.1vw, 14px); }
+
+/* ---------- V4 ≤480 收尾：子页签渐隐提示扩到 481~860、排行榜血条窄屏让位、
+   死规则清理（v20 的 battle-box 88vh 已被 v26 战斗壳 100dvh 覆盖为死代码） ---------- */
+@media (max-width: 860px) {
+  .subtabs {
+    -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent);
+    mask-image: linear-gradient(90deg, #000 0, #000 calc(100% - 18px), transparent);
+  }
+}
+@media (max-width: 480px) {
+  .rank-bar { flex-basis: 84px; }
+  .tutorial-btns {
+    position: sticky;
+    bottom: 0;
+    padding: 8px 0 calc(4px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(246, 240, 223, 0), var(--panel) 32%);
+  }
+}
+
+/* ---------- V5 横屏 / 矮视口（dvh≈390~520）：壳要素全面压缩，内容区保持可用 ---------- */
+@media (orientation: landscape) and (max-height: 520px) {
+  #top-bar { padding-bottom: 3px; }
+  .top-title { font-size: 14px; }
+  .top-meta2 { display: none !important; }
+  .m-mini-bars { display: none !important; }
+  #top-info { padding: 1px 0 2px; }
+  #focus-strip:not(.hidden) { gap: 6px; }
+  .focus-main, .focus-alert { padding: 5px 10px; }
+  .focus-dest { display: none; }
+  .focus-sub { display: none; }
+  #log-wrap:not(.collapsed) { height: clamp(76px, 26dvh, 150px); }
+  .tab-btn { min-height: 34px; padding: 2px 2px; }
+  #tabs { padding-top: 3px; padding-bottom: calc(3px + env(safe-area-inset-bottom, 0px)); }
+  .center-panel { padding-bottom: calc(var(--nav-h) - 12px + env(safe-area-inset-bottom, 0px)); }
+  #toast { bottom: calc(var(--nav-h) + 4px + env(safe-area-inset-bottom, 0px)); }
+  .bt-ctl .btn, .bt-sub .btn { min-height: 34px; }
+}
+
+/* ---------- V6 顶栏三组式在窄屏：组分隔线退场，chip 行照常横滑 ---------- */
+@media (max-width: 860px) {
+  .top-group { gap: 4px; }
+  #top-info { gap: 8px; }   /* v27：chips 组间距放宽，横滑行不再几乎相贴 */
+  .top-group + .top-group { padding-left: 0; border-left: none; }
+  .res-rep .rc-sub { display: none; }   /* 横滑行内省宽度，称号入 title */
+}
+
+/* ---------- V7 江湖页交情量表（-100 宿敌 ↔ +100 莫逆） ---------- */
+.npc-rel {
+  position: relative;
+  display: block;
+  height: 5px;
+  margin: 3px 0 4px 42px;
+  max-width: 240px;
+  border-radius: 3px;
+  background: rgba(96, 76, 40, 0.14);
+  overflow: hidden;
+}
+.npc-rel::before {   /* 中点刻度：零交情（陌生） */
+  content: '';
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  width: 1px;
+  background: rgba(96, 76, 40, 0.3);
+}
+.npc-rel i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #a05248, #b99650 55%, #7ca55e);
+  transition: width 0.3s ease;
+}
+
+/* ---------- V8 问道页一屏总览：章节轨下的进度汇总条 ---------- */
+.quest-sum {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  border-top: 1px dashed var(--border);
+}
+.quest-sum b { color: var(--gold-bright); font-weight: normal; }
+
+/* ---------- V9 炼制坊/祭炼堂 洞府加成徽记 ---------- */
+.shop-section-title .tag.safe { margin-left: 6px; }
+
+/* ---------- V10 火候按钮触控高度（置于 S9 基础规则之后才能生效） ---------- */
+@media (max-width: 860px) {
+  .fire-btn { min-height: 40px; }
+}

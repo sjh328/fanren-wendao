@@ -107,10 +107,12 @@ const DaoSys = {
     if (p.realmIdx < 1) { UI.toast('你尚未筑基，大道未成'); return; }
     const ok = await UI.popup({
       title: '转修他道',
-      html: `转道逆天，代价惨重：<br>· <span class="neg">跌落一个大境界</span>（${GameData.REALM_NAMES[p.realmIdx]} → ${GameData.REALM_NAMES[p.realmIdx - 1]}）<br>· <span class="neg">当前境界修为尽失</span><br>· 原有大道加成尽数消散，须重新叩问大道<br><br>确定弃道重修吗？`,
+      html: `转道逆天，代价惨重：<br>· <span class="neg">跌落一个大境界</span>（${GameData.REALM_NAMES[p.realmIdx]} → ${GameData.REALM_NAMES[p.realmIdx - 1]}）<br>· <span class="neg">当前境界修为尽失</span><br>· <span class="neg">原大道的道境经验尽数散去</span><br>· 原有大道加成尽数消散，须重新叩问大道<br><br>确定弃道重修吗？`,
       options: [{ text: '弃道重修', value: true }, { text: '罢了', value: false }],
     });
     if (!ok) return;
+    // v27 修瑕：转道清空原道 daoExp——此前重拾原道立即继承全部道境层数，「弃道重修」形同虚设
+    if (p.daoExp) delete p.daoExp[p.dao];
     p.realmIdx -= 1; p.layer = 0; p.exp = 0; p.insight = 0; p.dao = null;
     const st = Stat.compute(p);
     p.hp = Math.min(p.hp, st.maxHp); p.mp = Math.min(p.mp, st.maxMp);

@@ -24,9 +24,10 @@ const ForgeSys = {
     }
     return (p.enhanced || {})[id] || 0;
   },
-  /** 强化成功率（%）：1~3 必成，之后逐级递减 */
+  /** 强化成功率（%）：1~2 必成，+3→+4 起 90% 逐级递减
+   *  v27 修瑕：原 lv<=3 恒 100 使表中 3:90 成为死档（+3→+4 白送必成） */
   rate(lv) {
-    if (lv <= 3) return 100;
+    if (lv < 3) return 100;
     return { 3: 90, 4: 82, 5: 72, 6: 60, 7: 50, 8: 40, 9: 30, 10: 22 }[lv] || 50;
   },
   /** 强化费用：灵石随境界与等级递增，玄铁矿 = 等级+1 */
@@ -112,7 +113,7 @@ const ForgeSys = {
       Log.add(`锤起锤落，火星四溅——<b class="grade-${out.grade}">${out.name}</b> 铸成出世！`, 'gain');
       if ((out.grade || 0) >= 4 || out.set) UI.announce(`✦ 炼器大成 · ${out.name}`, 'gold');
     } else {
-      Log.add(`炉温骤变，器坯炸裂——材料尽毁，未得 ${out.name}。（成器率 ${r.rate}%）`, 'loss');
+      Log.add(`炉温骤变，器坯炸裂——材料尽毁，未得 ${out.name}。（成器率 ${rate}%）`, 'loss');
       UI.toast('炼器失败，材料尽毁', true);
     }
     Game.afterAction();

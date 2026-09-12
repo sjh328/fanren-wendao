@@ -82,8 +82,8 @@ try {
     p.cave._pestDay = undefined;
     CaveSys.checkPest(p);
     const guarded = p.cave._pestDay === Math.floor(p.day);
-    // v24：三项每日结算由渲染函数迁往 Game.afterAction——断言接线点同步迁移
-    const wired = /checkPest\(p\)/.test(Game.afterAction.toString()) && /visitorEvent\(p\)/.test(Game.afterAction.toString());
+    // v24：三项每日结算迁往行动收尾；v27 再归口 Game.dailySettle（离线回放共用）——断言接线点同步迁移
+    const wired = /checkPest\(p/.test(Game.dailySettle.toString()) && /visitorEvent\(p/.test(Game.dailySettle.toString());
     return { guarded, wired };
   });
   f3.guarded && f3.wired ? pass('F3 虫害/访客每日事件已接线且带日界防重') : fail('F3 洞府事件接线', JSON.stringify(f3));
@@ -1469,7 +1469,7 @@ try {
   const z17 = (() => {
     const wired = /离线修行/.test(fs.readFileSync('game.js', 'utf8'));
     const css = fs.readFileSync('style.css', 'utf8');
-    const safe = /#top-bar { padding-top: env\(safe-area-inset-top/.test(css);
+    const safe = /env\(safe-area-inset-top, 0px\)\) 12px 8px/.test(css);   // v27：刘海避让并入顶栏 padding 简写
     const sep = /\.tab-sep { display: none; }/.test(css);
     const btn = /\.btn-sm { min-height: 42px; padding: 6px 10px; }/.test(css);
     return { wired, safe, sep, btn };

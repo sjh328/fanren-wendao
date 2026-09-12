@@ -606,6 +606,7 @@ const Battle = {
           if (crit && B.enemy.charging) {
             B.enemy.charging = false;
             B.intent = null;
+            p.counters.breaks = (p.counters.breaks || 0) + 1;   // v27 修瑕：破招从未计数，成就「破招行家」永不可解锁
             const brk = Math.max(1, Math.round(Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy)) * Utils.randF(0.9, 1.1)));
             B.enemy.hp = Math.max(0, B.enemy.hp - brk);
             if (B.stats) B.stats.out += brk;
@@ -733,7 +734,8 @@ const Battle = {
           const fk = def.fkind || 'damage';
           if (fk === 'damage') {
             // 伤害符：符光必中，高额爆发（雷笔境 +30%）
-            let dmg = Stat.afterDef(st.atk * (def.power || 2.2), this.enDef(B.enemy)) * Utils.randF(0.95, 1.1) * this.moraleMul() * this.comboMul();
+            // v27 修瑕：祭符伤害此前用面板原始 atk，狂暴/虚弱等状态不生效（与全战斗口径不一致）
+            let dmg = Stat.afterDef(this.myAtk(st) * (def.power || 2.2), this.enDef(B.enemy)) * Utils.randF(0.95, 1.1) * this.moraleMul() * this.comboMul();
             if (p.dao === 'talisman' && DaoSys.tierLevel(p) >= 3) dmg *= 1.3;   // v10 符道六境·雷笔境
             if (this.eFx(B, 'e_tstorm')) dmg *= 1.3;   // v20 精英词缀·雷皮
             if (B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain' && /雷/.test(def.name)) dmg *= 1.2;   // v20 雨天雷符 +20%
@@ -753,7 +755,7 @@ const Battle = {
             }
             // v10 符道六境·追雷境：三成几率引动追雷
             if (p.dao === 'talisman' && DaoSys.tierLevel(p) >= 4 && B.enemy.hp > 0 && Utils.chance(30)) {
-              const thunder = Math.max(1, Math.round(st.atk * 0.2));
+              const thunder = Math.max(1, Math.round(this.myAtk(st) * 0.2));
               B.enemy.hp = Math.max(0, B.enemy.hp - thunder);
               this.log(`一道追雷随符而落！再对 ${B.enemy.name} 造成 <b>${thunder}</b> 点伤害！`, 'log-crit');
             }
@@ -787,6 +789,8 @@ const Battle = {
           if (b.atkPct) StatusFx.add(B.myFx, { kind: 'atkup', pct: b.atkPct, rounds: b.rounds || 3 });
           if (b.defPct) StatusFx.add(B.myFx, { kind: 'defup', pct: b.defPct, rounds: b.rounds || 3 });
           if (b.spdPct || b.dodge) StatusFx.add(B.myFx, { kind: 'agiup', pct: Math.max(b.spdPct || 0, b.dodge || 0), rounds: b.rounds || 3 });
+          // v27 修瑕：轻身丹「闪避 +10%」此前从未生效——dodge 需并入闪避加成而非只取 max 塞进身法
+          if (b.dodge) { B.buffs.dodgeBonus = b.dodge; B.buffs.dodgeRounds = b.rounds || 3; }
           if (b.crit) StatusFx.add(B.myFx, { kind: 'critup', pct: b.crit, rounds: b.rounds || 3 });
           // v20 精英词缀·镜像：玩家每获一项增益，敌方攻击 +8%
           if (this.eFx(B, 'e_mirror') && B.enemy.hp > 0) {
@@ -812,13 +816,27 @@ const Battle = {
         break;
       }
       case 'flee': {
-        const chance = Utils.clamp(45 + (st.speed - B.enemy.spd) * 2, 10, 90);
+        // v27 修瑕：遁走成算改用结算后身法口径（此前用敌方原始 spd，「迅影」「迟滞」均不参与）
+        const chance = Utils.clamp(45 + (this.mySpd(st) - this.enSpd(B.enemy)) * 2, 10, 90);
         if (Utils.chance(chance)) {
           this.log('你虚晃一招，遁走而去，好汉不吃眼前亏！', 'log-warn');
           await this.wait(700);
           if (B.ctx.spar) NpcSys.afterSpar(p, B.ctx.npcId, false);
           if (B.ctx.dungeon) DungeonSys.onFlee();
           if (B.ctx.tower) TowerSys.onFlee();   // v25：塔内遁走等同离塔，保全部收获
+          // v27 修瑕：剧情战遁走此前不回调 onEnd——Story.cur 悬挂、主线永久停摆（软锁）
+          if (B.ctx.story) {
+            const cb = B.ctx.story.onEnd; B.ctx.story.onEnd = null;
+            this.end(false);
+            if (cb) cb(false);
+            return;
+          }
+          // v27 修瑕：宗门大比遁走此前不结算本轮——免费重赛到三连胜（白嫖夺魁）
+          if (B.ctx.tourney) {
+            this.end(false);
+            SectSys.onTourneyRound(false);
+            return;
+          }
           this.end(false);
           return;
         }
@@ -1013,6 +1031,14 @@ const Battle = {
       const frozen = StatusFx.has(e.fx, 'freeze');
       this.log(`${e.name} 被【${frozen ? '冰封' : '束缚'}】困住，这一回合动弹不得！`, 'log-gain');
       e.fx = StatusFx.removeKinds(e.fx, ['stun', 'freeze']);
+      // v27 修瑕：敌方被缚跳过回合时照常收尾——此前提前 return 不复位防御标记、不衰减增益，
+      // 玩家「防御 + 冰封」连招可白吃一整回合 40% 减伤与反击机会
+      if (B.buffs.defRounds > 0) { B.buffs.defRounds--; if (B.buffs.defRounds === 0) B.buffs.defPower = 0; }
+      if (B.buffs.dodgeRounds > 0) { B.buffs.dodgeRounds--; if (B.buffs.dodgeRounds === 0) B.buffs.dodgeBonus = 0; }
+      if (e.guardRounds > 0) { e.guardRounds--; if (e.guardRounds === 0) e.guardPower = 0; }
+      B.myFx = StatusFx.decayKinds(B.myFx, ['defdown', 'slow', 'weaken', 'atkup', 'defup', 'agiup', 'critup']);
+      e.fx = StatusFx.decayKinds(e.fx, ['defdown', 'slow']);
+      B.defending = false;
       this.planIntent();
       await this.wait(400);
       return;
@@ -1350,6 +1376,10 @@ const Battle = {
     if (B.stats.out > st.atk * 100) p.counters.bigOut = (p.counters.bigOut || 0) + 1;   // v20 一夜屠魔
     p.counters.wins++;
     if (B.enemy.elite) p.counters.killsElite = (p.counters.killsElite || 0) + 1;   // v6 成就计数
+    // v27 修瑕：三项战斗挑战成就（无伤/速胜/越境）此前从未计数，永不可解锁
+    if (B.stats && B.stats.in === 0) p.counters.hitlessWins = (p.counters.hitlessWins || 0) + 1;
+    if ((B.turn || 1) <= 3) p.counters.quickWins = (p.counters.quickWins || 0) + 1;
+    if ((B.enemy.power || 0) > (p.realmIdx * 4 + p.layer) + 2) p.counters.upsetWins = (p.counters.upsetWins || 0) + 1;
     // v19 剧情战：轻奖励、必入戏（主线战不受普通掉落与败绩规则影响）
     if (B.ctx.story) {
       Cultivate.addExp(p, Math.round(B.enemy.expGain * 0.5));
@@ -1488,6 +1518,8 @@ const Battle = {
     p.hp = Math.max(1, Math.round(st.maxHp * 0.3));
     p.mp = Math.round(st.maxMp * 0.2);
     p.counters.defeats = (p.counters.defeats || 0) + 1;   // v6 成就计数
+    // v27 联动：败北亦有道心代价——普通败北心魔 +3（切磋/大比/塔/秘境/剧情战不在此列，各分支已提前返回）
+    if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 3, '败北之辱');
     Time.add(3);
     Log.add(`不知过了多久，你被人救回了村中。此战折损修为 ${Utils.fmtNum(lostExp)}、灵石 ${Utils.fmtNum(lostLow)}，捡回一条性命。`, 'loss');
     Log.add('伤敌不足，修身有余。且调理伤势，再图精进。', 'warn');

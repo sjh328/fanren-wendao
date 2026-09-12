@@ -58,6 +58,18 @@ const Game = {
       const btn = [...item.querySelectorAll('.bag-item-btns .btn')].find(b => !b.classList.contains('btn-danger'));
       if (btn && !btn.disabled) btn.click();
     });
+    // v27 移动端键盘适配：visualViewport 缩放量写入 --kb 变量——底部弹层与输入框不再被软键盘遮住
+    if (window.visualViewport && window.innerWidth <= 860) {
+      const vv = window.visualViewport;
+      const kbSync = () => {
+        const kb = Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+        document.documentElement.style.setProperty('--kb', kb + 'px');
+        document.documentElement.classList.toggle('kb-open', kb > 40);   // 仅键盘弹出时让位，平时贴底弹层不抬升
+      };
+      vv.addEventListener('resize', kbSync);
+      vv.addEventListener('scroll', kbSync);
+      kbSync();
+    }
     // 键盘：ESC 依次收起 弹窗（按取消）→ 氛围面板 → 大道弹窗；战斗中 1~5 快捷出手
     document.addEventListener('keydown', (e) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '');
@@ -163,7 +175,9 @@ const Game = {
 
   /** v18：离线进度计算——灵田按真实时间生长
    *  v26 修瑕：离线天数改按日回放 Time.add(1)——跨年结算（年龄整化 / NPC 成长 / 世界大事 / 寿元判定）
-   *  不再被整体跳过，年龄也不再出现 16.0821… 式小数。 */
+   *  不再被整体跳过，年龄也不再出现 16.0821… 式小数。
+   *  v27：离线逐日补结「日更」系统（灵泉 / 访客 / 虫害 / 节庆 / 登顶日赏 / 玄影窥伺 / 图鉴）——
+   *  此前这些钩子只挂在行动收尾，离线 30 天分文不进。 */
   computeOfflineProgress() {
     const p = this.player;
     if (!p || p.dead || p.day === 0) return;
@@ -175,17 +189,9 @@ const Game = {
     if (elapsedMs < 60000) return; // 少于 1 分钟不算离线
     // 按真实时间推算游戏天数（现实 1 分钟 ≈ 游戏 1 天，上限 30 天）
     const realDays = Math.min(30, Math.floor(elapsedMs / 60000));
-    // 灵田生长（收获判定由洞府页/行动收尾按日界完成）
-    let offlineCrops = 0;
-    if (p.cave && p.cave.plots) {
-      for (const plot of p.cave.plots) {
-        if (!plot || !plot.seed) continue;
-        const def = GameData.ITEMS[plot.seed];
-        if (!def || !def.days) continue;
-        plot.plantedDay = Math.max(plot.plantedDay, p.day - realDays);
-        offlineCrops++;
-      }
-    }
+    // v27 修瑕：不再回拨熟期——作物按真实日数自然生长与过熟（原 Math.max 回拨让
+    // 「过熟廿日减半」的规则在长离线下永远无法成立）
+    const offlineCrops = (p.cave && p.cave.plots || []).filter(pl => pl && pl.seed).length;
     // v24 离线修行：放置游戏名实相符——离线期间行功不辍，修为按四成效率折算（不冲关、不积丹毒）
     let offlineExp = 0;
     if (p.realmIdx >= 0 && !p.dead) {
@@ -197,13 +203,33 @@ const Game = {
       } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; }
     }
     // 时间照常流逝（逐日回放，跨年/寿元/世界线照常结算；寿元尽则照常坐化）
-    for (let i = 0; i < realDays && !p.dead; i++) Time.add(1);
+    // v27：逐日补结日更系统（auto 模式——节庆自动从简、灵泉只入账不刷屏）
+    let springOn = !!(p.cave && p.cave.builds && p.cave.builds.spring);
+    for (let i = 0; i < realDays && !p.dead; i++) {
+      Time.add(1);
+      this.dailySettle(p, true);
+    }
     if (offlineCrops > 0) {
       Log.add(`你不在的${realDays}个时辰里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
     }
+    if (springOn && !p.dead) Log.add('【灵泉】离线的日子里，洞府灵泉照常日日涌出灵石，皆已收入储物袋。', 'gain');
     if (offlineExp > 0) {
       Log.add(`离山的日子裡你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（离线修行按四成效率折算，共 ${realDays} 日）。`, 'gain');
     }
+  },
+
+  /** v27：每日例行结算（行动收尾与离线回放共用）——所有子项内部自带日界防重，重复调用无副作用。
+   *  auto=离线回放模式：节庆自动从简（不弹窗不开战）、访客/灵泉不回环 afterAction、
+   *  道侣心愿需互动故跳过（来日在线再叙）。 */
+  dailySettle(p, auto = false) {
+    try { if (typeof FestivalSys !== 'undefined') FestivalSys.check(p, auto); } catch (err) { console.error('节庆检查异常:', err); }   // v20：节庆触发
+    try { if (typeof SectSys !== 'undefined' && SectSys.tourneyCheck) SectSys.tourneyCheck(p); } catch (err) { console.error('大比检查异常:', err); }   // v22：宗门大比（每五年一届）
+    if (!auto) { try { if (typeof NpcSys !== 'undefined' && NpcSys.companionCheck) NpcSys.companionCheck(p); } catch (err) { console.error('共修检查异常:', err); } }   // v20：道侣共修
+    try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
+    // v24：日常结算统一收口到行动后（原先藏在各页签渲染函数里，打开页面才结算）
+    try { if (typeof RankSys !== 'undefined' && RankSys.dailyReward && RankSys.isTop(p)) RankSys.dailyReward(p); } catch (err) { console.error('登顶日赏异常:', err); }
+    try { if (p.cave) { CaveSys.visitorEvent(p, auto); CaveSys.checkPest(p); CaveSys.springDaily(p, auto); } } catch (err) { console.error('洞府日常异常:', err); }
+    try { if (typeof Codex !== 'undefined' && Codex.checkRewards) Codex.checkRewards(); } catch (err) { console.error('图鉴检查异常:', err); }
   },
 
   enterGame() {
@@ -243,14 +269,7 @@ const Game = {
     Save.autoSave();
     Achieve.check();   // v6：成就检查（解锁即发奖播报）
     try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
-    try { if (typeof FestivalSys !== 'undefined') FestivalSys.check(p); } catch (err) { console.error('节庆检查异常:', err); }   // v20：节庆触发
-    try { if (typeof SectSys !== 'undefined' && SectSys.tourneyCheck) SectSys.tourneyCheck(p); } catch (err) { console.error('大比检查异常:', err); }   // v22：宗门大比（每五年一届）
-    try { if (typeof NpcSys !== 'undefined' && NpcSys.companionCheck) NpcSys.companionCheck(p); } catch (err) { console.error('共修检查异常:', err); }   // v20：道侣共修
-    try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
-    // v24：日常结算统一收口到行动后（原先藏在各页签渲染函数里，打开页面才结算）
-    try { if (typeof RankSys !== 'undefined' && RankSys.dailyReward && RankSys.isTop(p)) RankSys.dailyReward(p); } catch (err) { console.error('登顶日赏异常:', err); }
-    try { if (p.cave) { CaveSys.visitorEvent(p); CaveSys.checkPest(p); CaveSys.springDaily(p); } } catch (err) { console.error('洞府日常异常:', err); }
-    try { if (typeof Codex !== 'undefined' && Codex.checkRewards) Codex.checkRewards(); } catch (err) { console.error('图鉴检查异常:', err); }
+    this.dailySettle(p);   // v27：日更系统统一收口（节庆/大比/共修/窥伺/登顶/洞府/图鉴）
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
     if (p.pendingDao && !p.dao && !p.dead && !Battle.active
       && (p.realmIdx >= 1 || p.reinc)) {
@@ -477,7 +496,7 @@ const Game = {
     'trib-strategy': (d) => Tribulation.choose(d.strategy),
     'act-slay': () => KarmaSys.slayCorpses(),
     'quest-side': (d) => QuestSys.claimSide(d.side),
-    'quest-bonus': () => QuestSys.claimBonus(),   // v24 章助缘领赏
+    'quest-bonus': (d) => QuestSys.claimBonus(d && d.ch),   // v24/v27 章助缘领赏（支持跨章补领，无参=当前章）
     'act-sign': () => DailySign.draw(),
     'act-alchemy': (d) => CraftSys.alchemy(d.recipe),
     'act-study-recipe': (d) => CraftSys.studyRecipe(d.recipe),

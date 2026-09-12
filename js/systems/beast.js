@@ -52,6 +52,12 @@ const BeastSys = {
         Log.add(`神识相融，心意相通——<b>${e.name}</b> 竟俯首认主！灵兽图谱又添一员，出战可协力攻敌。`, 'gain');
         UI.announce(`✦ 灵兽认主 · ${e.name}`, 'gold');
         Meta.see('monster', e.id);
+        // v27 修瑕：驯服物种去重从未计数，成就「驯兽大师」永不可解锁
+        p.counters.tamedSpecies = p.counters.tamedSpecies || {};
+        if (!p.counters.tamedSpecies[e.species]) {
+          p.counters.tamedSpecies[e.species] = 1;
+          p.counters.tameSpecies = Object.keys(p.counters.tamedSpecies).length;
+        }
       }
       B.enemy.hp = 0;
       p.counters.tames = (p.counters.tames || 0) + 1;   // v24 章助缘计数

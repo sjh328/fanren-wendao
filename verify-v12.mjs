@@ -44,8 +44,8 @@ try {
     ? pass('VA5 闪光引导 / 回到顶部 / 火候按钮样式齐备') : fail('VA5 样式件', '');
   /@media \(max-width: 860px\)[^@]*\.battle-box \{[^}]*display: flex/.test(css.replace(/\n/g, ' ')) && /#bt-log \{[^}]*flex: 1 1 auto/.test(css.replace(/\n/g, ' ').replace('  ', ' '))
     ? pass('VA6 战斗壳：战报内滚、操作常驻') : fail('VA6 战斗壳', '缺 flex 壳规则');
-  html.includes('id="back-top"') && html.includes('style.css?v=42') && html.includes('game.js?v=42')
-    ? pass('VA7 回到顶部按钮 + 缓存号 v=42') : fail('VA7 index.html', '');
+  html.includes('id="back-top"') && html.includes('style.css?v=43') && html.includes('game.js?v=43')
+    ? pass('VA7 回到顶部按钮 + 缓存号 v=43') : fail('VA7 index.html', '');
 
   /* ================= VB 移动端壳行为组（390×844） ================= */
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });

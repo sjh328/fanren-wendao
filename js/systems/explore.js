@@ -274,6 +274,8 @@ const EventSys = {
         Log.add('你囊中羞涩，便以真元渡了对方一程，自身气血小损。', 'info');
       }
       KarmaSys.addFortune(Utils.rand(8, 12));
+      // v27 联动：善行有口皆碑——红尘相助声望 +2（声望体系新产出端）
+      if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 2, '红尘相助');
     } else if (choice === 'rob') {
       const gain = Math.round(Utils.rand(12, 20) * eco);
       Bag.addStones(gain);

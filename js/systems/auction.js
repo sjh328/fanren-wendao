@@ -82,7 +82,8 @@ const AuctionSys = {
       p.auction.until = 0;   // 本期拍品易主，刷新下一件
       Ambience.sfx('auction');   // v19 落槌音
     } else {
-      Bag.addStones(price);
+      // v27 修瑕：退款走原额入账（不吃灵石获取加成）——此前退款被加成放大，落标反而净赚
+      Bag.addStonesRaw(price);
       Log.add(`竞价失利——有人以更高价截胡。灵石已原路退回。`, 'warn');
     }
     Game.afterAction();

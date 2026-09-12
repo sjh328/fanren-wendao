@@ -424,26 +424,39 @@ const QuestSys = {
     if (p.realmIdx >= (supR || 999)) return true;   // 境界领先：旧章目标自动追认
     try { return !!step.done(p); } catch (e) { return false; }
   },
-  /** v24 章助缘领取（不挡章末推进的可选支目标，把散落玩法织进主线动机） */
   bonusDone(def, p) {
     if (!def || !def.bonus) return false;
     try { return !!def.bonus.done(p); } catch (e) { return false; }
   },
-  claimBonus() {
+  /** v24 章助缘领取（不挡章末推进的可选支目标，把散落玩法织进主线动机）
+   *  v27 修瑕：支持跨章补领——此前章节一完结，未领的助缘即永久失效 */
+  claimBonus(chId) {
     const p = Game.player;
     if (!p) return;
     const q = p.quest = p.quest || { ch: 0, side: {} };
     q.bonus = q.bonus || {};
-    const def = this.CHAPTERS[Math.min(q.ch, this.CHAPTERS.length - 1)];
-    if (!def || !def.bonus || q.bonus[def.id]) return;
+    let idx = Math.min(q.ch, this.CHAPTERS.length - 1);
+    if (chId) {
+      const i = this.CHAPTERS.findIndex(d => d.id === chId);
+      if (i >= 0) idx = i;
+    }
+    const def = this.CHAPTERS[idx];
+    if (!def || !def.bonus || q.bonus[def.id]) { UI.toast('此助缘已领赏或不存在'); return; }
     if (!this.bonusDone(def, p)) { UI.toast('助缘尚未达成'); return; }
     q.bonus[def.id] = Math.floor(p.day);
     this.grant(def.bonus.reward);
     Log.add(`✦ 助缘功成 · ${def.bonus.desc} ——【酬谢】${this.rewardText(def.bonus.reward)}`, 'gain');
     UI.toast('助缘功成，酬谢已入囊中');
-    Story.chron(`第${this.CN9[Math.min(q.ch, this.CHAPTERS.length - 1)]}章助缘达成`);
+    Story.chron(`第${this.CN9[idx]}章助缘达成`);
     UI.renderAll();
     Save.autoSave(true);
+  },
+  /** v27 往章助缘补领清单：已完成但未领赏的前章助缘 */
+  lateBonusList(p) {
+    const q = p.quest || { bonus: {} };
+    return this.CHAPTERS
+      .map((def, i) => ({ def, i }))
+      .filter(({ def, i }) => i < Math.min(q.ch, this.CHAPTERS.length - 1) && def.bonus && !(q.bonus || {})[def.id] && this.bonusDone(def, p));
   },
   /** v24 百科新词条解锁提示（story markSeen 后调用） */
   loreToast(sid) {
@@ -617,11 +630,19 @@ const QuestSys = {
         <span class="rail-name">${def.title}</span>
       </div>`;
     }).join('<span class="rail-link"></span>');
+    // v27：问道页一屏总览——主线进度 + 支线了结数 + 助缘领取数
+    const sideDoneN = this.SIDES.filter(sd => !!q.side[sd.id]).length;
+    const bonusGotN = Object.keys(q.bonus || {}).length;
     const railHtml = `
     <div class="card quest-card card-main">
       <div class="card-title">✦ 主线 · 问道九章 <span class="tag">${ch}/${this.CHAPTERS.length} 章</span>
         <button class="btn btn-sm" data-action="quest-review" style="margin-left:auto">📜 问道录 · 剧情回顾</button></div>
       <div class="quest-rail">${rail}</div>
+      <div class="quest-sum">
+        <span>支线了结 <b class="hl">${sideDoneN}/${this.SIDES.length}</b></span>
+        <span>章助缘 <b class="hl">${bonusGotN}/${this.CHAPTERS.filter(d => d.bonus).length}</b></span>
+        <span>残玉共鸣 <b class="hl">${p.jade || 0}/9</b></span>
+      </div>
     </div>`;
     let mainHtml;
     if (ch >= this.CHAPTERS.length) {
@@ -662,7 +683,7 @@ const QuestSys = {
         const bonusAnchor = bonusGo === 'cave:home' ? '洞府' : '';
         const goBtn = (!ok && bonusGo) ? `<button class="btn btn-sm q-go" data-action="quest-goto" data-tab="${bonusGo}" ${bonusAnchor ? `data-anchor="${bonusAnchor}"` : ''} title="直达 · ${this.destLabel(bonusGo) || ''}">前往 ›</button>` : '';
         const act = claimed ? '<span class="q-prog">已领赏</span>'
-          : ok ? `<button class="btn btn-sm btn-primary" data-action="quest-bonus">领 赏</button>` : '';
+          : ok ? `<button class="btn btn-sm btn-primary" data-action="quest-bonus" data-ch="${def.id}">领 赏</button>` : '';
         bonusHtml = `<div class="q-step bonus ${ok ? 'done' : ''}"><span class="q-mark">${claimed ? '✓' : '✦'}</span><span class="q-main"><b>助缘</b> · ${def.bonus.desc}</span>${prog}${act}${goBtn}</div>
         <div class="tip-line">· 助缘不挡章末推进——完成可额外领取：${this.rewardText(def.bonus.reward)}。</div>`;
       }
@@ -675,7 +696,7 @@ const QuestSys = {
         <div class="tip-line">章末奖励：${this.rewardText(def.reward)}</div>
       </div>`;
     }
-    const sideRows = this.SIDES.map(sd => {
+    const sideCard = (sd) => {
       const done = !!q.side[sd.id];
       const prevDone = !sd.prev || !!q.side[sd.prev];
       const npcName = sd.npc ? ((NpcSys.def(sd.npc) || {}).name || '') : '';
@@ -699,8 +720,35 @@ const QuestSys = {
         <div class="card-desc">${done ? sd.ending : sd.story}</div>
         ${done ? '' : `<div class="q-steps">${stepTxt}</div><div class="tip-line">酬谢：${this.rewardText(sd.reward)}</div>${action ? `<div class="action-row">${action}</div>` : ''}`}
       </div>`;
-    }).join('');
-    return `${railHtml}${mainHtml}<div class="shop-section-title">◈ 奇遇录 · 支线</div>${sideRows}`;
+    };
+    // v27：奇遇录分组呈现——可结案 / 进行中 / 未启 三区各归其位，21 张支线卡不再一锅平铺
+    const groups = { claimable: [], active: [], locked: [], done: [] };
+    for (const sd of this.SIDES) {
+      const done = !!q.side[sd.id];
+      const prevDone = !sd.prev || !!q.side[sd.prev];
+      const locked = p.realmIdx < sd.minRealm || !prevDone;
+      const allDone = sd.steps.every(st => this.stepDone(st, p));
+      if (done) groups.done.push(sd);
+      else if (!locked && allDone) groups.claimable.push(sd);
+      else if (locked) groups.locked.push(sd);
+      else groups.active.push(sd);
+    }
+    const lateBonuses = this.lateBonusList(p);
+    const lateBonusHtml = lateBonuses.length ? `
+      <div class="shop-section-title">◈ 往章助缘 · 补领（${lateBonuses.length} 笔已完成未领赏）</div>
+      ${lateBonuses.map(({ def }) => `
+      <div class="card side-card">
+        <div class="card-title">✦ 第${this.CN9[this.CHAPTERS.indexOf(def)]}章助缘 · ${def.bonus.desc}</div>
+        <div class="tip-line">酬谢：${this.rewardText(def.bonus.reward)}</div>
+        <div class="action-row"><button class="btn btn-sm btn-primary" data-action="quest-bonus" data-ch="${def.id}">补 领</button></div>
+      </div>`).join('')}` : '';
+    const groupBlock = (title, list, cls = '') => list.length
+      ? `<div class="shop-section-title ${cls}">${title}</div>${list.map(sideCard).join('')}` : '';
+    return `${railHtml}${mainHtml}${lateBonusHtml}<div class="shop-section-title">◈ 奇遇录 · 支线</div>`
+      + groupBlock(`可结案（${groups.claimable.length}）· 领赏即了结`, groups.claimable)
+      + groupBlock(`进行中（${groups.active.length}）`, groups.active)
+      + groupBlock(`已了结（${groups.done.length}）`, groups.done)
+      + groupBlock(`未启（${groups.locked.length}）· 随境界与前置解锁`, groups.locked);
   },
 
   /** v20 问道录 · 百科词条（LORE 词条化，随剧情推进解锁） */

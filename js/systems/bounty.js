@@ -58,7 +58,12 @@ const BountySys = {
     const t = B.list[idx];
     if (!t || t.progress < t.need) return;
     let r = this.rewards(p);
+    // v27 联动：声望赏格真正入账——此前 UI 标注 ×1.15/×1.3/×1.5 而实发从未乘算
+    const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
+    if (repBonus > 1) r = { stones: Math.round(r.stones * repBonus), contrib: Math.round(r.contrib * repBonus) };
     if (typeof SectSys !== 'undefined' && SectSys.commandActive && SectSys.commandActive(p, 'drill')) r = { stones: Math.round(r.stones * 1.5), contrib: Math.round(r.contrib * 1.5) };   // v19 长老令·演武
+    // v27 联动：践诺立信——完成悬赏声望 +1（声望体系自布施之外的第二产出端）
+    if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 1, '悬赏践诺');
     if (Utils.chance(25)) KarmaSys.addFortune(2);
     Ambience.sfx('bounty');
     let chainTxt = '';

@@ -49,8 +49,8 @@ const CaveSys = {
   /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级；炼丹房（v18：每级+5%成丹率） */
   cultBonus(p) { return p.cave ? p.cave.lv * 4 : 0; },
   pillBonus(p) { return p.cave ? p.cave.lv * 5 : 0; },
-  /** v18：访客事件（每日第一次进入洞府时触发） */
-  visitorEvent(p) {
+  /** v18：访客事件（每日第一次进入洞府时触发）；v27 auto=离线回放模式（不回环 afterAction） */
+  visitorEvent(p, auto = false) {
     if (!p.cave || p.cave._visitorDay === Math.floor(p.day)) return;
     p.cave._visitorDay = Math.floor(p.day);
     if (!Utils.chance(15)) return;
@@ -78,7 +78,7 @@ const CaveSys = {
     const ev = Utils.pick(events);
     ev.fn();
     Log.add(`【洞府访客】${ev.text}`, 'info');
-    Game.afterAction();
+    if (!auto) Game.afterAction();
   },
   /** v20 聚灵加速：花灵石点燃聚灵阵，当日修炼效率 ×1.5（日限一次） */
   /** v24 聚灵加速定价单源化：随境界走 stoneEco 曲线（解除 v20 的 4 境封顶，高境灵石有了日常去路） */
@@ -101,15 +101,15 @@ const CaveSys = {
     Story.chron('点燃聚灵阵（日修加速）');
     Game.afterAction();
   },
-  /** v20 灵泉：每日首次入洞府自动涌出灵石（日界防重） */
-  springDaily(p) {
+  /** v20 灵泉：每日首次入洞府自动涌出灵石（日界防重）；v27 auto=离线回放（只入账不逐日刷屏） */
+  springDaily(p, auto = false) {
     if (!p.cave || !p.cave.builds || !p.cave.builds.spring) return;
     const today = Math.floor(p.day || 0);
     if (p.cave._springDay === today) return;
     p.cave._springDay = today;
     const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(4, p.realmIdx)));
     Bag.addStones(gain);
-    Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。`, 'gain');
+    if (!auto) Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。`, 'gain');
   },
   async water(idx) {
     const p = Game.player;
@@ -118,7 +118,10 @@ const CaveSys = {
     if (!plot) { UI.toast('此田无作物'); return; }
     if (plot.wateredDay === Math.floor(p.day)) { UI.toast('今日已浇过水了'); return; }
     plot.wateredDay = Math.floor(p.day);
-    plot.days = Math.max(1, Math.round(plot.days * 0.9));
+    // v27 修瑕：浇水按「剩余生长期」打折——此前对总生长期乘 0.9，临近成熟时浇水等于当日催熟
+    const grown = Math.max(0, Math.floor(p.day) - (plot.plantedDay || 0));
+    const remaining = Math.max(0, (plot.days || 0) - grown);
+    plot.days = grown + (remaining > 0 ? Math.max(1, Math.round(remaining * 0.9)) : 0);
     Log.add(`你以灵泉浇灌第 ${idx + 1} 田，作物生长加快了一分。`, 'info');
     Game.afterAction();
   },
@@ -175,16 +178,19 @@ const CaveSys = {
       html: `扩建洞府，聚灵阵随之精进：<br>
         · 修炼效率 <b class="hl">+4%</b>（现 +${p.cave.lv * 4}%）<br>
         · 灵田扩至 <b class="hl">${Math.min(8, 4 + p.cave.lv)} 块</b><br>
-        · 兽栏扩至 <b class="hl">${4 + p.cave.lv + 1} 位</b><br>
+        · 兽栏扩至 <b class="hl">${BeastSys.maxSlots(p) + 1} 位</b><br>
         需灵石 <span class="hl">${Utils.fmtNum(c.stones)}</span>${matsTxt ? `、${matsTxt}` : ''}。`,
       options: [{ text: '扩 建', value: true, primary: true }, { text: '再等等', value: false }],
     });
     if (!ok) return;
-    if (!Bag.spendStones(c.stones)) { UI.toast('灵石不足'); return; }
+    // v27 修瑕：先验材料再扣灵石——此前材料不足时灵石已扣、扩建未成（白扣不退）
     if (c.mats) {
       for (const [id, n] of Object.entries(c.mats)) {
         if (Bag.count(id) < n) { UI.toast(`${GameData.ITEMS[id].name}不足`); return; }
       }
+    }
+    if (!Bag.spendStones(c.stones)) { UI.toast('灵石不足'); return; }
+    if (c.mats) {
       for (const [id, n] of Object.entries(c.mats)) Bag.removeItem(id, n);
     }
     p.cave.lv++;

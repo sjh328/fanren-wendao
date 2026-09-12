@@ -286,6 +286,10 @@ const DungeonSys = {
       const stones = Math.round(Utils.rand(60, 100) * GameData.stoneEco(R.recRealm) * 2);
       Bag.addStones(stones);
       KarmaSys.addFortune(10);
+      // v27 修瑕：通关秘境从未按 realm 去重计数，成就「秘境征服者」永不可解锁
+      p.counters.clearedRealms = p.counters.clearedRealms || {};
+      p.counters.clearedRealms[R.id] = 1;
+      p.counters.dungeonClears = Object.keys(p.counters.clearedRealms).length;
       Log.add(`<b>${R.name}</b> 最深处的宝库向你敞开！${gf ? `失传功法【${gf}】、` : '上古法宝碎片 ×2、'}上古法宝碎片 ×3、灵石 ${Utils.fmtNum(stones)}——你满载而归！（气运 +10）`, 'gain');
       p.dungeon = null;
       Log.add('你退出秘境，回望雾中洞口，只觉造化玄奇。', 'system');

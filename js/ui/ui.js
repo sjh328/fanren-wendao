@@ -74,26 +74,30 @@ const UI = {
     this.setHTML(this.el['create-rating'], `天资合计 <b>${sum}</b> 点 —— ${PlayerFactory.rating(sum)}`);
   },
 
-  /* ---------- 顶部信息 ---------- */
+  /* ---------- 顶部信息（v27：三组式布局——身份资历｜家资｜战力岁月，层次一眼可读） ---------- */
   renderTop() {
     const p = Game.player;
     const st = Stat.compute(p);
     // v21：顶栏资源条——灵石三档 + 战力 + 主线章程，全局常驻一眼可读
     const stone = (nk, v) => `<span class="num-anim" data-nk="${nk}" data-fmt="fmt" data-nv="${v}">${Utils.fmtNum(v)}</span>`;
-    const stoneChip = `<span class="res-chip res-stone" title="灵石 · 下品 / 中品 / 上品">◈ ${stone('stones.low', p.stones.low)}`
+    const stoneChip = `<span class="res-chip res-stone" title="灵石 · 下品 / 中品 / 上品"><i class="rc-ico">◈</i>${stone('stones.low', p.stones.low)}`
       + (p.stones.mid ? ` <i>·</i> ${stone('stones.mid', p.stones.mid)}` : '')
       + (p.stones.high ? ` <i>·</i> ${stone('stones.high', p.stones.high)}` : '') + `</span>`;
     const chIdx = QuestSys.currentChapterIdx(p);
-    const chapter = `<span class="res-chip res-chapter" title="主线进度 · 问道九章">卷 ${chIdx + 1} / ${QuestSys.CHAPTERS.length} 章</span>`;
+    const chapter = `<span class="res-chip res-chapter" title="主线进度 · 问道十章"><i class="rc-ico">卷</i>${chIdx + 1} / ${QuestSys.CHAPTERS.length} 章</span>`;
     const needTop = GameData.layerNeed(p.realmIdx, p.layer);
     // v23 移动端迷你条：抽屉收起也能一眼看血线/修为（桌面隐藏）
     const miniBars = `<span class="m-mini-bars" title="气血 / 修为">
       <span class="mini-bar hp"><i style="width:${Utils.clamp(p.hp / st.maxHp * 100, 0, 100)}%"></i></span>
       <span class="mini-bar exp"><i style="width:${Utils.clamp(p.exp / needTop * 100, 0, 100)}%"></i></span></span>`;
+    // v27：声望徽记——声望自此真实参与悬赏赏格与买价，值得常驻一栏
+    const repLv = (typeof RepSys !== 'undefined' && RepSys.level) ? RepSys.level(p) : null;
+    const repChip = `<span class="res-chip res-rep" title="江湖声望：影响悬赏赏格与坊市买价">誉 ${p.reputation || 0}<i class="rc-sub">${repLv ? repLv.name : ''}</i></span>`;
     this.setHTML(this.el['top-info'], `
-      ${chapter}${stoneChip}${miniBars}
-      <span class="res-chip" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</span>
-      <span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${Math.floor(p.age)}岁 / 寿元${st.lifespan}</span>
+      <span class="top-group top-id">${chapter}</span>
+      <span class="top-group top-res">${stoneChip}${repChip}</span>
+      ${miniBars}
+      <span class="top-group top-vit"><span class="res-chip res-power" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</span><span class="top-meta">${Time.labelLong(p)}</span><span class="top-meta2">${Math.floor(p.age)}岁 / 寿元${st.lifespan}</span></span>
       <span class="top-meta2"><span class="save-dot"></span>已自动存档</span>`);
   },
 
@@ -144,9 +148,8 @@ const UI = {
     this.setHTML(this.el['panel-left'], `
       <div class="panel-title">✦ 道途</div>
       ${idCard}
-      ${p.sect ? `<div class="stat-line"><span>宗门</span><b class="hl">${GameData.SECTS.find(s => s.id === p.sect.id).name}${p.sect.faction && GameData.SECT_FACTIONS.find(f => f.id === p.sect.faction) ? ' · ' + GameData.SECT_FACTIONS.find(f => f.id === p.sect.faction).name : ''}</b></div>
+      ${p.sect ? `<div class="stat-line"><span>宗门</span><b class="hl">${(GameData.SECTS.find(s => s.id === p.sect.id) || {}).name || '——'}${p.sect.faction && GameData.SECT_FACTIONS.find(f => f.id === p.sect.faction) ? ' · ' + GameData.SECT_FACTIONS.find(f => f.id === p.sect.faction).name : ''}</b></div>
         <div class="stat-line"><span>贡献</span><b><span class="num-anim" data-nk="contrib" data-nv="${p.sect.contrib}">${p.sect.contrib}</span></b></div>` : ''}
-      <details class="fold" open><summary>装备法宝</summary>${eqHtml}${setHtml}</details>
       <div class="sec-title">核心属性</div>
       ${coreBar('气血', 'hp', 'hp', p.hp, st.maxHp, st.maxHp, false)}
       ${coreBar('灵力', 'mp', 'mp', p.mp, st.maxMp, st.maxMp, false)}
@@ -154,7 +157,6 @@ const UI = {
       <div class="attr-mini">
         <span>根骨 <b>${p.attrs.gen}</b></span><span>悟性 <b>${p.attrs.comp}</b></span><span>福缘 <b>${p.attrs.luck}</b></span><span>体魄 <b>${p.attrs.body}</b></span>
       </div>
-      <div class="stat-line"><span>气血构成</span><b class="stat-detail" data-stat="maxHp" title="点击查看构成" style="cursor:pointer">🔍 明细</b></div>
       <div class="stat-grid">
         <div class="stat-line"><span>攻击</span><b class="stat-detail" data-stat="atk" title="点击查看构成" style="cursor:pointer">${st.atk} 🔍</b></div>
         <div class="stat-line"><span>防御</span><b class="stat-detail" data-stat="def" title="点击查看构成" style="cursor:pointer">${st.def} 🔍</b></div>
@@ -162,19 +164,21 @@ const UI = {
         <div class="stat-line"><span>暴击</span><b class="stat-detail" data-stat="crit" title="点击查看构成" style="cursor:pointer">${st.crit.toFixed(0)}% 🔍</b></div>
         <div class="stat-line"><span>闪避</span><b class="stat-detail" data-stat="dodge" title="点击查看构成" style="cursor:pointer">${st.dodge.toFixed(0)}% 🔍</b></div>
         <div class="stat-line"><span>格挡</span><b class="stat-detail" data-stat="block" title="点击查看构成" style="cursor:pointer">${st.block.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>气血构成</span><b class="stat-detail" data-stat="maxHp" title="点击查看构成" style="cursor:pointer">🔍 明细</b></div>
         <div class="stat-line"><span>战力</span><b class="hl" title="综合战力：攻防血速暴闪格加权">⚔ ${Utils.fmtNum(Stat.power(p))}</b></div>
       </div>
       <div class="sec-title">道行状态</div>
       ${chipsHtml}
       ${DaoxinSys.statusHtml(p)}
-      ${GameData.REALM_TRAITS[p.realmIdx] ? `<details class="fold"><summary>境界特性 · ${GameData.REALM_TRAITS[p.realmIdx].name}</summary>
-      <div class="tip-line" style="margin:0 0 4px">· ${GameData.REALM_TRAITS[p.realmIdx].desc}</div></details>` : ''}
-      ${p.dao ? DaoSys.statusHtml(p) : ''}
-      ${p.reinc ? `<div class="stat-line"><span>前世</span><b class="hl">第${p.reinc.lives}世 · 印记${p.reinc.marks || 0}（全属性+${p.reinc.marks || 0}%）</b></div>` : ''}
       <div class="guide-box">
         <div class="guide-title">✦ 当前建议</div>
         ${Guide.tips(p).map(t => `<div class="guide-tip"><span class="guide-tip-text">· ${t.text}</span>${t.go ? `<button class="btn btn-sm guide-go" data-action="act-tab" data-tab="${t.go}">前往 ›</button>` : ''}</div>`).join('')}
       </div>
+      <details class="fold" open><summary>装备法宝</summary>${eqHtml}${setHtml}</details>
+      ${GameData.REALM_TRAITS[p.realmIdx] ? `<details class="fold"><summary>境界特性 · ${GameData.REALM_TRAITS[p.realmIdx].name}</summary>
+      <div class="tip-line" style="margin:0 0 4px">· ${GameData.REALM_TRAITS[p.realmIdx].desc}</div></details>` : ''}
+      ${p.dao ? DaoSys.statusHtml(p) : ''}
+      ${p.reinc ? `<div class="stat-line"><span>前世</span><b class="hl">第${p.reinc.lives}世 · 印记${p.reinc.marks || 0}（全属性+${p.reinc.marks || 0}%）</b></div>` : ''}
     `);
   },
 
@@ -829,6 +833,9 @@ const UI = {
       const powerText = !s.alive ? '已殒身'
         : his > myPow + 3 ? '远胜于你' : his > myPow ? '略胜于你' : his === myPow ? '与你相当' : '不及你';
       const sparTag = (s.sparWins || s.sparLoses) ? `<span class="tag">切磋 ${s.sparWins || 0}胜${s.sparLoses || 0}负</span>` : '';
+      // v27：交情量表——-100~100 一条横杆，恩怨亲疏一眼可读
+      const relPct = Utils.clamp((s.rel + 100) / 2, 0, 100);
+      const relBar = `<span class="npc-rel" title="交情 ${s.rel > 0 ? '+' : ''}${s.rel}（-100 宿敌 ↔ +100 莫逆）"><i style="width:${relPct}%"></i></span>`;
       // v24 主次分级：主行只留高频四钮（结交/赠礼/论道/续谈），切磋结缘与恩怨抉择收进折叠
       let btns = '';
       let moreBtns = [];
@@ -857,6 +864,7 @@ const UI = {
       <div class="shop-row">
         <div class="gf-info">
           <div class="gf-name"><span style="display:inline-block;vertical-align:middle;width:34px;height:34px;border-radius:6px;overflow:hidden;margin-right:6px">${Art.portrait(Art.npcLook(d))}</span>${d.name} <span style="color:var(--text-faint);font-size:12px">${d.title} · ${d.temper}</span> <span class="tag ${relCls}">${lbl} ${s.rel > 0 ? '+' : ''}${s.rel}</span> ${sparTag} ${tags.join('')}</div>
+          ${relBar}
           <div class="gf-desc">${d.desc}<br><span style="color:var(--text-faint)">${GameData.REALM_NAMES[s.realmIdx]}${GameData.LAYER_NAMES[s.layer]} · 现于${s.alive ? mapName(s.map) : '殒身之地'} · 战力${powerText}</span></div>
         </div>
         <div class="gf-actions">${btns}</div>
@@ -895,7 +903,7 @@ const UI = {
     return `
     <div class="card rep-card">
       <div class="card-title">✦ 义声 · 布施 <span class="tag ${rep && rep.color === 'neg' ? 'danger' : 'safe'}">${rep ? rep.name : '初露头角'} · 声望 ${p.reputation || 0}</span></div>
-      <div class="card-desc">散财于世间疾苦，善名自远——声望高者，坊市买价有面子（当前买价 ×${mul}），悬赏赏格更丰（×${bon}）；劣迹昭彰者处处吃闭门羹。</div>
+      <div class="card-desc">散财于世间疾苦，善名自远——声望高者，坊市买价有面子（当前买价 ×${mul}），悬赏赏格真实加成（×${bon}），门派差事与红尘善举亦能积誉；劣迹昭彰者处处吃闭门羹。</div>
       ${donateRows}
     </div>`;
   },
@@ -1002,7 +1010,7 @@ const UI = {
     const p = Game.player;
     // 炼丹炉（人人可用，丹道成丹率大涨）；v26：火候选择入口（v18 现成机制实装）
     const alchemySection = `
-      <div class="shop-section-title">◈ 炼丹炉${p.dao === 'pill' ? '（丹道加持，成丹率大增）' : ''}</div>
+      <div class="shop-section-title">◈ 炼丹炉${p.dao === 'pill' ? '（丹道加持，成丹率大增）' : ''}${p.cave ? `<span class="tag safe" title="洞府聚灵阵护持炉火">洞府 +${p.cave.lv * 5}%</span>` : ''}</div>
       ${this.fireSelectorHtml(p)}
       ${GameData.ALCHEMY_RECIPES.map(r => {
         const out = GameData.ITEMS[r.out];
@@ -1152,15 +1160,21 @@ const UI = {
     const B = BountySys.stateOf(p);
     const r = BountySys.rewards(p);
     const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
+    // v27 联动：声望赏格已真实入账——展示值同步按 ×声望 ×连锁 预览
     const repTag = repBonus > 1 ? ` <span class="tag safe" title="声望加成：${Math.round((repBonus - 1) * 100)}%">声望赏格 ×${repBonus}</span>` : '';
+    const show = t => {
+      const chain = t && t.chain ? 1 + t.chain * 0.6 : 1;
+      return { stones: Math.round(Math.round(r.stones * repBonus) * chain), contrib: Math.round(Math.round(r.contrib * repBonus) * chain) };
+    };
     const bountyRows = B.list.map((t, i) => {
       if (!t) return `
       <div class="shop-row">
         <div class="gf-info"><div class="gf-name">（此悬赏已交付）</div><div class="gf-desc">明日将有新悬赏贴出。</div></div>
       </div>`;
       const done = t.progress >= t.need;
+      const rv = show(t);
       const btn = done
-        ? `<button class="btn btn-sm btn-primary" data-action="act-bounty-claim" data-i="${i}">领赏（${Utils.fmtNum(r.stones)}灵石${p.sect ? `+${r.contrib}贡献` : ''}）</button>`
+        ? `<button class="btn btn-sm btn-primary" data-action="act-bounty-claim" data-i="${i}">领赏（${Utils.fmtNum(rv.stones)}灵石${p.sect ? `+${rv.contrib}贡献` : ''}）</button>`
         : t.type === 'collect'
           ? `<button class="btn btn-sm" data-action="act-bounty-submit" data-i="${i}">上交（持有${Bag.count(t.target)}）</button>`
           : t.type === 'spar'
@@ -1170,7 +1184,7 @@ const UI = {
       <div class="shop-row">
         <div class="gf-info">
           <div class="gf-name">${t.name} ${done ? '<span class="tag safe">已达成</span>' : `<span class="tag">进度 ${t.progress}/${t.need}</span>`}${repTag}</div>
-          <div class="gf-desc">${t.desc} · 赏格：灵石 ${Utils.fmtNum(Math.round(r.stones * (t.chain ? 1 + t.chain * 0.6 : 1)))}${p.sect ? `、贡献 ${Math.round(r.contrib * (t.chain ? 1 + t.chain * 0.6 : 1))}` : ''}</div>
+          <div class="gf-desc">${t.desc} · 赏格：灵石 ${Utils.fmtNum(rv.stones)}${p.sect ? `、贡献 ${rv.contrib}` : ''}</div>
         </div>
         <div class="gf-actions">${btn}</div>
       </div>`;
@@ -1257,7 +1271,7 @@ const UI = {
         </div>`).join('');
       return `<div class="card"><div class="card-title">✦ 宗门</div><div class="card-desc">你已至筑基，可择一宗门拜入，领取宗门任务换取贡献，兑换高阶功法与稀有资源。</div></div>${cards}`;
     }
-    const sect = GameData.SECTS.find(s => s.id === p.sect.id);
+    const sect = GameData.SECTS.find(s => s.id === p.sect.id) || { name: '——', bonusText: '' };
     const taskRows = p.sect.tasks.map((t, i) => {
       const done = t.progress >= t.need;
       let btn = '';
@@ -1744,7 +1758,7 @@ const UI = {
         <div class="tip-line">· 二十四位常驻修士随岁月成长：结交→赠礼→论道→结拜/结侣；道侣会在你渡劫时舍命相助。</div>
         <div class="tip-line">· 关系深厚触发「续谈」——个人线三幕剧情，全通给永久加成；错过档位会暂隐，不必急。</div>
         <div class="tip-line">· 宿敌会截胡机缘、趁虚偷袭；「化解仇怨」或雷台了断可消患。孽障越高，仇家越多。</div>
-        <div class="tip-line">· 声望由布施行善积累：买价打折、悬赏赏格加成；声名狼藉则处处吃闭门羹。</div>
+        <div class="tip-line">· 声望由布施行善、悬赏践诺、门派差事与红尘善举积累：买价打折、悬赏赏格真实加成；声名狼藉则处处吃闭门羹。</div>
       </details>
       <details class="fold"><summary>✦ 营生与经济</summary>
         <div class="tip-line">· 洞府灵田自种自收（离线亦生长）；种子在坊市「灵田种子」区；一键行权可代收代种。</div>
@@ -1762,7 +1776,7 @@ const UI = {
       </details>
       <details class="fold"><summary>✦ 杂录</summary>
         <div class="tip-line">· 快捷键：剧情中 Enter/空格 翻页；战斗中 1~5 普攻/法诀/防御/道具/遁走；QWERTASD 切页签；ESC 关层。</div>
-        <div class="tip-line">· 离线时灵田照常生长、修为按修炼四成效率自行精进（上限 30 日），回归时入账。</div>
+        <div class="tip-line">· 离线时灵田照常生长、修为按修炼四成效率自行精进（上限 30 日）；灵泉、访客、节庆等日常亦按日补结（互动节庆自动从简）。</div>
         <div class="tip-line">· 图鉴五类收满各得全属性 +1%（永久）；成就页未完成的排在前头。</div>
         <div class="tip-line">· 问道录（问道页右上）收录你看过的全部剧情、人物志、年表、抉择树与百科。</div>
       </details>`;

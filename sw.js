@@ -7,7 +7,7 @@
  *   · Google Fonts（字体 CSS/woff2）：运行时缓存，首访后离线也有书卷气
  * 升级提示：改动 sw.js 时把 VERSION 常量 +1 即可，旧缓存自动清空。
  * ====================================================================== */
-const VERSION = 'fanren-wd-v1';
+const VERSION = 'fanren-wd-v2';
 const CORE = [
   './',
   './index.html',

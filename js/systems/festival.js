@@ -9,8 +9,9 @@ const FestivalSys = {
     const doy = Math.floor((p.day || 0) % 365) + 1;
     return GameData.FESTIVALS.find(f => f.day === doy) || null;
   },
-  /** 每次行动后检查：节庆日首次触发（按 年+节庆 记旗标，一年只过一次） */
-  check(p) {
+  /** 每次行动后检查：节庆日首次触发（按 年+节庆 记旗标，一年只过一次）
+   *  v27 auto=离线回放模式：互动型节庆自动从简（不弹窗、不开战），资源型节庆照常入账 */
+  check(p, auto = false) {
     const f = this.today(p);
     if (!f || !p || p.dead) return;
     const year = Math.floor((p.day || 0) / 365) + 1;
@@ -18,14 +19,19 @@ const FestivalSys = {
     const key = 'fest_' + f.id + '_' + year;
     if (p.flags[key]) return;
     p.flags[key] = true;
-    this.fire(p, f);
+    this.fire(p, f, auto);
   },
   /** 当日是否某节庆（供玩法钩子查询，如中秋赠礼加倍） */
   is(p, id) { const f = this.today(p); return !!(f && f.id === id); },
-  async fire(p, f) {
+  async fire(p, f, auto = false) {
     Log.add(`【节庆 · ${f.name}】${f.desc}`, 'event');
-    UI.announce(`✦ ${f.name} ✦`, 'gold');
+    if (!auto) UI.announce(`✦ ${f.name} ✦`, 'gold');
     if (f.id === 'shangyuan') {
+      if (auto) {   // v27：离线错过灯会，随手揭一签
+        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Log.add('（离线错过灯会——你隔日对着记忆里的谜面想了想，也算略有所得。突破感悟 +2）', 'info');
+        return;
+      }
       const right = Utils.chance(50);
       const ans = await UI.popup({
         title: '上元灯会 · 灯谜',
@@ -43,10 +49,20 @@ const FestivalSys = {
     } else if (f.id === 'huazhao') {
       let n = 0;
       for (const plot of (p.cave && p.cave.plots) || []) {
-        if (plot && plot.seed) { plot.days = Math.max(1, plot.days - 2); n++; }
+        if (plot && plot.seed) {
+          // v27 修瑕：花朝催熟按「剩余生长期」-2 日——此前对总生长期直减，临近成熟等于当日即收
+          const grown = Math.max(0, Math.floor(p.day) - (plot.plantedDay || 0));
+          const remaining = Math.max(0, (plot.days || 0) - grown);
+          plot.days = grown + (remaining > 0 ? Math.max(1, remaining - 2) : 0);
+          n++;
+        }
       }
       Log.add(n ? `花神过境——灵田里 ${n} 块作物的生长骤然加快（每块 -2 日）！` : '花神过境——可惜你灵田里空空如也，只讨了个好彩头。', n ? 'gain' : 'info');
     } else if (f.id === 'zhongyuan') {
+      if (auto) {   // v27：离线错过河灯，静观其变
+        Log.add('（离线错过中元——河灯顺水漂远，你只在心里默祷了一声。）', 'info');
+        return;
+      }
       const choice = await UI.popup({
         title: '中元鬼节 · 河灯',
         html: '河面上漂满引魂灯。你手边正有一盏——<br><span class="tip-line">· 点灯超度：孽障 -3，气运 +2<br>· 静观其变：一身轻</span>',
@@ -65,6 +81,10 @@ const FestivalSys = {
       KarmaSys.addFortune(1);
       Log.add('你分得一块月饼，与同门席地分食，月色正好。（气血灵力尽复，气运 +1；今日赠礼情谊加倍）', 'gain');
     } else if (f.id === 'chuxi') {
+      if (auto) {   // v27：离线年关，安分守岁
+        Log.add('（离线年关——你闭门守岁，听了一夜爆竹与风吼。天明雪地上满是巨大爪印。）', 'info');
+        return;
+      }
       const choice = await UI.popup({
         title: '除夕年关 · 年兽',
         html: '爆竹声里，山中隐隐传来低吼——年兽循着人间烟火气来了。<br><span class="tip-line">· 迎战年兽：胜则压岁厚重<br>· 安分守岁：闭门不出</span>',
@@ -106,7 +126,7 @@ const FestivalSys = {
       } });
       return;
     }
-    Game.afterAction();
+    if (!auto) Game.afterAction();
   },
 };
 window.FestivalSys = FestivalSys;

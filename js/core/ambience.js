@@ -100,9 +100,11 @@ const Ambience = {
     if (typeof Anim !== 'undefined') Anim.enabled = this.animOn;
     try { document.body.classList.toggle('anim-off', !this.animOn); } catch (e) {}   // v21 入场/过渡动画同受性能开关门控
   },
-  /** v19 字号档位 */
+  /** v19 字号档位；v27 修瑕：样式表全为 px、根字号档位形同虚设——改用根级 zoom 真实缩放整个界面 */
   applyFontScale(v) {
     document.documentElement.style.fontSize = (v === 110 ? 17 : v === 122 ? 19 : 15.5) + 'px';
+    const scale = v === 110 ? 1.1 : v === 122 ? 1.22 : 1;
+    try { document.documentElement.style.zoom = scale === 1 ? '' : String(scale); } catch (e) { /* 老内核不支持则退化为字号档 */ }
   },
   persist() {
     const raw = JSON.stringify({ sfx: this.sfxOn, music: this.musicOn, vol: this.vol });

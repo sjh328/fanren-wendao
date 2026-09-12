@@ -24,20 +24,23 @@ const CraftSys = {
     if (fire === 'wu') return -3;
     return 0;
   },
-  /** 成丹率：基础 × 丹道1.6 + 气运微助 + 火候 */
+  /** 成丹率：基础 × 丹道1.6 + 气运微助 + 洞府炼丹房 + 火候
+   *  v27 联动：洞府等级（炼丹房）+5%/级成丹率——此前 CaveSys.pillBonus 定义了却从未被调用 */
   rate(p, recipe, fire = null) {
     let r = recipe.rate;
     if (p.dao === 'pill') r *= 1.6;
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 1) r += 10;
     r += Utils.clamp((p.fortune || 0) * 0.1, 0, 15);
+    if (typeof CaveSys !== 'undefined' && CaveSys.pillBonus) r += CaveSys.pillBonus(p);
     if (fire) r += this.fireMatch(p, recipe, fire);
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 6) return Utils.clamp(r, 40, 95);
     return Utils.clamp(r, 5, 95);
   },
-  /** v18：丹药品质判定（上品/极品） */
-  rollQuality(p, recipe) {
+  /** v18：丹药品质判定（上品/极品）；v27 修瑕：武火「上品率 +10%」此前从未实现 */
+  rollQuality(p, recipe, fire = null) {
     let sup = 6, supreme = 1;
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 4) { sup = 12; supreme = 2; } // 炉火纯青
+    if (fire === 'wu') sup += 10;
     if (Utils.chance(supreme)) return 'supreme';
     if (Utils.chance(sup)) return 'superior';
     return 'normal';
@@ -96,16 +99,16 @@ const CraftSys = {
       if (Utils.chance(rate)) {
         DaoSys.gain(p, 25);
         const isCrit = Utils.chance(p.dao === 'pill' && DaoSys.tierLevel(p) >= 4 ? 15 : 10);
+        // v27 修瑕：品质先判定、翻倍后入包——此前极品在 addItem 之后才 ×2，袋中只得一枚、日志却按两枚记账
+        const qual = this.rollQuality(p, r, fire);
         let qty = isCrit ? 2 : 1;   // v26：极品翻倍需要可变（原 const 与 ×2 冲突）
+        if (qual === 'supreme') { supremeN++; qty *= 2; DaoSys.gain(p, 10); }
+        else if (qual === 'superior') { supN++; DaoSys.gain(p, 5); }
         Bag.addItem(r.out, qty);
         p.counters.craftsOk = (p.counters.craftsOk || 0) + 1;
         DaoSys.gain(p, 8);
         made += qty;
         if (isCrit) critN++;
-        // v18 品质判定 + v26 激活：上品凝丹道感悟，极品当炉产出翻倍——「可遇不可求」落到实处
-        const qual = this.rollQuality(p, r);
-        if (qual === 'supreme') { supremeN++; qty *= 2; DaoSys.gain(p, 10); }
-        else if (qual === 'superior') { supN++; DaoSys.gain(p, 5); }
         gainMap[r.out] = (gainMap[r.out] || 0) + qty;
       }
     }
@@ -137,6 +140,7 @@ const CraftSys = {
     const today = Math.floor(p.day);
     if (p._drawDay !== today) { p._drawDay = today; p._drawCount = 0; }
     p._drawCount = (p._drawCount || 0) + 1;
+    p.counters.talRounds = (p.counters.talRounds || 0) + 1;   // v27 修瑕：画符轮次从未计数，成就「画符千张」永不可解锁
     const costMult = 1 + Math.min(4, (p._drawCount - 1) * 0.5);
     const cost = Math.round(this.drawCost(p) * costMult);
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足，置不起朱砂灵纸'); return; }
