@@ -562,8 +562,14 @@ try {
       let p = await player(page);
       if (p.realmIdx >= 8) { // 3% 天幸成功 → 重试一次
         console.log('  - V6 天劫意外成功，重试');
-        await seedAndLoad({ name: '转世道人', realmIdx: 7, layer: 3, exp: 63750000, karma: 300, insight: 0, dao: 'sword', sect: null, canReincarnate: false, reinc: null });
-        await page.evaluate(() => { NpcSys.tribAmbush = () => null; });
+        // v30 消抖：重试种子补齐断言前置态（携宝诛仙剑影 + n3 前世恩怨），否则重试后下游断言必挂
+        await seedAndLoad({ name: '转世道人', realmIdx: 7, layer: 3, exp: 63750000, karma: 300, insight: 0, dao: 'sword', sect: null, canReincarnate: false, reinc: null, bag: { w_zhuxian: 1, pill_liaoshang: 3 } });
+        await page.evaluate(() => {
+          NpcSys.tribAmbush = () => null;
+          const pl = Game.player;
+          const s3 = pl.npcs.n3 || (pl.npcs.n3 = { alive: true, met: true, rel: -50, realmIdx: 7, layer: 2, map: 'wanyao', sparWins: 0, sparLoses: 0 });
+          s3.grudge = true; s3.pastLife = true;
+        });
         await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
         await sleep(300);
         await clickSel(page, '[data-action="act-breakthrough"]');
@@ -631,6 +637,7 @@ try {
   console.log(`共 ${results.length} 项，失败 ${fails.length} 项`);
   console.log(`控制台错误 ${consoleErrors.length} 条:`);
   consoleErrors.slice(0, 10).forEach(e => console.log('  [console] ' + e));
+  process.exit(fails.length > 0 || consoleErrors.length > 0 ? 1 : 0);   // v30 门禁补漏：失败如实传播非零码（原恒 0，&& 链对 v3 失效）
 } catch (err) {
   fail('脚本异常中断', String(err).slice(0, 300));
   try {

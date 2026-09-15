@@ -35,7 +35,7 @@ const Log = {
       let badge = this.el.lastElementChild.querySelector('.log-dup');
       if (!badge) { badge = document.createElement('span'); badge.className = 'log-dup'; this.el.lastElementChild.appendChild(badge); }
       badge.textContent = ` ×${this._dupN + 1}`;
-      if (!this.paused) this.el.scrollTop = this.el.scrollHeight;
+      if (!this.paused && !document.hidden) this.el.scrollTop = this.el.scrollHeight;   // v30：后台页签不强制吸底（挂机高频重排消减）
       return;
     }
     this._dupN = 0;
@@ -47,7 +47,7 @@ const Log = {
     this.entries.push(text);
     if (this.entries.length > 200) this.entries.splice(0, this.entries.length - 200);   // 限长：防长时游玩内存缓慢膨胀
     if (this.el.children.length > 160) this.el.removeChild(this.el.firstChild);
-    if (!this.paused) this.el.scrollTop = this.el.scrollHeight;   // v4：暂停时不再强制吸底
+    if (!this.paused && !document.hidden) this.el.scrollTop = this.el.scrollHeight;   // v4：暂停时不再强制吸底   // v30：后台页签不强制吸底（挂机高频重排消减）
     // v4：金色重要日志（突破/系统大事）置顶高亮 3 秒再混入普通日志
     if (type === 'realm' || type === 'system') this.showPin(text);
     // v14：折叠态提示新日志
@@ -67,7 +67,7 @@ const Log = {
     if (head) {
       for (const b of head.querySelectorAll('button')) b.classList.toggle('on', b.dataset.tf === (type || ''));
     }
-    if (!this.paused) this.el.scrollTop = this.el.scrollHeight;
+    if (!this.paused && !document.hidden) this.el.scrollTop = this.el.scrollHeight;   // v30：后台页签不强制吸底（挂机高频重排消减）
   },
   applyFilterTo(div, type) {
     if (!this.filter) { div.style.display = ''; return; }

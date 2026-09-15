@@ -948,6 +948,7 @@ try {
   console.log(`共 ${results.length} 项，失败 ${fails.length} 项`);
   console.log(`控制台错误 ${consoleErrors.length} 条:`);
   consoleErrors.slice(0, 10).forEach(e => console.log('  [console] ' + e));
+  process.exit(fails.length > 0 || consoleErrors.length > 0 ? 1 : 0);   // v30 门禁补漏：失败如实传播非零码（原恒 0，&& 链对主套件失效）
 } catch (err) {
   fail('脚本异常中断', String(err).slice(0, 300) + ' @ ' + String(err.stack || '').split('\n').slice(0, 4).join(' | '));
   try {
