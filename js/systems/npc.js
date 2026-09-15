@@ -679,7 +679,7 @@ const NpcSys = {
     p.insight = Math.min(100, (p.insight || 0) + insight);
     this.mem(p, id, 'chat', '三胜倾囊相授');
     Time.add(3);
-    Log.add(`${d.name} 与你三度交手，終认你可堪造就——将压箱底的体悟倾囊相授！（突破感悟 +${insight}）`, 'gain');
+    Log.add(`${d.name} 与你三度交手，终认你可堪造就——将压箱底的体悟倾囊相授！（突破感悟 +${insight}）`, 'gain');
     UI.toast(`感悟 +${insight}`);
     Game.afterAction();
   },

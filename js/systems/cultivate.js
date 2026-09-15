@@ -67,7 +67,8 @@ const Cultivate = {
     if (spill > 0) {
       const exp = Math.round(spill * 80 * GameData.eco(p.realmIdx));
       if (exp > 0) {
-        this.addExp(p, exp, true);
+        // v31 修瑕（E20）：不再 silent——大额感悟折算的修为曾可静默连跳小层（无日志/浮字/公告，出关对不上账）
+        this.addExp(p, exp);
         Log.add(`感悟已臻圆融，余韵化作修为 <b>+${Utils.fmtNum(exp)}</b>。`, 'gain');
       }
     }
@@ -234,7 +235,9 @@ const Cultivate = {
       // v29 修瑕：剧情/弹窗挂起时闭关暂停——此前节庆弹窗会被下一轮闭关的自动取消逻辑顶掉
       // v30 修瑕：天劫弹窗未决同样必须暂停——原守护只查剧情/弹窗，冲关劫决期间循环继续烧灵石岁月、
       //          重入 Tribulation.run 连环吞渡劫丹并反复覆写回溯备份 bak（对齐 autocult 的守护）
-      if ((typeof Story !== 'undefined' && Story.active && Story.active()) || UI._popupResolve || Tribulation.state) {
+      // v31 修瑕：战斗进行中同样必须暂停——守护此前缺 Battle.active，循环间隙点探索开战后闭关照常烧岁月
+      if ((typeof Story !== 'undefined' && Story.active && Story.active()) || UI._popupResolve || Tribulation.state
+        || (typeof Battle !== 'undefined' && Battle.active)) {
         Log.add('天劫将至、外事来扰，你暂敛心神，出关一顾。', 'warn');
         break;
       }
@@ -363,7 +366,16 @@ const Cultivate = {
     });
     if (!ok) return;
     // v30 飞升实义化：终局一劫改为真判定——成算沿突破公式（真仙劫体 +8 已含），失败保留 40% 圆满修为并可再叩
-    const chance = Utils.clamp(this.breakthroughChance(p, 15), 5, 95);
+    // v31 修瑕（E19）：仙劫同款耗渡劫丹——丹药 tooltip 言「引动天劫即耗」，而飞升按钮恰叫「引动天劫」，
+    // 玩家囤丹渡仙劫却完全无效（渡劫丹在最高一劫失义）
+    p.flags = p.flags || {};
+    let dujieBonus = 0;
+    if ((p.flags.dujieDan || 0) > 0) {
+      p.flags.dujieDan--;
+      dujieBonus = 5;
+      Log.add('识海中渡劫丹的药力轰然化开，道基如蒙金光（成算 +5）。', 'gain');
+    }
+    const chance = Utils.clamp(this.breakthroughChance(p, 15 + dujieBonus), 5, 95);
     Log.add(`你一步踏空，直上九霄！九重雷劫轰然而落——天劫成算 <b class="hl">${chance.toFixed(0)}%</b>，你于雷海之中放声长啸——`, 'realm');
     await Utils.sleep(700);
     if (!Utils.chance(chance)) {

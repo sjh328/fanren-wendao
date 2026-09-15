@@ -152,7 +152,7 @@ try {
       });
     }, 400));
   });
-  (aa9.exists && aa9.ov === 'auto' && aa9.nodes === 10 && aa9.sl > 10) ? pass('AA9 仙途条横滑容器 + 当前境界自动定位') : fail('AA9 仙途条', JSON.stringify(aa9));
+  (aa9.exists && aa9.ov === 'auto' && aa9.nodes === 14 && aa9.sl > 10) ? pass('AA9 仙途条横滑容器 + 当前境界自动定位（十境+仙界四阶 14 节点）') : fail('AA9 仙途条', JSON.stringify(aa9));
 
   /* ================= AB 天塔组（桌面新页面——setViewport 会触发重载，故另开一页） ================= */
   const page2 = await browser.newPage();
@@ -383,8 +383,8 @@ try {
     ? pass('AC3 卷章 chip「10 章」/ CN9 十 / 章助缘直达天塔') : fail('AC3 收录接线', JSON.stringify({ cn10: ac.cn10, chip: ac.chip, goC10: ac.goC10 }));
   (ac.beyondPct)
     ? pass('AC4 残玉终响：beyondGate 全属性 +3% 生效') : fail('AC4 残玉终响', JSON.stringify(ac.beyondPct));
-  (ac.s21 && ac.achvN === 56 && ac.twDefs)
-    ? pass('AC5 支线 s21 / 成就 56 项（塔四档+终章）') : fail('AC5 收录计数', JSON.stringify({ s21: ac.s21, achvN: ac.achvN, twDefs: ac.twDefs }));
+  (ac.s21 && ac.achvN === 62 && ac.twDefs)
+    ? pass('AC5 支线 s21 / 成就 62 项（塔四档+终章+v31 扩容六项）') : fail('AC5 收录计数', JSON.stringify({ s21: ac.s21, achvN: ac.achvN, twDefs: ac.twDefs }));
 
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');

@@ -45,7 +45,11 @@ const AuctionSys = {
       if (mystery) {
         p.auction = { item: 'mystery', seq, base: this.mysteryBase(p), until: day + this.PERIOD };
       } else {
-        const lot2 = this.LOT_POOL[Utils.hashStr('auction@' + day + '#' + seq) % this.LOT_POOL.length];
+        // v31 修瑕（E41）：先按当前境界过滤可竞拍拍品再取模——原可在 60 日锁期内掷出整期不可竞拍的拍品，
+        // 低境玩家整期只能看着一件「不可用之物」
+        const usable = this.LOT_POOL.filter(x => (x.minRealm || 0) <= (p.realmIdx || 0));
+        const pool2 = usable.length ? usable : this.LOT_POOL;
+        const lot2 = pool2[Utils.hashStr('auction@' + day + '#' + seq) % pool2.length];
         const gate = Math.min(8, lot2.minRealm || 0);
         // v30 复核：底价随境界但限三境溢阶——原 3.8^min(8,r) 全幅膨胀，r6+ 拍品性价比远逊坊市，无人竞拍
         const mul = Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));

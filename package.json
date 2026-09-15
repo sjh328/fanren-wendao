@@ -14,7 +14,7 @@
     "test:v6": "node verify-v6.mjs",
     "test:v7": "node verify-v7.mjs",
     "test:v8": "node verify-v8.mjs",
-    "test:all": "node scripts/build.mjs && node verify-game.mjs && node verify-v3.mjs && node verify-v4.mjs && node verify-v5.mjs && node verify-v6.mjs && node verify-v7.mjs && node verify-v8.mjs && node verify-v9.mjs && node verify-v10.mjs && node verify-v11.mjs && node verify-v12.mjs && node verify-v13.mjs && node verify-v14.mjs && node verify-v15.mjs && node verify-v16.mjs",
+    "test:all": "node scripts/build.mjs && node verify-game.mjs && node verify-v3.mjs && node verify-v4.mjs && node verify-v5.mjs && node verify-v6.mjs && node verify-v7.mjs && node verify-v8.mjs && node verify-v9.mjs && node verify-v10.mjs && node verify-v11.mjs && node verify-v12.mjs && node verify-v13.mjs && node verify-v14.mjs && node verify-v15.mjs && node verify-v16.mjs && node verify-v17.mjs",
     "test:v15": "node verify-v15.mjs",
     "test:v9": "node verify-v9.mjs",
     "test:v10": "node verify-v10.mjs",

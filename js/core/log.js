@@ -22,6 +22,10 @@ const Log = {
         if (btn) btn.textContent = '收起';
       }
     } catch (e) { /* ignore */ }
+    // v31 修瑕（E31）：回前台补吸底——后台期间 document.hidden 拦住了吸底，回到前台日志停在半空
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this.el && !this.paused) this.el.scrollTop = this.el.scrollHeight;
+    });
   },
   /** text 支持 HTML；type: info/gain/loss/battle/system/realm/event/warn/crit */
   add(text, type = 'info') {

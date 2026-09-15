@@ -141,22 +141,24 @@ const GameData = {
         { id: 'tongming', name: '通明', slot: 'accessory', bonus: { crit: 3, dodge: 3 }, desc: '暴击+3%，闪避+3%' },
         { id: 'juling', name: '聚灵', slot: 'any', bonus: { cult: 4 }, desc: '修炼效率+4%' },
         /* ---- v30 高端词缀扩池 ---- */
-        { id: 'shawei', name: '煞威', slot: 'weapon', bonus: { atkPct: 10, crit: 3 }, desc: '攻击+10%，暴击+3%' },
-        { id: 'huyu', name: '护瑜', slot: 'armor', bonus: { defPct: 10, hpPct: 6 }, desc: '防御+10%，气血+6%' },
-        { id: 'yunling', name: '蕴灵', slot: 'accessory', bonus: { cult: 5, luck: 3 }, desc: '修炼效率+5%，福缘+3' },
+        { id: 'shawei', name: '煞威', slot: 'weapon', w: 35, minGrade: 2, bonus: { atkPct: 10, crit: 3 }, desc: '攻击+10%，暴击+3%（二阶法宝起方可现世）' },
+        { id: 'huyu', name: '护瑜', slot: 'armor', w: 35, minGrade: 2, bonus: { defPct: 10, hpPct: 6 }, desc: '防御+10%，气血+6%（二阶法宝起方可现世）' },
+        { id: 'yunling', name: '蕴灵', slot: 'accessory', w: 35, minGrade: 2, bonus: { cult: 5, luck: 3 }, desc: '修炼效率+5%，福缘+3（二阶法宝起方可现世）' },
       ],
       suffix: [
-        { id: 'leech', name: '吸血', slot: 'weapon', desc: '攻击时回复10%伤害的气血', onHit: { leech: 0.1 } },
-        { id: 'execute', name: '斩杀', slot: 'weapon', desc: '对血量低于20%的敌人伤害+25%', onHit: { execute: 0.25 } },
-        { id: 'thorns', name: '反伤', slot: 'armor', desc: '受击时反弹15%伤害', onHurt: { thorns: 0.15 } },
-        { id: 'shield', name: '护盾', slot: 'armor', desc: '战斗开场获得金光护体（减伤10%，两回合）', onStart: { shield: 0.1 } },
-        { id: 'regen', name: '回灵', slot: 'accessory', desc: '每回合回复5%灵力', onTurn: { mpRegen: 5 } },
-        { id: 'combo', name: '连击', slot: 'accessory', desc: '连击上限+2', onHit: { comboUp: 2 } },
+        /* v31 词缀补全：后缀补 score 标量估值（洗练/重铸「保底不降」的比对基础——原后缀无估值恒 0 分，
+         * 「双缀同洗」「保底不降」对后缀整体失效）；per 为两段式成长（随品阶，与前缀同款） */
+        { id: 'leech', name: '吸血', slot: 'weapon', score: 12, desc: '攻击时回复10%伤害的气血（每品阶再+1.5%）', onHit: { leech: 0.1 }, per: { leech: 0.015 } },
+        { id: 'execute', name: '斩杀', slot: 'weapon', score: 14, desc: '对血量低于20%的敌人伤害+25%（每品阶再+2%）', onHit: { execute: 0.25 }, per: { execute: 0.02 } },
+        { id: 'thorns', name: '反伤', slot: 'armor', score: 10, desc: '受击时反弹15%伤害（每品阶再+1.5%）', onHurt: { thorns: 0.15 }, per: { thorns: 0.015 } },
+        { id: 'shield', name: '护盾', slot: 'armor', score: 8, desc: '战斗开场获得金光护体（减伤10%，两回合；每品阶再+1%）', onStart: { shield: 0.1 }, per: { shield: 0.01 } },
+        { id: 'regen', name: '回灵', slot: 'accessory', score: 7, desc: '每回合回复5%灵力（每品阶再+1%）', onTurn: { mpRegen: 5 }, per: { mpRegen: 1 } },
+        { id: 'combo', name: '连击', slot: 'accessory', score: 10, desc: '连击上限+2', onHit: { comboUp: 2 } },
         /* ---- v19 词缀扩池 ---- */
-        { id: 'duopo', name: '夺魄', slot: 'weapon', desc: '攻击时回复18%伤害的气血', onHit: { leech: 0.18 } },
-        { id: 'jingji', name: '荆棘', slot: 'armor', desc: '受击时反弹22%伤害', onHurt: { thorns: 0.22 } },
-        { id: 'ningqi', name: '凝气', slot: 'accessory', desc: '每回合回复8%灵力', onTurn: { mpRegen: 8 } },
-        { id: 'lianshan', name: '连山', slot: 'weapon', desc: '连击上限+3', onHit: { comboUp: 3 } },
+        { id: 'duopo', name: '夺魄', slot: 'weapon', score: 20, w: 50, minGrade: 2, desc: '攻击时回复18%伤害的气血（每品阶再+2%）', onHit: { leech: 0.18 }, per: { leech: 0.02 } },
+        { id: 'jingji', name: '荆棘', slot: 'armor', score: 14, desc: '受击时反弹22%伤害（每品阶再+1.5%）', onHurt: { thorns: 0.22 }, per: { thorns: 0.015 } },
+        { id: 'ningqi', name: '凝气', slot: 'accessory', score: 11, desc: '每回合回复8%灵力（每品阶再+1%）', onTurn: { mpRegen: 8 }, per: { mpRegen: 1 } },
+        { id: 'lianshan', name: '连山', slot: 'weapon', score: 15, desc: '连击上限+3', onHit: { comboUp: 3 } },
       ],
     },
     /* ---------- v19 数值说明书（平衡设计意图） ----------
@@ -223,6 +225,7 @@ const GameData = {
     pill_yanshou2: { name: '培元延寿丹', type: 'pill', grade: 5, price: 180000, desc: '温养源婴、天梯再续——寿元 +25 年。', use: { life: 25 }, poison: 15 },
     pill_yanshou3: { name: '天元续命丹', type: 'pill', grade: 5, price: 500000, desc: '夺天地一线生机，寿元 +50 年。', use: { life: 50 }, poison: 25 },
     pill_dujie:    { name: '渡劫丹',   type: 'pill', grade: 4, price: 400000, desc: '以雷晶为引淬炼道基——下次渡劫成算 +5（服后印记留于识海，一丹一劫）。', use: { dujie: 1 }, poison: 12 },
+    m_qipei:       { name: '器胚残片', type: 'material', tier: 2, price: 0, desc: '炼器炸炉后残留的器胚碎块——集齐六片，可在炼器坊抵一次炸炉之厄（六片抵半份材料）。' },
     pill_tianyuan: { name: '天元造化丹', type: 'pill', grade: 5, price: 280000, desc: '丹道至高造化，服之得廿五万点修为。', use: { exp: 250000 }, poison: 85 },
     fruit_tianji:  { name: '天机果', type: 'pill', grade: 4, price: 52000, desc: '天地灵机所凝的异果，服之可令一项先天属性突破十点桎梏（至多十二点）。', use: { stat12: 1 }, poison: 30 },
     /* ---- 符箓（符修可画可售，战斗中人人可祭出）---- */
@@ -327,7 +330,7 @@ const GameData = {
     m_haixin:   { name: '沧海之心',   type: 'material', tier: 4, price: 85000, desc: '龙渊海眼深处凝结的蓝晶，内蕴沧海。' },
     m_shenmu:   { name: '建木神枝',   type: 'material', tier: 4, price: 95000, desc: '通天建木的一截神枝，生机不灭。' },
     /* ---- v13 灵田种子（洞府种植用） ---- */
-    m_qianghua: { name: '强化石',     type: 'material', tier: 3, price: 3000,  desc: '蕴含精纯灵性的晶石，祭炼强化法宝时掺入一枚，+7 以上强化必定成功。' },
+    m_qianghua: { name: '强化石',     type: 'material', tier: 3, price: 3000,  desc: '蕴含精纯灵性的晶石，祭炼强化法宝时掺入一枚：成功率 +40%，并积祝福值 +40（+8 起失败积祝福，满百下次必成）。' },
     m_danfang:  { name: '丹方残页',   type: 'material', tier: 3, price: 2600,  desc: '前辈丹师遗稿的残页。集齐数页，可在炼丹炉前参悟失传的丹方。' },
     seed_lingcao:  { name: '灵草种',   type: 'seed', grade: 1, price: 30,    crop: 'm_lingcao',  days: 10, desc: '播入灵田，十日可收【百年灵草】。' },
     seed_lingzhi:  { name: '灵芝种',   type: 'seed', grade: 2, price: 220,   crop: 'm_lingzhi',  days: 25, desc: '播入灵田，廿五日可收【千年灵芝】。' },
@@ -372,7 +375,7 @@ const GameData = {
    * v13 立绘：species 形象类型（beast兽/snake蛇/swarm虫群/human人形/plant草木/ghost阴魂/construct傀儡/element灵体） */
   MONSTERS: {
     m_yezhu:     { name: '野猪',         power: 0,  hp: 1.1,  atk: 0.9, species: 'beast', skills: [{ name: '獠牙冲撞', w: 25, kind: 'bleed', pct: 2, rounds: 2 }] },
-    m_dushe:     { name: '毒蛇',         power: 1,  hp: 0.8,  atk: 1.15, spd: 1.3, species: 'snake', skills: [{ name: '淬毒牙', w: 40, kind: 'poison', pct: 3, rounds: 3 }] },
+    m_dushe:     { name: '毒蛇',         power: 1,  hp: 0.8,  atk: 1.15, spd: 1.3, dodge: 6, species: 'snake', skills: [{ name: '淬毒牙', w: 40, kind: 'poison', pct: 3, rounds: 3 }] },
     m_shanlang:  { name: '山狼',         power: 2,  hp: 1.0,  atk: 1.05, species: 'beast', skills: [{ name: '撕咬', w: 30, kind: 'bleed', pct: 2, rounds: 2 }] },
     m_zeiren:    { name: '采药贼人',     power: 3,  hp: 1.0,  atk: 1.1, def: 1.1, stoneMul: 1.4, species: 'human', skills: [{ name: '撒石灰', w: 25, kind: 'slow', pct: 20, rounds: 2 }] },
     m_toumu:     { name: '山贼头目',     power: 4,  hp: 1.15, atk: 1.1, elite: true, rareDrop: 'w_qinggang', species: 'human', skills: [{ name: '开山刀势', w: 30, kind: 'weaken', pct: 15, rounds: 2 }] },
@@ -386,11 +389,11 @@ const GameData = {
     m_guimian:   { name: '鬼面修士',     power: 9,  hp: 1.0,  atk: 1.2, stoneMul: 1.4, species: 'human', skills: [{ name: '鬼面摄心', w: 30, kind: 'slow', pct: 25, rounds: 2 }] },
     m_dadangjia: { name: '黑风大当家',   power: 11, hp: 1.15, atk: 1.2, elite: true, rareDrop: 'a_xuangui', species: 'human', skills: [{ name: '山寨王气', w: 30, kind: 'roar', atk: 25, rounds: 2 }] },
     m_chilin:    { name: '赤鳞蟒',       power: 10, hp: 1.1,  atk: 1.05, species: 'snake', skills: [{ name: '蟒尾扫击', w: 25, kind: 'stun', rounds: 1 }] },
-    m_fuqun:     { name: '嗜血蝠群',     power: 11, hp: 0.85, atk: 1.2, spd: 1.2, species: 'swarm', skills: [{ name: '嗜血狂叮', w: 40, kind: 'drain', mult: 1.15, leech: 0.5 }] },
+    m_fuqun:     { name: '嗜血蝠群',     power: 11, hp: 0.85, atk: 1.2, spd: 1.2, dodge: 8, species: 'swarm', skills: [{ name: '嗜血狂叮', w: 40, kind: 'drain', mult: 1.15, leech: 0.5 }] },
     m_liedi:     { name: '裂地虎',       power: 13, hp: 1.2,  atk: 1.1, species: 'beast', skills: [{ name: '裂地一击', w: 30, kind: 'bleed', pct: 3, rounds: 2 }] },
     m_shuyao:    { name: '千年树妖',     power: 15, hp: 1.3,  atk: 1.1, elite: true, rareDrop: 'z_qiankun', species: 'plant', skills: [{ name: '根须缠绕', w: 35, kind: 'stun', rounds: 1 }, { name: '汲取地气', w: 25, kind: 'heal', pct: 15 }] },
     m_shikui:    { name: '遗迹石傀',     power: 14, hp: 1.3,  def: 1.4, spd: 0.7, species: 'construct', skills: [{ name: '石肤凝聚', w: 35, kind: 'guard', def: 40, rounds: 2 }] },
-    m_yinling:   { name: '噬魂阴灵',     power: 16, hp: 0.95, spd: 1.3, species: 'ghost', skills: [{ name: '摄魂夺魄', w: 35, kind: 'mpburn', pct: 30 }] },
+    m_yinling:   { name: '噬魂阴灵',     power: 16, hp: 0.95, spd: 1.3, dodge: 8, species: 'ghost', skills: [{ name: '摄魂夺魄', w: 35, kind: 'mpburn', pct: 30 }] },
     m_jianling:  { name: '上古剑灵',     power: 18, hp: 1.0,  atk: 1.15, species: 'ghost', skills: [{ name: '剑意余锋', w: 30, kind: 'bleed', pct: 3, rounds: 2 }] },
     m_moxiu:     { name: '魔修残魂',     power: 21, hp: 1.15, atk: 1.2, elite: true, rareDrop: 'w_zhuxian', species: 'ghost', skills: [{ name: '血魔噬心', w: 30, kind: 'drain', mult: 1.2, leech: 0.5 }, { name: '魔气蚀体', w: 25, kind: 'weaken', pct: 25, rounds: 2 }] },
     /* ---- v13 新增：毒蛛 / 岩蝎 / 火狼等（补齐金丹前空档） ---- */
@@ -399,46 +402,67 @@ const GameData = {
     m_chiyan:    { name: '赤炎狼',       power: 15, hp: 1.0,  atk: 1.2, species: 'beast', skills: [{ name: '炎牙撕咬', w: 40, kind: 'burn', pct: 3.5, rounds: 2 }] },
     m_hanshi:    { name: '寒潭冰蟾',     power: 16, hp: 1.2,  def: 1.2, species: 'element', skills: [{ name: '寒气吐息', w: 40, kind: 'slow', pct: 30, rounds: 2 }] },
     /* ---- v13 新增：万妖山脉（金丹后期~元婴） ---- */
-    m_fengbao:   { name: '风影豹',       power: 17, hp: 0.95, atk: 1.1, spd: 1.4, species: 'beast', skills: [{ name: '影爪掠影', w: 35, kind: 'bleed', pct: 3, rounds: 2 }] },
+    m_fengbao:   { name: '风影豹',       power: 17, hp: 0.95, atk: 1.1, spd: 1.4, dodge: 10, species: 'beast', skills: [{ name: '影爪掠影', w: 35, kind: 'bleed', pct: 3, rounds: 2 }] },
     m_xiongyuan: { name: '赤目凶猿',     power: 17, hp: 1.25, atk: 1.15, species: 'beast', skills: [{ name: '擂胸咆哮', w: 30, kind: 'roar', atk: 30, rounds: 2 }, { name: '巨掌拍击', w: 30, kind: 'stun', rounds: 1 }] },
     m_tengyao:   { name: '千年藤妖',     power: 18, hp: 1.3,  def: 1.15, species: 'plant', skills: [{ name: '藤蔓绞缚', w: 35, kind: 'stun', rounds: 1 }, { name: '光合自愈', w: 25, kind: 'heal', pct: 12 }] },
-    m_yaohu:     { name: '九尾妖狐',     power: 18, hp: 1.0,  atk: 1.15, spd: 1.2, stoneMul: 1.4, species: 'beast', skills: [{ name: '魅惑之瞳', w: 35, kind: 'weaken', pct: 30, rounds: 2 }, { name: '狐火燎原', w: 30, kind: 'burn', pct: 4, rounds: 2 }] },
-    m_heijiao:   { name: '黑蛟',         power: 19, hp: 1.2,  atk: 1.25, elite: true, rareDrop: 'gf_hansha', species: 'snake', skills: [{ name: '蛟尾横扫', w: 30, kind: 'stun', rounds: 1 }, { name: '黑水侵蚀', w: 30, kind: 'defdown', pct: 30, rounds: 2 }] },
+    m_yaohu:     { name: '九尾妖狐',     power: 18, hp: 1.0,  atk: 1.15, spd: 1.2, dodge: 6, stoneMul: 1.4, species: 'beast', skills: [{ name: '魅惑之瞳', w: 35, kind: 'weaken', pct: 30, rounds: 2 }, { name: '狐火燎原', w: 30, kind: 'burn', pct: 4, rounds: 2 }] },
+    m_heijiao:   { name: '黑蛟',         power: 19, hp: 1.2,  atk: 1.25, dodge: 5, elite: true, rareDrop: 'gf_hansha', species: 'snake', skills: [{ name: '蛟尾横扫', w: 30, kind: 'stun', rounds: 1 }, { name: '黑水侵蚀', w: 30, kind: 'defdown', pct: 30, rounds: 2 }] },
     m_shiren:    { name: '石人武士',     power: 20, hp: 1.35, def: 1.35, spd: 0.7, species: 'construct', skills: [{ name: '磐石壁', w: 35, kind: 'guard', def: 45, rounds: 2 }, { name: '巨岩锤', w: 25, kind: 'stun', rounds: 1 }] },
     /* ---- v13 新增：幽冥鬼泽（元婴~化神） ---- */
     m_guizu:     { name: '黄泉鬼卒',     power: 20, hp: 1.05, atk: 1.15, species: 'ghost', skills: [{ name: '幽冥爪', w: 30, kind: 'bleed', pct: 3, rounds: 2 }, { name: '阴风蚀骨', w: 25, kind: 'mpburn', pct: 25 }] },
-    m_yuangu:    { name: '千年怨鬼',     power: 21, hp: 1.0,  atk: 1.2, spd: 1.2, species: 'ghost', skills: [{ name: '怨念侵神', w: 35, kind: 'weaken', pct: 25, rounds: 2 }, { name: '摄魂低语', w: 30, kind: 'mpburn', pct: 30 }] },
+    m_yuangu:    { name: '千年怨鬼',     power: 21, hp: 1.0,  atk: 1.2, spd: 1.2, dodge: 6, species: 'ghost', skills: [{ name: '怨念侵神', w: 35, kind: 'weaken', pct: 25, rounds: 2 }, { name: '摄魂低语', w: 30, kind: 'mpburn', pct: 30 }] },
     m_shigui:    { name: '白骨尸鬼',     power: 22, hp: 1.3,  def: 1.2, species: 'ghost', skills: [{ name: '尸毒抓挠', w: 40, kind: 'poison', pct: 4, rounds: 3 }] },
     m_yinjiao:   { name: '阴煞蛟',       power: 23, hp: 1.15, atk: 1.2, species: 'snake', skills: [{ name: '阴煞缠身', w: 30, kind: 'slow', pct: 35, rounds: 2 }, { name: '噬阴一击', w: 30, kind: 'drain', mult: 1.2, leech: 0.4 }] },
     m_xueshe:    { name: '雪域冰蟒',     power: 23, hp: 1.2,  atk: 1.15, species: 'snake', skills: [{ name: '冰蟒吐信', w: 35, kind: 'slow', pct: 30, rounds: 2 }, { name: '绞缠', w: 25, kind: 'stun', rounds: 1 }] },
     m_yinshou:   { name: '泽底阴兽',     power: 24, hp: 1.3,  atk: 1.25, elite: true, rareDrop: 'z_xingpan', species: 'beast', skills: [{ name: '幽泽咆哮', w: 30, kind: 'roar', atk: 30, rounds: 2 }, { name: '裂魂爪', w: 30, kind: 'bleed', pct: 4, rounds: 2 }] },
     /* ---- v13 新增：天外飞舟残骸（化神~炼虚） ---- */
     m_xinggui:   { name: '星陨石傀',     power: 25, hp: 1.4,  def: 1.4, spd: 0.7, species: 'construct', skills: [{ name: '星辉装甲', w: 35, kind: 'guard', def: 50, rounds: 2 }, { name: '陨星重锤', w: 25, kind: 'stun', rounds: 1 }] },
-    m_tianchong: { name: '天外异虫',     power: 26, hp: 0.95, atk: 1.25, spd: 1.25, species: 'swarm', skills: [{ name: '蚀髓吸髓', w: 40, kind: 'drain', mult: 1.2, leech: 0.5 }] },
-    m_xuling:    { name: '虚空幻灵',     power: 27, hp: 1.0,  atk: 1.25, spd: 1.3, species: 'ghost', skills: [{ name: '虚空禁锢', w: 30, kind: 'stun', rounds: 1 }, { name: '虚实幻刃', w: 30, kind: 'defdown', pct: 35, rounds: 2 }] },
+    m_tianchong: { name: '天外异虫',     power: 26, hp: 0.95, atk: 1.25, spd: 1.25, dodge: 8, species: 'swarm', skills: [{ name: '蚀髓吸髓', w: 40, kind: 'drain', mult: 1.2, leech: 0.5 }] },
+    m_xuling:    { name: '虚空幻灵',     power: 27, hp: 1.0,  atk: 1.25, spd: 1.3, dodge: 10, species: 'ghost', skills: [{ name: '虚空禁锢', w: 30, kind: 'stun', rounds: 1 }, { name: '虚实幻刃', w: 30, kind: 'defdown', pct: 35, rounds: 2 }] },
     m_zhouling:  { name: '飞舟器灵',     power: 29, hp: 1.25, atk: 1.3, elite: true, rareDrop: 'gf_feixian', species: 'construct', skills: [{ name: '舟炮齐鸣', w: 35, kind: 'burn', pct: 4, rounds: 2 }, { name: '灵能护盾', w: 25, kind: 'guard', def: 50, rounds: 2 }] },
     /* ---- v13 新增：龙渊海眼（炼虚及以上） ---- */
     m_shuiling:  { name: '沧海水灵',     power: 27, hp: 1.15, atk: 1.1, species: 'element', skills: [{ name: '潮汐自愈', w: 35, kind: 'heal', pct: 18 }, { name: '深渊之压', w: 30, kind: 'weaken', pct: 30, rounds: 2 }] },
     m_haiyi:     { name: '深渊海兽',     power: 29, hp: 1.3,  atk: 1.25, species: 'beast', skills: [{ name: '撕裂巨口', w: 40, kind: 'bleed', pct: 4.5, rounds: 3 }] },
     m_jiaojiao:  { name: '怒海蛟龙',     power: 31, hp: 1.25, atk: 1.3, species: 'snake', skills: [{ name: '龙尾断浪', w: 30, kind: 'stun', rounds: 1 }, { name: '怒涛覆压', w: 30, kind: 'defdown', pct: 35, rounds: 2 }] },
     m_longgui:   { name: '玄武龙龟',     power: 32, hp: 1.45, def: 1.5, spd: 0.6, species: 'beast', skills: [{ name: '龟甲震波', w: 35, kind: 'guard', def: 55, rounds: 2 }, { name: '吞吐灵潮', w: 25, kind: 'heal', pct: 15 }] },
-    m_yuanmo:    { name: '渊底魔影',     power: 34, hp: 1.25, atk: 1.35, elite: true, rareDrop: 'gf_taiyin', species: 'ghost', skills: [{ name: '万渊噬心', w: 30, kind: 'drain', mult: 1.3, leech: 0.5 }, { name: '魔渊低语', w: 30, kind: 'weaken', pct: 30, rounds: 2 }] },
+    m_yuanmo:    { name: '渊底魔影',     power: 34, hp: 1.25, atk: 1.35, dodge: 6, elite: true, rareDrop: 'gf_taiyin', species: 'ghost', skills: [{ name: '万渊噬心', w: 30, kind: 'drain', mult: 1.3, leech: 0.5 }, { name: '魔渊低语', w: 30, kind: 'weaken', pct: 30, rounds: 2 }] },
     /* ---- v18 灵界篇：灵墟仙泽（飞升~真仙） ---- */
-    m_linglu:    { name: '灵墟仙鹭',     power: 35, hp: 1.05, atk: 1.2, spd: 1.35, species: 'element', skills: [{ name: '仙翎斩', w: 30, kind: 'bleed', pct: 4, rounds: 2 }, { name: '羽化灵光', w: 25, kind: 'heal', pct: 18 }] },
-    m_xianmo:    { name: '仙泽水魅',     power: 36, hp: 1.1,  atk: 1.25, spd: 1.3, species: 'ghost', skills: [{ name: '幻雾困身', w: 30, kind: 'slow', pct: 40, rounds: 2 }, { name: '魅影夺魄', w: 25, kind: 'drain', mult: 1.3, leech: 0.5 }] },
+    m_linglu:    { name: '灵墟仙鹭',     power: 35, hp: 1.05, atk: 1.2, spd: 1.35, dodge: 8, species: 'element', skills: [{ name: '仙翎斩', w: 30, kind: 'bleed', pct: 4, rounds: 2 }, { name: '羽化灵光', w: 25, kind: 'heal', pct: 18 }] },
+    m_xianmo:    { name: '仙泽水魅',     power: 36, hp: 1.1,  atk: 1.25, spd: 1.3, dodge: 8, species: 'ghost', skills: [{ name: '幻雾困身', w: 30, kind: 'slow', pct: 40, rounds: 2 }, { name: '魅影夺魄', w: 25, kind: 'drain', mult: 1.3, leech: 0.5 }] },
     m_lingjiang: { name: '灵墟守将',     power: 37, hp: 1.4,  def: 1.4,  spd: 0.7, species: 'construct', skills: [{ name: '仙光壁垒', w: 30, kind: 'guard', def: 60, rounds: 2 }, { name: '镇墟锤', w: 25, kind: 'stun', rounds: 1 }] },
     m_leixiao:   { name: '雷霄独角兽',   power: 38, hp: 1.2,  atk: 1.3,  species: 'beast', skills: [{ name: '雷角冲撞', w: 30, kind: 'burn', pct: 5, rounds: 2 }, { name: '雷网缠身', w: 25, kind: 'stun', rounds: 1 }] },
-    m_leimen:    { name: '九霄雷灵',     power: 40, hp: 1.15, atk: 1.35, spd: 1.35, species: 'element', skills: [{ name: '紫霄雷落', w: 35, kind: 'burn', pct: 6, rounds: 3 }, { name: '雷劫临身', w: 25, kind: 'weaken', pct: 35, rounds: 2 }] },
+    m_leimen:    { name: '九霄雷灵',     power: 40, hp: 1.15, atk: 1.35, spd: 1.35, dodge: 8, species: 'element', skills: [{ name: '紫霄雷落', w: 35, kind: 'burn', pct: 6, rounds: 3 }, { name: '雷劫临身', w: 25, kind: 'weaken', pct: 35, rounds: 2 }] },
     m_tianlong:  { name: '应龙残魄',     power: 42, hp: 1.35, atk: 1.4,  elite: true, rareDrop: 'w_lingjie', species: 'snake', skills: [{ name: '龙息焚天', w: 30, kind: 'burn', pct: 6, rounds: 3 }, { name: '龙威震荡', w: 25, kind: 'stun', rounds: 1 }, { name: '逆鳞反噬', w: 20, kind: 'defdown', pct: 40, rounds: 2 }] },
     m_lingxue:   { name: '灵墟雪猿',     power: 39, hp: 1.3,  atk: 1.2,  species: 'beast', skills: [{ name: '寒冰拳', w: 30, kind: 'slow', pct: 35, rounds: 2 }, { name: '咆哮', w: 25, kind: 'roar', atk: 35, rounds: 2 }] },
     m_tianle:    { name: '九霄雷兽',     power: 41, hp: 1.25, atk: 1.35, species: 'beast', skills: [{ name: '雷牙撕裂', w: 30, kind: 'bleed', pct: 5, rounds: 2 }, { name: '雷暴', w: 25, kind: 'burn', pct: 5, rounds: 2 }] },
-    m_xianzun:   { name: '仙尊残念',     power: 44, hp: 1.3,  atk: 1.45, elite: true, rareDrop: 'z_xianyao', species: 'ghost', skills: [{ name: '一念断生', w: 30, kind: 'weaken', pct: 40, rounds: 2 }, { name: '夺魄', w: 25, kind: 'drain', mult: 1.4, leech: 0.6 }] },
+    m_xianzun:   { name: '仙尊残念',     power: 44, hp: 1.3,  atk: 1.45, dodge: 6, elite: true, rareDrop: 'z_xianyao', species: 'ghost', skills: [{ name: '一念断生', w: 30, kind: 'weaken', pct: 40, rounds: 2 }, { name: '夺魄', w: 25, kind: 'drain', mult: 1.4, leech: 0.6 }] },
     m_leishen:   { name: '雷狱主宰',     power: 46, hp: 1.5,  atk: 1.5,  elite: true, rareDrop: 'gf_leishen', species: 'construct', skills: [{ name: '灭世雷罚', w: 30, kind: 'cursed', pct: 8, rounds: 3 }, { name: '雷狱封锁', w: 25, kind: 'stun', rounds: 1 }] },
     /* ---- v20 夜行妖兽（仅夜间出没） ---- */
-    m_yexiao:    { name: '夜啼枭',       power: 4,  hp: 0.95, atk: 1.1,  spd: 1.2, night: true, species: 'beast', skills: [{ name: '无声俯袭', w: 40, kind: 'slow', pct: 20, rounds: 2 }] },
+    m_yexiao:    { name: '夜啼枭',       power: 4,  hp: 0.95, atk: 1.1,  spd: 1.2, dodge: 8, night: true, species: 'beast', skills: [{ name: '无声俯袭', w: 40, kind: 'slow', pct: 20, rounds: 2 }] },
     m_yexing:    { name: '夜行幽狼',     power: 16, hp: 1.05, atk: 1.15, night: true, species: 'beast', skills: [{ name: '月下撕咬', w: 40, kind: 'bleed', pct: 3, rounds: 2 }, { name: '幽嚎', w: 20, kind: 'weaken', pct: 20, rounds: 2 }] },
-    m_yuemei:    { name: '月魄夜魅',     power: 27, hp: 1.0,  atk: 1.2,  spd: 1.25, night: true, species: 'ghost', skills: [{ name: '摄月之光', w: 35, kind: 'mpburn', pct: 30 }, { name: '魄爪', w: 30, kind: 'drain', mult: 1.15, leech: 0.4 }] },
+    m_yuemei:    { name: '月魄夜魅',     power: 27, hp: 1.0,  atk: 1.2,  spd: 1.25, dodge: 8, night: true, species: 'ghost', skills: [{ name: '摄月之光', w: 35, kind: 'mpburn', pct: 30 }, { name: '魄爪', w: 30, kind: 'drain', mult: 1.15, leech: 0.4 }] },
   },
+
+  /* ======================================================================
+   * v31「登仙」仙界四阶（XianSys 消费）
+   * 真仙圆满 → 白日飞升之后，修为溢流所炼「仙元」于此续行登仙之路：
+   * 地仙 → 天仙 → 金仙 → 大罗，每阶三层（初/中/后期），层以仙元晋，
+   * 阶满引动「仙劫」（复用天劫三策），大罗圆满证道祖之境。
+   * ====================================================================== */
+  XIAN_TIERS: [
+    { id: 1, name: '地仙', layerNeed: 5000,  life: 2000,  ascendText: '脱去凡骨，初证仙班——山河在望，云路初开。', aura: '#7cc7a1' },
+    { id: 2, name: '天仙', layerNeed: 12000, life: 5000,  ascendText: '御风而行，天门在侧——雷部闻其名，星官识其路。', aura: '#6aa8e8' },
+    { id: 3, name: '金仙', layerNeed: 30000, life: 12000, ascendText: '金光铸体，万劫不磨——一念之间，沧海化桑田。', aura: '#e8c56a' },
+    { id: 4, name: '大罗', layerNeed: 80000, life: 30000, ascendText: '跳出三界外，不在五行中——大罗天上，再无拘束。', aura: '#c77ce8' },
+  ],
+  XIAN_LAYER_NAMES: ['初期', '中期', '后期'],
+  XIAN_VISITORS: [
+    { text: '仙缘童子奉命送来一枚仙元凝成的宝珠，言道「上仙莫忘尘世旧缘」。', fn: (p) => { p.counters.xianyuan = (p.counters.xianyuan || 0) + Math.round(1500); return '仙元 +1500'; } },
+    { text: '一位仙官路过洞府，与你论及天条规章，言及人间修行利弊，相谈甚欢。', fn: (p) => { Cultivate.addInsight(p, 6); return '感悟 +6'; } },
+    { text: '一头仙鹤衔来半卷仙阶功法注解，字迹与你前世笔迹有七分相似。', fn: (p) => { p.counters.xianyuan = (p.counters.xianyuan || 0) + Math.round(800); KarmaSys.addFortune(2); return '仙元 +800，气运 +2'; } },
+    { text: '仙界药园的收成日到了，你名下那份仙田的份例送了过来。', fn: (p) => { Bag.addItem('m_xianjing', 1); return '仙晶 ×1'; } },
+    { text: '一位故人的转世托梦寻来——你在梦中替他指点了一条明路。', fn: (p) => { KarmaSys.addFortune(3); return '气运 +3'; } },
+  ],
 
   /* ---------- 地图区域 ---------- */
   MAPS: [
@@ -569,17 +593,17 @@ const GameData = {
     { item: 'm_lingcao', minRealm: 0 }, { item: 'm_xuantie', minRealm: 0 },
     { item: 'seed_lingcao', minRealm: 1 }, { item: 'seed_lingzhi', minRealm: 1 }, { item: 'seed_bingpo', minRealm: 2 },
     { item: 'seed_xuelian', minRealm: 3 }, { item: 'seed_lianhun', minRealm: 3 },
-    { item: 'seed_xianling', minRealm: 8 },   // v29：补齐灵界种植线（仙灵种原无任何获取渠道）
+    { item: 'seed_xianling', minRealm: 6 },   // v29 补灵界种植线；v31 下调至 r6——f19/f20 在 r6 前后即需求仙灵翠，原 r8 断供
     { item: 'pill_yanshou', minRealm: 3 }, { item: 'pill_yanshou2', minRealm: 6 }, { item: 'pill_yanshou3', minRealm: 8 },   // v29 天年：延寿丹上架（高境灵石新去向）
   ],
 
   /* ---------- v13 套装（集齐 pieces 中全部装备于身时触发 bonus） ---------- */
   SETS: {
-    xuantian: { name: '玄天套装', pieces: ['s_xt_jian', 's_xt_jia', 's_xt_pei'], bonus: { defPct: 15, hpPct: 10 }, text: '守御之道：防御 +15%，气血 +10%（两件即得六成）' },
-    chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, text: '杀伐之道：攻击 +15%，暴击 +5%（两件即得六成）' },
+    xuantian: { name: '玄天套装', pieces: ['s_xt_jian', 's_xt_jia', 's_xt_pei'], bonus: { defPct: 15, hpPct: 10 }, text: '守御之道：防御 +15%，气血 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
+    chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, text: '杀伐之道：攻击 +15%，暴击 +5%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
     /* ---- v19 新增套装 ---- */
-    xuehe:    { name: '血河套装', pieces: ['s_hj_sha', 's_hj_pao', 's_hj_ling'], bonus: { atkPct: 12, crit: 4 }, text: '血河遗锋：攻击 +12%，暴击 +4%（两件即得六成）' },
-    xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, text: '仙缘天成：攻击、防御、气血俱 +10%（两件即得六成）' },
+    xuehe:    { name: '血河套装', pieces: ['s_hj_sha', 's_hj_pao', 's_hj_ling'], bonus: { atkPct: 12, crit: 4 }, text: '血河遗锋：攻击 +12%，暴击 +4%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
+    xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, text: '仙缘天成：攻击、防御、气血俱 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
   },
 
   /* ---------- v19 道韵协同：功法双双修至三层以上，共鸣生韵 ---------- */
@@ -1388,7 +1412,7 @@ const GameData = {
    * ====================================================================== */
   PERSONAL: {
     /* ---- v30 个人线补全：原无个人线的六位 NPC ---- */
-    n8:  { arc: '秤心', title: '秦重楼 · 秤平斗满', fx: { stoneMult: 1.05 }, doneText: '商道秤心，灵石更进',
+    n8:  { arc: '秤心', title: '秦重楼 · 秤平斗满', fx: { stoneMult: 0.05 }, doneText: '商道秤心，灵石更进',
       acts: [
         { key: 'pl_n8_a1', title: '第一幕 · 缺角的算盘', need: { tier: 'friend', realm: 2 }, brief: '商会账房一笔差三枚灵石的旧账，秦重楼对了二十年。',
           reward: { insight: 4 } },
@@ -1415,7 +1439,7 @@ const GameData = {
         { key: 'pl_n18_a3', title: '第三幕 · 文脉剑脉', need: { tier: 'sworn', realm: 5 }, brief: '他要写一部《剑心笺注》，把三百年的剑写成人人读得懂的话。',
           reward: { insight: 8 } },
       ] },
-    n19: { arc: '成色', title: '花千树 · 人比货贵', fx: { stoneMult: 1.04 }, doneText: '看人如看货，财路更宽',
+    n19: { arc: '成色', title: '花千树 · 人比货贵', fx: { stoneMult: 0.04 }, doneText: '看人如看货，财路更宽',
       acts: [
         { key: 'pl_n19_a1', title: '第一幕 · 十成成色', need: { tier: 'friend', realm: 2 }, brief: '一件能赚三倍的赝品，摆在金算盘的案上。',
           reward: { insight: 4 } },
@@ -1660,6 +1684,7 @@ c1_end: { id: 'c1_end', title: '第一章 · 终 · 入世', scenes: [
 
 /* ============ 第二章 · 青峰疑云 ============ */
 c2_open: { id: 'c2_open', title: '第二章 · 青峰疑云', scenes: [
+  { t: 'narr', req: 'remembrance', text: '（前世残忆）踏入青峰山的那一刻，一阵陌生的熟悉涌上心头——前世，你似乎也在这山坳里躲过一场夜雨。\n那时陪在你身边的人，如今不知投往了哪一世。残玉微温，像一声隔着轮回的叹息。' },
   { t: 'narr', text: '残玉入夜生温，热度竟随方位变化。\n你循着感应来到青峰山——山坳深处，火把如龙：黑风寨的人马竟在夜里挖掘一座上古遗迹，为首之人一袭黑袍立在崖边，从不亲手碰土，只负手看月。' },
   { t: 'dialog', who: '@c_n24', title: '草窠里 · 悄声', text: '「别动。」身侧草窠里忽然压着嗓子开口，「梆子已响，三个哨探正朝这边来——阁下分一个，我分两个。\n在下燕回时，路见不平的『路』，今日恰好路过此地。」' },
   { t: 'battle', foe: { m: 'm_loulou' }, label: '黑风寨前哨', text: '刀剑同时出鞘，前哨的火把一支支熄灭。\n喊杀声在夜山里荡开，惊起满林宿鸟。', win: ['最后一名喽啰瘫倒在火堆边，燕回时收剑入鞘，掸了掸袖口的灰。\n前哨已清，崖上那群人还蒙在鼓里——你们借着岩影，摸到了离黑袍人三十步的乱石之后。'], lose: ['你挨了一记泼风刀，肩头见血，燕回时一把将你拽进岩缝，两人伏到喽啰散尽。\n前哨虽被惊动，崖上黑袍人却纹丝未动——掘土的还在掘土，看月的还在看月。'] },
@@ -1799,6 +1824,7 @@ c4_end: { id: 'c4_end', title: '第四章 · 终 · 道心之答', scenes: [
 
 /* ============ 第五章 · 金丹之秘 ============ */
 c5_open: { id: 'c5_open', title: '第五章 · 金丹之秘', scenes: [
+  { t: 'narr', req: 'remembrance', text: '（前世残忆）丹炉青烟起时，你的指尖忽然自行掐了个诀——那是前世才用过的手法。\n残忆如潮水漫过识海，你怔了片刻，才失笑摇头：这一生，还没人教过你这个。' },
   { t: 'narr', text: '金丹天劫的雷光中，残玉骤然炸响！\n一段不属于自己的记忆，如决堤洪水涌入识海——' },
   { t: 'dialog', who: '@c_zhenling', title: '记忆 · 赐名', text: '（记忆的最深处，画面泛黄如旧纸）\n那年我十岁，是饥荒里快饿死的流童，倒在血河山门外。一袭黑袍的男人把我从死人堆里拎出来，掌心竟带着炉火的余温。\n「别怕。入我血河，便是我亲生骨肉。」他亲手替我束发赐名，那日血河万丈，为之让路。\n——三百年后我才明白：他说「骨肉」二字时，看我的眼神，和看一株上品丹材的眼神，并无分别。' },
   { t: 'dialog', who: '@c_zhenling', title: '记忆 · 三百年前', text: '（一袭黑袍，腕刺河纹，站在万魂丹炉前）\n炉中是九千九百九十九条生魂……宗主说，丹成之日，血河万世不灭。可这丹炉里，有刚满月的婴啼。' },
@@ -1892,6 +1918,7 @@ c6_end: { id: 'c6_end', title: '第六章 · 终 · 五碎片退敌', scenes: [
 
 /* ============ 第七章 · 血河旧账 ============ */
 c7_open: { id: 'c7_open', title: '第七章 · 血河旧账', scenes: [
+  { t: 'narr', req: 'remembrance', text: '（前世残忆）「血河」二字入耳的刹那，眉心朱砂骤然发烫。\n前世，你与这条『河』之间，是否也有一笔未了的账？残忆翻涌如沸——你竟分不清，今生的恨意，有几分是从前世带来的。' },
   { t: 'narr', text: '化神之后，你的名字开始在诸宗长老之间流传。\n这一日，一位素未谋面的白须掌门亲自登门，屏退左右，只带了一样东西——一份泛黄的名单。' },
   { t: 'dialog', who: '@c_zhangmen', title: '开门见山', text: '三百年前灭血河宗那一战，老夫的师尊也被黑玉令牵着走。\n老夫时日无多，有些账，再烂在土里，就真的没人记得了。你若要查——名单给你。' },
   { t: 'dialog', who: '@c_zhangmen', title: '交名单 · 忏悔', text: '老夫的师尊，就是当年九个执行人里走得最早的一个。\n他临终前疯了似的烧自己的手札，烧到最后只留一句胡话：「令是假的，银子是真的……可火，是我们亲手放的。」\n老夫替他瞒了六十年，瞒得祖宗堂里的香火都烫手。今日把名单交到你手上，也算替他，把这句胡话说完。' },

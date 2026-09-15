@@ -126,8 +126,8 @@ try {
   const cGain = await colorOf('#log .log-gain');
   const cBattle = await colorOf('#log .log-battle');
   const cRealm = await colorOf('#log .log-realm');
-  // v8 宣纸亮色主题的日志墨色契约
-  (cInfo === 'rgb(125, 118, 99)' ? pass('U2 普通事件日志墨色') : fail('U2 普通事件日志', cInfo))
+  // v8 宣纸亮色主题的日志墨色契约；v31 无障碍：log-info 提亮至 ≥4.5:1（125,118,99 → 143,136,115）
+  (cInfo === 'rgb(143, 136, 115)' ? pass('U2 普通事件日志墨色') : fail('U2 普通事件日志', cInfo))
     ; (cGain === 'rgb(77, 139, 63)' ? pass('U2 资源日志绿色') : fail('U2 资源日志', cGain))
     ; (cBattle === 'rgb(182, 64, 56)' ? pass('U2 战斗危险日志朱色') : fail('U2 战斗危险日志', cBattle))
     ; (cRealm === 'rgb(150, 89, 30)' ? pass('U2 突破奇遇日志赭色') : fail('U2 突破奇遇日志', cRealm));

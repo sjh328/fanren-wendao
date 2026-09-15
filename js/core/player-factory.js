@@ -45,6 +45,7 @@ const PlayerFactory = {
       counters: { battles: 0, wins: 0, explores: 0, killsElite: 0, defeats: 0, spars: 0, bossKills: 0,
         mapExplores: {}, dilemmas: 0, befriends: 0, crafts: 0, craftsOk: 0, pills: 0, learns: 0, gupianGot: 0, maxDepth: 0 },
       flags: { tutorialDone: false, ascended: false },
+      xianjie: { idx: 0, layer: 0 },   // v31 仙界四阶：未入仙籍（白日飞升后开启）
       dead: false,
       /* —— 增量扩展字段（v3 §23-26）：世界 / NPC / 秘境 / 转世 —— */
       world: WorldSys.freshWorld(),
@@ -285,6 +286,16 @@ const PlayerFactory = {
     out.equipped = { ...fresh.equipped, ...(p.equipped || {}) };
     out.counters = { ...fresh.counters, ...(p.counters || {}) };
     out.flags = { ...fresh.flags, ...(p.flags || {}) };
+    // v31 仙阶：结构自愈——老档无 xianjie 归零为未入阶，超界值钳制
+    {
+      const xjSrc = (out.xianjie && typeof out.xianjie === 'object') ? out.xianjie : {};
+      out.xianjie = {
+        idx: Utils.clamp(Math.floor(Number(xjSrc.idx)) || 0, 0, GameData.XIAN_TIERS.length),
+        layer: Utils.clamp(Math.floor(Number(xjSrc.layer)) || 0, 0, 3),
+      };
+      if (out.xianjie.idx === 0) out.xianjie.layer = 0;
+      out._xianVisitDay = Number(out._xianVisitDay) || 0;
+    }
     // 逐级运行迁移步骤
     const startStep = out._migratedVersion || 0;
     for (let i = startStep; i < MIGRATE_STEPS.length; i++) {

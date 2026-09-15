@@ -24,7 +24,7 @@
   --danger: #bf4a44;
   --ok: #588a3e;
   /* 六品统一色阶：凡 / 灵 / 玄 / 地 / 天 / 仙（浅底加深调，全游戏一致） */
-  --grade-0: #8a877e;  --grade-0-bd: rgba(138, 135, 126, 0.55);
+  --grade-0: #98948a;   /* v31 无障碍：对比度提升 */  --grade-0-bd: rgba(138, 135, 126, 0.55);
   --grade-1: #588a3e;  --grade-1-bd: rgba(88, 138, 62, 0.55);
   --grade-2: #3a6ea8;  --grade-2-bd: rgba(58, 110, 168, 0.55);
   --grade-3: #c77f2e;  --grade-3-bd: rgba(199, 127, 46, 0.6);
@@ -888,7 +888,7 @@ body:not(.anim-off) .modal:not(.hidden) .battle-box { animation: boxIn 0.24s eas
   color: var(--gold);
   opacity: 1;
 }
-.log-info { color: #7d7663; }
+.log-info { color: #8f8873; }   /* v31 无障碍：对比度 3.5:1 → ≥4.5:1 */
 .log-event { color: #96702e; }
 .log-gain { color: #4d8b3f; }
 .log-loss { color: #b64038; }
@@ -3407,3 +3407,10 @@ body.density-compact .card-desc { margin-bottom: 5px; }
  * v29 体验：日志相邻去重徽记
  * ====================================================================== */
 .log-dup { color: var(--text-faint); font-size: 11px; margin-left: 6px; }
+
+/* v31（E33）：移动端迷你存档指示点（桌面端隐藏，与 .m-hide 内的完整反馈互补） */
+.m-save-dot { display: none; }
+@media (max-width: 860px) {
+  .m-save-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 5px rgba(88, 138, 62, 0.6); margin-left: 6px; vertical-align: 1px; transition: background 0.18s ease, transform 0.18s ease; }
+  .m-save-dot.flash { background: #fff; transform: scale(1.5); }
+}

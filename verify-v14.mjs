@@ -48,8 +48,8 @@ try {
     ? pass('TA7 遮罩已移入 #game-screen（P0 修根）+ more-sheet 元素在位') : fail('TA7 index.html 结构', '遮罩位置或 more-sheet 缺失');
   html.includes('<i class="mdb-i" aria-hidden="true">☰</i><span class="mdb-t">道途</span>') && html.includes('id="amb-density"')
     ? pass('TA8 抽屉钮图标化 + 界面密度设置项在位') : fail('TA8 index.html 控件', '');
-  html.includes('style.css?v=46') && html.includes('game.js?v=46')
-    ? pass('TA9 缓存号升级 v=46') : fail('TA9 缓存号', 'index.html 未升到 v=46');
+  html.includes('style.css?v=47') && html.includes('game.js?v=47')
+    ? pass('TA9 缓存号升级 v=47') : fail('TA9 缓存号', 'index.html 未升到 v=47');
   js.includes('M_SHEET_TABS') && js.includes('renderMoreSheet()') && js.includes("'act-more'")
     ? pass('TA10 更多面板 JS：收拢表 / 渲染器 / 动作齐备') : fail('TA10 更多面板 JS', '');
   js.includes('closeDrawers(opts = {})') && js.includes("if (!sheet.classList.contains('on')) sheet.classList.add('hidden');")
@@ -270,7 +270,7 @@ try {
     ? pass('TE3 界面密度档：紧凑档切换 body 类并真实改变卡片内边距') : fail('TE3 密度档', JSON.stringify(te3));
 
   /* ================= TF 联动织网数值组（纯函数断言） ================= */
-  const tf = await page.evaluate(() => {
+  const tf = await page.evaluate(async () => {
     const p = Game.player;
     const out = {};
     // G4 心魔蚀道：心魔 50 → 成算 -5（剑修 ×0.77 等大道乘区在减项之后，故取无道者量基准）
@@ -309,9 +309,13 @@ try {
       { uid: 2, id: 'm_yezhu', name: '乙', species: 'beast', power: 24, level: 2, exp: 0, bond: 0, skills: [], trip: { until: Math.floor(p.day), days: 3 } },
     ], active: 1, active2: null, nextId: 3 };
     for (const k of Object.keys(p.bag)) if (GameData.ITEMS[k] && GameData.ITEMS[k].type === 'material') delete p.bag[k];
-    BeastSys.claimTrip(1);
+    // v31 寻宝归来三选一：mock 选「灵材为主」并 await 异步结算
+    const origPopup = UI.popup.bind(UI);
+    UI.popup = async (o) => (o.title || '').includes('寻宝归来') ? 'mat' : origPopup(o);
+    await BeastSys.claimTrip(1);
     const qtyBond = Object.entries(p.bag).filter(([k]) => GameData.ITEMS[k].type === 'material').reduce((s, [, v]) => s + v, 0);
-    BeastSys.claimTrip(2);
+    await BeastSys.claimTrip(2);
+    UI.popup = origPopup;
     const qtyPlain = Object.entries(p.bag).filter(([k]) => GameData.ITEMS[k].type === 'material').reduce((s, [, v]) => s + v, 0) - qtyBond;
     out.g11 = qtyBond === 2 && qtyPlain === 1;
     return out;

@@ -72,21 +72,21 @@ const BountySys = {
     if (Utils.chance(25)) KarmaSys.addFortune(2);
     Ambience.sfx('bounty');
     let chainTxt = '';
-    // v19 连锁悬赏：赏格 ×1.6、目标 +2，代代加码
-    const mul = (t.chain || 0) > 0 ? 1 + t.chain * 0.6 : 1;
+    // v19 连锁悬赏：赏格代代加码；v30 连锁 1→3 级；v31 修瑕（E13）：实发统一走 CHAIN_MUL 表——
+    // 原实发用 1+chain*0.6（连锁Ⅲ=×2.8）而文案按 CHAIN_MUL[3]=×3 宣称，两口径打架
+    const CHAIN_MUL = [1, 1.6, 2.2, 3];
+    const CHAIN_CHANCE = [25, 22, 18];
+    const CHAIN_TAG = ['', '连锁 · ', '连锁Ⅱ · ', '连锁Ⅲ · '];
+    const curChain = t.chain || 0;
+    const mul = CHAIN_MUL[curChain] || 1;
     const gainStones = Math.round(r.stones * mul);
     Bag.addStones(gainStones);
     if (p.sect) p.sect.contrib += Math.round(r.contrib * mul);
     Log.add(`悬赏【${t.name}】交付！赏得灵石 ${Utils.fmtNum(gainStones)}${p.sect ? `、宗门贡献 +${Math.round(r.contrib * mul)}` : ''}。`, 'gain');
-    // v30 悬赏连锁 1→3 级：赏格 ×1.6/×2.2/×3，三级后终了
-    const CHAIN_MUL = [0, 1.6, 2.2, 3];
-    const CHAIN_CHANCE = [25, 22, 18];
-    const CHAIN_TAG = ['', '连锁 · ', '连锁Ⅱ · ', '连锁Ⅲ · '];
-    const curChain = t.chain || 0;
     if (curChain < 3 && (t.type === 'kill' || t.type === 'collect') && Utils.chance(CHAIN_CHANCE[curChain])) {
       const nc = curChain + 1;
       const baseName = t.name.replace(/^(连锁Ⅱ?Ⅲ? · )/, '');
-      const nt = { ...t, need: t.need + 2, progress: 0, chain: nc, name: `${CHAIN_TAG[nc]}${baseName}`, desc: `${t.desc.replace(/×\d+/, `×${t.need + 2}`)}（连锁${nc > 1 ? 'Ⅲ'.slice(0, 0) + ['Ⅰ', 'Ⅱ', 'Ⅲ'][nc - 1] : ''} · 赏格 ×${CHAIN_MUL[nc]}）` };
+      const nt = { ...t, need: t.need + 2, progress: 0, chain: nc, name: `${CHAIN_TAG[nc]}${baseName}`, desc: `${t.desc.replace(/×\d+/, `×${t.need + 2}`)}（连锁${['Ⅰ', 'Ⅱ', 'Ⅲ'][nc - 1] || ''} · 赏格 ×${CHAIN_MUL[nc]}）` };
       B.list[idx] = nt;
       chainTxt = nc < 3 ? '行商追加了一张<b>连锁悬赏</b>——目标更多，赏格更厚！' : '行商搬出压箱底的赏格——<b>连锁Ⅲ</b>！办成这一单，江湖都知道你的名号。';
     } else {

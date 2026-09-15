@@ -32,13 +32,13 @@ const Tribulation = {
       hide: Utils.clamp(S.base * 1.0 * mult, 3, 97),       // 借地躲劫：居中
     };
   },
-  async run(bonus = 0) {
+  async run(bonus = 0, opts = {}) {
     const p = Game.player;
     const target = p.realmIdx + 1;
     // v30 护栏：天劫进行中拒绝重入——闭关循环曾可在劫弹窗未决时反复调 run（连环吞渡劫丹/覆写回溯备份）
     if (this.state) return;
     Save.write('bak', Game.player);   // v6：冲关之前，自动备份至临时槽位，失利可回溯
-    // v29 天年：渡劫丹——药力应劫而化，成算 +5（一丹一劫，引动天劫即耗，失利不返还）
+    // v29 天年：渡劫丹——药力应劫而化，成算 +5（一丹一劫；回溯因果时随 bak 一并复原，连败的持续代价以孽障计）
     p.flags = p.flags || {};
     let dujieBonus = 0;
     if ((p.flags.dujieDan || 0) > 0) {
@@ -46,14 +46,22 @@ const Tribulation = {
       dujieBonus = 5;
       Log.add('识海中渡劫丹的药力轰然化开，道基如蒙金光（成算 +5）。', 'gain');
     }
+    // v31 仙劫：opts.xian——XianSys 阶满引动，成算沿用同一张三策表，成败分支各走仙阶口径
+    const xian = !!opts.xian;
+    const effTarget = xian ? 9 + (opts.xianTo || 10) : target;   // 仙劫劫威续推（地仙晋阶 ≈ 渡劫之后又两级）
     this.state = {
       target,
+      xian,
+      xianTo: opts.xianTo || 0,
+      xianYuanAtStart: xian ? (p.counters.xianyuan || 0) : 0,   // 仙劫失利折仙元三成的基准
       base: Cultivate.breakthroughChance(p, bonus + dujieBonus),
-      power: this.power(p, target),
-      artifact: this.findArtifact(p, this.artifactGrade(target)),
+      power: this.power(p, effTarget),
+      artifact: this.findArtifact(p, xian ? 4 : this.artifactGrade(target)),
       busy: false, logs: [],
     };
-    Log.add(`你收敛心神，向 <b>${GameData.REALM_NAMES[target]}</b> 境发起最后的冲击——刹那间天地变色，九霄雷云翻涌，<b>天劫</b>降临了！`, 'system');
+    Log.add(xian
+      ? `你收敛仙光，向 <b>${(GameData.XIAN_TIERS[(opts.xianTo || 2) - 1] || {}).name || '下一阶'}</b> 发起冲击——刹那间天外劫云翻卷，<b>仙劫</b>降临了！`
+      : `你收敛心神，向 <b>${GameData.REALM_NAMES[target]}</b> 境发起最后的冲击——刹那间天地变色，九霄雷云翻涌，<b>天劫</b>降临了！`, 'system');
     document.getElementById('tribulation-modal').classList.remove('hidden');
     this.render();
   },
@@ -85,10 +93,11 @@ const Tribulation = {
     const p = Game.player;
     const c = this.chances();
     const art = S.artifact ? GameData.ITEMS[S.artifact.id] : null;
-    const gradeName = GameData.GRADE_NAMES[this.artifactGrade(S.target)];
+    const gradeName = S.xian ? GameData.GRADE_NAMES[4] : GameData.GRADE_NAMES[this.artifactGrade(S.target)];
+    const title = S.xian ? '— 仙 劫 将 至 —' : '— 天 劫 将 至 —';
     document.getElementById('trib-box').innerHTML = `
-      <div class="battle-head" style="color:var(--gold)">— 天 劫 将 至 —</div>
-      <div class="card-desc" style="margin-bottom:8px">雷云压顶，劫威如狱。当前天劫威力 <b class="hl">${S.power.toFixed(0)}</b>
+      <div class="battle-head" style="color:var(--gold)">${title}</div>
+      <div class="card-desc" style="margin-bottom:8px">劫云压顶，${S.xian ? '仙威' : '劫威'}如狱。当前劫威 <b class="hl">${S.power.toFixed(0)}</b>
       （气运 ${p.fortune || 0} 削之，孽障 ${p.karma || 0} 长之）。<br>三策在手，生死自择——</div>
       <div class="trib-opts">
         <button class="btn trib-opt" data-action="trib-strategy" data-strategy="endure" ${S.busy ? 'disabled' : ''}>
@@ -169,6 +178,20 @@ const Tribulation = {
     await Utils.sleep(800);
     // 渡劫结果
     if (Utils.chance(chance)) {
+      // v31 仙劫：成败各走仙阶口径——晋仙阶、仙体回满，不落 realmIdx
+      if (S.xian) {
+        p.breakStreak = 0;
+        const st2 = Stat.compute(p);
+        p.hp = st2.maxHp; p.mp = st2.maxMp;
+        this.log('仙劫散去，霞光满身——你于云端之上缓缓睁眼——成了！', 'log-realm');
+        if (typeof XianSys !== 'undefined') XianSys.tribSuccess(p, S.xianTo, strategy);
+        UI.toast(`仙劫功成！晋 ${GameData.XIAN_TIERS[S.xianTo - 1].name}`);
+        await Utils.sleep(900);
+        document.getElementById('tribulation-modal').classList.add('hidden');
+        this.state = null;
+        Game.afterAction();
+        return;
+      }
       if (p.hp >= Stat.compute(p).maxHp * 0.999) { p.flags = p.flags || {}; p.flags.tribFullHp = true; }   // v20 无伤渡劫成就（判定须在回血前，且先于 st 声明避免 TDZ）
       p.realmIdx++; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(p.realmIdx, 0) - 1); p.insight = 0; p.expOverflow = 0;
       p.breakStreak = 0;   // v8 挫而愈坚：成功即清零
@@ -203,17 +226,27 @@ const Tribulation = {
       // §24 渡劫虚弱期：道侣/结拜概率护法
       const aid = NpcSys.tryAid(p, 'trib');
       // v10 境界特性 · 劫体（渡劫起）：失利保留九成修为
-      const keepPct = p.realmIdx >= 8 ? 0.9 : (aid ? 0.8 : 0.6);
+      // v31 修瑕（E17）：护法保留率单独计算——原三目在 realmIdx>=8 时劫体分量吞掉 aid 分量，
+      // 高境护法反成负收益（修为同样多、感悟还少 5），与静修冲关版（aid 0.8/0.6）语义也不一致
+      let keepPct;
+      if (aid) keepPct = p.realmIdx >= 8 ? 0.95 : 0.8;
+      else keepPct = p.realmIdx >= 8 ? 0.9 : 0.6;
       let insGain;
       if (aid) {
-        p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * keepPct);
+        if (!S.xian) p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * keepPct);
         insGain = 10;
         p.insight = Math.min(100, p.insight + insGain);
         this.log(`危难之际，<b>${aid.name}</b> 护法相助，为你护住道基！`, 'log-gain');
       } else {
-        p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * keepPct);
+        if (!S.xian) p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * keepPct);
         insGain = 15;
         p.insight = Math.min(100, p.insight + insGain);
+      }
+      // v31 仙劫失利：折仙元三成、不折寿——仙劫非天劫，雷火不蚀寿元，蚀的是仙家资粮
+      if (S.xian) {
+        const lost = Math.round((S.xianYuanAtStart || 0) * 0.3);
+        p.counters.xianyuan = Math.max(0, (p.counters.xianyuan || 0) - lost);
+        this.log(`仙元溃散三成（-${Utils.fmtNum(lost)}）——道行未损，来日再叩。`, 'log-loss');
       }
       // v8 挫而愈坚：连败保底，越挫越勇
       p.breakStreak = (p.breakStreak || 0) + 1;
@@ -246,7 +279,7 @@ const Tribulation = {
       }
     }
     // v29 天年：渡劫失利折寿十年（选择回溯者本次渡劫已尽数抹去，不折寿）
-    if (!p.dead) Time.cutLife(p, 10, '天劫反噬');
+    if (!p.dead && !S.xian) Time.cutLife(p, 10, '天劫反噬');   // v31：仙劫失利折仙元不折寿
     // v30 补遗：道侣共渡天劫——失利之际道侣扶住你（心魔 -2，患难见真情）
     if (!p.dead && p.partner) {
       const ps = (typeof NpcSys !== 'undefined' && NpcSys.state) ? NpcSys.state(p, p.partner) : null;

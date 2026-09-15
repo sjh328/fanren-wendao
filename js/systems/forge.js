@@ -110,14 +110,73 @@ const ForgeSys = {
     }
     Game.afterAction();
   },
-  /** 执行炼器 */
+  /** v31（D7）：连祭炼——自动强化至多 N 轮（+8 起自动掺强化石；+7 起失败即停、材料不足自动停）。
+   *  复用 enhance 的判定内核口径（rate+强化石+祝福值），只去掉逐轮弹窗。 */
+  async enhanceMulti(slot, times = 5) {
+    const p = Game.player;
+    let done = 0;
+    for (let i = 0; i < times; i++) {
+      const itemId = p.equipped[slot] ? Utils.eqId(p.equipped[slot]) : null;
+      if (!itemId) { UI.toast('该槽位尚未装备法宝'); return; }
+      const def = GameData.ITEMS[itemId];
+      const lv = this.lvOf(p, itemId);
+      if (lv >= this.MAX_LV) { UI.toast('此宝已至强化极境（+15）'); return; }
+      const stones = this.stonesCost(p, itemId, lv);
+      const oreNeed = lv + 1;
+      if (Bag.count('m_xuantie') < oreNeed) { UI.toast('玄铁矿不足——连祭炼中止'); return; }
+      if (!Bag.spendStones(stones)) { UI.toast('灵石不足——连祭炼中止'); return; }
+      Bag.removeItem('m_xuantie', oreNeed);
+      const useGuard = Bag.count('m_qianghua') > 0 && lv >= 8;   // 高风险档才自动掺石
+      if (useGuard) Bag.removeItem('m_qianghua', 1);
+      const bless = this.blessOf(p, itemId);
+      const autoSuccess = bless >= 100;
+      let success;
+      if (autoSuccess) {
+        success = true;
+        if (p.enhBless) delete p.enhBless[itemId];
+      } else {
+        const rate = Math.min(100, this.rate(lv) + (useGuard ? 40 : 0));
+        success = Utils.chance(rate);
+        if (!success && lv >= 8) this.addBless(p, itemId, 20 + (useGuard ? 40 : 0));
+      }
+      done++;
+      if (success) {
+        const eq = p.equipped[slot];
+        if (eq && typeof eq === 'object') eq.enhance = Math.min(this.MAX_LV, lv + 1);
+        else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv + 1; }
+        if (p.enhBless) delete p.enhBless[itemId];
+        Log.add(`【连祭炼 ${done}】炉火纯青——<b class="grade-${def.grade}">${def.name}</b> 升至 <b>+${lv + 1}</b>！`, 'gain');
+      } else if (lv >= 7) {
+        const eq2 = p.equipped[slot];
+        if (eq2 && typeof eq2 === 'object') eq2.enhance = Math.max(0, lv - 1);
+        else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv - 1; }
+        let blessNote = '';
+        if (lv >= 8) { const b = this.addBless(p, itemId, 20); blessNote = `（祝福值 ${b}/100）`; }
+        Log.add(`【连祭炼 ${done}】炉火骤然失控——强化跌至 <b>+${lv - 1}</b>${blessNote}，连祭炼中止。`, 'loss');
+        UI.toast('祭炼失败，强化跌落一级', true);
+        Game.afterAction();
+        return;
+      } else {
+        Log.add(`【连祭炼 ${done}】火候未至，等级保留。`, 'warn');
+      }
+      await Utils.sleep(80);
+    }
+    Log.add(`连祭炼收炉——本轮共祭炼 ${done} 次。`, 'system');
+    Game.afterAction();
+  },
+  /** 执行炼器（v31 D7：炸炉产器胚残片；持 6 片材料折半——大额炼器赌博补上保底） */
   forge(recipeId) {
     const p = Game.player;
     const r = GameData.FORGE_RECIPES.find(x => x.id === recipeId);
     if (!r) return;
-    const okMats = Object.entries(r.need).every(([id, n]) => Bag.count(id) >= n);
+    // v31（D7）：器胚残片折抵——集 6 片自动折半材料
+    const useFrag = Bag.count('m_qipei') >= 6;
+    const needEff = {};
+    for (const [id, n] of Object.entries(r.need)) needEff[id] = useFrag ? Math.max(1, Math.ceil(n / 2)) : n;
+    const okMats = Object.entries(needEff).every(([id, n]) => Bag.count(id) >= n);
     if (!okMats) { UI.toast('材料不足'); return; }
-    for (const [id, n] of Object.entries(r.need)) Bag.removeItem(id, n);
+    for (const [id, n] of Object.entries(needEff)) Bag.removeItem(id, n);
+    if (useFrag) { Bag.removeItem('m_qipei', 6); Log.add('六片器胚残片入炉垫底——材料折半。', 'info'); }
     p.counters.forges = (p.counters.forges || 0) + 1;
     Time.add(5);
     if (p.dead) return;
@@ -130,7 +189,9 @@ const ForgeSys = {
       Log.add(`锤起锤落，火星四溅——<b class="grade-${out.grade}">${out.name}</b> 铸成出世！`, 'gain');
       if ((out.grade || 0) >= 4 || out.set) UI.announce(`✦ 炼器大成 · ${out.name}`, 'gold');
     } else {
-      Log.add(`炉温骤变，器坯炸裂——材料尽毁，未得 ${out.name}。（成器率 ${rate}%）`, 'loss');
+      const frag = Utils.rand(1, 2);
+      Bag.addItem('m_qipei', frag);
+      Log.add(`炉温骤变，器坯炸裂——材料尽毁，未得 ${out.name}。炉底拾得【器胚残片】×${frag}（集六片折半材料）。（成器率 ${rate}%）`, 'loss');
       UI.toast('炼器失败，材料尽毁', true);
     }
     Game.afterAction();
@@ -145,15 +206,25 @@ const ForgeSys = {
     const grade = def.grade || 0;
     if (Utils.chance(Utils.clamp(40 + grade * 10, 0, 85))) {
       const cands = pool.prefix.filter(a => a.slot === 'any' || a.slot === def.slot);
-      if (cands.length) out.prefix = Utils.pick(cands).id;
+      if (cands.length) out.prefix = this.pickAffix(cands, grade).id;
     }
     if (Utils.chance(Utils.clamp(25 + grade * 10, 0, 70))) {
       const cands = pool.suffix.filter(a => a.slot === 'any' || a.slot === def.slot);
-      if (cands.length) out.suffix = Utils.pick(cands).id;
+      if (cands.length) out.suffix = this.pickAffix(cands, grade).id;
     }
     return out;
   },
   affixDef(part, id) { return ((GameData.BALANCE.AFFIXES || {})[part] || []).find(a => a.id === id) || null; },
+  /** v31（D7）：词缀加权掷取——高端词缀权重低、有品阶门槛（原全池等权，煞威与磐石同权重） */
+  pickAffix(cands, grade) {
+    const usable = cands.filter(a => (a.minGrade || 0) <= (grade || 0));
+    const pool = usable.length ? usable : cands;
+    const wOf = a => a.w || 100;
+    const total = pool.reduce((s2, a) => s2 + wOf(a), 0);
+    let r = Math.random() * total;
+    for (const a of pool) { r -= wOf(a); if (r <= 0) return a; }
+    return pool[pool.length - 1];
+  },
   /** 装备实例的词缀（旧档首次读取时补掷并写回，即首次装备后落定） */
   affixesOf(p, inst) {
     if (!inst || typeof inst === 'string') return {};
@@ -163,15 +234,33 @@ const ForgeSys = {
     if (!inst.affixes) inst.affixes = this.rollAffixes(def);
     return inst.affixes;
   },
-  /** 词缀显示（◆前缀 ◈后缀） */
+  /** 词缀显示（◆前缀 ◈后缀）；v31：两段式词缀在 title 中标注本件实值（原 grade5 破军实为 +165 攻，玩家无从知晓） */
   affixText(inst) {
     const A = (inst && inst.affixes) || {};
     const parts = [];
+    const g = ((GameData.ITEMS[Utils.eqId(inst)] || {}).grade) || 0;
     const pre = A.prefix && this.affixDef('prefix', A.prefix);
     const suf = A.suffix && this.affixDef('suffix', A.suffix);
-    if (pre) parts.push(`<span class="affix-p" title="${Utils.esc(pre.desc)}">◆${pre.name}</span>`);
-    if (suf) parts.push(`<span class="affix-s" title="${Utils.esc(suf.desc)}">◈${suf.name}</span>`);
+    if (pre) {
+      const tip = pre.per ? `${pre.desc} · 本件实值 ${this.affixActual(pre, g)}` : pre.desc;
+      parts.push(`<span class="affix-p" title="${Utils.esc(tip)}">◆${pre.name}</span>`);
+    }
+    if (suf) {
+      const tip = suf.per ? `${suf.desc} · 本件实值 ${this.affixActual(suf, g)}` : suf.desc;
+      parts.push(`<span class="affix-s" title="${Utils.esc(tip)}">◈${suf.name}</span>`);
+    }
     return parts.join(' ');
+  },
+  /** v31：两段式词缀在本件品阶下的实值文本（如「攻 +165」「吸血 17.5%」） */
+  affixActual(d, grade) {
+    const N = { atk: '攻', atkPct: '攻', def: '防', defPct: '防', hp: '血', hpPct: '血', mp: '灵力', mpPct: '灵力', spd: '身法', spdPct: '身法', crit: '暴击', dodge: '闪避', block: '格挡', cult: '修炼', luck: '福缘', stonePct: '灵石', leech: '吸血', execute: '斩杀', thorns: '反伤', shield: '护体', mpRegen: '回灵', comboUp: '连击' };
+    const src = d.bonus || d.onHit || d.onHurt || d.onStart || d.onTurn || {};
+    const per = d.per || {};
+    return Object.entries(src).map(([k, v]) => {
+      const val = v + (per[k] || 0) * (grade || 0);
+      const pct = k.endsWith('Pct') || ['leech', 'execute', 'thorns', 'shield', 'mpRegen'].includes(k);
+      return `${N[k] || k} ${pct ? '+' + (Math.round(val * 1000) / 10) + '%' : '+' + Math.round(val)}`;
+    }).join('、');
   },
   /** 词缀前缀加成（equipBonus 并入） */
   affixBonus(p) {
@@ -189,15 +278,32 @@ const ForgeSys = {
     }
     return total;
   },
-  /** v30 词缀价值估分（重铸保底与对比用） */
-  affixScore(part, id) {
+  /** 词缀价值估分（洗练/重铸保底与对比用）
+   *  v31 根修：后缀补 score 标量估值——原后缀无 bonus 恒 0 分，「保底不降」对后缀整体失效（可洗成严格降级）、
+   *  器魂重铸的后缀半边永远不变；per×grade 两段式一并计入；ctx（玩家属性）用于把百分比词缀折算为期望
+   *  平铺值再比较——高境下百分比与平铺孰优随面板变化，保底不再锁死低配词缀。 */
+  affixScore(part, id, grade = 0, ctx = null) {
     const d = this.affixDef(part, id);
-    if (!d || !d.bonus) return 0;
+    if (!d) return 0;
+    if (d.score != null) return d.score;   // 后缀：数据侧标量估值
+    if (!d.bonus) return 0;
     const W = { atk: 2, atkPct: 2, def: 1.5, defPct: 1.5, hp: 0.3, hpPct: 0.3, mp: 0.2, mpPct: 0.2, spd: 1, spdPct: 1, crit: 1, dodge: 1, block: 0.5, cult: 1, luck: 2, stonePct: 1 };
-    return Object.entries(d.bonus).reduce((acc, [k, v]) => acc + (W[k] ?? 1) * v, 0);
+    const per = d.per || {};
+    return Object.entries(d.bonus).reduce((acc, [k, v]) => {
+      let val = v + (per[k] || 0) * (grade || 0);
+      if (ctx) {
+        if (k === 'atkPct') val = val * (ctx.atk || 0) / 100;
+        else if (k === 'defPct') val = val * (ctx.def || 0) / 100;
+        else if (k === 'hpPct') val = val * (ctx.maxHp || 0) / 100;
+        else if (k === 'mpPct') val = val * (ctx.maxMp || 0) / 100;
+        else if (k === 'spdPct') val = val * (ctx.speed || 0) / 100;
+      }
+      return acc + (W[k] ?? 1) * val;
+    }, 0);
   },
   /** 词缀后缀战斗特效聚合（Battle 消费）
-   *  v30 修瑕：统一走 affixesOf（原直读 inst.affixes，依赖 Stat.compute 先行落缀的时序） */
+   *  v30 修瑕：统一走 affixesOf（原直读 inst.affixes，依赖 Stat.compute 先行落缀的时序）
+   *  v31：后缀 per 两段式随品阶成长（与 affixBonus 前缀同款） */
   suffixFx(p) {
     const fx = { leech: 0, execute: 0, comboUp: 0, thorns: 0, shield: 0, mpRegen: 0 };
     if (!p || !p.equipped) return fx;
@@ -207,7 +313,9 @@ const ForgeSys = {
       const d = this.affixDef('suffix', A.suffix);
       if (!d) continue;
       const o = d.onHit || d.onHurt || d.onStart || d.onTurn || {};
-      for (const [k, v] of Object.entries(o)) if (k in fx) fx[k] += v;
+      const g = ((GameData.ITEMS[Utils.eqId(inst)] || {}).grade) || 0;
+      const per = d.per || {};
+      for (const [k, v] of Object.entries(o)) if (k in fx) fx[k] += v + (per[k] || 0) * g;
     }
     return fx;
   },
@@ -245,10 +353,12 @@ const ForgeSys = {
     const pool = GameData.BALANCE.AFFIXES[part].filter(a => a.slot === 'any' || a.slot === def.slot);
     if (!pool.length) { UI.toast('此槽位无可用词缀'); Game.afterAction(); return; }
     inst.affixes = inst.affixes || {};
-    const oldScore = this.affixScore(part, inst.affixes[part]);
-    const cand = Utils.pick(pool);
-    // v30：洗练保底不降——新词缀估值更低时保留原词缀（灵石玄铁照付，求变不亏底）
-    if (oldScore > 0 && this.affixScore(part, cand) < oldScore) {
+    const g = def.grade || 0;
+    const ctx = Stat.compute(p);
+    const oldScore = this.affixScore(part, inst.affixes[part], g, ctx);
+    const cand = this.pickAffix(pool, def.grade || 0);
+    // v30：洗练保底不降——新词缀估值更低时保留原词缀（灵石玄铁照付，求变不亏底）；v31：纳入品阶与面板折算
+    if (oldScore > 0 && this.affixScore(part, cand.id || cand, g, ctx) < oldScore) {
       const d0 = this.affixDef(part, inst.affixes[part]);
       Log.add(`你以玄铁重淬【${def.name}】——新火候不如旧纹，【<b>${d0.name}</b>】保留不动。`, 'warn');
       Ambience.sfx('forge');
@@ -257,7 +367,7 @@ const ForgeSys = {
     }
     inst.affixes[part] = cand.id || cand;
     const d = this.affixDef(part, inst.affixes[part]);
-    Log.add(`你以玄铁重淬【${def.name}】——${part === 'prefix' ? '前缀' : '后缀'}词缀化为【<b>${d.name}</b>】：${d.desc}${keepSide ? `（已锁${keepSide === 'prefix' ? '前缀' : '后缀'}）` : ''}`, part === 'prefix' ? 'gain' : 'system');
+    Log.add(`你以玄铁重淬【${def.name}】——${part === 'prefix' ? '前缀' : '后缀'}词缀化为【<b>${d.name}</b>】：${d.desc}${keepSide ? `（已锁${keepSide === 'prefix' ? '前缀' : '后缀'}）` : ''}${d.per ? `（本件实值：${this.affixActual(d, g)}）` : ''}`, part === 'prefix' ? 'gain' : 'system');
     Ambience.sfx('forge');
     Game.afterAction();
   },
@@ -282,16 +392,24 @@ const ForgeSys = {
     p.qihun -= costQ;
     inst.affixes = inst.affixes || {};
     const oldA = { ...inst.affixes };
+    const g = def.grade || 0;
+    const ctx = Stat.compute(p);
     inst.affixes = this.rollAffixes(def);   // 双侧重掷
-    // 保底：任一侧新不如旧则回滚该侧（在 6 次候补里择优，再不济保旧纹）
+    // v31 修瑕（E39）：重铸空手保底——低品双空概率曾近半，8 器魂花出去可能空手而归：前缀必出一条
     const pool = GameData.BALANCE.AFFIXES;
+    if (!inst.affixes.prefix) {
+      const cands = pool.prefix.filter(a => a.slot === 'any' || a.slot === def.slot);
+      if (cands.length) inst.affixes.prefix = this.pickAffix(cands, def.grade || 0).id;
+    }
+    // 保底：任一侧新不如旧则回滚该侧（在 6 次候补里择优，再不济保旧纹）；v31：后缀有估值后本函数对后缀真正生效
     const rollBetter = (part, oldId) => {
-      const oldScore = this.affixScore(part, oldId);
+      const oldScore = this.affixScore(part, oldId, g, ctx);
       let best = oldId, bestScore = oldScore;
       for (let i = 0; i < 6; i++) {
         const cands = pool[part].filter(a => a.slot === 'any' || a.slot === def.slot);
-        const c = Utils.pick(cands);
-        if (this.affixScore(part, c.id) > bestScore) { best = c.id; bestScore = this.affixScore(part, c.id); }
+        const c = this.pickAffix(cands, g);
+        const cScore = this.affixScore(part, c.id, g, ctx);
+        if (cScore > bestScore) { best = c.id; bestScore = cScore; }
       }
       return best;
     };

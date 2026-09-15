@@ -18,6 +18,7 @@ const BeastSys = {
     const p = Game.player;
     if (!B || B.over || !B.enemy) return;
     const e = B.enemy;
+    if (B.ctx && B.ctx.tower) { UI.toast('塔影乃气相所化，散即重凝——无从驯服'); return; }   // v31 修瑕：塔影可驯曾致一次登塔内无限重踏无限驯兽
     if (!this.TAMEABLE.includes(e.species)) { UI.toast('此物灵智已开或非血肉之躯，无法驯服'); return; }
     if (e.hp > e.hpMax * 0.2) { UI.toast('需先将其打至两成血以下，方能驯服'); return; }
     const slotFull = p.beasts.list.length >= this.maxSlots(p);
@@ -62,7 +63,7 @@ const BeastSys = {
       }
       B.enemy.hp = 0;
       p.counters.tames = (p.counters.tames || 0) + 1;   // v24 章助缘计数
-      B.log(`${e.name} 驯服功成！`, 'log-gain');
+      Battle.log(`${e.name} 驯服功成！`, 'log-gain');   // v31 修瑕：原 B.log 调不存在的方法必抛异常——驯服成功即软锁（victoryTame 永不执行）
       await Battle.wait(500);
       Battle.victoryTame();
       return;
@@ -121,6 +122,14 @@ const BeastSys = {
     plant:    { name: '盘根错节', kind: 'slow', pct: 30, rounds: 2 },
     element:  { name: '灵爆', kind: 'burn', pct: 5, rounds: 2 },
   },
+  /** v31 亲昵 ≥80 的第三天生技（守护/相哺一路——人兽默契的具象） */
+  SPECIES_SKILLS3: {
+    beast:    { name: '守主之啸', kind: 'weaken', pct: 18, rounds: 2 },
+    snake:    { name: '灵蛇吐信', kind: 'bleed', pct: 3, rounds: 2 },
+    swarm:    { name: '群翼蔽主', kind: 'guard', def: 25, rounds: 2 },
+    plant:    { name: '青藤续脉', kind: 'heal', pct: 8 },
+    element:  { name: '灵息涤尘', kind: 'heal', pct: 9 },
+  },
   /** v30：人兽合击就绪判定（出战灵兽 + 亲昵 ≥60） */
   comboReady(p) {
     const b = this.activeBeast(p);
@@ -140,13 +149,13 @@ const BeastSys = {
     B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
     B.hitShake = true;
     if (B.stats) { B.stats.out += dmg; if (B.stats.src) B.stats.src.beast += dmg; }   // v20 伤害构成统计
-    B.pushFloat('enemy', `-${dmg}`, 'dmg');
+    Battle.pushFloat('enemy', `-${dmg}`, 'dmg');   // v31 修瑕：原 B.pushFloat 必抛 TypeError——助战掷中即被吞成「气机紊乱」，玩家行动作废
     // v18：灵兽技能实效化——施加真实技能效果（毒/流血/减益等）；v20 支持双技
     // v30 修瑕：技能语义补全——原白名单缺 drain/mpburn/guard/heal/freeze，野性继承技与
     //          傀儡/阴魂系招式被静默丢弃；现按语义分别结算（伤敌/削敌/护主/续主）
     let skillNote = '';
     const mySt = Stat.compute(p);
-    for (const sk of (b.skills || []).slice(0, 2)) {
+    for (const sk of (b.skills || []).slice(0, (b.bond || 0) >= 80 ? 3 : 2)) {
       if (!sk.kind) continue;
       if (['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken', 'stun', 'freeze'].includes(sk.kind)) {
         Battle.applyEnemyFx(B.enemy, { kind: sk.kind, pct: (sk.pct || 2) * 0.6, rounds: sk.kind === 'freeze' || sk.kind === 'stun' ? 1 : (sk.rounds || 2) });
@@ -169,7 +178,7 @@ const BeastSys = {
         skillNote += `【${sk.name}·回春 +${heal}】`;
       }
     }
-    B.log(`${skillNote}你的灵兽 <b>${b.name}</b> 亦张牙舞爪扑上助战——造成 <b>${dmg}</b> 点伤害！`, 'log-gain');
+    Battle.log(`${skillNote}你的灵兽 <b>${b.name}</b> 亦张牙舞爪扑上助战——造成 <b>${dmg}</b> 点伤害！`, 'log-gain');
     Battle.render();
     await Battle.wait(360);
     // v30：法诀呼应——主人刚施展过法诀，灵兽以天生属性补一手侵扰（五成几率）
@@ -209,6 +218,13 @@ const BeastSys = {
           b.skills.push({ ...this.SPECIES_SKILLS2[b.species] });
           extra = `，并领悟第二天生技【${b.skills[b.skills.length - 1].name}】！`;
         }
+        // v31（E-灵兽）：亲昵 ≥80 且十阶——人兽默契相感，可习得第三天生技（协战时结算三技）
+        if (b.level >= 10 && (b.bond || 0) >= 80 && (!b.skills || b.skills.length < 3) && this.SPECIES_SKILLS3[b.species]) {
+          b.skills = b.skills || [];
+          b.skills.push({ ...this.SPECIES_SKILLS3[b.species] });
+          extra = `，亲昵已深——它将毕生所悟与你相授，领悟第三天生技【${b.skills[b.skills.length - 1].name}】！！`;
+          UI.announce(`✦ 人兽契合 · 第三天生技 ✦`, 'gold');
+        }
         Log.add(`【${b.name}】吞下内丹，周身妖气一涨——灵兽升至 <b>${b.level} 阶</b>！${extra || '协助作战愈发骁勇。'}`, 'gain');
         UI.toast(`${b.name} 升至 ${b.level} 阶`);
       } else {
@@ -218,6 +234,9 @@ const BeastSys = {
   },
   setActive(uid) {
     const p = Game.player;
+    // v31 修瑕（E14）：在途派遣的灵兽不可设为出战——原可同时吃派遣寻宝与出战协战双重收益
+    const b0 = p.beasts.list.find(x => x.uid === uid);
+    if (b0 && b0.trip) { UI.toast('它还在外头寻宝未归，无暇出战'); return; }
     p.beasts.active = p.beasts.active === uid ? null : uid;
     const b = this.activeBeast(p);
     Log.add(b ? `你放出 <b>${b.name}</b> 随行出战。` : '灵兽归栏歇息。', 'info');
@@ -226,6 +245,8 @@ const BeastSys = {
   /** v19 副战灵兽：不出手协战，但被动以五成效力加身 */
   setActive2(uid) {
     const p = Game.player;
+    const b0 = p.beasts.list.find(x => x.uid === uid);
+    if (b0 && b0.trip) { UI.toast('它还在外头寻宝未归，无暇护持'); return; }   // v31 修瑕（E14）同上
     if (p.beasts.active === uid) p.beasts.active = null;
     p.beasts.active2 = p.beasts.active2 === uid ? null : uid;
     const b = p.beasts.list.find(x => x.uid === p.beasts.active2);
@@ -292,8 +313,8 @@ const BeastSys = {
     Log.add(`你系上小竹篓，<b>${b.name}</b> 欢快地窜入山林——${days} 日后归来。`, 'info');
     Game.afterAction();
   },
-  /** v20 寻宝归来结算 */
-  claimTrip(uid) {
+  /** v20 寻宝归来结算；v31（E-灵兽）归来三选一——灵材/灵石/情谊各有侧重，保底不落空 */
+  async claimTrip(uid) {
     const p = Game.player;
     const b = p.beasts.list.find(x => x.uid === uid);
     if (!b || !b.trip) return;
@@ -304,10 +325,31 @@ const BeastSys = {
     // v28 联动：亲昵近六十的灵兽，外出更肯用心——多衔一份材料回来
     const qty = (b.trip.days >= 7 ? 2 : 1) + ((b.bond || 0) >= 60 ? 1 : 0);
     const stones = Math.round((30 + b.power * 2) * b.trip.days * GameData.stoneEco(Math.min(6, p.realmIdx)) / 3);   // v29：封顶 4→6
-    Bag.addItem(mat, qty);
-    Bag.addStones(stones);
-    b.exp += b.trip.days * 120;
-    Log.add(`【${b.name}】叼着竹篓归来——带回【${GameData.ITEMS[mat].name}】×${qty}、灵石 ${Utils.fmtNum(stones)}，妖气也涨了几分。`, 'gain');
+    const days = b.trip.days;
+    b.exp += days * 120;
+    const choice = await UI.popup({
+      title: `寻宝归来 · ${b.name}`,
+      html: `【${b.name}】叼着竹篓欢快归来，竹篓里泛着灵光——它邀你来挑这一趟的收成：`,
+      options: [
+        { text: `灵材为主（${GameData.ITEMS[mat].name} ×${qty} + 灵石 ${Utils.fmtNum(stones)}）`, value: 'mat', primary: true },
+        { text: `灵石为主（灵石 ${Utils.fmtNum(Math.round(stones * 2.2))}）`, value: 'stones' },
+        { text: `情谊为重（灵石 ${Utils.fmtNum(Math.round(stones / 2))}、亲昵 +6、经验 +${days * 60}）`, value: 'bond' },
+      ],
+    });
+    if (choice === 'stones') {
+      const s2 = Math.round(stones * 2.2);
+      Bag.addStones(s2);
+      Log.add(`竹篓里竟是满满的灵石——灵石 +${Utils.fmtNum(s2)}。【${b.name}】得意地摇了摇尾巴。`, 'gain');
+    } else if (choice === 'bond') {
+      Bag.addStones(Math.round(stones / 2));
+      b.bond = Math.min(100, (b.bond || 0) + 6);
+      b.exp += days * 60;
+      Log.add(`你把灵石收下，把竹篓还给它，揉了揉它的脑袋——亲昵 +6，经验 +${days * 60}。【${b.name}】蹭了蹭你的手心。`, 'gain');
+    } else {
+      Bag.addItem(mat, qty);
+      Bag.addStones(stones);
+      Log.add(`【${b.name}】叼着竹篓归来——带回【${GameData.ITEMS[mat].name}】×${qty}、灵石 ${Utils.fmtNum(stones)}，妖气也涨了几分。`, 'gain');
+    }
     if (b.exp >= b.level * 400) UI.toast(`${b.name} 经验涨了，可喂内丹升阶`);
     b.trip = null;
     Game.afterAction();

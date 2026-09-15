@@ -114,7 +114,8 @@ const UI = {
       <span class="top-group top-res">${stoneChip}<span class="m-hide-inline">${repChip}</span></span>
       ${miniBars}
       <span class="top-group top-vit"><span class="res-chip res-power" title="综合战力：攻防血速暴闪格加权"><i class="rc-ico">武</i>${Utils.fmtNum(Stat.power(p))}</span><span class="top-meta m-hide">${Time.labelLong(p)}</span><span class="top-meta2 m-hide${(st.lifespan - p.age) < st.lifespan * 0.2 ? ' life-warn' : ''}" title="寿元：余年不足两成时朱砂示警">${Math.floor(p.age)}岁 / 寿元${st.lifespan}</span></span>
-      <span class="top-meta2 m-hide"><span class="save-dot"></span>已自动存档</span>`);
+      <span class="top-meta2 m-hide"><span class="save-dot"></span>已自动存档</span>
+      <span class="m-save-dot" title="已自动存档" aria-hidden="true"></span>`);
   },
 
   /* ---------- 左侧状态面板（v14：身份卡 → 核心条 → 属性网格 → 道行状态 → 建议） ---------- */
@@ -500,6 +501,34 @@ const UI = {
         <div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-ascend">引动天劫 · 白日飞升</button><button class="btn" data-action="act-mirror" title="查看跨世传承与轮回印记">🪞 轮回镜</button></div>
       </div>`;
     }
+    // v31 仙界四阶：飞升之后开启——仙籍落名 → 三层以仙元晋 → 阶满引仙劫 → 大罗圆满证道祖
+    if (typeof XianSys !== 'undefined' && XianSys.unlocked(p) && !p.canReincarnate) {
+      const xi = XianSys.cur(p);
+      const layer = XianSys.layer(p);
+      const yuan = XianSys.yuan(p);
+      const curDef = xi > 0 ? GameData.XIAN_TIERS[xi - 1] : null;
+      const nxT = xi > 0 ? GameData.XIAN_TIERS[xi] : null;
+      const need = xi > 0 && layer < 3 ? curDef.layerNeed : 0;
+      let xianBody = '';
+      if (xi === 0) {
+        xianBody = `<div class="card-desc">飞升之后，仙途未竟。落名仙籍，自地仙起步——此后每层全属性 <b class="hl">+1.5%</b>、修炼效率 <b class="hl">+2%</b>，仙元自此有了正经去处。</div>
+        <div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-xian-enter">仙籍落名 · 初入地仙</button></div>`;
+      } else if (layer < 3) {
+        xianBody = `<div class="card-desc">${curDef.ascendText}</div>
+        <div class="bar" style="height:14px;margin:6px 0"><div class="bar-fill exp" style="width:${Utils.clamp(yuan / need * 100, 0, 100)}%"></div><span class="bar-text">仙元 ${Utils.fmtNum(yuan)} / ${Utils.fmtNum(need)}</span></div>
+        <div class="action-row"><button class="btn btn-primary" data-action="act-xian-advance" ${yuan >= need ? '' : 'disabled'}>晋 ${curDef.name}${GameData.XIAN_LAYER_NAMES[layer]}（耗仙元 ${Utils.fmtNum(need)}）</button></div>`;
+      } else {
+        xianBody = `<div class="card-desc">${curDef.name}已圆满——${nxT ? `阶满当渡<b>仙劫</b>，晋入 ${nxT.name} 之列。` : '大罗已极，圆满之后可证<b>道祖之境</b>。'}</div>
+        <div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-xian-trib">${nxT ? `引动仙劫 · 晋 ${nxT.name}` : '证 道祖之境'}</button></div>`;
+      }
+      extra += `
+      <div class="card xian-card">
+        <div class="card-title">✦ 仙阶 <span class="tag magic">${XianSys.label(p)}</span>
+          <span style="margin-left:auto;font-size:12px;color:var(--text-dim)">仙元 ${Utils.fmtNum(yuan)}</span></div>
+        ${xianBody}
+        <div class="tip-line">· 修为满溢自会炼作仙元（修炼/闭关皆然）；仙阶每层全属性 +1.5%、修炼效率 +2%，入阶续仙寿。</div>
+      </div>`;
+    }
     if (p.canReincarnate) {
       const marks = p.reinc ? p.reinc.marks || 0 : 0;
       extra += `
@@ -523,7 +552,18 @@ const UI = {
         <span class="rp-layer">${layer}</span>
       </div>`;
     };
+    // v31 仙界四阶：仙途条十境之后续接地仙→天仙→金仙→大罗四节点
     const rpTrack = Array.from({ length: 10 }, (_, r) => rpNode(r))
+      .concat(GameData.XIAN_TIERS.map((x) => {
+        const xi = XianSys.cur(p);
+        const state = xi > x.id ? 'done' : (xi === x.id ? 'cur' : '');
+        const layer = xi > x.id ? '圆满' : (xi === x.id ? (XianSys.layer(p) >= 3 ? '圆满' : (GameData.XIAN_LAYER_NAMES[XianSys.layer(p)] || '')) : '');
+        return `<div class="rp-node ${state}" title="仙界四阶 · ${x.name}${layer ? ' · ' + layer : ''}">
+          <span class="rp-dot" style="${xi === x.id ? `--rp-c:${x.aura}` : ''}"></span>
+          <span class="rp-name">${x.name}</span>
+          <span class="rp-layer">${layer || '·'}</span>
+        </div>`;
+      }))
       .join('<span class="rp-line"></span>');
     // v25：仙途条横向滚动容器——渲染后自动把当前境界滚进视野（窄屏十境不再溢出裁切）
     // v29 修瑕：切页或境界变化时才把仙途条滚进视野——此前每次行动都强拽滚动打断阅读
@@ -795,11 +835,14 @@ const UI = {
     }
     // v30 塔绩兑换所：累计胜层（塔绩）常驻兑换——tw 系塔材不再只能卖店
     const towerPts = p.counters.towerWins || 0;
-    const redeems = (TowerSys.REDEEMS || []).map(r => `
+    const redeems = (TowerSys.REDEEMS || []).map(r => {
+      const cost = TowerSys.redeemCost ? TowerSys.redeemCost(p, r) : r.cost;
+      return `
       <div class="shop-row">
-        <div class="gf-info"><div class="gf-name">${r.name}</div><div class="gf-desc">${r.desc}（需塔绩 ${r.cost}）</div></div>
-        <div class="gf-actions"><button class="btn btn-sm" data-action="act-tower-redeem" data-k="${r.id}" ${towerPts >= r.cost ? '' : 'disabled'}>兑 换</button></div>
-      </div>`).join('');
+        <div class="gf-info"><div class="gf-name">${r.name}</div><div class="gf-desc">${r.desc}${cost !== r.cost ? `（塔绩 ${r.cost}+${(p.realmIdx || 0) * 15}/境 · 日限一枚）` : `（需塔绩 ${cost}）`}</div></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-tower-redeem" data-k="${r.id}" ${towerPts >= cost ? '' : 'disabled'}>兑 换</button></div>
+      </div>`;
+    }).join('');
     const redeemHtml = towerPts > 0 ? `
       <div class="shop-section-title" style="margin-top:10px">◈ 塔绩兑换所 <span class="tag warn">塔绩 ${towerPts}</span></div>
       <div class="tip-line">· 塔绩 = 历次登塔累计胜层，兑换后扣除（最高层纪录不受影响）。</div>
@@ -1005,7 +1048,7 @@ const UI = {
     const bon = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
     const donateRows = (typeof DonateSys !== 'undefined' ? DonateSys.TIERS : []).map(t => {
       // v30 修瑕：显示价与实收同源（原 UI 封顶 min5 而系统 min8，高境显示价与弹窗真价差 2.2~4.8 倍）
-      const stones = typeof DonateSys.priceOf === 'function' ? DonateSys.priceOf(p, t) : Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(8, p.realmIdx) - 1) / 1));
+      const stones = DonateSys.priceOf(p, t);   // v31（E46）：缺位回退死分支删除——priceOf 恒存在，旧回退内嵌 2.2^r 死曲线防未来误启用
       return `
       <div class="shop-row">
         <div class="gf-info"><div class="gf-name">${t.name}</div>
@@ -1156,7 +1199,7 @@ const UI = {
           <div class="gf-name">挥毫画符</div>
           <div class="gf-desc">焚香沐手，朱砂灵纸——成符可于战斗中祭出轰敌，亦可售予坊市换取灵石。</div>
         </div>
-        <div class="gf-actions"><button class="btn btn-sm btn-primary" data-action="act-draw">画符（${Utils.fmtNum(CraftSys.drawCost(p))}灵石）</button></div>
+        <div class="gf-actions"><button class="btn btn-sm btn-primary" data-action="act-draw">画符（${Utils.fmtNum(Math.round(CraftSys.drawCost(p) * (1 + Math.min(4, (p._drawCount || 0) * 0.75))))}灵石）</button></div>
       </div>` : '';
     // v13 炼器坊
     const forgeRows = GameData.FORGE_RECIPES.map(r => {
@@ -1200,13 +1243,15 @@ const UI = {
         </div>`;
       const stones = ForgeSys.stonesCost(p, id, lv);
       const rate = ForgeSys.rate(lv);
+      // v31（D7）：祝福值徽标上板（原只在弹窗可见）+ 连祭炼×5
+      const bless = ForgeSys.blessOf(p, id);
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${this.gradeSpan(def.name, def.grade)}${ForgeSys.enhText(p, id)} ${ForgeSys.affixText(typeof p.equipped[slot] === 'object' ? p.equipped[slot] : null)} <span style="color:var(--text-faint);font-size:12px">→ +${lv + 1}（成功率 ${rate}%）</span></div>
-          <div class="gf-desc">需灵石 ${Utils.fmtNum(stones)}、玄铁矿 ×${lv + 1}（持有 ${Bag.count('m_xuantie')}）${lv >= 7 ? '；<span class="neg">+7 起失败跌一级</span>' : ''}。强化石可保必成。</div>
+          <div class="gf-name">${this.gradeSpan(def.name, def.grade)}${ForgeSys.enhText(p, id)} ${ForgeSys.affixText(typeof p.equipped[slot] === 'object' ? p.equipped[slot] : null)} <span style="color:var(--text-faint);font-size:12px">→ +${lv + 1}（成功率 ${rate}%）</span>${bless > 0 ? ` <span class="tag magic">祝福 ${bless}/100</span>` : ''}</div>
+          <div class="gf-desc">需灵石 ${Utils.fmtNum(stones)}、玄铁矿 ×${lv + 1}（持有 ${Bag.count('m_xuantie')}）${lv >= 7 ? '；<span class="neg">+7 起失败跌一级</span>' : ''}。掺入强化石：成功率 +40% 并积祝福值。</div>
         </div>
-        <div class="gf-actions"><button class="btn btn-sm" data-action="act-enhance" data-slot="${slot}">祭 炼</button></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-enhance" data-slot="${slot}">祭 炼</button><button class="btn btn-sm" data-action="act-enhance-multi" data-slot="${slot}" title="自动祭炼至多 5 轮：+8 起自动掺强化石，+7 起失败即停，材料不足自停">连祭炼×5</button></div>
       </div>`;
     }).join('');
     // v19 词缀洗练（对已穿戴装备）
@@ -1418,7 +1463,7 @@ const UI = {
           <div class="gf-name">${this.gradeSpan(sp.name, sp.grade)}${row.qty > 1 ? ` ×${row.qty}` : ''} <span class="tag magic">特殊</span></div>
           <div class="gf-desc">${sp.desc}</div>
         </div>
-        <div class="gf-actions"><button class="btn btn-sm" data-action="sect-exchange" data-idx="${i}" ${afford2 ? '' : 'disabled'}>${row.cost} 贡献</button></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-exchange" data-i="${i}" ${afford2 ? '' : 'disabled'}>${row.cost} 贡献</button></div>
       </div>`;
       }
       const def = GameData.ITEMS[row.item];
@@ -1822,14 +1867,17 @@ const UI = {
         <div class="slot-btns">
           ${key !== 'auto' ? `<button class="btn btn-sm" data-action="act-save" data-slot="${key}">保存</button>` : ''}
           <button class="btn btn-sm" data-action="act-load" data-slot="${key}" ${data && data.player && !data.meta.dead ? '' : 'disabled'}>读取</button>
-          ${data && data.player ? `<button class="btn btn-sm btn-danger" data-action="act-delete-save" data-slot="${key}">删除</button>` : ''}
+          ${key !== 'auto' && data && data.player ? `<button class="btn btn-sm btn-danger" data-action="act-delete-save" data-slot="${key}">删除</button>` : ''}
+          <!-- v31 修瑕（E27）：自动存档不再提供删除钮——原 Number('auto')=NaN 曾落进确认文案显示「存档位NaN」 -->
         </div></div>`;
     }).join('');
     return `<div class="start-slots">${cards}</div>
       <div class="save-io">
         <button class="btn btn-sm" data-action="save-export">导出文本码</button>
-        <button class="btn btn-sm" data-action="save-import">导入文本码</button>
+        <button class="btn btn-sm" data-action="save-import">导入存档文件 / 文本码</button>
+        <button class="btn btn-sm" data-action="act-tutorial-replay" title="重看开局的新手引导（不影响进度）">重看引导</button>
       </div>
+      <div class="tip-line" style="margin-top:4px">· 本机存储占用约 ${UI.storageKb()} KB（存档 + 成就图鉴 + 偏好）。</div>
       <div class="tip-line" style="margin-top:6px">· 自动存档随每次行动实时更新；手动保存可覆盖三个存档位。<br>· 文本码含成就与图鉴，复制给其他设备即可续缘（导出为当前进度）。<br>· 冲击大境界前会自动备份至隐秘槽位，渡劫失利可回溯因果。</div>`;
   },
   async saveModal() {
@@ -1957,6 +2005,18 @@ const UI = {
   },
 
   /* ---------- v6：存档导出 / 导入（文本码） ---------- */
+  /** v31：本机存储占用（KB，粗算 localStorage 中本游戏键值体积） */
+  storageKb() {
+    let bytes = 0;
+    try {
+      const ls = window.localStorage;
+      for (let i = 0; i < ls.length; i++) {
+        const k = ls.key(i);
+        if (k && k.indexOf('fanren_wd') === 0) bytes += (ls.getItem(k) || '').length + k.length;
+      }
+    } catch (e) { /* ignore */ }
+    return Math.max(1, Math.round(bytes / 102.4) / 10);
+  },
   async exportSave() {
     if (!Game.player) { UI.toast('当前没有进行中的存档'); return; }
     const payload = { v: 1, player: Game.player, ext: Meta.data };
@@ -1978,16 +2038,25 @@ const UI = {
     });
   },
   async importSave() {
-    const ok = await this.popup({
+    // v31（F）：文件导入通道——选择 .txt 直接读入（文本码粘贴保留）
+    const ok0 = await this.popup({
       title: '导入存档',
-      html: `粘贴存档文本码：<br><textarea class="save-code" id="import-code" placeholder="在此粘贴……"></textarea>
+      html: `选择存档文件，或直接粘贴文本码：<br>
+        <input type="file" id="import-file" accept=".txt,text/plain" style="margin:6px 0;width:100%">
+        <textarea class="save-code" id="import-code" placeholder="在此粘贴文本码……"></textarea>
         <div class="tip-line">导入只会写入所选存档位，不影响当前进行中的进度。</div>`,
       options: [{ text: '下一步', value: true, primary: true }, { text: '取消', value: false }],
     });
-    if (!ok) return;
+    if (!ok0) return;
+    let raw = document.getElementById('import-code').value.trim();
+    if (!raw) {
+      const f = document.getElementById('import-file') && document.getElementById('import-file').files[0];
+      if (f) {
+        try { raw = (await f.text()).trim(); } catch (e) { raw = ''; }
+      }
+    }
     let data = null;
     try {
-      const raw = document.getElementById('import-code').value.trim();
       data = JSON.parse(decodeURIComponent(escape(atob(raw))));
     } catch (e) { data = null; }
     if (!data || data.v !== 1 || !data.player || !data.player.name) { UI.toast('文本码无法识别', true); return; }
@@ -2011,10 +2080,13 @@ const UI = {
   /* ---------- Toast / 存档指示 ---------- */
   toast(text, err = false) {
     const wrap = this.el['toast'];
+    // v31 无障碍（E32）：aria-live 让读屏器可感知弹报
+    if (!wrap.getAttribute('aria-live')) wrap.setAttribute('aria-live', 'polite');
     // v25 移动端补课：同屏至多 3 条，超出移除最旧——成就/主线/百科同帧连发不再叠罗汉遮顶栏
     while (wrap.children.length >= 3) wrap.firstElementChild?.remove();
     const div = document.createElement('div');
     div.className = 'toast-item' + (err ? ' err' : '');
+    div.setAttribute('role', 'status');
     div.textContent = text;
     wrap.appendChild(div);
     setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity .4s'; }, 1600);
@@ -2062,6 +2134,7 @@ const UI = {
     if (!wrap) {
       wrap = document.createElement('div');
       wrap.id = 'announce';
+      wrap.setAttribute('aria-live', 'polite');   // v31 无障碍（E32）
       document.getElementById('app').appendChild(wrap);
     }
     // v21：先按当前弹窗状态定位（剧情打开前一瞬发出的公告也会随开层即时上移）
@@ -2112,8 +2185,9 @@ const UI = {
   },
   saveFlash() {
     const dot = document.querySelector('.save-dot');
-    if (!dot) return;
-    dot.style.background = '#fff';
-    setTimeout(() => { dot.style.background = ''; }, 180);
+    if (dot) { dot.style.background = '#fff'; setTimeout(() => { dot.style.background = ''; }, 180); }
+    // v31 修瑕（E33）：移动端存档反馈——原 .save-dot 整个在 .m-hide 内，手机端存档反馈完全不可见
+    const mdot = document.querySelector('.m-save-dot');
+    if (mdot) { mdot.classList.add('flash'); setTimeout(() => mdot.classList.remove('flash'), 260); }
   },
 };

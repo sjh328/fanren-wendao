@@ -35,6 +35,10 @@ const TowerSys = {
     { id: 'twb_cexp',   name: '慧极必伤', desc: '层奖修为 +80%，守影气血 +12%（诅咒祝福）', mod: { exp: 1.8, hp: 1.12 }, curse: true },
     { id: 'twb_cglass', name: '琉璃贪匣', desc: '宝箱所获 ×2.5，五层大回复 -30%（诅咒祝福）', mod: { chest: 2.5, healChest: -0.30 }, curse: true },
     { id: 'twb_cswift', name: '迅影之殇', desc: '守影身法 -40%，防御 +25%（诅咒祝福）', mod: { spd: 0.6, def: 1.25 }, curse: true },
+    /* ---- v31 规则祝福：改变打法而非单纯乘算 ---- */
+    { id: 'twb_rdot',  name: '蚀骨双煞', desc: '你对守影的毒/焰/血伤害翻倍，但每次结算自身也受其 2% 上限反噬（规则祝福）', mod: { dotMul: 2, dotSelf: 0.02 }, rule: true },
+    { id: 'twb_rzy',   name: '聚气归元', desc: '会心一击额外回复 1 点真元（规则祝福）', mod: { zyCrit: 1 }, rule: true },
+    { id: 'twb_rund',  name: '塔心不灭', desc: '塔内每场战斗首次致死伤害保留一息生机（规则祝福）', mod: { undying: 1 }, rule: true },
   ],
 
   unlockOk(p) { return p.realmIdx >= 1; },
@@ -47,19 +51,28 @@ const TowerSys = {
     { id: 'pill',   name: '培元丹一炉', cost: 30, desc: '培元丹 ×1' },
     { id: 'leijing', name: '雷晶核（塔心所藏）', cost: 60, desc: '雷晶核 ×1——渡劫丹主材' },
   ],
+  /** 塔绩兑换实耗（v31 E10：雷晶核等渡劫主材随境界加价 + 日限一枚——原恒 60 塔绩，后期约两日白拿一枚） */
+  redeemCost(p, r) { return r.id === 'leijing' ? r.cost + (p.realmIdx || 0) * 15 : r.cost; },
   async redeem(k) {
     const p = Game.player;
     const r = this.REDEEMS.find(x => x.id === k);
     if (!r) return;
-    if ((p.counters.towerWins || 0) < r.cost) { UI.toast('塔绩不足'); return; }
+    const cost = this.redeemCost(p, r);
+    if (r.id === 'leijing') {
+      const today = Math.floor(p.day || 0);
+      this.syncToday(p);
+      if ((p.tower.today.leijingDay || -1) === today) { UI.toast('塔心的雷晶核今日已被请走——塔灵需要时间再凝一枚'); return; }
+    }
+    if ((p.counters.towerWins || 0) < cost) { UI.toast('塔绩不足'); return; }
     const ok = await UI.popup({
       title: `塔绩兑换 · ${r.name}`,
-      html: `${r.desc}。<br>需塔绩 <b>${r.cost}</b>（当前 ${p.counters.towerWins || 0}）。`,
+      html: `${r.desc}。<br>需塔绩 <b>${cost}</b>（当前 ${p.counters.towerWins || 0}）。`,
       options: [{ text: '兑 换', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
-    if ((p.counters.towerWins || 0) < r.cost) { UI.toast('塔绩不足'); return; }
-    p.counters.towerWins -= r.cost;
+    if ((p.counters.towerWins || 0) < cost) { UI.toast('塔绩不足'); return; }
+    p.counters.towerWins -= cost;
+    if (r.id === 'leijing') p.tower.today.leijingDay = Math.floor(p.day || 0);
     if (r.id === 'stones') { const s = Math.round(120 * GameData.stoneEco(p.realmIdx)); Bag.addStones(s); Log.add(`塔灵倾囊——灵石 +${Utils.fmtNum(s)}。`, 'gain'); }
     else if (r.id === 'ore') { Bag.addItem('m_xuantie', 8); Log.add('塔灵奉上玄铁矿 ×8——塔基深处所凝。', 'gain'); }
     else if (r.id === 'pill') { Bag.addItem('pill_peiyuan', 1); Log.add('塔灵奉上培元丹 ×1——塔中丹房的陈年存货。', 'gain'); }
@@ -77,7 +90,9 @@ const TowerSys = {
   syncToday(p) {
     const t = this.state(p);
     const d = Math.floor(p.day || 0);
-    if (t.today.day !== d) { t.today.day = d; t.today.used = 0; t.today.bought = 0; }
+    // v31 修瑕：层奖灵石日额度同随换日清零——此前只清 used/bought，历史层奖累计达上限后每日层奖恒 0，
+    // 与「归于明日」文案相反
+    if (t.today.day !== d) { t.today.day = d; t.today.used = 0; t.today.bought = 0; t.today.stones = 0; }
   },
   leftToday(p) {
     const t = this.state(p);
@@ -241,19 +256,34 @@ const TowerSys = {
     Log.add(`登天塔第 ${floor} 层已克——层奖：修为 +${Utils.fmtNum(exp)}、灵石 +${Utils.fmtNum(stones)}${healPct > 0 ? `，气血回复 ${Math.round(healPct * 100)}%` : ''}。`, 'gain');
     Game.afterAction();
     // 每 5 层：宝箱；每 7 层：奇遇层；每 3 层：祝福三选一；其余层自动续层
-    if (floor % 5 === 0) await this.chestStep(p, run, mods, floor);
-    else if (floor % 7 === 0) await this.eventStep(p, run, mods, floor);
-    else if (floor % 3 === 0) await this.blessStep(p, run, floor);
-    else { await Battle.wait(900); this.nextFloor(); }
+    // v31 修瑕（E7）：多重合层并列触发——原 else-if 串联曾让 15/30/45 层宝箱吞掉祝福、35/70 层吞掉奇遇；
+    // 仅最后一环推进层，任一环「离塔」即中止后续环节
+    const steps = [];
+    if (floor % 5 === 0) steps.push('chest');
+    if (floor % 7 === 0) steps.push('event');
+    if (floor % 3 === 0) steps.push('bless');
+    if (!steps.length) { await Battle.wait(900); this.nextFloor(); }
+    else {
+      for (let i = 0; i < steps.length; i++) {
+        const advance = i === steps.length - 1;
+        const s = steps[i];
+        const quit = s === 'chest' ? await this.chestStep(p, run, mods, floor, advance)
+          : s === 'event' ? await this.eventStep(p, run, mods, floor, advance)
+          : await this.blessStep(p, run, floor, advance);
+        if (quit) break;
+      }
+    }
   },
 
-  /** v30 每 7 层奇遇层：灵泉石台 / 行脚商人 / 塔灵赐福——爬塔从「刷纪录」变「每层都在做选择」 */
-  async eventStep(p, run, mods, floor) {
+  /** v30 每 7 层奇遇层：灵泉石台 / 行脚商人 / 塔灵赐福——爬塔从「刷纪录」变「每层都在做选择」；advance 同 blessStep */
+  async eventStep(p, run, mods, floor, advance = true) {
     const eco = GameData.stoneEco(p.realmIdx);
     const vendorMat = Utils.pick(['tw_sand', 'tw_iron', 'tw_core']);
     const price = Math.round(60 * eco);
     const pool = this.BUFFS.filter(b => !run.buffs.includes(b.id));
-    const gift = pool.length ? Utils.pick(pool) : null;
+    // v31 修瑕（E8）：塔灵「赐福」从全池均匀抽取——可能塞给你诅咒祝福（琉璃贪匣），gift 池滤除 curse
+    const giftPool = pool.filter(b => !b.curse);
+    const gift = giftPool.length ? Utils.pick(giftPool) : null;
     const v = await UI.popup({
       title: `✦ 登天塔 · 第 ${floor} 层 · 塔中奇遇`,
       html: `<div class="tip-line">这一层没有守影——只有一方石台、一个行脚商人，与一缕若有若无的塔灵。</div>`,
@@ -276,11 +306,12 @@ const TowerSys = {
       Log.add(`塔灵低语一声——【<b>${gift.name}</b>】入体：${gift.desc}`, 'gain');
       UI.toast(`✦ 塔灵赐福：${gift.name}`);
     }
-    this.nextFloor();
+    if (advance) this.nextFloor();
+    return false;
   },
 
-  /** 祝福三选一（第四项永远是离塔出口） */
-  async blessStep(p, run, floor) {
+  /** 祝福三选一（第四项永远是离塔出口）；advance=false 时只结算不推进层（多重合层并列触发） */
+  async blessStep(p, run, floor, advance = true) {
     const pool = this.BUFFS.filter(b => !run.buffs.includes(b.id));
     // v27 修瑕：sort(random) 非均匀洗牌，靠前祝福系统性偏低——改 Fisher–Yates
     for (let i = pool.length - 1; i > 0; i--) {
@@ -296,19 +327,21 @@ const TowerSys = {
         { text: '收手离塔（带足战利品）', value: '__quit' }],
     });
     if (v === '__quit' || v == null) {
-      if (v === '__quit') this.leave();
-      else UI.toast('你未能决意——本层祝福机会已过（可继续登层）');   // v30 修瑕：ESC 曾静默吞掉三选一
-      return;
+      if (v === '__quit') { this.leave(); return true; }
+      UI.toast('你未能决意——本层祝福机会已过（可继续登层）');   // v30 修瑕：ESC 曾静默吞掉三选一
+      if (advance) this.nextFloor();
+      return false;
     }
     run.buffs.push(v);
     const b = this.BUFFS.find(x => x.id === v);
     UI.toast(`✦ 塔心祝福：${b.name}`);
     Log.add(`塔心祝福入体：<b>${b.name}</b>——${b.desc}。`, 'gain');
-    this.nextFloor();
+    if (advance) this.nextFloor();
+    return false;
   },
 
-  /** 五层宝箱 */
-  async chestStep(p, run, mods, floor) {
+  /** 五层宝箱；advance=false 时只结算不推进层（多重合层并列触发） */
+  async chestStep(p, run, mods, floor, advance = true) {
     const bonus = Math.round(20 * GameData.stoneEco(p.realmIdx) * (mods.stone || 1));
     Bag.addStones(bonus);
     const pool = [
@@ -321,19 +354,24 @@ const TowerSys = {
     const total = pool.reduce((s, x) => s + x.w, 0);
     let roll = Math.random() * total, drop = pool[0].id;
     for (const x of pool) { roll -= x.w; if (roll <= 0) { drop = x.id; break; } }
-    const n = 1 + (mods.chest ? mods.chest - 1 : 0);
+    // v31 修瑕：取整——琉璃贪匣 chest=2.5 时原式得 2.5 件小数物品直写存档
+    const n = Math.max(1, Math.round(1 + (mods.chest ? mods.chest - 1 : 0)));
     Bag.addItem(drop, n);
     const def = GameData.ITEMS[drop];
+    // v31 修瑕：文案与实发同源——回复比例与 onVictory:233 同式（原恒写「三成」，诅咒祝福吸干后仍是死文案）
+    const healPct = (mods.heal || 0) + 0.30 + (mods.healChest || 0);
+    const healTxt = healPct > 0 ? `气血回复 ${Math.round(healPct * 100)}%` : '气血回复……宝气被诅咒祝福吸去了（0）';
     const v = await UI.popup({
       title: `✦ 登天塔 · 第 ${floor} 层宝箱`,
       html: `<div class="tip-line">石阶尽头的鎏金宝箱应声而开——</div>
         <div class="tip-line">· 灵石 <b class="hl">+${Utils.fmtNum(bonus)}</b>${mods.chest > 1 ? '（剥灵之手翻倍）' : ''}</div>
         <div class="tip-line">· ${this.gradeName(def)} ×${n}</div>
-        <div class="tip-line">· 气血回复三成，塔风一清。</div>`,
+        <div class="tip-line">· ${healTxt}，塔风一清。</div>`,
       options: [{ text: '继续登层', value: true, primary: true }, { text: '收手离塔（带足战利品）', value: '__quit' }],
     });
-    if (v === '__quit' || v == null) { if (v === '__quit') this.leave(); return; }
-    this.nextFloor();
+    if (v === '__quit' || v == null) { if (v === '__quit') { this.leave(); return true; } return false; }
+    if (advance) this.nextFloor();
+    return false;
   },
 
   gradeName(def) {

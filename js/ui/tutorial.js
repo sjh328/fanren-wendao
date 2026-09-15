@@ -13,10 +13,11 @@ const Tutorial = {
   idx: 0,
   show(force = false) {
     const seen = Save.storage.getItem ? Save.storage.getItem('fanren_wd_tutorial') : Save.mem['fanren_wd_tutorial'];
-    if (seen && !force) return;
+    if (seen && !force) return false;   // v31 修瑕：返回是否真正展示——早退时 onDone 由调用方立即接力
     this.idx = 0;
     document.getElementById('tutorial').classList.remove('hidden');
     this.render();
+    return true;
   },
   render() {
     const s = this.steps[this.idx];

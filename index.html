@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="凡人问道">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>凡人问道 · 文字修仙</title>
-<link rel="stylesheet" href="style.css?v=46">
+<link rel="stylesheet" href="style.css?v=47">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -123,6 +123,7 @@
                 <button class="log-tool" data-action="log-filter" data-tf="gain">收获</button>
                 <button class="log-tool" data-action="log-filter" data-tf="loss">损失</button>
                 <button class="log-tool" data-action="log-filter" data-tf="story">剧情</button>
+                <button class="log-tool" data-action="log-filter" data-tf="system">系统</button>
               </span>
               <button class="log-toggle" data-action="log-toggle" title="展开 / 收起游历记载">展开</button>
               <button class="log-tool" id="log-pause-btn" data-action="log-pause">暂停滚动</button>
@@ -216,7 +217,7 @@
   <div id="toast"></div>
   <div id="announce"></div>
 </div>
-<script src="game.js?v=46"></script>
+<script src="game.js?v=47"></script>
 <script>
   /* v24 PWA：注册 Service Worker——离线可玩、可添加到主屏幕（http/https 环境生效） */
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
@@ -244,7 +245,19 @@
               });
             };
             if (document.getElementById('start-screen') && !document.getElementById('start-screen').classList.contains('hidden')) show();
-            else setTimeout(() => { if (canReload()) show(); else setTimeout(show, 30000); }, 15000);
+            // v31 修瑕（E25）：游戏进行中收到的更新通知改走全局 toast——原延迟路径把提示插进隐藏的开始界面，
+            // 玩家在游戏内永远看不到「新版本已就绪」
+            else {
+              const inGameTip = () => {
+                if (document.getElementById('sw-update-tip')) return;
+                UI.toast('✦ 新版本已就绪——回到开始界面即可刷新启用（进度已自动存档）');
+              };
+              const waitStart = () => {
+                if (!document.getElementById('start-screen') || document.getElementById('start-screen').classList.contains('hidden')) { setTimeout(waitStart, 3000); return; }
+                show();
+              };
+              setTimeout(() => { if (canReload()) waitStart(); else inGameTip(); }, 15000);
+            }
           };
           reg.addEventListener('updatefound', () => {
             const nw = reg.installing;

@@ -172,11 +172,13 @@ const Bag = {
       const canInh = oldEnh > 0 && Bag.count('m_xuantie') >= inhOre;
       // v20 推荐标记：攻击2倍/防御1.5倍/气血0.3倍/暴击闪避1倍加权估分
       const score = b => Object.entries(b || {}).reduce((acc, [k, v]) => acc + ({ atk: v * 2, atkPct: v * 2, def: v * 1.5, defPct: v * 1.5, hp: v * 0.3, hpPct: v * 0.3, mp: v * 0.2, mpPct: v * 0.2, spd: v, spdPct: v, crit: v, dodge: v, block: v * 0.5, cult: v, stonePct: v, luck: v * 2 }[k] ?? 0), 0);
-      // v30 修瑕：对比估分纳入前缀词缀（原只看白板 bonus，带词缀的旧装被系统性低估）
+      // v30 修瑕：对比估分纳入词缀（原只看白板 bonus，带词缀的旧装被系统性低估）
+      // v31 修瑕：走 ForgeSys.affixScore 单源——两段式 per×品阶与后缀特效一并计分（原本地 score 不含 per）；
+      // 新装尚未落缀（首次装备时才掷），新侧词缀按期望 0 计
       const affixScore = inst => {
-        if (!inst || typeof inst !== 'object' || !inst.affixes || !inst.affixes.prefix) return 0;
-        const d = ForgeSys.affixDef('prefix', inst.affixes.prefix);
-        return d && d.bonus ? score(d.bonus) : 0;
+        if (!inst || typeof inst !== 'object' || !inst.affixes) return 0;
+        const g = ((GameData.ITEMS[Utils.eqId(inst)] || {}).grade) || 0;
+        return ForgeSys.affixScore('prefix', inst.affixes.prefix, g) + ForgeSys.affixScore('suffix', inst.affixes.suffix, g);
       };
       const newBetter = score(def.bonus) > score(curDef.bonus) * (1 + oldEnh * 0.1) + affixScore(cur);
       const ok = await UI.popup({
@@ -277,12 +279,13 @@ const Bag = {
     const stones = Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2)));
     const ok = await UI.popup({
       title: `分解 · ${def.name}`,
-      html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br><span class="neg">分解之物与其祭炼心得、词缀将一并化去，无法找回。</span>`,
+      html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br>· <b>器魂 ×${2 + (def.grade || 0) * 2 + enh}</b>（祭炼堂重铸词缀之用）<br><span class="neg">分解之物与其祭炼心得、词缀将一并化去，无法找回。</span>`,
       options: [{ text: '分 解', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
     this.removeItem(itemId, 1);
     if (enh) delete p.enhanced[itemId];
+    if (p.enhBless && p.enhBless[itemId]) delete p.enhBless[itemId];   // v31 修瑕（E37）：祝福值同随分解化去（此前重购同 id 可白继承）
     // v30：分解同清词缀留档
     if (p.affixKept && p.affixKept[itemId]) delete p.affixKept[itemId];
     // v30：分解产「器魂」——重铸词缀的新货币（品阶越高、强化越深，器魂越多）
@@ -302,6 +305,11 @@ const Bag = {
     });
     if (!ok) return;
     this.removeItem(itemId, 1);
+    // v31 修瑕（E37）：丢弃联动清祭炼留档——此前丢弃后再购同 id，强化/词缀/祝福原样「复活」，
+    // 与「丢弃之物无法找回」承诺矛盾，也破坏分解回收的动机（三键口径与 salvage 对齐）
+    if (p.enhanced && p.enhanced[itemId]) delete p.enhanced[itemId];
+    if (p.affixKept && p.affixKept[itemId]) delete p.affixKept[itemId];
+    if (p.enhBless && p.enhBless[itemId]) delete p.enhBless[itemId];
     Log.add(`你丢弃了一件 ${def.name}。`, 'loss');
     Game.afterAction();
   },
@@ -318,7 +326,13 @@ const Bag = {
       options: [{ text: '全部丢弃', value: true }, { text: '取消', value: false }],
     });
     if (!ok) return;
-    for (const id of ids) delete p.bag[id];
+    for (const id of ids) {
+      delete p.bag[id];
+      // v31 修瑕（E37）：批量丢弃同款清留档
+      if (p.enhanced && p.enhanced[id]) delete p.enhanced[id];
+      if (p.affixKept && p.affixKept[id]) delete p.affixKept[id];
+      if (p.enhBless && p.enhBless[id]) delete p.enhBless[id];
+    }
     Log.add(`你挥手间清空了一类杂物（${total} 件），乾坤袋清爽了许多。`, 'loss');
     Game.afterAction();
   },

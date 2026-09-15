@@ -14,6 +14,14 @@ const Game = {
     Log.init();
     Ambience.init();   // v5：氛围音效（默认关，读回上次的开关偏好）
     UI.renderStart();
+    // v31 修瑕（E24）：PWA shortcuts 深链消费——manifest 声明的 ?tab= 此前无任何代码读取（死链）
+    try {
+      const qtab = new URLSearchParams(location.search).get('tab');
+      if (qtab && ['cultivate', 'quest', 'cave', 'map', 'jianghu', 'shop', 'sect', 'gongfa'].includes(qtab)) {
+        this._deepLinkTab = qtab;
+        history.replaceState(null, '', location.pathname);
+      }
+    } catch (e) { /* ignore */ }
     // 全局事件委托：所有 data-action 统一分发
     document.addEventListener('click', async (e) => {
       const el = e.target.closest('[data-action]');
@@ -166,12 +174,13 @@ const Game = {
     Log.clear();
     Log.add(`天地灵气复苏之年，凡俗少年 <b>${Utils.esc(name)}</b> 得了一册残缺功法，自此踏上仙途。`, 'system');
     Log.add('（提示：先在后山「游历」磨砺，或就地「修炼」积攒修为。遇到不懂的可点菜单里的「玩法说明」。）', 'info');
-    // v29 修瑕：教程(z140)曾压着第一章剧情(z135)双层叠开——改为教程完毕再开剧情
+    // v29 修瑕：教程(z140)曾压着第一章剧情(z135)双层叠开——改为教程完毕再开剧情；
+    // v31 修瑕：show() 改返回是否真正展示——仅早退（本机已看过教程）时立即接力开剧情。
+    // 此前无条件消费 onDone，而 show() 展示路径并不清回调——真首机剧情照样提前叠开，v29 修复失效
     if (!this.player.flags.tutorialDone) {
       Tutorial.onDone = () => QuestSys.showStory(0);
-      Tutorial.show();
-      // v29 修瑕：show() 早退（本机已看过教程）时 onDone 悬空——立即接力开剧情
-      if (typeof Tutorial.onDone === 'function') { const cb = Tutorial.onDone; Tutorial.onDone = null; cb(); }
+      const shown = Tutorial.show();
+      if (!shown && typeof Tutorial.onDone === 'function') { const cb = Tutorial.onDone; Tutorial.onDone = null; cb(); }
     }
     else QuestSys.showStory(0);   // v11：主线第一章开篇叙事
     Save.autoSave();
@@ -269,6 +278,7 @@ const Game = {
     try { if (p.cave) { CaveSys.visitorEvent(p, auto); CaveSys.checkPest(p); CaveSys.springDaily(p, auto); } } catch (err) { console.error('洞府日常异常:', err); }
     try { if (typeof SectSys !== 'undefined' && SectSys.discipleDaily) SectSys.discipleDaily(p, auto); } catch (err) { console.error('弟子历练异常:', err); }   // v30 补遗：亲传门中弟子历练（离线亦入账）
     try { if (typeof Codex !== 'undefined' && Codex.checkRewards) Codex.checkRewards(); } catch (err) { console.error('图鉴检查异常:', err); }
+    try { if (typeof XianSys !== 'undefined' && XianSys.dailyCheck) XianSys.dailyCheck(p, auto); } catch (err) { console.error('仙界访客异常:', err); }   // v31：仙界访客（入仙籍后，离线静默入账）
   },
 
   enterGame() {
@@ -284,6 +294,8 @@ const Game = {
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('game-screen').classList.remove('hidden');
     UI.renderAll();
+    // v31（E24）：深链页签跳转（PWA shortcuts 落地）
+    if (this._deepLinkTab) { const t = this._deepLinkTab; this._deepLinkTab = null; this.actions['act-tab']({ tab: t }); }
   },
 
   exitToStart() {
@@ -456,6 +468,10 @@ const Game = {
     'act-seclude': () => Cultivate.seclude(),
     'act-breakthrough': () => Cultivate.breakthrough(),
     'act-ascend': () => Cultivate.ascend(),
+    /* --- v31 仙界四阶 --- */
+    'act-xian-enter': () => XianSys.enterFirst(),
+    'act-xian-advance': () => XianSys.advanceLayer(),
+    'act-xian-trib': () => XianSys.trib(),
     /* --- 游历 --- */
     'act-explore': (d) => Explore.go(d.map),
     'act-explore-multi': (d) => Explore.goMulti(d.map, 5),   // v23 连续探索
@@ -512,6 +528,7 @@ const Game = {
       const slot = Number(d.slot);
       Game.slot = slot;
       Save.write(slot, Game.player);
+      Meta.load();   // v31 修瑕（E28）：切槽保存后重载成就图鉴——原 Meta.data 仍是旧槽内容，其后 Meta.save 把成就写进新槽分叉
       UI.toast(`已保存至存档位 ${['一', '二', '三'][slot - 1]}`);
       UI.refreshSaveBody();
     },
@@ -534,7 +551,8 @@ const Game = {
       UI.toast('已删除该存档');
       UI.refreshSaveBody();
     },
-    'act-help': () => UI.helpModal(),   // v24：玩法手册（三分钟清单并入首节）
+    'act-help': () => UI.helpModal(),
+    'act-tutorial-replay': () => { UI.closePopup(); Tutorial.show(true); },   // v31：重看新手引导（不影响进度）   // v24：玩法手册（三分钟清单并入首节）
     'act-newgame': async () => {
       const ok = await UI.popup({ title: '离开游戏', html: '当前进度已自动保存。确定回到开始界面吗？', options: [{ text: '离开', value: true }, { text: '取消', value: false }] });
       if (ok) Game.exitToStart();
@@ -597,6 +615,7 @@ const Game = {
     'act-draw': () => CraftSys.drawTalisman(),
     /* --- v13 祭炼强化 / 炼器 --- */
     'act-enhance': (d) => ForgeSys.enhance(d.slot),
+    'act-enhance-multi': (d) => ForgeSys.enhanceMulti(d.slot, 5),   // v31：连祭炼×5
     'act-recast': (d) => ForgeSys.recast(d.slot),   // v30：器魂重铸
     'act-reroll': (d) => ForgeSys.reroll(d.slot),
     'act-forge': (d) => ForgeSys.forge(d.recipe),

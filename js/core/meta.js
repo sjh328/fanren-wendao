@@ -14,6 +14,9 @@ const Meta = {
       achv: (d && d.achv) || {},
       codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, (d && d.codex) || {}),
       towerBest: (d && d.towerBest) || 0,   // v25：登天塔跨世最佳层
+      // v31 修瑕：印记去重集透传保留（真实源头已迁至全局 legacy，grantMarks 首次调用时一次性并合）——
+      // 此前 load 重建丢弃 marksGiven，重进游戏后图鉴/个人线/飞升印记全部可跨世重刷
+      marksGiven: (d && d.marksGiven) || null,
     };
   },
   save() {

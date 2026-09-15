@@ -36,13 +36,17 @@ const ReincarnationSys = {
     '道韵残响（保留一条道韵）', '逆天改命（四维重掷取最优）',
   ],
   grantMarks(n, why) {
-    if (typeof Meta !== 'undefined' && Meta.data) {
-      Meta.data.marksGiven = Meta.data.marksGiven || {};
-      if (Meta.data.marksGiven[why]) return false;
-      Meta.data.marksGiven[why] = 1;
-      Meta.save();
-    }
+    // v31 修瑕：去重集改存全局 legacy（跨档单键）——原存 Meta.data.marksGiven，随每次 Meta.load
+    // 重建被丢弃，重进游戏后图鉴大成/个人线全通/白日飞升等印记全部可跨世重刷（多周目经济崩坏）。
+    // 旧档 Meta 里尚存的去重集在此一次性并合迁移，只增不减。
     const legacy = this.readLegacy();
+    legacy.marksGiven = legacy.marksGiven || {};
+    if (typeof Meta !== 'undefined' && Meta.data && Meta.data.marksGiven) {
+      for (const k of Object.keys(Meta.data.marksGiven)) if (!legacy.marksGiven[k]) legacy.marksGiven[k] = 1;
+      delete Meta.data.marksGiven;
+    }
+    if (legacy.marksGiven[why]) return false;
+    legacy.marksGiven[why] = 1;
     legacy.marks = (legacy.marks || 0) + n;
     this.writeLegacy(legacy);
     Log.add(`✦ 轮回印记 +${n}（${why}）——血脉深处的道韵又厚了一分（累计 ${legacy.marks} 枚）。`, 'realm');
@@ -64,15 +68,19 @@ const ReincarnationSys = {
       ? (legacy.grudges.map(id => (typeof NpcSys !== 'undefined' && NpcSys.def(id) || {}).name).filter(Boolean).join('、') || '（前世的恩怨仍在人间游荡）')
       : '无';
     const pasts = (legacy.pastLives || []).map(l => `<div class="tip-line">· 第${l.no}世 · ${l.who} —— ${l.life}</div>`).join('') || '<div class="tip-line">· 尘世茫茫，尚无记录。</div>';
+    // v31 仙籍：历世最高仙阶（跨世展示）
+    const xjBest = legacy.xianjieBest || 0;
+    const xjTxt = xjBest > 0 ? `<b class="hl">${(GameData.XIAN_TIERS[xjBest - 1] || {}).name || '?'}</b>${xjBest >= 4 ? '（道祖之境自在此心）' : ''}` : '未入仙籍';
     await UI.popup({
       title: '轮回镜',
-      html: `<div class="stat-line"><span>历世</span><b>第 ${Math.max(1, lives + (lives ? 0 : 1))} 世将至 · 已历 ${lives} 次兵解</b></div>
+      html: `<div class="stat-line"><span>历世</span><b>第 ${lives + 1} 世将至 · 已历 ${lives} 次兵解</b></div>
         <div class="stat-line"><span>轮回印记</span><b>${marks} 枚（全属性永久 +${marks}%）</b></div>
         <div class="stat-line"><span>传承树</span><b>${tier}/10 层 · ${nextTxt}</b></div>
         <div class="tip-line" style="margin-top:6px"><b>印记来路</b>：兵解转世 +1（寿满天年再 +1）｜图鉴大成 +1｜登天塔三十层 +1｜白日飞升 +2｜个人线全通 +1</div>
         <div class="shop-section-title" style="margin-top:8px">◈ 传承树 · 十层</div>${rows}
         <div class="shop-section-title" style="margin-top:8px">◈ 前世恩怨</div><div class="tip-line">· ${grudgesTxt}</div>
-        <div class="shop-section-title" style="margin-top:8px">◈ 前世编年</div>${pasts}`,
+        <div class="shop-section-title" style="margin-top:8px">◈ 前世编年</div>${pasts}
+        <div class="shop-section-title" style="margin-top:8px">◈ 仙籍</div><div class="tip-line">· 历世最高仙阶：${xjTxt}</div>`,
       options: [{ text: '合 上 镜', value: true, primary: true }],
     });
   },
@@ -94,6 +102,31 @@ const ReincarnationSys = {
       options: [{ text: '兵 解', value: true, primary: true }, { text: '再苟一时', value: false }],
     });
     if (!ok) return;
+    // v31 来世预约：印记消费端——花印记为来世定制一份底气（被动加成第一次变主动构建）
+    const PLANS = [
+      { id: 'ring',   cost: 6, name: '仙缘随行', desc: '来世开场自带【仙缘玉环】×1（grade5 饰品）' },
+      { id: 'layer3', cost: 4, name: '生而近道', desc: '来世初始境界即为练气三层' },
+      { id: 'comp',   cost: 2, name: '宿慧一点', desc: '来世悟性 +1（上限十）' },
+    ];
+    const curPlan = legacy.plan || null;
+    const pickPlan = await UI.popup({
+      title: '来世预约',
+      html: `轮回镜前，你可以此生的印记，为来世预约一份底气（现印记 <b>${legacy.marks || 0}</b>）。<br><span class="tip-line">· 预约即时生效、仅此一次；再下一次兵解前可重新预约。</span>`,
+      options: PLANS.map(pl => {
+        const owned = curPlan === pl.id;
+        const afford = (legacy.marks || 0) >= pl.cost;
+        return { text: `${owned ? '✓ 已预约 · ' : ''}${pl.name}（${pl.cost} 印记）——${pl.desc}${!owned && !afford ? '（印记不足）' : ''}`, value: owned ? null : pl.id };
+      }).concat([{ text: curPlan ? '维持现有预约' : '不作预约', value: null }]),
+    });
+    if (pickPlan) {
+      const pl = PLANS.find(x => x.id === pickPlan);
+      if (pl && curPlan !== pl.id && (legacy.marks || 0) >= pl.cost) {
+        legacy.marks -= pl.cost;
+        legacy.plan = pl.id;
+        this.writeLegacy(legacy);
+        Log.add(`轮回镜中光华一闪——你以 ${pl.cost} 枚印记预约了来世的【${pl.name}】。（印记余 ${legacy.marks}）`, 'realm');
+      }
+    }
     // 择法宝入轮回
     const arts = Object.keys(p.bag)
       .filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'artifact')
@@ -141,6 +174,11 @@ const ReincarnationSys = {
       if (active.length) echo = active[active.length - 1].fx;
     }
     // 新身
+    // v31 修瑕（E18）：传承树十层「逆天改命」当世生效——rollAttrs 读的是 Game.player.rerollBest（前世的
+    // 旗标），本世旗标在 create 之后才写入，首个攒够 30 印记的转世拿不到三掷取优（晚一世才生效）。
+    // 先按新 treeTier 临时置位再掷；旧身对象随即被丢弃，无需还原。
+    const pendingTreeTier = Math.floor((legacy.marks || 0) / 3);
+    if (pendingTreeTier >= 10 && Game.player && !Game.player.rerollBest) Game.player.rerollBest = true;
     const attrs = PlayerFactory.rollAttrs();
     if (origin) for (const [k, v] of Object.entries(origin.mods)) attrs[k] = Utils.clamp(attrs[k] + v, 1, 10);
     const p2 = PlayerFactory.create(oldP.name, attrs);
@@ -154,20 +192,30 @@ const ReincarnationSys = {
     }
     p2.reinc = { lives: legacy.lives, marks: legacy.marks, compPct: 10, grudges: grudges };
     if (echo) p2.reinc.echo = echo;   // v20 道韵残响
-    // v18 传承树：每3枚印记解锁一层天赋
+    // v31 多周目变奏：前世残忆旗标——c2/c5/c7 开篇将演出「前世残忆」变体场景（story._vis req 路由）
+    p2.story = { seen: {}, mid: {}, choices: {}, flags: { remembrance: true } };
+    // v31 来世预约兑现：legacy.plan 在新身落地（兑现后清除，防重复）
+    if (legacy.plan === 'ring') { p2.bag['s_xy_huan'] = (p2.bag['s_xy_huan'] || 0) + 1; }
+    else if (legacy.plan === 'layer3') { p2.layer = 2; }
+    else if (legacy.plan === 'comp') { p2.attrs.comp = Math.min(10, p2.attrs.comp + 1); }
+    if (legacy.plan) { Log.add(`来世预约兑现——【${{ ring: '仙缘随行', layer3: '生而近道', comp: '宿慧一点' }[legacy.plan] || legacy.plan}】随神魂入胎。`, 'gain'); legacy.plan = null; this.writeLegacy(legacy); }
+    // v18 传承树：每3枚印记解锁一层天赋；v31 修瑕（E22）：效果单源化为 TREE_EFFECTS 表——
+    // 原散落 10 个 if，层间耦合曾两度出连环 bug；行为逐条等价，另附出生天赋清单日志
     const treeTier = Math.floor((legacy.marks || 0) / 3);
-    if (treeTier >= 1) p2.stones.low += Math.round((origin ? origin.start.stones : 150) || 0); // 初始灵石翻倍（v29 修瑕：随遇而安按默认 150 计，此前 +0 落空）
-    if (treeTier >= 2) p2.attrs.comp = Math.min(10, p2.attrs.comp + 2); // 悟性+2
-    if (treeTier >= 3 && kept) p2.bag[kept] = (p2.bag[kept] || 0) + 1; // 多带一件法宝
-    if (treeTier >= 4) p2.attrs.luck = Math.min(10, p2.attrs.luck + 2); // 福缘+2
-    if (treeTier >= 5) { for (const k of ['gen', 'comp', 'luck', 'body']) p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } // 全属性+1
-    // v19 传承树扩至八层
-    if (treeTier >= 6) p2.reputation = (p2.reputation || 0) + 30;   // 名门之后：初始声望
-    if (treeTier >= 7) p2.fortune = (p2.fortune || 0) + 10;   // 福泽绵长：初始气运
-    if (treeTier >= 8) p2.bag['m_gupian'] = (p2.bag['m_gupian'] || 0) + 1;   // 骨血传玉：自带一枚上古碎片
-    // v20 传承树九、十层
-    if (treeTier >= 9) p2.flags.daoYunEcho = true;   // 道韵残响：转世保留一条已激活道韵（Stat 消费）
-    if (treeTier >= 10) p2.rerollBest = true;   // 逆天改命：创角四维重掷三次取最优
+    const TREE_EFFECTS = [
+      { at: 1,  name: '一世之家 · 初始灵石翻倍', apply: () => { p2.stones.low += Math.round((origin ? origin.start.stones : 150) || 0); } },
+      { at: 2,  name: '生而知之 · 悟性 +2', apply: () => { p2.attrs.comp = Math.min(10, p2.attrs.comp + 2); } },
+      { at: 3,  name: '故物重携 · 多带一件法宝', apply: () => { if (kept) p2.bag[kept] = (p2.bag[kept] || 0) + 1; } },
+      { at: 4,  name: '福缘深厚 · 福缘 +2', apply: () => { p2.attrs.luck = Math.min(10, p2.attrs.luck + 2); } },
+      { at: 5,  name: '道基天成 · 全属性 +1', apply: () => { for (const k of ['gen', 'comp', 'luck', 'body']) p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } },
+      { at: 6,  name: '名门之后 · 初始声望 +30', apply: () => { p2.reputation = (p2.reputation || 0) + 30; } },
+      { at: 7,  name: '福泽绵长 · 初始气运 +10', apply: () => { p2.fortune = (p2.fortune || 0) + 10; } },
+      { at: 8,  name: '骨血传玉 · 自带上古碎片', apply: () => { p2.bag['m_gupian'] = (p2.bag['m_gupian'] || 0) + 1; } },
+      { at: 9,  name: '道韵残响 · 保留一条前世道韵', apply: () => { p2.flags.daoYunEcho = true; } },
+      { at: 10, name: '逆天改命 · 创角四维三掷取优', apply: () => { p2.rerollBest = true; } },
+    ];
+    const unlockedTalents = TREE_EFFECTS.filter(t2 => treeTier >= t2.at);
+    for (const t2 of unlockedTalents) t2.apply();
     // v28 联动：前世塔绩化作来世资粮——跨世登塔最佳 ≥10 层气运 +5，≥20 层再 +1 悟性
     const towerBest = legacy.towerBest || 0;
     if (towerBest >= 10) p2.fortune = (p2.fortune || 0) + 5;
@@ -185,6 +233,8 @@ const ReincarnationSys = {
     Log.add('<b>兵解转世</b>——一道流光划破夜空，落入凡间某处。啼哭声中，你重开一世。', 'system');
     Log.add(`此为第 <b>${legacy.lives}</b> 世：轮回印记 ×${legacy.marks}（全属性 +${legacy.marks}%）、前世悟性传承 +10%${kept ? `、携【${GameData.ITEMS[kept].name}】转世` : ''}。`, 'gain');
     if (grudges.length) Log.add(`前世仇怨如附骨之疽：${grudges.map(id => (NpcSys.def(id) || {}).name).filter(Boolean).join('、')} 与你再结梁子。`, 'warn');
+    // v31（E22）：出生天赋清单——传承树解锁到第几层、带来哪些天赋，一目了然
+    if (unlockedTalents.length) Log.add(`血脉深处的传承苏醒（传承树 ${treeTier}/10 层）：${unlockedTalents.map(t2 => t2.name.split(' · ')[0]).join('、')}。`, 'gain');
     if (towerBest >= 10) Log.add(`前世登天塔 <b>${towerBest}</b> 层的足印化作资粮——气运 +5${towerBest >= 20 ? '、悟性 +1' : ''}。`, 'gain');
     Log.add('前世记忆未消——你可即刻叩问大道，游历中偶有前世洞府机缘。', 'info');
     Game.afterAction();

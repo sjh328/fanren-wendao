@@ -588,6 +588,9 @@ try {
       await sleep(350);
       await clickPopupBtn(0); // 兵解确认
       await sleep(350);
+      // v31：来世预约弹窗（新增于兵解确认之后）——选最后一项「不作预约」
+      await clickPopupBtn(3);
+      await sleep(350);
       await clickPopupBtn(0); // 择法宝：诛仙剑影
       await sleep(350);
       await clickPopupBtn(0); // 择出身：山村猎户

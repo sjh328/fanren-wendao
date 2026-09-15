@@ -6,7 +6,11 @@ const buildMonster = (id, delta = 0, opts = {}) => {
   const d = GameData.MONSTERS[id];
   const rp = Utils.clamp(d.power + delta, 0, 60);
   const realmIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
-  const e = !!d.elite;
+  // v31 修瑕：elitePlus（秘境 forced 精英/魔域入侵/夺宝怪）并入对象构造——原修复写在 return 之后
+  // 且把取整函数 m 误当怪物对象，整段不可达，手工精英整体退化为「隐形精英」（有词缀无基线）。
+  // 数据精英（d.elite）吃全部倍率；elitePlus 只补精英旗标与 crit 基线（调用方自带数值倍率，不叠乘）
+  const dataElite = !!d.elite;
+  const e = dataElite || !!opts.elitePlus;
   // v20 习性模板：同一妖兽不同个体养成不同打法（无模板为主，五种习性均摊）
   const tplId = Utils.pickWeighted(GameData.MONSTER_TEMPLATE_WEIGHTS);
   const tpl = GameData.MONSTER_TEMPLATES.find(t => t.id === tplId) || null;
@@ -21,22 +25,18 @@ const buildMonster = (id, delta = 0, opts = {}) => {
     tplName: tpl ? tpl.name : null,
     skills: (d.skills || []).map(s => ({ ...s })),
     realmLabel: GameData.REALM_NAMES[realmIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
-    hpMax: m(Math.round((55 + Math.pow(rp, 1.6) * 5) * (d.hp || 1) * (e ? 1.7 : 1)), 'hp'),
-    atk: m(Math.round((6 + rp * 2.6) * (d.atk || 1) * (e ? 1.35 : 1)), 'atk'),
+    hpMax: m(Math.round((55 + Math.pow(rp, 1.6) * 5) * (d.hp || 1) * (dataElite ? 1.7 : 1)), 'hp'),
+    atk: m(Math.round((6 + rp * 2.6) * (d.atk || 1) * (dataElite ? 1.35 : 1)), 'atk'),
     def: m(Math.round((3 + rp * 1.6) * (d.def || 1)), 'def'),
     spd: m(Math.round((6 + rp * 0.9) * (d.spd || 1)), 'spd'),
     dodge: d.dodge || 0,
     crit: (e ? 10 : 4) + ((tpl && tpl.crit) || 0),
-    expGain: Math.round(22 * GameData.eco(realmIdx) * (e ? 2.2 : 1)),
-    stoneGain: Math.round(Utils.rand(10, 20) * GameData.stoneEco(realmIdx) * (d.stoneMul || 1) * (e ? 2.5 : 1)),
+    expGain: Math.round(22 * GameData.eco(realmIdx) * (dataElite ? 2.2 : 1)),
+    stoneGain: Math.round(Utils.rand(10, 20) * GameData.stoneEco(realmIdx) * (d.stoneMul || 1) * (dataElite ? 2.5 : 1)),
     dropTier: Math.min(4, Math.floor(realmIdx / 2) + 1),
     rareDrop: d.rareDrop || null,
     hp: 0,
   };
-  // v30 修瑕：手工精英统一口径——秘境/世界事件曾在 buildMonster 之后才置 e.elite=true，
-  // 吃得到词缀却吃不到精英 crit 基线；elitePlus 只补基线不叠倍率（难度曲线不变）
-  if (opts.elitePlus && !m.elite) { m.elite = true; m.crit = 10 + ((tpl && tpl.crit) || 0); }
-  return m;
 };
 
 /* ======================================================================
@@ -83,7 +83,7 @@ const StatusFx = {
   /* v30 状态引擎：统一衰减时相——原衰减清单散落四路调用点各自维护，kind 易漏
    *（金光盾/敌方虚弱曾双双漏衰减）。所有回合末衰减统一走 tick(list, phase)。 */
   AUG_MINE: ['defdown', 'slow', 'weaken', 'atkup', 'defup', 'agiup', 'critup', 'shield', 'ward'],
-  AUG_ENEMY: ['defdown', 'slow', 'weaken'],
+  AUG_ENEMY: ['defdown', 'slow', 'weaken', 'vuln'],   // v31 修瑕：破绽漏入衰减表——一张破阵符曾=敌方永久 +30% 被会心
   tick(list, phase) {
     const kinds = phase === 'enemyEnd' ? this.AUG_ENEMY : this.AUG_MINE;
     for (const x of list) if (kinds.includes(x.kind)) x.rounds--;

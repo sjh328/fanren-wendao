@@ -52,8 +52,8 @@ try {
     ? pass('TA9 折寿机制：天劫 -10 / 心魔 / 转道') : fail('TA9 折寿', '');
   js.includes('坐化之时神魂不昧') && js.includes('extraMarks: 1')
     ? pass('TA10 坐化兵解闭环（寿满天年 +1 印记）') : fail('TA10 坐化', '');
-  js.includes("Math.max(60, GameData.LIFESPAN[p.realmIdx] - (p.lifeCut || 0) + (p.lifeGain || 0))")
-    ? pass('TA11 寿元 = 境界基准 - 折寿 + 延寿') : fail('TA11 寿元公式', '');
+  js.includes("Math.max(60, GameData.LIFESPAN[p.realmIdx] - (p.lifeCut || 0) + (p.lifeGain || 0)")
+    ? pass('TA11 寿元 = 境界基准 - 折寿 + 延寿（+v31 仙寿续接）') : fail('TA11 寿元公式', '');
   js.includes("Math.floor(((p.day || 0) % 365) / 30)")
     ? pass('TA12 四季与 365 天日历同源') : fail('TA12 四季', '');
   js.includes("(B.enemy.dodge || 0)") && js.includes('e._roared = true') && js.includes('preMit * 0.15')
@@ -78,10 +78,10 @@ try {
     ? pass('TA22 滚动只在切页时 + 日志相邻去重 ×N') : fail('TA22 体验件', '');
   js.includes('SELL_CAP = 80') && js.includes("box.remove(); }, 5000)")
     ? pass('TA23 出售区惰性渲染 + 结算卡 5s 可点击') : fail('TA23 体验件', '');
-  html.includes('style.css?v=46') && html.includes('game.js?v=46') && html.includes('media="print"')
-    ? pass('TA24 缓存号 v=46 + 字体异步加载') : fail('TA24 缓存号/字体', '');
-  fs.readFileSync('sw.js', 'utf8').includes("const VERSION = 'fanren-wd-v5';")
-    ? pass('TA25 SW 版本 v4') : fail('TA25 SW', '');
+  html.includes('style.css?v=47') && html.includes('game.js?v=47') && html.includes('media="print"')
+    ? pass('TA24 缓存号 v=47 + 字体异步加载') : fail('TA24 缓存号/字体', '');
+  fs.readFileSync('sw.js', 'utf8').includes("const VERSION = 'fanren-wd-v6';")
+    ? pass('TA25 SW 版本 v6') : fail('TA25 SW', '');
   !js.includes('BREAKTHROUGH: {') && !js.includes('rushMul(p)') && js.includes('function depth2')
     ? pass('TA26 死代码清除（BALANCE 数值双轨 / rushMul / depth2 归位）') : fail('TA26 死代码', '');
 

@@ -62,7 +62,7 @@ const Achieve = {
     { id: 'v1', cat: 'exp', name: '丹炉百炼', desc: '炼丹成丹一百炉', reward: { stones: 3000 }, prog: p => `${Math.min(100, (p.counters.craftsOk || 0))}/100`, test: p => (p.counters.craftsOk || 0) >= 100 },
     { id: 'v2', cat: 'exp', name: '画符千张', desc: '累计画符五十轮', reward: { stones: 2000 }, prog: p => `${Math.min(50, (p.counters.talRounds || 0))}/50`, test: p => (p.counters.talRounds || 0) >= 50 },
     { id: 'v3', cat: 'exp', name: '灵田大丰', desc: '收获作物三十次', reward: { stones: 2000 }, prog: p => `${Math.min(30, (p.counters.harvests || 0))}/30`, test: p => (p.counters.harvests || 0) >= 30 },
-    { id: 'v4', cat: 'exp', name: '斗兽十连胜', desc: '斗兽场累计十胜', reward: { fortune: 8 }, prog: p => `${Math.min(10, (p.counters.arenaWins || 0))}/10`, test: p => (p.counters.arenaWins || 0) >= 10 },
+    { id: 'v4', cat: 'exp', name: '斗兽常客', desc: '斗兽场累计十胜', reward: { fortune: 8 }, prog: p => `${Math.min(10, (p.counters.arenaWins || 0))}/10`, test: p => (p.counters.arenaWins || 0) >= 10 },
     { id: 'v5', cat: 'battle', name: '无伤渡劫', desc: '渡劫成功时气血满盈', reward: { fortune: 12 }, test: p => (p.flags && p.flags.tribFullHp) || false },
     { id: 'v6', cat: 'battle', name: '残血翻盘', desc: '气血低于一成时反败为胜', reward: { fortune: 10 }, test: p => (p.counters.lowHpWins || 0) >= 1 },
     { id: 'v7', cat: 'battle', name: '一夜屠魔', desc: '单场战斗输出逾自身攻击百倍', reward: { fortune: 10 }, test: p => (p.counters.bigOut || 0) >= 1 },
@@ -79,6 +79,13 @@ const Achieve = {
     { id: 'tw3', cat: 'battle', name: '塔影同高', desc: '登天塔抵达第二十层', reward: { fortune: 10 }, prog: p => `${Math.min(20, p.counters.towerBest || 0)}/20`, test: p => (p.counters.towerBest || 0) >= 20 },
     { id: 'tw4', cat: 'battle', name: '塔顶之风', desc: '登天塔抵达第三十层', reward: { fortune: 15 }, prog: p => `${Math.min(30, p.counters.towerBest || 0)}/30`, test: p => (p.counters.towerBest || 0) >= 30 },
     { id: 'c10a', cat: 'exp', name: '仙门之外', desc: '踏出仙门，亲见门后天地', reward: { fortune: 20 }, test: p => (p.flags && p.flags.beyondGate) || false },
+    /* ---- v31 成就扩容 ---- */
+    { id: 'x1', cat: 'exp', name: '洞天福地', desc: '洞天营造至二重', reward: { fortune: 8 }, prog: p => `${Math.min(2, (p.cave && p.cave.dongtian) || 0)}/2`, test: p => (p.cave && (p.cave.dongtian || 0) >= 2) },
+    { id: 'x2', cat: 'dao', name: '本命通灵', desc: '本命法宝喂养至五阶', reward: { stones: 5000 }, prog: p => `${Math.min(5, (p.benming && p.benming.lv) || 0)}/5`, test: p => ((p.benming && p.benming.lv) || 0) >= 5 },
+    { id: 'x3', cat: 'reinc', name: '仙籍有名', desc: '白日飞升后落名仙籍', reward: { fortune: 15 }, test: p => (p.xianjie && (p.xianjie.idx || 0) >= 1) },
+    { id: 'x4', cat: 'realm', name: '大罗之巅', desc: '证得大罗仙位', reward: { fortune: 25 }, test: p => (p.xianjie && (p.xianjie.idx || 0) >= 4) },
+    { id: 'x5', cat: 'exp', name: '侠名远播', desc: '声望达一百', reward: { stones: 4000 }, prog: p => `${Math.min(100, (p.reputation || 0))}/100`, test: p => (p.reputation || 0) >= 100 },
+    { id: 'x6', cat: 'battle', name: '派系中人', desc: '在宗门派系之争中站队', reward: { stones: 1500 }, test: p => !!(p.sect && p.sect.faction) },
   ],
   /** 每次行动收尾时检查：解锁则发奖并播报 */
   check() {
@@ -102,7 +109,9 @@ const Achieve = {
       UI.toast(`成就达成：${d.name}`);
     }
     Meta.save();
-    UI.renderAll();
+    // v31 修瑕（E30）：只刷顶栏与状态区——原全量 renderAll 在 afterAction 已渲染过一遍后二次整树重建
+    UI.markDirty('top'); UI.markDirty('status');
+    try { UI.renderAll(); } catch (e) { /* ignore */ }
     Save.autoSave();
   },
 };

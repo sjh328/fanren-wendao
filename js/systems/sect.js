@@ -245,7 +245,7 @@ const SectSys = {
   /** 击杀钩子：推进讨伐任务 */
   onKill(monsterId) {
     const p = Game.player;
-    if (!p.sect) return;
+    if (!p.sect || !Array.isArray(p.sect.tasks)) return;   // v31：宗门档缺 tasks 数组时不再崩（异种档自愈）
     for (const t of p.sect.tasks) {
       if (t.type === 'kill' && t.target === monsterId && t.progress < t.need) {
         t.progress++;
@@ -257,7 +257,7 @@ const SectSys = {
   /** v30 补遗：历练钩子（任意地图探索 +1）——探索计数处调用 */
   onExplore() {
     const p = Game.player;
-    if (!p.sect) return;
+    if (!p.sect || !Array.isArray(p.sect.tasks)) return;   // v31：宗门档缺 tasks 数组时不再崩（异种档自愈）
     for (const t of p.sect.tasks) {
       if (t.type === 'explore' && t.progress < t.need) {
         t.progress++;
@@ -268,7 +268,7 @@ const SectSys = {
   /** v30 补遗：问签钩子（黄历求签）——求签处调用 */
   onSign() {
     const p = Game.player;
-    if (!p.sect) return;
+    if (!p.sect || !Array.isArray(p.sect.tasks)) return;   // v31：宗门档缺 tasks 数组时不再崩（异种档自愈）
     for (const t of p.sect.tasks) {
       if (t.type === 'sign' && t.progress < t.need) {
         t.progress = t.need;
@@ -298,7 +298,7 @@ const SectSys = {
   /** 修炼钩子：推进修行任务 */
   onCultivate(amount) {
     const p = Game.player;
-    if (!p.sect) return;
+    if (!p.sect || !Array.isArray(p.sect.tasks)) return;   // v31：宗门档缺 tasks 数组时不再崩（异种档自愈）
     for (const t of p.sect.tasks) {
       if (t.type === 'cult' && t.progress < t.need) {
         t.progress = Math.min(t.need, t.progress + amount);

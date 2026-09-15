@@ -140,11 +140,13 @@ const CraftSys = {
     // v18：当日画符次数累加（每日重置）
     const today = Math.floor(p.day);
     if (p._drawDay !== today) { p._drawDay = today; p._drawCount = 0; }
-    p._drawCount = (p._drawCount || 0) + 1;
-    p.counters.talRounds = (p.counters.talRounds || 0) + 1;   // v27 修瑕：画符轮次从未计数，成就「画符千张」永不可解锁
-    const costMult = 1 + Math.min(4, (p._drawCount - 1) * 0.75);   // v29：递增斜率 0.5→0.75（符修一家独大削幅，不砍死职业）
+    // v31 修瑕（E38）：扣款成功后才计数——原失败（灵石不足）也烧当日档位与成就轮次，
+    // 且把当日成本系数推高一档；显示价与实收同步（原按钮恒显首档价）
+    const costMult = 1 + Math.min(4, (p._drawCount || 0) * 0.75);
     const cost = Math.round(this.drawCost(p) * costMult);
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足，置不起朱砂灵纸'); return; }
+    p._drawCount = (p._drawCount || 0) + 1;
+    p.counters.talRounds = (p.counters.talRounds || 0) + 1;   // v27 修瑕：画符轮次从未计数，成就「画符千张」永不可解锁
     Time.add(1);
     let qty = 2 + Utils.rand(0, 2) + (p.realmIdx >= 2 ? 1 : 0) + (DaoSys.tierLevel(p) >= 1 ? 1 : 0);   // v10 符道三境·描符境
     if (typeof Art !== 'undefined' && Art.seasonOf(p) === 1) qty += 2;   // v20 仲夏雷雨：朱砂易引雷，成符 +2

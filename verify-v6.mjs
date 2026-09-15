@@ -376,7 +376,8 @@ try {
   await page.click('[data-action="act-save-open"]');
   await sleep(400);
   const s3 = await text(page, '#popup-body');
-  s3.includes('导出文本码') && s3.includes('导入文本码') ? pass('S3 存档弹窗含导出/导入入口') : fail('S3 入口', s3.slice(0, 80));
+  // v31：导入按钮更名为「导入存档文件 / 文本码」（新增 file picker 通道），并新增重看引导与存储占用
+  s3.includes('导出文本码') && s3.includes('导入存档文件') && s3.includes('重看引导') ? pass('S3 存档弹窗含导出/导入入口') : fail('S3 入口', s3.slice(0, 80));
   await clickSel(page, '[data-action="save-export"]');
   await sleep(400);
   const code = await page.$eval('.save-code', el => el.value);

@@ -15,6 +15,8 @@ const BlackSys = {
     { id: 'm_bingpo', w: 12 }, { id: 'seed_xingchen', w: 4 }, { id: 'm_xuecan', w: 10 },
     { id: 'm_jiaojin', w: 6 },   // v29：蛟筋断头路补全——原仅 r6+ 掉落与 22000 贡献一条路，赤霄神剑（grade3 内容）中期无料
     { id: 'm_yaopi', w: 10 },   // v30 断头路补全：妖兽皮革原仅 tier1 掉落（金丹后随 dropTier 绝迹），f3/f13 炼器线中后期无料
+    { id: 'm_leijing', w: 5 },   // v31 断头路补全：雷晶核 tier-4 池 11 选 1 均匀掉落，期望 11 掉/枚——f19-f22 与 a4-a6 丹方共抢，黑市补一条定向料源
+    { id: 'm_xiancui', w: 6 },   // v31 断头路补全：仙灵翠原仅仙灵种（原 r8 上架）一源，f19/f20 中期即需求
   ],
   /** 暗巷货（确定性哈希）：今日四件货物 */
   goods(p) {

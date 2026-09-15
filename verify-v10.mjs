@@ -330,7 +330,10 @@ try {
     UI.popup = origPopup;
     const tripping = !!(b.trip && b.trip.days === 3);
     p.day = 103;
-    BeastSys.claimTrip(1);
+    // v31 寻宝归来三选一：mock 归来弹窗选「灵材为主」并 await 异步结算
+    UI.popup = async (o) => (o.title || '').includes('寻宝归来') ? 'mat' : origPopup(o);
+    await BeastSys.claimTrip(1);
+    UI.popup = origPopup;
     const claimed = !b.trip && Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'material');
     p.beasts.active = 1;
     p.stones.low += 100000;
@@ -764,7 +767,8 @@ try {
       cur: (document.querySelector('.rp-node.cur .rp-name') || {}).textContent || '',
     }), 250));
   });
-  v4.nodes === 10 && v4.cur ? pass(`V4 仙途十境路线图（当前：${v4.cur}）`) : fail('V4 仙途路线', JSON.stringify(v4));
+  // v31 仙界四阶：仙途条扩为十境 + 地仙/天仙/金仙/大罗 14 节点
+  v4.nodes === 14 && v4.cur ? pass(`V4 仙途路线图（十境+仙界四阶，当前：${v4.cur}）`) : fail('V4 仙途路线', JSON.stringify(v4));
 
   // V5 修炼浮字：行动后飘起 +N 修为
   const v5 = await page.evaluate(async () => {

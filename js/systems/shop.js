@@ -16,7 +16,7 @@ const ShopSys = {
     if (def.type === 'artifact' && (def.grade || 0) >= 1) {
       const row = (GameData.SHOP || []).find(r => r.item === itemId);
       const minR = row ? (row.minRealm || 0) : 0;
-      base = Math.round(base * Utils.clamp(Math.pow(3.8, p.realmIdx - minR), 1, 3));
+      base = Math.round(base * Utils.clamp(1 + 0.66 * (p.realmIdx - minR), 1, 3));   // v31（E47）：线性爬坡——原 3.8^(r-minR) 恒在 r=minR+1 跳顶 3 倍，『微涨』名不副实
     }
     // v24 声望接线：名望高者坊市给面子（买价九折/九二折，劣迹昭彰者吃溢价）；卖价不受声望影响
     const repMul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;

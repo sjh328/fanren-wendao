@@ -67,6 +67,8 @@ write(key, player) {
   },
   remove(key) {
     try { this.storage.removeItem ? this.storage.removeItem(this.KEY + key) : delete this.mem[key]; } catch (e) { /* ignore */ }
+    // v31 修瑕（E26）：联动清掉该档的成就图鉴 meta 键——此前删档后 fanren_wd_meta_<slot> 永久残留
+    try { this.storage.removeItem ? this.storage.removeItem(this.KEY + 'meta_' + key) : delete this.mem['meta_' + key]; } catch (e) { /* ignore */ }
   },
   /** 每次行动实时落盘（保持外部读取 localStorage 所见即所得）；
    *  force 参数保留兼容（关页 / 切后台等关键时机调用），当前策略下与常规写入一致。 */

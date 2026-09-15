@@ -104,10 +104,13 @@ const Stat = {
     const jadePct = (typeof DaoxinSys !== 'undefined' && DaoxinSys.attunePct) ? DaoxinSys.attunePct(p) : 0;
     // v19 个人线永久加成
     const pl = (typeof PersonalSys !== 'undefined' && PersonalSys.bonusOf) ? PersonalSys.bonusOf(p) : {};
+    // v31 仙阶：每层全属性 +1.5%（XianSys 消费）
+    const xianLayers = (typeof XianSys !== 'undefined' && XianSys.layersTotal) ? XianSys.layersTotal(p) : 0;
     const A = p.attrs;
     const compEff = this.compOf(p);
     const finalScale = (1 + rootPct / 100) * (1 - lossPct / 100) * (1 + marks * 0.01)
       * (1 + jadePct / 100)
+      * (1 + xianLayers * 0.015)   // v31 仙阶：每层全属性 +1.5%
       * ((typeof XinmoSys !== 'undefined' && XinmoSys.scale) ? XinmoSys.scale(p) : 1)
       * (1 + ((p.benming && p.benming.lv) || 0) * 0.01)
       * (1 + (p.codexBonus || 0) * 0.01)   // v24 图鉴大成：每类收集满全属性 +1%
@@ -130,15 +133,18 @@ const Stat = {
       maxHp, maxMp, atk, def, speed,
       crit: Utils.clamp(5 + (A.luck + (eq.luck || 0)) * 0.6 + (gf.crit || 0) + (eq.crit || 0) + (beastPass.crit || 0) + (dx.crit || 0) + (pl.crit || 0), 0, 75),
       dodge: Utils.clamp((gf.dodge || 0) + (eq.dodge || 0) + (sb.dodge || 0) + (beastPass.dodge || 0) + (dx.dodge || 0) + (pl.dodge || 0) + (p.dao === 'array' && DaoSys.tierLevel(p) >= 4 ? 8 : 0), 0, 35),   // v10 阵道六境·迷踪境 · v13 宗门/灵兽
-      block: Utils.clamp(8 + (gf.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0), 0, 60),   // v10 般若六境·铁骨境
-      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0) + (pl.cultPct || 0),   // v30 修瑕：补个人线 cultPct 消费（苏白线终章加成原为死键）
+      block: Utils.clamp(8 + (gf.block || 0) + (eq.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0), 0, 60),   // v10 般若六境·铁骨境；v31 修瑕：补读 eq.block——词缀「磐石」/玄天玉佩/仙缘玉环的格挡此前是死键（强化按功能键收费、明细表却虚报）
+      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0) + (pl.cultPct || 0) + xianLayers * 2,   // v30 补个人线 cultPct；v31 仙阶每层修炼效率 +2%
       stonePct: (sb.stonePct || 0) + (eq.stonePct || 0) + (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3),   // v20 藏宝阁
       luck: A.luck + (eq.luck || 0),
       pillPct: (sb.pillPct || 0) + (pl.pillPct || 0),
       poisonReduce: sb.poisonReduce || 0,
       shopDiscount: sb.shopDiscount || 0,
       // v29 天年：折寿扣减 + 延寿丹增益（下限 60，延寿不超该境基准——增益入 p.lifeGain）
-      lifespan: Math.max(60, GameData.LIFESPAN[p.realmIdx] - (p.lifeCut || 0) + (p.lifeGain || 0)),
+      // v31 仙阶：入阶续仙寿（地仙 +2000 → 大罗 +30000 年）
+      lifespan: Math.max(60, GameData.LIFESPAN[p.realmIdx] - (p.lifeCut || 0) + (p.lifeGain || 0)
+        + ((typeof XianSys !== 'undefined' && XianSys.cur && XianSys.cur(p) > 0)
+          ? GameData.XIAN_TIERS.slice(0, XianSys.cur(p)).reduce((s2, x2) => s2 + x2.life, 0) : 0)),
     };
   },
   /** 防御减伤后的伤害期望值 */

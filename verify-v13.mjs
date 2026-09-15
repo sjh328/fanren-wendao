@@ -48,8 +48,8 @@ try {
     ? pass('A5 死令牌清理（--bg-soft / --panel-2）') : fail('A5 死令牌', '仍存在');
   css.includes('env(safe-area-inset-top, 0px)) 12px 8px')
     ? pass('A6 刘海避让并入顶栏 padding（不再被简写覆盖）') : fail('A6 刘海避让', '');
-  html.includes('style.css?v=46') && html.includes('game.js?v=46') && swSrc.includes('fanren-wd-v5')
-    ? pass('A7 缓存号 v=46 + SW 版本 v4') : fail('A7 缓存号', '');
+  html.includes('style.css?v=47') && html.includes('game.js?v=47') && swSrc.includes('fanren-wd-v6')
+    ? pass('A7 缓存号 v=47 + SW 版本 v6') : fail('A7 缓存号', '');
 
   /* ================= B 启动（移动端视口走查用同一会话） ================= */
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
@@ -159,6 +159,8 @@ try {
     const p = Game.player;
     const today = Math.floor(p.day);
     p.reputation = 150;
+    Meta.data.achv = Meta.data.achv || {};
+    ['x1', 'x2', 'x3', 'x4', 'x5', 'x6'].forEach(k => { Meta.data.achv[k] = 1; });   // v31：预解锁新成就，排除奖励干扰
     p.bounties = { day: today, list: [{ type: 'kill', target: 'm_yezhu', need: 1, progress: 1, name: '猎杀测试', desc: 'x' }] };
     const tot = () => p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
     const before = tot();
