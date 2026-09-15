@@ -30,7 +30,7 @@ const NpcSys = {
     if (!L || !L[kind] || !L[kind].length) return null;
     if (kind === 'greet') {
       const rel = (this.state(p, id) || {}).rel || 0;
-      const tier = rel >= 70 ? 2 : rel >= 15 ? 1 : 0;
+      const tier = rel >= 70 ? 2 : rel >= 30 ? 1 : 0;   // v30：档位阈值对齐 relLabel（8/30/70/90）
       return L.greet[Math.min(tier, L.greet.length - 1)];
     }
     if (kind === 'hostile') {
@@ -254,12 +254,14 @@ const NpcSys = {
     if (!Utils.chance(Utils.clamp(10 + this.grudgeCount(p) * 4, 10, 45))) return null;
     return this.pickAmbusher(p);
   },
-  /** 危机相助：道侣 > 结拜 > 莫逆之交 */
+  /** 危机相助：道侣 > 结拜（轮换） > 莫逆之交（v30：多人结拜原只认 sworn[0]，后结拜者永不出场） */
   tryAid(p, scene) {
+    const swornAlive = (p.sworn || []).filter(id => (p.npcs[id] || {}).alive);
     const cand = p.partner
-      || (p.sworn || [])[0]
+      || (swornAlive.length ? swornAlive[(p.counters.aidRot || 0) % swornAlive.length] : null)
       || Object.keys(p.npcs || {}).find(id => p.npcs[id].alive && p.npcs[id].rel >= 50);
     if (!cand) return null;
+    if (p.partner || swornAlive.length) p.counters.aidRot = (p.counters.aidRot || 0) + 1;
     const s = this.state(p, cand);
     if (!s || !s.alive) return null;
     if (!Utils.chance(Utils.clamp(25 + Math.max(0, s.rel) * 0.3, 0, 70))) return null;
@@ -351,8 +353,8 @@ const NpcSys = {
     s.pastLife = false;
     s.rel = Utils.clamp(s.rel + 15, -100, 100);
     this.mem(p, id, 'peace', showdown ? '雷台了断' : '一战了断');   // v19 记忆
-    KarmaSys.addKarma(8, true);
-    Log.add(`一战之后，恩怨两清。${(this.def(id) || {}).name || ''} 收起敌意，与你相顾无言。（孽障 +8）`, 'system');
+    KarmaSys.addKarma(2, true);   // v30：正当决斗只记微业——原 +8 与「散财化解零孽障」倒挂，玩家系统性规避了断
+    Log.add(`一战之后，恩怨两清。${(this.def(id) || {}).name || ''} 收起敌意，与你相顾无言。（孽障 +2）`, 'system');
     if (showdown) {
       const pool = Object.keys(GameData.ITEMS).filter(k => GameData.ITEMS[k].type === 'artifact' && (GameData.ITEMS[k].grade || 0) >= 1 && (GameData.ITEMS[k].grade || 0) <= 3);
       const art = Utils.pick(pool);
@@ -385,10 +387,12 @@ const NpcSys = {
     // v28 联动：声望先于人先——名望高者结交更受欢迎，恶名远扬者见面先减三分
     const rep = p.reputation || 0;
     const repAdj = rep >= 80 ? 5 : rep >= 30 ? 3 : rep < -30 ? -5 : rep < 0 ? -2 : 0;
+    const relBefore = s.rel;   // v30：日志改报本次增量（原打印累计总量，「交情 +37」实为 +8~14）
     s.rel = Utils.clamp(s.rel + Utils.rand(8, 14) + repAdj, -100, 100);
     p.counters.befriends = (p.counters.befriends || 0) + 1;   // v11 剧情计数
     this.mem(p, id, 'chat', '结交之谊');   // v19 记忆
-    Log.add(`你以礼相待，与 ${d.name} 相谈甚欢。${repAdj ? `（${repAdj > 0 ? '你的名望令对方高看一眼，' : '你的恶名令对方心存戒备，'}交情 ${repAdj > 0 ? '+' : ''}${repAdj}）` : ''}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}）`, 'gain');
+    const relDelta = s.rel - relBefore;
+    Log.add(`你以礼相待，与 ${d.name} 相谈甚欢。${repAdj ? `（${repAdj > 0 ? '你的名望令对方高看一眼，' : '你的恶名令对方心存戒备，'}交情 ${repAdj > 0 ? '+' : ''}${repAdj}）` : ''}（交情 ${relDelta > 0 ? '+' : ''}${relDelta}${s.rel ? `，现 ${s.rel}` : ''}）`, 'gain');
     Game.afterAction();
   },
   async spar(id) {
@@ -580,10 +584,11 @@ const NpcSys = {
       if (midautumn) gain *= 2;
     }
     const before = this.tierOf(Math.max(0, s.rel)).name;
+    const relBefore2 = s.rel;
     s.rel = Utils.clamp(s.rel + gain, -100, 100);
     this.mem(p, id, 'gift', '赠礼之谊');
     const after = this.tierOf(Math.max(0, s.rel)).name;
-    Log.add(`你向 ${d.name} 奉上礼物${likeNote}。${this.lineFor(p, id, 'gift') || this.dialogText(d.temper, 'gift')}（交情 ${s.rel > 0 ? '+' : ''}${s.rel}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
+    Log.add(`你向 ${d.name} 奉上礼物${likeNote}。${this.lineFor(p, id, 'gift') || this.dialogText(d.temper, 'gift')}（交情 ${s.rel - relBefore2 > 0 ? '+' : ''}${s.rel - relBefore2}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
     if (after !== before) Ambience.sfx('rare');
     Game.afterAction();
   },
@@ -602,7 +607,28 @@ const NpcSys = {
     s.rel = Utils.clamp(s.rel + 2, -100, 100);
     this.mem(p, p.partner, 'chat', '双修机缘');
     Log.add(`【双修】你与 ${d.name} 席地对坐，两道真气交缠共进——修为 +${Utils.fmtNum(gain)}。（交情 +2）`, 'gain');
+    if (Utils.chance(20)) await this.companionOuting(p, d, s);   // v30：道侣出游
     if (Utils.chance(30)) await this.companionWish(p, d, s);
+  },
+  /** v30 道侣出游：双修之外的同行机缘——三处去处各有各的收益（与心愿共用 30 日节拍） */
+  async companionOuting(p, d, s) {
+    const spots = [
+      { name: '夜市灯河', act: '提灯逛一圈夜市', ok: () => { KarmaSys.addFortune(2); return '人间的灯火映在TA眼底——你忽然觉得，修行路上最难得的不是机缘，是有人陪你看灯火。（气运 +2）'; } },
+      { name: '秘泉野浴', act: '寻一处无人的灵泉', ok: () => { p.hp = Stat.compute(p).maxHp; p.mp = Stat.compute(p).maxMp; return '灵泉洗去一路风尘，气血灵力尽复，连经脉都暖了几分。（状态尽复）'; } },
+      { name: '断崖论剑', act: '与TA印证一场', ok: () => { p.insight = Math.min(100, (p.insight || 0) + 4); s.rel = Utils.clamp(s.rel + 3, -100, 100); return '胜负不重要——重要的是TA接住了你每一剑。印证归来，彼此又懂了几分。（感悟 +4，交情 +3）'; } },
+    ];
+    const spot = Utils.pick(spots);
+    const ok = await UI.popup({
+      title: `道侣出游 · ${d.name}`,
+      html: `TA 提议：去${spot.name}——${spot.act}。<br><span class="tip-line">· 同行一日，各有造化。</span>`,
+      options: [{ text: '同 去', value: true, primary: true }, { text: '改日再说', value: false }],
+    });
+    if (!ok) return;
+    Time.add(1);
+    const line = spot.ok();
+    this.mem(p, p.partner, 'chat', '同行之谊');
+    Log.add(`【出游 · ${spot.name}】${line}`, 'gain');
+    Game.afterAction();
   },
   async companionWish(p, d, s) {
     const wishes = [
@@ -737,9 +763,10 @@ const NpcSys = {
       ],
     });
     if (choice === 'chat') {
+      const relBefore3 = s.rel;
       s.rel = Utils.clamp(s.rel + Utils.rand(2, 5), -100, 100);
       this.mem(p, id, 'chat', '途中叙话');   // v19 记忆
-      Log.add(`你们席地论道，相谈甚欢。（交情 ${s.rel > 0 ? '+' : ''}${s.rel}）`, 'gain');
+      Log.add(`你们席地论道，相谈甚欢。（交情 +${s.rel - relBefore3}）`, 'gain');
     } else if (choice === 'ask') {
       if (Utils.chance(45 + Math.max(0, s.rel))) {
         const gain = Math.round(60 * GameData.eco(p.realmIdx));
@@ -806,6 +833,7 @@ const PersonalSys = {
       Log.add(`【${def.arc} · ${a.title}】落幕。${gainTxt ? `（${gainTxt}）` : ''}`, 'gain');
       if (done >= def.acts.length) {
         Log.add(`<b>【个人线终章】${def.title}</b> 全线落幕——${def.doneText}。（${this.fxText(def.fx)}）`, 'realm');
+      if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.grantMarks) ReincarnationSys.grantMarks(1, 'personal_' + id);   // v30：个人线全通 +1 印记
         UI.announce(`✦ 个人线 · ${def.arc} · 终 ✦`, 'gold');
         Ambience.sfx('rare');
       }
@@ -813,19 +841,19 @@ const PersonalSys = {
     });
   },
   fxText(fx) {
-    const N = { atkPct: '攻击', defPct: '防御', hpPct: '气血', crit: '暴击', dodge: '闪避', pillPct: '丹效' };
+    const N = { atkPct: '攻击', defPct: '防御', hpPct: '气血', crit: '暴击', dodge: '闪避', pillPct: '丹效', cultPct: '修炼效率' };
     return Object.entries(fx || {}).map(([k, v]) =>
       k === 'stoneMult' ? `灵石获取 +${Math.round(v * 100)}%`
         : `${N[k] || k}${k.endsWith('Pct') ? ' +' + v + '%' : ' +' + v}`).join('，');
   },
   /** 已完成个人线的永久加成（Stat.compute 调用；stoneMult 由 Bag.addStones 消费） */
   bonusOf(p) {
-    const agg = { atkPct: 0, defPct: 0, hpPct: 0, crit: 0, dodge: 0, pillPct: 0, stoneMult: 1 };
+    const agg = { atkPct: 0, defPct: 0, hpPct: 0, crit: 0, dodge: 0, pillPct: 0, cultPct: 0, stoneMult: 1 };   // v30：补 cultPct（苏白线终章加成原为死键）
     if (!p || !p.personal) return agg;
     for (const [id, def] of Object.entries(GameData.PERSONAL)) {
       if ((p.personal[id] || 0) < def.acts.length) continue;
       for (const [k, v] of Object.entries(def.fx || {})) {
-        if (k in agg) agg[k] += (k === 'stoneMult' ? v : v);
+        if (k in agg) agg[k] += v;   // v30：恒等三元清理
       }
     }
     return agg;

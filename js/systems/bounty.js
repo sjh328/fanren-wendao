@@ -78,10 +78,17 @@ const BountySys = {
     Bag.addStones(gainStones);
     if (p.sect) p.sect.contrib += Math.round(r.contrib * mul);
     Log.add(`悬赏【${t.name}】交付！赏得灵石 ${Utils.fmtNum(gainStones)}${p.sect ? `、宗门贡献 +${Math.round(r.contrib * mul)}` : ''}。`, 'gain');
-    if (!t.chain && Utils.chance(25) && (t.type === 'kill' || t.type === 'collect')) {
-      const nt = { ...t, need: t.need + 2, progress: 0, chain: 1, name: `连锁 · ${t.name.replace(/^连锁 · /, '')}`, desc: `${t.desc.replace(/×\d+/, `×${t.need + 2}`)}（连锁 · 赏格 ×1.6）` };
+    // v30 悬赏连锁 1→3 级：赏格 ×1.6/×2.2/×3，三级后终了
+    const CHAIN_MUL = [0, 1.6, 2.2, 3];
+    const CHAIN_CHANCE = [25, 22, 18];
+    const CHAIN_TAG = ['', '连锁 · ', '连锁Ⅱ · ', '连锁Ⅲ · '];
+    const curChain = t.chain || 0;
+    if (curChain < 3 && (t.type === 'kill' || t.type === 'collect') && Utils.chance(CHAIN_CHANCE[curChain])) {
+      const nc = curChain + 1;
+      const baseName = t.name.replace(/^(连锁Ⅱ?Ⅲ? · )/, '');
+      const nt = { ...t, need: t.need + 2, progress: 0, chain: nc, name: `${CHAIN_TAG[nc]}${baseName}`, desc: `${t.desc.replace(/×\d+/, `×${t.need + 2}`)}（连锁${nc > 1 ? 'Ⅲ'.slice(0, 0) + ['Ⅰ', 'Ⅱ', 'Ⅲ'][nc - 1] : ''} · 赏格 ×${CHAIN_MUL[nc]}）` };
       B.list[idx] = nt;
-      chainTxt = '行商追加了一张<b>连锁悬赏</b>——目标更多，赏格更厚！';
+      chainTxt = nc < 3 ? '行商追加了一张<b>连锁悬赏</b>——目标更多，赏格更厚！' : '行商搬出压箱底的赏格——<b>连锁Ⅲ</b>！办成这一单，江湖都知道你的名号。';
     } else {
       B.list[idx] = null;
     }

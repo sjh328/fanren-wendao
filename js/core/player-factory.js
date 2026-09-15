@@ -59,6 +59,9 @@ const PlayerFactory = {
       quest: { ch: 0, side: {} },   // v11 主线章节进度 / 支线了结记录
       /* —— v13 新增：强化心得 / 洞府 / 灵兽 / 悬赏 / 天骄榜 —— */
       enhanced: {},
+      affixKept: {},   // v30：词缀留档（卸下/换装时保存实例词缀，防洗练投入蒸发）
+      qihun: 0,      // v30：器魂（分解法宝所得，器魂重铸的货币）
+      enhBless: {},  // v30：强化祝福值 { 物品id: 0~100 }，满百下次必成
       cave: null,
       beasts: { active: null, list: [], nextId: 1 },
       bounties: null,
@@ -109,6 +112,15 @@ const PlayerFactory = {
           if (!GameData.ITEMS[id] || GameData.ITEMS[id].type !== 'artifact') continue;
           const n = Math.floor(Number(lv));
           if (isFinite(n) && n > 0) out.enhanced[id] = Utils.clamp(n, 1, ForgeSys.MAX_LV);
+        }
+        // v30：器魂与祝福值清洗（老档 ||0 自愈，超界值钳制）
+        out.qihun = Math.max(0, Math.floor(Number(out.qihun)) || 0);
+        out.enhBless = {};
+        const srcBless = (p.enhBless && typeof p.enhBless === 'object') ? p.enhBless : {};
+        for (const [id2, v] of Object.entries(srcBless)) {
+          if (!GameData.ITEMS[id2] || GameData.ITEMS[id2].type !== 'artifact') continue;
+          const n2 = Math.floor(Number(v));
+          if (isFinite(n2) && n2 > 0) out.enhBless[id2] = Utils.clamp(n2, 0, 100);
         }
         if (out.cave && typeof out.cave === 'object') {
           const plots = Array.isArray(out.cave.plots) ? out.cave.plots.slice(0, 8).map(x => x && typeof x === 'object' ? x : null) : null;

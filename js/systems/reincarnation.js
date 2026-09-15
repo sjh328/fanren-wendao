@@ -29,6 +29,54 @@ const ReincarnationSys = {
       else Save.mem[Save.KEY + this.legacyKey()] = raw;
     } catch (e) { /* ignore */ }
   },
+  /** v30 轮回镜：印记多元化发放入口（图鉴大成/塔30层/飞升/个人线全通）——跨世去重，即时落盘 */
+  TREE_NAMES: [
+    '一世之家（初始灵石翻倍）', '生而知之（悟性 +2）', '故物重携（多带一件法宝）', '福缘深厚（福缘 +2）',
+    '道基天成（全属性 +1）', '名门之后（初始声望 +30）', '福泽绵长（初始气运 +10）', '骨血传玉（自带上古碎片）',
+    '道韵残响（保留一条道韵）', '逆天改命（四维重掷取最优）',
+  ],
+  grantMarks(n, why) {
+    if (typeof Meta !== 'undefined' && Meta.data) {
+      Meta.data.marksGiven = Meta.data.marksGiven || {};
+      if (Meta.data.marksGiven[why]) return false;
+      Meta.data.marksGiven[why] = 1;
+      Meta.save();
+    }
+    const legacy = this.readLegacy();
+    legacy.marks = (legacy.marks || 0) + n;
+    this.writeLegacy(legacy);
+    Log.add(`✦ 轮回印记 +${n}（${why}）——血脉深处的道韵又厚了一分（累计 ${legacy.marks} 枚）。`, 'realm');
+    UI.toast(`✦ 轮回印记 +${n}`);
+    return true;
+  },
+  /** v30 轮回镜：跨世面板——世数 / 印记 / 十层传承树 / 仇怨 / 前世编年（开始界面与游戏内皆可开） */
+  async mirror() {
+    const legacy = this.readLegacy();
+    const marks = legacy.marks || 0;
+    const lives = legacy.lives || 0;
+    const tier = Math.floor(marks / 3);
+    const rows = this.TREE_NAMES.map((name, i) => {
+      const on = tier >= i + 1;
+      return `<div class="tip-line">· ${on ? '<b class="hl">✦</b>' : '<span style="color:var(--text-faint)">🔒</span>'} 第${i + 1}层 <b>${name}</b>${on ? '' : `（需印记 ${(i + 1) * 3} 枚）`}</div>`;
+    }).join('');
+    const nextTxt = tier < 10 ? `距下一层还差 <b class="hl">${(tier + 1) * 3 - marks}</b> 枚印记` : '十层圆满——血脉之道，已至极致';
+    const grudgesTxt = (legacy.grudges || []).length
+      ? (legacy.grudges.map(id => (typeof NpcSys !== 'undefined' && NpcSys.def(id) || {}).name).filter(Boolean).join('、') || '（前世的恩怨仍在人间游荡）')
+      : '无';
+    const pasts = (legacy.pastLives || []).map(l => `<div class="tip-line">· 第${l.no}世 · ${l.who} —— ${l.life}</div>`).join('') || '<div class="tip-line">· 尘世茫茫，尚无记录。</div>';
+    await UI.popup({
+      title: '轮回镜',
+      html: `<div class="stat-line"><span>历世</span><b>第 ${Math.max(1, lives + (lives ? 0 : 1))} 世将至 · 已历 ${lives} 次兵解</b></div>
+        <div class="stat-line"><span>轮回印记</span><b>${marks} 枚（全属性永久 +${marks}%）</b></div>
+        <div class="stat-line"><span>传承树</span><b>${tier}/10 层 · ${nextTxt}</b></div>
+        <div class="tip-line" style="margin-top:6px"><b>印记来路</b>：兵解转世 +1（寿满天年再 +1）｜图鉴大成 +1｜登天塔三十层 +1｜白日飞升 +2｜个人线全通 +1</div>
+        <div class="shop-section-title" style="margin-top:8px">◈ 传承树 · 十层</div>${rows}
+        <div class="shop-section-title" style="margin-top:8px">◈ 前世恩怨</div><div class="tip-line">· ${grudgesTxt}</div>
+        <div class="shop-section-title" style="margin-top:8px">◈ 前世编年</div>${pasts}`,
+      options: [{ text: '合 上 镜', value: true, primary: true }],
+    });
+  },
+
   /** v29 天年：opts.force=坐化转世（寿元尽亦入轮回）；opts.extraMarks=额外印记（寿满天年） */
   async open(opts = {}) {
     const p = Game.player;
@@ -78,6 +126,13 @@ const ReincarnationSys = {
     legacy.grudges = grudges;
     // v28 联动：跨世塔绩入传承——登天塔的足印不随轮回散去
     legacy.towerBest = Math.max(legacy.towerBest || 0, (oldP.counters && oldP.counters.towerBest) || 0);
+    // v30 轮回镜：前世编年归档（保留最近三世）
+    legacy.pastLives = (legacy.pastLives || []).slice(-2);
+    legacy.pastLives.push({
+      no: legacy.lives,
+      who: `${oldP.name}（${GameData.REALM_NAMES[oldP.realmIdx] || '?'}期）`,
+      life: oldP.flags && oldP.flags.ascended ? '白日飞升，仙门之外' : (oldP.lifeCut ? `折寿 ${oldP.lifeCut} 年，抱憾而终` : '一生行止，留待后说'),
+    });
     this.writeLegacy(legacy);
     // v20 道韵残响：传承树九层保留上一世最强的一条已激活道韵
     let echo = null;

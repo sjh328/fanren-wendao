@@ -49,7 +49,7 @@ const AutoCult = {
     if (kind === 'realm') {
       const realm = Number(document.getElementById('auto-realm').value);
       if (realm <= p.realmIdx) { UI.toast('你已不弱于此境'); return; }
-      target = { kind, realm, label: `修至${GameData.REALM_NAMES[realm]}期` };
+      target = { kind, realm, label: `修至${GameData.REALM_NAMES[realm]}期（每逢圆满自停，待你亲手冲关）` };
     } else {
       const val = Number(document.getElementById('auto-val').value);
       if (!isFinite(val) || val <= 0) { UI.toast('请填写目标数值'); return; }
@@ -74,6 +74,7 @@ const AutoCult = {
     this.run();
   },
   async run() {
+    try {
     while (this.active) {
       const p = Game.player;
       if (!p || p.dead) { this.finish('道途中断'); return; }
@@ -95,6 +96,12 @@ const AutoCult = {
       }
       if (this.reached(p2)) { this.finish('目标达成'); return; }
       await Utils.sleep(280);
+    }
+    } catch (err) {
+      // v30 自愈：单轮异常不再让循环静默死亡（active 挂真）——记日志、停表、交回手动
+      console.error('自动修炼异常:', err);
+      Log.add('自动修炼忽遇一丝紊乱，自行为你停了下来——修为与存档均无碍。', 'warn');
+      this.finish('异常自愈');
     }
   },
   reached(p) {

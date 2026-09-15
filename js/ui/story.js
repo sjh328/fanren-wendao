@@ -193,7 +193,9 @@ const Story = {
     let guard = 0;
     while (this.cur && guard++ < 300) {
       const sc = this.cur.scenes[this.cur.idx];
-      if (sc && (sc.t === 'choice' || sc.t === 'battle')) break;
+      // v30 修瑕：investigate（细察）同样自停——原被直接翻过，四处线索旗标静默丢失，
+      // 依赖这些旗标的后续分支场景（c7_open/c9_open）永久不可见
+      if (sc && (sc.t === 'choice' || sc.t === 'battle' || sc.t === 'investigate')) break;
       this.next();
     }
     this.stopAuto();
@@ -206,7 +208,7 @@ const Story = {
       const c = this.cur;
       if (!c || c.readonly) return this.stopAuto();
       const sc = c.scenes[c.idx];
-      if (sc && (sc.t === 'choice' || sc.t === 'battle')) { this.stopAuto(); this.render(); return; }
+      if (sc && (sc.t === 'choice' || sc.t === 'battle' || sc.t === 'investigate')) { this.stopAuto(); this.render(); return; }
       this.next();
       if (!this.cur) this.stopAuto();
     }, 2400);

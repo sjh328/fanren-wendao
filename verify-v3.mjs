@@ -433,7 +433,7 @@ try {
     const w = p.world;
     (w.magicMaps.length > 0 || w.preachUntil > 0 || w.ruinsUntil > 0 || w.warUntil > 0
       || w.lingchaoUntil > 0 || (w.beastMaps || []).length > 0
-      || ['xianmen', 'meteor'].includes((w.pending || {}).type))
+      || ['xianmen', 'meteor', 'zhongbao', 'neiluan', 'qiren', 'lingyi'].includes((w.pending || {}).type))   // v30：新增四类 NPC 牵连型大事（抉择型，无永久旗标）
       ? pass('V4 大事件永久改变世界格局（v20 八类其一）') : fail('V4 永久格局', JSON.stringify(w));
     const logTxt = await text(page, '#log');
     logTxt.includes('天下大事') ? pass('V4 大事件日志播报') : fail('V4 事件日志', logTxt.slice(-80));
@@ -543,7 +543,7 @@ try {
   {
     // 种子：大乘圆满 + 孽障300（天劫威力700，成算≈3%必败）+ 与n3有宿怨
     await seedAndLoad({
-      name: '转世道人', realmIdx: 7, layer: 3, exp: 8000000,
+      name: '转世道人', realmIdx: 7, layer: 3, exp: 63750000,
       karma: 300, insight: 0, dao: 'sword', sect: null, canReincarnate: false, reinc: null,
       bag: { w_zhuxian: 1, pill_liaoshang: 3 },
       npcs: { n3: { realmIdx: 1, layer: 0, exp: 0, rel: -50, alive: true, map: 'village', met: true, grudge: true, pastLife: false } },
@@ -562,7 +562,7 @@ try {
       let p = await player(page);
       if (p.realmIdx >= 8) { // 3% 天幸成功 → 重试一次
         console.log('  - V6 天劫意外成功，重试');
-        await seedAndLoad({ name: '转世道人', realmIdx: 7, layer: 3, exp: 8000000, karma: 300, insight: 0, dao: 'sword', sect: null, canReincarnate: false, reinc: null });
+        await seedAndLoad({ name: '转世道人', realmIdx: 7, layer: 3, exp: 63750000, karma: 300, insight: 0, dao: 'sword', sect: null, canReincarnate: false, reinc: null });
         await page.evaluate(() => { NpcSys.tribAmbush = () => null; });
         await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
         await sleep(300);

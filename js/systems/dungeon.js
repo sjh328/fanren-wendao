@@ -19,8 +19,9 @@ const DungeonSys = {
     UI.toast(`窥探结果：${info}`);
     Log.add(`你以符箓为媒，灵光一闪窥得前路——${info}。`, 'info');
   },
-  /** v29：秘境门票——按推荐境界灵石经济 ×0.6 定价，入历一次一付 */
-  ticketOf(R) { return Math.round(GameData.stoneEco(R.recRealm) * 0.6); },
+  /** v29：秘境门票——按推荐境界灵石经济定价，入历一次一付
+   *  v30 复核：×0.6 只占单次满通关收入约 0.2%，形同虚设——提至 ×2（约占 0.7%，保门票体感） */
+  ticketOf(R) { return Math.round(GameData.stoneEco(R.recRealm) * 2); },
   enter(idx) {
     const p = Game.player;
     if (Battle.active || p.dead) return;
@@ -73,9 +74,10 @@ const DungeonSys = {
   makeEnemy(R, depth, forceElite = false) {
     const mid = Utils.pick(R.pool);
     const target = R.recRealm * 4 + Math.floor(depth * 0.8);
-    const e = buildMonster(mid, Math.max(0, target - GameData.MONSTERS[mid].power));
-    if (forceElite || Utils.chance(12 + depth * 3)) {
-      e.elite = true;
+    // v30 修瑕：精英基线改由 buildMonster 统一（原事后置 e.elite=true，吃词缀却吃不到 crit 基线）
+    const wantElite = forceElite || Utils.chance(12 + depth * 3);
+    const e = buildMonster(mid, Math.max(0, target - GameData.MONSTERS[mid].power), { elitePlus: wantElite });
+    if (wantElite) {
       e.hpMax = Math.round(e.hpMax * 1.6);
       e.atk = Math.round(e.atk * 1.3);
       e.expGain = Math.round(e.expGain * 2);
@@ -288,8 +290,13 @@ const DungeonSys = {
     if (boss) {
       const gf = this.grantLostGongfa(p);
       Bag.addItem('m_gupian', 3);
-      const stones = Math.round(Utils.rand(60, 100) * GameData.stoneEco(R.recRealm) * 2);
-      Bag.addStones(stones);
+      // v30 堵漏：Boss 灵石每秘境每日限一次——此前门票占通关收入 0.2%，Boss 巨款可无限复刷
+      p.counters.bossStoneDay = p.counters.bossStoneDay || {};
+      const _today2 = Math.floor(p.day || 0);
+      const stoneOk = p.counters.bossStoneDay[R.id] !== _today2;
+      if (stoneOk) p.counters.bossStoneDay[R.id] = _today2;
+      const stones = stoneOk ? Math.round(Utils.rand(60, 100) * GameData.stoneEco(R.recRealm) * 2) : 0;
+      if (stones > 0) Bag.addStones(stones);
       // v29：Boss 气运每秘境每日限一次——重复通关不再无限灌气运（配合 KarmaSys 气运软上限 150）
       p.counters.bossFortuneDay = p.counters.bossFortuneDay || {};
       const _today = Math.floor(p.day || 0);
@@ -305,7 +312,7 @@ const DungeonSys = {
       p.counters.clearedRealms = p.counters.clearedRealms || {};
       p.counters.clearedRealms[R.id] = 1;
       p.counters.dungeonClears = Object.keys(p.counters.clearedRealms).length;
-      Log.add(`<b>${R.name}</b> 最深处的宝库向你敞开！${gf ? `失传功法【${gf}】、` : '上古法宝碎片 ×2、'}上古法宝碎片 ×3、灵石 ${Utils.fmtNum(stones)}——你满载而归！${fortuneTxt}`, 'gain');
+      Log.add(`<b>${R.name}</b> 最深处的宝库向你敞开！${gf ? `失传功法【${gf}】、` : '上古法宝碎片 ×2、'}上古法宝碎片 ×3、${stones > 0 ? `灵石 ${Utils.fmtNum(stones)}` : '宝库灵石今日已被你取过（不再进益）'}——你满载而归！${fortuneTxt}`, 'gain');
       p.dungeon = null;
       Log.add('你退出秘境，回望雾中洞口，只觉造化玄奇。', 'system');
       return;

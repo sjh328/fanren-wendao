@@ -392,6 +392,23 @@ const QuestSys = {
   },
   destLabel(go) { return this.DEST[go] || ''; },
   /** v12 有效章节序号：跳过「境界已领先、目标全部自动追认」的章节（正式结算仍在 check 中逐章进行） */
+  /** v30 内容完成度总览：个人线/图鉴/成就三组计数（反「漏看」仪表） */
+  _personalDone(p) {
+    return Object.entries(p.personal || {}).filter(([id, n]) => GameData.PERSONAL[id] && n >= GameData.PERSONAL[id].acts.length).length;
+  },
+  _codexCount() {
+    if (typeof Meta === 'undefined' || typeof Codex === 'undefined') return [0, 1];
+    let got = 0, total = 0;
+    for (const cat of ['gongfa', 'artifact', 'monster', 'npc', 'realm']) {
+      total += Codex.catalog(cat).length;
+      got += Object.keys((Meta.data.codex || {})[cat] || {}).length;
+    }
+    return [got, total];
+  },
+  _achvCount() {
+    if (typeof Meta === 'undefined' || typeof Achieve === 'undefined') return [0, 1];
+    return [Object.keys(Meta.data.achv || {}).length, (Achieve.DEFS || []).length];
+  },
   currentChapterIdx(p) {
     const q = p.quest || { ch: 0 };
     let ch = Math.min(q.ch, this.CHAPTERS.length - 1);
@@ -444,12 +461,59 @@ const QuestSys = {
     if (!def || !def.bonus || q.bonus[def.id]) { UI.toast('此助缘已领赏或不存在'); return; }
     if (!this.bonusDone(def, p)) { UI.toast('助缘尚未达成'); return; }
     q.bonus[def.id] = Math.floor(p.day);
-    this.grant(def.bonus.reward);
+    this.grant(def.bonus.reward, idx);
     Log.add(`✦ 助缘功成 · ${def.bonus.desc} ——【酬谢】${this.rewardText(def.bonus.reward)}`, 'gain');
     UI.toast('助缘功成，酬谢已入囊中');
     Story.chron(`第${this.CN9[idx]}章助缘达成`);
     UI.renderAll();
     Save.autoSave(true);
+  },
+  /** v30 修瑕：门前影重战——原终章剧情战一败，gateShadowSlain/beyondGate 永不置位，
+   *  全属性 +3% 与成就「仙门之外」本世永锁（败北文案却写「来日再答不迟」）。
+   *  胜后以现场剧本续演门后天地（三问抉择照常发放残玉终响），败后须静修一年再战。 */
+  async rebattleGateShadow() {
+    const p = Game.player;
+    if (!p || p.dead) return;
+    if (Story.active() || Battle.active) return;
+    if ((p.flags || {}).gateShadowSlain) { UI.toast('门前影早已伏诛'); return; }
+    if (p.realmIdx < 9) { UI.toast('须真仙之境方可再叩问道之门'); return; }
+    const retryDay = (p.flags || {}).gateShadowRetry || 0;
+    if (Math.floor(p.day || 0) - retryDay < 360) { UI.toast('影子说「时候未到」——静修一年后再来'); return; }
+    const ok = await UI.popup({
+      title: '⚔ 仙门旧影 · 再战',
+      html: `星海尽头，那道与你形影不离的影子仍在门阙下拔剑而立。<br>
+        两世问道的最后一问，这一次，你要亲自作答。<br><span class="tip-line">· 若再败，须静修一年方可再战；若胜，门后天地自开。</span>`,
+      options: [{ text: '踏阶而战', value: true, primary: true }, { text: '再等等', value: false }],
+    });
+    if (!ok) return;
+    const pw = 44;
+    const rIdx = Utils.clamp(Math.floor(pw / 4), 0, 9);
+    const enemy = {
+      id: null, name: '门前影 · 两世之我', elite: true, power: pw, bossArt: 'xuanYing',
+      realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(pw % 4, 0, 3)],
+      hpMax: Math.round((55 + Math.pow(pw, 1.6) * 5) * 1.7 * 1.1),
+      atk: Math.round((6 + pw * 2.6) * 1.35 * 1.1),
+      def: Math.round((4 + pw * 2.2) * 1.1), spd: Math.round(7 + pw * 0.9),
+      dodge: 5, crit: 8, skills: [],
+      expGain: Math.round(30 * GameData.eco(rIdx)), stoneGain: 0, dropTier: 2, rareDrop: null, hp: 0,
+    };
+    Battle.start(null, { enemy, mapName: '问道门阙', story: {
+      onEnd: (win) => {
+        if (win) {
+          Story.setFlag('gateShadowSlain');
+          Story.chron('门前影 · 未竟之问终有答案');
+          // 续演门后天地：取终章胜后诸景（剔除战斗景与败北景），三问抉择照常发放残玉终响
+          const src = (GameData.STORIES.c10_end && GameData.STORIES.c10_end.scenes || []).slice(1).filter(s => !s.noFlag && s.t !== 'battle');
+          Story.play({ id: 'c10_regate', title: '终章 · 门后天地（续演）', scenes: src });
+        } else {
+          p.flags = p.flags || {};
+          p.flags.gateShadowRetry = Math.floor(p.day || 0);
+          Log.add('你又被自己击落在长阶上。影子收剑而立：「时候未到。」——静修一年，方可再战。', 'warn');
+          UI.toast('再战失利 · 一年后可再叩门');
+          Game.afterAction();
+        }
+      },
+    } });
   },
   /** v27 往章助缘补领清单：已完成但未领赏的前章助缘 */
   lateBonusList(p) {
@@ -537,7 +601,7 @@ const QuestSys = {
       UI.announce(`主线 · ${def.title} · 完结`, 'gold');
       Log.add(`✦ 主线推进 · 第${this.CN9[q.ch - 1]}章「${def.title}」完成！`, 'realm');
       DaoxinSys.attune(p, q.ch);   // v18 残玉共鸣 +1 重
-      this.grant(def.reward);
+      this.grant(def.reward, q.ch - 1);   // v30：基准境界=章序
       const rewardLine = `【章末奖励】${this.rewardText(def.reward)}`;
       const next = this.CHAPTERS[q.ch];
       const supSkipped = next && p.realmIdx >= (next.supR || 999);
@@ -579,8 +643,16 @@ const QuestSys = {
       }
     } finally { this.checking = false; }
   },
-  grant(reward) {
-    if (reward.stones) Bag.addStones(reward.stones);
+  grant(reward, baseR = null) {
+    // v30 修瑕：章节奖励随Claim时境界缩放（对齐成就灵石口径）——固定面值在 r5+ 形同虚设；
+    // 以内容设计基准境界 baseR 为锚，缩放封顶 60 倍，早领不吃亏、晚领不虚设
+    let stones = reward.stones || 0;
+    if (stones && baseR != null) {
+      const p = Game.player;
+      const diff = Math.min(6, p.realmIdx) - Math.min(6, baseR);
+      if (diff > 0) stones = Math.round(stones * Math.min(60, Math.pow(3.8, diff)));
+    }
+    if (stones) Bag.addStones(stones);
     if (reward.fortune) KarmaSys.addFortune(reward.fortune, true);
     for (const [id, n] of Object.entries(reward.items || {})) Bag.addItem(id, n);
   },
@@ -598,7 +670,7 @@ const QuestSys = {
     q.side[id] = true;
     UI.announce(`支线 · ${sd.title} · 了结`, 'gold');
     this.storyLog(`【支线结案 · ${sd.title}】`, sd.ending);
-    this.grant(sd.reward);
+    this.grant(sd.reward, sd.minRealm);
     Log.add(`【酬谢】${this.rewardText(sd.reward)}`, 'gain');
     // v19 NPC 绑定：结案增进交情、写入记忆与年表
     if (sd.npc) {
@@ -643,14 +715,26 @@ const QuestSys = {
         <span>支线了结 <b class="hl">${sideDoneN}/${this.SIDES.length}</b></span>
         <span>章助缘 <b class="hl">${bonusGotN}/${this.CHAPTERS.filter(d => d.bonus).length}</b></span>
         <span>残玉共鸣 <b class="hl">${p.jade || 0}/9</b></span>
+        <span>个人线 <b class="hl">${this._personalDone(p)}/${Object.keys(GameData.PERSONAL || {}).length}</b></span>
+        <span>图鉴 <b class="hl">${this._codexCount()[0]}/${this._codexCount()[1]}</b></span>
+        <span>成就 <b class="hl">${this._achvCount()[0]}/${this._achvCount()[1]}</b></span>
       </div>
     </div>`;
     let mainHtml;
     if (ch >= this.CHAPTERS.length) {
+      // v30 修瑕：门前影战败曾永久锁死 gateShadowSlain/beyondGate（全属性 +3% 与成就「仙门之外」
+      //          本世再不可得，而败北文案却写「来日再答不迟」）——问道页补「再战门前影」入口
+      const retryDay = (p.flags || {}).gateShadowRetry || 0;
+      const retryOk = Math.floor(p.day || 0) - retryDay >= 360;
+      const shadowHtml = (!p.flags || !p.flags.gateShadowSlain) && p.realmIdx >= 9 ? `
+        <div class="shop-section-title" style="margin-top:10px">◈ 仙门旧影 · 未竟之问</div>
+        <div class="tip-line">门阙下那道与你形影不离的影子仍在星海尽头等你——斩它的资格，要你自己挣来。</div>
+        <button class="btn btn-primary" data-action="quest-gate-shadow" ${retryOk ? '' : 'disabled'} style="margin-top:6px">
+          ⚔ 再战门前影${retryOk ? '' : '（须静修一年后再战）'}</button>` : '';
       mainHtml = `
       <div class="card quest-card">
         <div class="card-title">主线 · 问道九章（已圆满）</div>
-        <div class="card-desc">残玉化砂，仙路已成。三百年血案昭雪，你的故事却仍在继续——轮回转世，另有一番天地机缘。</div>
+        <div class="card-desc">残玉化砂，仙路已成。三百年血案昭雪，你的故事却仍在继续——轮回转世，另有一番天地机缘。</div>${shadowHtml}
       </div>`;
     } else {
       const def = this.CHAPTERS[ch];
@@ -848,7 +932,7 @@ const QuestSys = {
   /** 页签：人物志（主线角色 + 江湖修士的相逢与记忆） */
   archiveFigures(p) {
     const seen = (p.story && p.story.seen) || {};
-    const APPEAR = { c_laoren: null, c_ling: 'c1_mid', c_xuanying: 'c2_open', c_zongzhu: 'c5_open', c_zhenling: 'c5_open', c_shanggu: 'c6_mid', c_zhangmen: 'c7_open', c_xuanji: 'c7_mid' };
+    const APPEAR = { c_laoren: null, c_ling: 'c1_mid', c_xuanying: 'c2_open', c_zongzhu: 'c5_open', c_zhenling: 'c5_open', c_shanggu: 'c6_mid', c_zhangmen: 'c7_open', c_xuanji: 'c7_mid', c_baifa: 'c4_open', c_gatekeeper: 'c10_open' };   // v30 修瑕：补出场门槛（原开局即剧透终章守门人与黑玉令知情人）
     const rows = [];
     for (const [id, c] of Object.entries(GameData.CHARACTERS)) {
       const appearKey = APPEAR[id];

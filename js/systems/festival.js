@@ -76,6 +76,56 @@ const FestivalSys = {
       } else {
         Log.add('你抱臂看了一夜河灯，天明方归。', 'info');
       }
+    } else if (f.id === 'duanwu') {
+      // v30 端午：食粽驱邪 / 观舟得彩
+      if (auto) {
+        p.poison = Math.max(0, p.poison - 10);
+        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Log.add('（离线端午——邻里送来的粽子还温着。食粽驱邪，丹毒 -10，感悟 +2。）', 'info');
+        return;
+      }
+      const c = await UI.popup({
+        title: '✦ 端午龙舟 ✦',
+        html: '江面龙舟竞渡，鼓声震天。邻里提来一篮新粽，药铺挂起艾草菖蒲。',
+        options: [
+          { text: '食粽驱邪（丹毒 -15，感悟 +3）', value: 'zong', primary: true },
+          { text: '下注观舟（赌一手彩头）', value: 'boat' },
+        ],
+      });
+      if (c === 'zong') {
+        p.poison = Math.max(0, p.poison - 15);
+        p.insight = Math.min(100, (p.insight || 0) + 3);
+        Log.add('糯米裹着枣香下肚，一股暖流涤荡百脉——丹毒 -15，感悟 +3。', 'gain');
+      } else {
+        const win = Utils.chance(50);
+        const stake = Math.round(20 * GameData.stoneEco(p.realmIdx));
+        if (win) { Bag.addStones(stake * 2); Log.add(`你押的龙舟一马当先——彩头翻倍，灵石 +${Utils.fmtNum(stake * 2)}！`, 'gain'); }
+        else { Bag.spendStonesMax(stake); Log.add(`你押的龙舟半道散了队形——彩头落空，灵石 -${Utils.fmtNum(stake)}。`, 'loss'); }
+      }
+    } else if (f.id === 'chongyang') {
+      // v30 重阳：登高 / 插茱萸
+      if (auto) {
+        KarmaSys.addFortune(1);
+        Log.add('（离线重阳——你在洞府前远眺了一炷香，算登过了高。气运 +1。）', 'info');
+        return;
+      }
+      const c2 = await UI.popup({
+        title: '✦ 重阳登高 ✦',
+        html: '秋高气爽，正是登高时节。山径旁茱萸红得正好。',
+        options: [
+          { text: '登高望远（气运 +2，感悟 +2）', value: 'climb', primary: true },
+          { text: '遍插茱萸（气血灵力尽复，丹毒尽去）', value: 'zhuyu' },
+        ],
+      });
+      if (c2 === 'climb') {
+        KarmaSys.addFortune(2);
+        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Log.add('你一路登上最高处，天地忽然开阔——襟怀一畅，气运 +2，感悟 +2。', 'gain');
+      } else {
+        const st = Stat.compute(p);
+        p.hp = st.maxHp; p.mp = st.maxMp; p.poison = 0;
+        Log.add('茱萸别在襟前，草木清气入体——气血灵力尽复，丹毒尽去。', 'gain');
+      }
     } else if (f.id === 'zhongqiu') {
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;

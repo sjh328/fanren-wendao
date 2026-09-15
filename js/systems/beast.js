@@ -78,9 +78,12 @@ const BeastSys = {
     const p = Game.player;
     if (!B) return;
     B.over = true;
+    B.won = true;   // v30 修瑕：驯服战原不置 won，战斗回顾里全部记为负场
+    B._tame = true;   // v30：标记驯服场——邪修「每战孽障+1」不再结算（点到为止）
     p.counters.wins++;
     const gain = Math.round(B.enemy.expGain * 0.5);
     Cultivate.addExp(p, gain);
+    if (!fled && B.enemy.id) BountySys.onKill(B.enemy.id);   // v30 修瑕：目标已被驯走=目标已消除，悬赏猎杀照计进度（走脱不算）
     if (fled) Bag.addStones(Math.round(B.enemy.stoneGain * 0.3));
     Log.add(fled
       ? `兽虽走脱，你仍获修为 +${Utils.fmtNum(gain)}，并捡到些许灵石。`
@@ -102,15 +105,13 @@ const BeastSys = {
     for (const [k, v] of entries) out[k] = (out[k] || 0) + v;
     return out;
   },
-  /** v19 物种天生技能（灵兽五阶习得，九阶精进） */
+  /** v19 物种天生技能（灵兽五阶习得，九阶精进）——仅可驯五物种（v30 清理：ghost/construct 不可驯，条目为死数据） */
   SPECIES_SKILLS: {
     beast:    { name: '兽王撕咬', kind: 'bleed', pct: 3, rounds: 2 },
     snake:    { name: '淬毒獠牙', kind: 'poison', pct: 3, rounds: 3 },
     swarm:    { name: '蚀甲之群', kind: 'defdown', pct: 20, rounds: 2 },
     plant:    { name: '缠丝藤缚', kind: 'slow', pct: 25, rounds: 2 },
     element:  { name: '灵焰灼身', kind: 'burn', pct: 3.5, rounds: 2 },
-    ghost:    { name: '摄魂低语', kind: 'drain', mult: 1.15, leech: 0.4 },
-    construct:{ name: '铁壁守护', kind: 'guard', def: 30, rounds: 2 },
   },
   /** v20 十阶第二天生技（每物种另一路打法） */
   SPECIES_SKILLS2: {
@@ -119,31 +120,67 @@ const BeastSys = {
     swarm:    { name: '蚀魂之群', kind: 'mpburn', pct: 20 },
     plant:    { name: '盘根错节', kind: 'slow', pct: 30, rounds: 2 },
     element:  { name: '灵爆', kind: 'burn', pct: 5, rounds: 2 },
-    ghost:    { name: '慑心之嚎', kind: 'weaken', pct: 25, rounds: 2 },
-    construct:{ name: '地裂震波', kind: 'stun', rounds: 1 },
   },
-  /** 战斗中灵兽协助攻击（Battle.act 开头调用）：40% 几率出手 */
+  /** v30：人兽合击就绪判定（出战灵兽 + 亲昵 ≥60） */
+  comboReady(p) {
+    const b = this.activeBeast(p);
+    return !!(b && (b.bond || 0) >= 60);
+  },
+  /** 战斗中灵兽协助攻击（Battle.act 开头调用）
+   *  v30 合击 2.0：从「40% 定率扑一下」改策略驱动——主人刚普攻命中/连击层高时追击欲更强；
+   *  主人刚放法诀时，灵兽按物种呼应（兽撕咬/蛇淬毒/焰灼身/藤缚/群蚀甲） */
   async assist(st) {
     const B = Battle.active;
     const p = Game.player;
     const b = this.activeBeast(p);
-    if (!B || !b || B.over || !Utils.chance(40 + (b.bond || 0) * 0.1)) return false;   // v19 抚摸亲昵加成
+    if (!B || !b || B.over) return false;
+    const chase = 28 + (B.combo || 0) * 5 + (b.bond || 0) * 0.2 + (B.lastAct === 'attack' ? 15 : 0) + (typeof B.lastSkillTag === 'string' ? 10 : 0);
+    if (!Utils.chance(Utils.clamp(chase, 5, 80))) return false;   // v30：亲昵/连击/招式呼应皆入追击成算
     const dmg = Math.max(1, Math.round(st.atk * (0.22 + b.level * 0.03) * (1 + b.power * 0.02) * (b.evolved ? 1.3 : 1) * Utils.randF(0.8, 1.2)));   // v19 进化 ×1.3
     B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
     B.hitShake = true;
     if (B.stats) { B.stats.out += dmg; if (B.stats.src) B.stats.src.beast += dmg; }   // v20 伤害构成统计
     B.pushFloat('enemy', `-${dmg}`, 'dmg');
     // v18：灵兽技能实效化——施加真实技能效果（毒/流血/减益等）；v20 支持双技
+    // v30 修瑕：技能语义补全——原白名单缺 drain/mpburn/guard/heal/freeze，野性继承技与
+    //          傀儡/阴魂系招式被静默丢弃；现按语义分别结算（伤敌/削敌/护主/续主）
     let skillNote = '';
+    const mySt = Stat.compute(p);
     for (const sk of (b.skills || []).slice(0, 2)) {
-      if (sk.kind && ['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken', 'stun'].includes(sk.kind)) {
-        Battle.applyEnemyFx(B.enemy, { kind: sk.kind, pct: (sk.pct || 2) * 0.6, rounds: sk.rounds || 2 });
+      if (!sk.kind) continue;
+      if (['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken', 'stun', 'freeze'].includes(sk.kind)) {
+        Battle.applyEnemyFx(B.enemy, { kind: sk.kind, pct: (sk.pct || 2) * 0.6, rounds: sk.kind === 'freeze' || sk.kind === 'stun' ? 1 : (sk.rounds || 2) });
         skillNote += `【${sk.name}】`;
+      } else if (sk.kind === 'drain') {
+        const heal = Math.max(1, Math.round(dmg * (sk.leech || 0.4)));
+        p.hp = Math.min(mySt.maxHp, p.hp + heal);
+        skillNote += `【${sk.name}·汲摄回哺 +${heal}】`;
+      } else if (sk.kind === 'mpburn') {
+        const extra = Math.max(1, Math.round(dmg * 0.25));
+        B.enemy.hp = Math.max(0, B.enemy.hp - extra);
+        if (B.stats) { B.stats.out += extra; if (B.stats.src) B.stats.src.beast += extra; }
+        skillNote += `【${sk.name}·蚀魂 +${extra}】`;
+      } else if (sk.kind === 'guard') {
+        StatusFx.add(B.myFx, { kind: 'shield', pct: 20, rounds: 2 });
+        skillNote += `【${sk.name}·护主金光】`;
+      } else if (sk.kind === 'heal') {
+        const heal = Math.max(1, Math.round(mySt.maxHp * 0.08));
+        p.hp = Math.min(mySt.maxHp, p.hp + heal);
+        skillNote += `【${sk.name}·回春 +${heal}】`;
       }
     }
     B.log(`${skillNote}你的灵兽 <b>${b.name}</b> 亦张牙舞爪扑上助战——造成 <b>${dmg}</b> 点伤害！`, 'log-gain');
     Battle.render();
     await Battle.wait(360);
+    // v30：法诀呼应——主人刚施展过法诀，灵兽以天生属性补一手侵扰（五成几率）
+    if (B.lastSkillTag && B.enemy.hp > 0 && Utils.chance(50)) {
+      const echo = { beast: ['bleed', 3, 2], snake: ['poison', 3, 2], element: ['burn', 3, 2], plant: ['slow', 20, 2], swarm: ['defdown', 18, 2] }[b.species];
+      if (echo) {
+        Battle.applyEnemyFx(B.enemy, { kind: echo[0], pct: echo[1], rounds: echo[2] });
+        Battle.render();
+        await Battle.wait(300);
+      }
+    }
     return B.enemy.hp <= 0;
   },
   /** 喂食内丹：+500 灵兽经验 */
@@ -202,7 +239,7 @@ const BeastSys = {
     if (!b) return;
     if (b.evolved) { UI.toast('它已完成蜕变'); return; }
     if (b.level < 10) { UI.toast('需修至十阶圆满方可蜕变'); return; }
-    const cost = Math.round(8000 * Math.pow(2.2, Math.min(8, p.realmIdx)));   // v29：封顶 5→8
+    const cost = Math.round(8000 * GameData.sinkCurve(p.realmIdx) / 2.2);   // v30：曲线族统一（原 2.2^min(8,r) 封顶）
     const ok = await UI.popup({
       title: `灵兽蜕变 · ${b.name}`,
       html: `${b.name} 已至十阶圆满，妖气内蕴——以五枚【妖兽内丹】引其蜕凡成王。<br>蜕变后：<b>战力 +5、被动 ×1.4、协战 ×1.3</b>，名称冠以「王」号。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span> 与【妖兽内丹】×5（持有 ${Bag.count('m_neidan')}）。`,
@@ -275,11 +312,14 @@ const BeastSys = {
     b.trip = null;
     Game.afterAction();
   },
-  /** v20 斗兽场：押注观战，胜得 1.6 倍彩头 */
+  /** v20 斗兽场：押注观战，胜得 1.6 倍彩头（v30：日限三场，防满养成兽正期望无限复投） */
   async arena() {
     const p = Game.player;
     const b = this.activeBeast(p);
     if (!b) { UI.toast('需先有一头出战灵兽'); return; }
+    p.counters.arena = p.counters.arena || { day: 0, n: 0 };
+    if (p.counters.arena.day !== Math.floor(p.day || 0)) { p.counters.arena.day = Math.floor(p.day || 0); p.counters.arena.n = 0; }
+    if (p.counters.arena.n >= 3) { UI.toast('今日斗兽场已罢（日限三场）——明日再来'); return; }
     const eco = GameData.stoneEco(Math.min(5, p.realmIdx));
     const tiers = [
       { name: '小注', base: 100 },
@@ -294,12 +334,14 @@ const BeastSys = {
     if (pick == null) return;
     const cost = Math.round(tiers[pick].base * eco);
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    p.counters.arena.n++;
     Time.add(1);
     // v29 修瑕：对手同权重吃养成项（阶数/蜕变/亲昵）——此前 oppScore 只看 power，
     // 养成后胜率远超盈亏点（赔付 1.8 倍），斗兽场成了正期望印钞机
+    // v30 复核：满养成兽仍 +20%~47% 期望——对手阶数/蜕变分布再压一档并加日限三场
     const oppPower = Utils.clamp(Math.round(b.power * Utils.randF(0.8, 1.3)), 1, 60);
-    const oppLevel = Math.max(1, b.level + Utils.rand(-1, 2));
-    const oppEvo = Utils.chance(Utils.clamp(15 + b.level * 7, 0, 55));
+    const oppLevel = Math.max(1, b.level + Utils.rand(-1, 3));
+    const oppEvo = Utils.chance(Utils.clamp(18 + b.level * 7, 0, 75));
     const oppBond = Utils.rand(0, Math.max(12, b.bond || 0));
     const myScore = b.power + b.level * 2 + (b.evolved ? 8 : 0) + (b.bond || 0) / 10 + Utils.rand(0, 10);
     const oppScore = oppPower + oppLevel * 2 + (oppEvo ? 8 : 0) + oppBond / 10 + Utils.rand(0, 10);

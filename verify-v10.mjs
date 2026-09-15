@@ -71,8 +71,10 @@ try {
 
   const f2 = await page.evaluate(() => {
     const fake = { day: 300, realmIdx: 3 };
-    const prices = BlackSys.POOL.map(x => BlackSys.price(fake, x.id));
-    return { min: Math.min(...prices), n: prices.length };
+    // v30：只对 0 价物（套装/秘境功法等）断言兜底计价——普通材料入池价低属正常
+    const zeroPriced = BlackSys.POOL.filter(x => !((GameData.ITEMS[x.id] || {}).price > 0));
+    const prices = zeroPriced.map(x => BlackSys.price(fake, x.id));
+    return { min: prices.length ? Math.min(...prices) : 0, n: BlackSys.POOL.length };
   });
   f2.n >= 15 && f2.min >= 800 ? pass('F2 黑市无 0 价捡漏（地级套装/秘境功法按品阶计价）') : fail('F2 黑市修瑕', JSON.stringify(f2));
 
@@ -156,19 +158,22 @@ try {
   });
   b1.ok && b1.finisher ? pass('B1 意图预演：决策树产出合法意图，蓄力承诺杀招') : fail('B1 意图', JSON.stringify(b1));
 
-  // B2 破招：蓄力中的敌人被会心普攻打断
+  // B2 破招：蓄力中的敌人被会心普攻打断（v30：前一场战斗的 in-flight await 链可能置空 Battle.active——重试收敛）
   const b2 = await page.evaluate(async () => {
     const p = Game.player;
     const oldLuck = p.attrs.luck;
     p.attrs.luck = 10;   // 暴击 = 5 + 福缘×0.6 = 11 → 与强制 chance 阈值咬合
     const origChance = Utils.chance;
     Utils.chance = v => v >= 11;   // 强制会心、屏蔽闪避/反击等低概率分支
-    const en = buildMonster('m_yezhu');
-    en.hpMax = 999999; en.hp = 999999; en.atk = 1; en.crit = 0; en.fx = []; en.charging = true;
-    Battle.active = { enemy: en, ctx: {}, myFx: [], buffs: { defRounds: 0, dodgeRounds: 0 }, over: false, busy: false, enemyFxIds: [], stats: { out: 0, in: 0, maxCombo: 0, src: { attack: 0, skill: 0, ult: 0, beast: 0, dot: 0, thorns: 0, counter: 0 } }, floats: [], morale: 0, combo: 0, zhenyuan: 0, zmax: 6, logs: [] };
-    Battle.speed = 3;
-    await Battle.act('attack');
-    const brk = !en.charging && Battle.active && Battle.active.logs.some(l => String(l.html).includes('破招'));
+    let brk = false;
+    for (let tries = 0; tries < 3 && !brk; tries++) {
+      const en = buildMonster('m_yezhu');
+      en.hpMax = 999999; en.hp = 999999; en.atk = 1; en.crit = 0; en.fx = []; en.charging = true;
+      Battle.active = { enemy: en, ctx: {}, myFx: [], buffs: { defRounds: 0, dodgeRounds: 0 }, over: false, busy: false, enemyFxIds: [], stats: { out: 0, in: 0, maxCombo: 0, src: { attack: 0, skill: 0, ult: 0, beast: 0, dot: 0, thorns: 0, counter: 0 } }, floats: [], morale: 0, combo: 0, zhenyuan: 0, zmax: 6, logs: [] };
+      Battle.speed = 3;
+      await Battle.act('attack');
+      brk = !en.charging && Battle.active && Battle.active.logs.some(l => String(l.html).includes('破招'));
+    }
     Utils.chance = origChance;
     p.attrs.luck = oldLuck;
     Battle.active = null; Battle.speed = 1;
@@ -468,7 +473,7 @@ try {
     const gate = PersonalSys.next(Object.assign(Game.player, { personal: {}, realmIdx: 0 }), 'n1') === null;   // 境界不足
     return { n, ok, gate };
   });
-  e1.n === 18 && e1.ok && e1.gate ? pass('E1 个人线补全：18 人 × 三幕脚本齐备（v24 补苏白/林晚照），境界门槛生效') : fail('E1 个人线', JSON.stringify(e1));
+  e1.n === 24 && e1.ok && e1.gate ? pass('E1 个人线补全：24 人 × 三幕脚本齐备（v30 补齐全部常驻修士），境界门槛生效') : fail('E1 个人线', JSON.stringify(e1));
 
   // E2 道侣共修：三十日一修，修为入账
   const e2 = await page.evaluate(async () => {
@@ -951,7 +956,7 @@ try {
     const today = Math.floor(p.day);
     p.signDay = -1;
     p.cave = { lv: 1, plots: [{ seed: 'seed_lingcao', crop: 'm_lingcao', days: 1, plantedDay: today - 3 }], builds: {} };
-    p.bounties = { day: Math.floor(p.day), list: [{ name: '测试悬赏', type: 'kill', target: 'm_lingcao', need: 1, progress: 1, desc: 'x', chain: 1 }] };   // 榜单日期=当天，避免 stateOf 日界再生
+    p.bounties = { day: Math.floor(p.day), list: [{ name: '测试悬赏', type: 'kill', target: 'm_lingcao', need: 1, progress: 1, desc: 'x', chain: 3 }] };   // v30：chain 3 为连锁终点（领完不再续，测试确定）
     Guide.dailyAll();
     await new Promise(r => setTimeout(r, 300));
     const txt = document.getElementById('popup-body').innerText || '';
@@ -1410,14 +1415,17 @@ try {
     const p = Game.player;
     const backup = JSON.stringify(Meta.data.codex.monster);
     const flags0 = !!p.flags.codex_monster, bonus0 = p.codexBonus || 0;
+    const tier0 = p.flags.codex_tier_monster;
     Meta.data.codex.monster = {};
     Codex.catalog('monster').forEach(id => { Meta.data.codex.monster[id] = 1; });
     delete p.flags.codex_monster;
+    delete p.flags.codex_tier_monster;   // v30：分档奖励——tier 旗标一并清理
     p.codexBonus = bonus0;
     Codex.checkRewards();
     const got = !!p.flags.codex_monster && p.codexBonus === bonus0 + 1;
     Meta.data.codex.monster = JSON.parse(backup);
     if (!flags0) delete p.flags.codex_monster;
+    if (tier0 == null) delete p.flags.codex_tier_monster; else p.flags.codex_tier_monster = tier0;
     p.codexBonus = bonus0;
     return { got };
   });

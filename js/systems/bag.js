@@ -166,13 +166,19 @@ const Bag = {
     const curId = cur ? Utils.eqId(cur) : null;
     if (curId) {
       const curDef = GameData.ITEMS[curId];
-      const fmt = b => Object.entries(b || {}).map(([k, v]) => `${({ atk: '攻击', def: '防御', hp: '气血', mp: '灵力', spd: '身法', atkPct: '攻击%', defPct: '防御%', hpPct: '气血%', mpPct: '灵力%', spdPct: '身法%', crit: '暴击', dodge: '闪避', block: '格挡', cult: '修炼%' }[k] || k)  }+${v}`).join('，') || '无';
+      const fmt = b => Object.entries(b || {}).map(([k, v]) => `${({ atk: '攻击', def: '防御', hp: '气血', mp: '灵力', spd: '身法', atkPct: '攻击%', defPct: '防御%', hpPct: '气血%', mpPct: '灵力%', spdPct: '身法%', crit: '暴击', dodge: '闪避', block: '格挡', cult: '修炼%', luck: '福缘', stonePct: '灵石%' }[k] || k)  }+${v}`).join('，') || '无';
       const oldEnh = cur && typeof cur === 'object' ? (cur.enhance || 0) : ((p.enhanced || {})[curId] || 0);
       const inhOre = Math.ceil(oldEnh * 1.5);
       const canInh = oldEnh > 0 && Bag.count('m_xuantie') >= inhOre;
       // v20 推荐标记：攻击2倍/防御1.5倍/气血0.3倍/暴击闪避1倍加权估分
       const score = b => Object.entries(b || {}).reduce((acc, [k, v]) => acc + ({ atk: v * 2, atkPct: v * 2, def: v * 1.5, defPct: v * 1.5, hp: v * 0.3, hpPct: v * 0.3, mp: v * 0.2, mpPct: v * 0.2, spd: v, spdPct: v, crit: v, dodge: v, block: v * 0.5, cult: v, stonePct: v, luck: v * 2 }[k] ?? 0), 0);
-      const newBetter = score(def.bonus) > score(curDef.bonus) * (1 + oldEnh * 0.1);
+      // v30 修瑕：对比估分纳入前缀词缀（原只看白板 bonus，带词缀的旧装被系统性低估）
+      const affixScore = inst => {
+        if (!inst || typeof inst !== 'object' || !inst.affixes || !inst.affixes.prefix) return 0;
+        const d = ForgeSys.affixDef('prefix', inst.affixes.prefix);
+        return d && d.bonus ? score(d.bonus) : 0;
+      };
+      const newBetter = score(def.bonus) > score(curDef.bonus) * (1 + oldEnh * 0.1) + affixScore(cur);
       const ok = await UI.popup({
         title: '装备对比',
         html: `<div class="stat-line"><span>当前${newBetter ? '' : ' <span class="tag safe">推荐</span>'}</span><b>${curDef.name}${oldEnh ? ' +' + oldEnh : ''}</b></div>
@@ -194,7 +200,10 @@ const Bag = {
         const carried = Math.min(ForgeSys.MAX_LV, Math.ceil(oldEnh * 0.6));
         // 旧装备随炉而化：不回包，其强化一并转入新装备（不再留档）
         if (p.enhanced && p.enhanced[curId]) delete p.enhanced[curId];
+        // v30：旧装词缀随炉而化，留档一并清除
+        if (p.affixKept && p.affixKept[curId]) delete p.affixKept[curId];
         p.equipped[slot] = { id: itemId, enhance: carried };
+        this.restoreAffix(p, itemId, p.equipped[slot]);
         Log.add(`炉火重燃——你将【${curDef.name}】化入【<b>${def.name}</b>】的器胚，强化承其 <b>${carried}</b> 级。`, 'gain');
         Ambience.sfx('forge');
         Game.afterAction();
@@ -210,14 +219,34 @@ const Bag = {
         p.enhanced = p.enhanced || {};
         p.enhanced[old.id] = Math.max(p.enhanced[old.id] || 0, old.enhance);
       }
+      // v30 修瑕：旧装备的词缀同样留档——原换装即丢词缀，洗练投入无声蒸发
+      this.keepAffix(p, old);
       Bag.addItem(old.id, 1); // 旧装备回包
     }
     // v20 修瑕：新装备只继承「同 id 祭炼心得」，不再跨 id 继承旧装备的强化
     p.equipped[slot] = { id: itemId, enhance: (p.enhanced && p.enhanced[itemId]) || 0 };
     // 从 p.enhanced 中清除（现由槽位实例持有）
     if (p.enhanced && p.enhanced[itemId]) delete p.enhanced[itemId];
+    // v30：词缀留档还原到新实例（洗练过的词缀换装再穿不重掷）
+    this.restoreAffix(p, itemId, p.equipped[slot]);
     Log.add(`你装备了 <b>${def.name}</b>。`, 'gain');
     Game.afterAction();
+  },
+  /** v30 词缀留档：卸下/换装时把实例词缀存入 p.affixKept[id]（与强化心得留档对称） */
+  keepAffix(p, inst) {
+    if (!inst || typeof inst !== 'object' || !inst.affixes) return;
+    const id = Utils.eqId(inst);
+    if (!id) return;
+    p.affixKept = p.affixKept || {};
+    p.affixKept[id] = { ...inst.affixes };
+  },
+  /** v30 词缀还原：装备时把留档词缀写回实例（有留档不重掷，无留档走惰性补掷） */
+  restoreAffix(p, itemId, inst) {
+    if (!inst) return;
+    if (p.affixKept && p.affixKept[itemId]) {
+      inst.affixes = { ...p.affixKept[itemId] };
+      delete p.affixKept[itemId];
+    }
   },
   unequip(slot) {
     const p = Game.player;
@@ -228,6 +257,8 @@ const Bag = {
       if (!p.enhanced) p.enhanced = {};
       p.enhanced[eq.id] = Math.min(eq.enhance, ForgeSys.MAX_LV);
     }
+    // v30 修瑕：卸下时词缀一并留档——原实例丢弃即词缀重掷，洗练投入无声蒸发
+    this.keepAffix(p, eq);
     Bag.addItem(eq.id, 1);
     Log.add(`你卸下了 ${GameData.ITEMS[eq.id].name}。`, 'info');
     p.equipped[slot] = null;
@@ -246,15 +277,20 @@ const Bag = {
     const stones = Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2)));
     const ok = await UI.popup({
       title: `分解 · ${def.name}`,
-      html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br><span class="neg">分解之物与其祭炼心得将一并化去，无法找回。</span>`,
+      html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br><span class="neg">分解之物与其祭炼心得、词缀将一并化去，无法找回。</span>`,
       options: [{ text: '分 解', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
     this.removeItem(itemId, 1);
     if (enh) delete p.enhanced[itemId];
+    // v30：分解同清词缀留档
+    if (p.affixKept && p.affixKept[itemId]) delete p.affixKept[itemId];
+    // v30：分解产「器魂」——重铸词缀的新货币（品阶越高、强化越深，器魂越多）
+    const qihun = 2 + (def.grade || 0) * 2 + enh;
+    p.qihun = (p.qihun || 0) + qihun;
     Bag.addItem('m_xuantie', oreBack);
     Bag.addStones(stones);
-    Log.add(`你将【${def.name}】投入熔炉——得玄铁矿 ×${oreBack}、灵石 ${Utils.fmtNum(stones)}。`, 'gain');
+    Log.add(`你将【${def.name}】投入熔炉——得玄铁矿 ×${oreBack}、灵石 ${Utils.fmtNum(stones)}、器魂 ×${qihun}。`, 'gain');
     Game.afterAction();
   },
   async drop(itemId) {
@@ -305,7 +341,7 @@ const Pill = {
     if (effect.hpPct) { p.hp = Math.min(st.maxHp, p.hp + Math.round(st.maxHp * effect.hpPct / 100)); effectText.push(`气血 +${effect.hpPct}%`); }
     if (effect.mpPct) { p.mp = Math.min(st.maxMp, p.mp + Math.round(st.maxMp * effect.mpPct / 100)); effectText.push(`灵力 +${effect.mpPct}%`); }
     if (effect.curePoison) { p.poison = Math.max(0, p.poison - effect.curePoison); effectText.push(`丹毒 -${effect.curePoison}`); }
-    if (effect.insight) { p.insight = Math.min(100, p.insight + effect.insight); effectText.push(`突破感悟 +${effect.insight}`); }
+    if (effect.insight) { Cultivate.addInsight(p, effect.insight); effectText.push(`突破感悟 +${effect.insight}`); }   // v30 修瑕：走单源（溢出折修为，原直接写 insight 高位蒸发）
     // v29 天年：延寿丹（增益上限为该境基准五成）与渡劫丹（一丹一劫的识海印记）
     if (effect.life) {
       const base = GameData.LIFESPAN[p.realmIdx] || 120;

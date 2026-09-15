@@ -78,9 +78,9 @@ try {
     ? pass('TA22 滚动只在切页时 + 日志相邻去重 ×N') : fail('TA22 体验件', '');
   js.includes('SELL_CAP = 80') && js.includes("box.remove(); }, 5000)")
     ? pass('TA23 出售区惰性渲染 + 结算卡 5s 可点击') : fail('TA23 体验件', '');
-  html.includes('style.css?v=45') && html.includes('game.js?v=45') && html.includes('media="print"')
-    ? pass('TA24 缓存号 v=45 + 字体异步加载') : fail('TA24 缓存号/字体', '');
-  fs.readFileSync('sw.js', 'utf8').includes("const VERSION = 'fanren-wd-v4';")
+  html.includes('style.css?v=46') && html.includes('game.js?v=46') && html.includes('media="print"')
+    ? pass('TA24 缓存号 v=46 + 字体异步加载') : fail('TA24 缓存号/字体', '');
+  fs.readFileSync('sw.js', 'utf8').includes("const VERSION = 'fanren-wd-v5';")
     ? pass('TA25 SW 版本 v4') : fail('TA25 SW', '');
   !js.includes('BREAKTHROUGH: {') && !js.includes('rushMul(p)') && js.includes('function depth2')
     ? pass('TA26 死代码清除（BALANCE 数值双轨 / rushMul / depth2 归位）') : fail('TA26 死代码', '');
@@ -179,7 +179,7 @@ try {
   eco.ticket > 0 ? pass(`TC6 秘境门票实装（首座 ${eco.ticket} 灵石）`) : fail('TC6 门票', '');
   eco.fortuneCapped ? pass('TC7 气运软上限生效') : fail('TC7 气运', '');
   eco.bountyFloor ? pass('TC8 悬赏材料赏格 ≥ 卖店两倍') : fail('TC8 悬赏', '');
-  eco.eventYear <= 45 && eco.eventYear >= 25 ? pass(`TC9 世界大事首次 ${eco.eventYear} 年（原 100）`) : fail('TC9 大事年份', String(eco.eventYear));
+  eco.eventYear <= 14 && eco.eventYear >= 10 ? pass(`TC9 世界大事首次 ${eco.eventYear} 年（v30 与修为曲线同校）`) : fail('TC9 大事年份', String(eco.eventYear));
   eco.farmRatio >= 2 && eco.farmRatio <= 2.5 ? pass(`TC10 灵田期望 ≈ 种子×2.2（灵芝 ×${eco.farmRatio}）`) : fail('TC10 灵田', String(eco.farmRatio));
 
 

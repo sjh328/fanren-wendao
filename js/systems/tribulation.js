@@ -35,6 +35,8 @@ const Tribulation = {
   async run(bonus = 0) {
     const p = Game.player;
     const target = p.realmIdx + 1;
+    // v30 护栏：天劫进行中拒绝重入——闭关循环曾可在劫弹窗未决时反复调 run（连环吞渡劫丹/覆写回溯备份）
+    if (this.state) return;
     Save.write('bak', Game.player);   // v6：冲关之前，自动备份至临时槽位，失利可回溯
     // v29 天年：渡劫丹——药力应劫而化，成算 +5（一丹一劫，引动天劫即耗，失利不返还）
     p.flags = p.flags || {};
@@ -53,6 +55,18 @@ const Tribulation = {
     };
     Log.add(`你收敛心神，向 <b>${GameData.REALM_NAMES[target]}</b> 境发起最后的冲击——刹那间天地变色，九霄雷云翻涌，<b>天劫</b>降临了！`, 'system');
     document.getElementById('tribulation-modal').classList.remove('hidden');
+    this.render();
+  },
+  /** v30 借天运：渡劫前燃 20 气运换三策各 +5 成算（每劫限一次）——气运自此有了正经消费端 */
+  borrow() {
+    const S = this.state;
+    const p = Game.player;
+    if (!S || S.busy || S._borrowed) return;
+    if ((p.fortune || 0) < 20) { UI.toast('气运不足 20，天时不予'); return; }
+    p.fortune -= 20;
+    S._borrowed = true;
+    S.base += 5;
+    this.log('你燃二十年气运，向天借得一线时来运转——三策成算各 +5。', 'log-system');
     this.render();
   },
   log(html, cls = 'log-warn') {
@@ -81,6 +95,11 @@ const Tribulation = {
           <span class="trib-name">硬抗天劫</span>
           <span class="trib-chance">成算 ${c.endure.toFixed(0)}%</span>
           <span class="trib-note">成功率最低 · 成则雷火淬体，得永久厚赐【根基深厚】：全属性 +20%，此后历劫难度皆降一成</span>
+        </button>
+        <button class="btn trib-opt" data-action="trib-borrow" ${(S.busy || S._borrowed || (Game.player.fortune || 0) < 20) ? 'disabled' : ''} title="燃 20 点气运，三策成算各 +5（每次渡劫限一次）">
+          <span class="trib-name">燃运借力${S._borrowed ? ' · 已借' : ''}</span>
+          <span class="trib-chance">${S._borrowed ? '已成' : '气运 -20'}</span>
+          <span class="trib-note">以气运借天时——三策成算各 +5。天道姻缘，用一分少一分。</span>
         </button>
         <button class="btn trib-opt" data-action="trib-strategy" data-strategy="artifact" ${S.busy || !art ? 'disabled' : ''}>
           <span class="trib-name">法宝挡劫</span>

@@ -40,10 +40,19 @@ const Cultivate = {
     }
     if (p.layer === 3) {
       const need = GameData.layerNeed(p.realmIdx, 3);
-      // v18：溢出修为保留，突破后自动计入
       if (p.exp > need) {
-        p.expOverflow = (p.expOverflow || 0) + (p.exp - need);
+        const over = p.exp - need;
         p.exp = need;
+        if (p.realmIdx >= 9) {
+          // v30 仙途续航：真仙圆满之后修为溢流炼作「仙元」（道境资粮）——修为轴有终点，道境没有
+          const daoGain = Math.max(1, Math.round(over / (GameData.eco(9) * 0.05)));
+          p.counters.xianyuan = (p.counters.xianyuan || 0) + daoGain;
+          DaoSys.gain(p, daoGain);
+          if (p.counters.xianyuan % 50 < daoGain) Log.add(`修为满溢，尽数炼作 <b>仙元</b>（道境资粮 +${daoGain} · 累计 ${p.counters.xianyuan}）——修为轴有终点，道境没有。`, 'gain');
+        } else {
+          // v18：溢出修为保留，突破后自动计入
+          p.expOverflow = (p.expOverflow || 0) + over;
+        }
       }
     }
     return leveled;
@@ -161,7 +170,7 @@ const Cultivate = {
     const ok = await UI.popup({
       title: '闭关修炼',
       html: `闭关三十日，心无旁骛，修行效率远胜平日。<br>
-        预计可得修为 <span class="hl">≈${Utils.fmtNum(Math.round(this.baseGain(p) * 10 * 1.6))}</span>（视悟性略有浮动）。<br>
+        预计可得修为 <span class="hl">≈${Utils.fmtNum(Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult()))}</span>（视悟性与诸般加成略有浮动）。<br>
         需支付洞府灵石开销 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石／轮。<br>
         <span class="neg">若修为已至圆满，闭关中会自行冲关。</span>
         <label class="opt-line"><input type="checkbox" id="seclude-until-level">
@@ -223,8 +232,10 @@ const Cultivate = {
     while (rounds++ < 120) {
       if (!p || p.dead || Game.player !== p) return;   // 兵解/回溯等更换玩家对象时，旧循环立即作废
       // v29 修瑕：剧情/弹窗挂起时闭关暂停——此前节庆弹窗会被下一轮闭关的自动取消逻辑顶掉
-      if ((typeof Story !== 'undefined' && Story.active && Story.active()) || UI._popupResolve) {
-        Log.add('外事来扰，你暂敛心神，出关一顾。', 'warn');
+      // v30 修瑕：天劫弹窗未决同样必须暂停——原守护只查剧情/弹窗，冲关劫决期间循环继续烧灵石岁月、
+      //          重入 Tribulation.run 连环吞渡劫丹并反复覆写回溯备份 bak（对齐 autocult 的守护）
+      if ((typeof Story !== 'undefined' && Story.active && Story.active()) || UI._popupResolve || Tribulation.state) {
+        Log.add('天劫将至、外事来扰，你暂敛心神，出关一顾。', 'warn');
         break;
       }
       const beforeLayer = p.layer, beforeRealm = p.realmIdx;
@@ -264,7 +275,8 @@ const Cultivate = {
   },
   /** 突破成算（大境界渡劫基准）：感悟/悟性/气运/孽障/大道/根基/挫而愈坚 皆计入 */
   breakthroughChance(p, bonus = 0) {
-    let chance = 40 + Stat.compOf(p) * 2 + p.insight + bonus;
+    // v30 修瑕：感悟 1:1 计成算可饱和打穿（满百 +100 把三策博弈与境界惩罚全部架空）——降权为 0.5:1
+    let chance = 40 + Stat.compOf(p) * 2 + (p.insight || 0) * 0.5 + bonus;
     // v18 残玉共鸣九重 · 两世归一：两世道韵归一，突破成算 +3%
     if ((p.jade || 0) >= 9) chance += 3;
     chance += (p.fortune || 0) * 0.2;   // 气运：每10点 +2%
@@ -350,11 +362,25 @@ const Cultivate = {
       ],
     });
     if (!ok) return;
-    Log.add('你一步踏空，直上九霄！九重雷劫轰然而落，你于雷海之中放声长啸——', 'realm');
+    // v30 飞升实义化：终局一劫改为真判定——成算沿突破公式（真仙劫体 +8 已含），失败保留 40% 圆满修为并可再叩
+    const chance = Utils.clamp(this.breakthroughChance(p, 15), 5, 95);
+    Log.add(`你一步踏空，直上九霄！九重雷劫轰然而落——天劫成算 <b class="hl">${chance.toFixed(0)}%</b>，你于雷海之中放声长啸——`, 'realm');
     await Utils.sleep(700);
+    if (!Utils.chance(chance)) {
+      const lost = Math.round(p.exp * 0.6);
+      p.exp = Math.max(0, p.exp - lost);
+      Time.cutLife(p, 10, '仙劫失利，雷火蚀身');
+      const st2 = Stat.compute(p);
+      p.hp = Math.max(1, Math.round(st2.maxHp * 0.3));
+      Log.add(`仙劫失利！雷火反噬，你自云端跌落人间——圆满修为折损六成，折寿十年。仙门未闭，来日再叩。`, 'loss');
+      UI.toast('仙劫失利 · 调息后再战', true);
+      Game.afterAction();
+      return;
+    }
     Log.add('雷劫散尽，霞光万道。你身披仙光，回望人界一眼，翩然登仙。', 'realm');
     await Utils.sleep(500);
     p.flags.ascended = true;
+    if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.grantMarks) ReincarnationSys.grantMarks(2, 'ascend');   // v30：白日飞升 +2 印记
     UI.realmShow('霞举飞升，肉身成圣——凡人之躯，终成不朽。', GameData.REALM_AURA[9]);   // v5
     UI.announce('✦ 白日飞升 · 位列仙班 ✦', 'gold');   // v4
     Ambience.sfx('breakthrough');

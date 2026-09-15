@@ -22,8 +22,8 @@ const XinmoSys = {
   },
   ready(p) { return (p.xinmo || 0) >= this.THRESHOLD; },
   cleared(p) { return (p.flags && p.flags.xinmoCleared) || 0; },
-  /** 全属性加成（Stat.finalScale 消费）：每降伏一次 +1% */
-  scale(p) { return 1 + this.cleared(p) * 0.01; },
+  /** 全属性加成（Stat.finalScale 消费）：每降伏一次 +1%，封顶 +20%（v30：防扩源后无限堆叠） */
+  scale(p) { return 1 + Math.min(20, this.cleared(p)) * 0.01; },
   /** 降伏心魔：幻境之战（胜负皆了局） */
   start() {
     const p = Game.player;

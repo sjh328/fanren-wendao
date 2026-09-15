@@ -1,11 +1,11 @@
 
 /* ======================================================================
- * §23 世界大事件 WorldSys（每 100 游戏年一次全图大事，永久改变格局）
+ * §23 世界大事件 WorldSys（v30：首现 10~14 年、此后 18~30 年一遇——与修为曲线同校，正常周目可见）
  * ====================================================================== */
 const WorldSys = {
   freshWorld() {
-    // v29：首次大事 32~40 年（原 100——多数周目寿元坐化前根本见不到，v20 四个新事件形同虚设）
-    return { nextEventYear: 32 + Utils.rand(0, 8), pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null };
+    // v30 节奏重校：首次大事 10~14 年（v29 的 32~40 仍在多数周目之外——修为曲线重校后全程约 12~20 年）
+    return { nextEventYear: 10 + Utils.rand(0, 4), pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null };
   },
   year(p) { return Math.floor((p.day || 0) / 365) + 1; },
   isMagic(p, mapId) { const w = p.world; return !!(w && w.magicMaps && w.magicMaps.includes(mapId)); },
@@ -42,7 +42,7 @@ const WorldSys = {
     const w = p.world;
     if (!w) return;
     // v29：旧档一次性迁移——百年周期改短后，从未触发过大事的旧档重掷首次年份
-    if (w.nextEventYear > 50 && !(w.history && w.history.length)) w.nextEventYear = Math.min(w.nextEventYear, 32 + Utils.rand(0, 8));
+    if (w.nextEventYear > 14 && !(w.history && w.history.length)) w.nextEventYear = Math.min(w.nextEventYear, 10 + Utils.rand(0, 4));   // v30：旧档一次性重掷至十数年
     NpcSys.yearTick(p, y);
     if (w.preachUntil && y > w.preachUntil) { w.preachUntil = 0; Log.add('圣地讲道落幕，道音散入天地之间。', 'system'); }
     if (w.ruinsUntil && y > w.ruinsUntil) { w.ruinsUntil = 0; Log.add('上古秘境重归虚妄，机缘之门缓缓关闭。', 'system'); }
@@ -52,11 +52,12 @@ const WorldSys = {
       const rest = w.beastMaps.filter(b => y <= b.until);
       if (rest.length !== w.beastMaps.length) { w.beastMaps = rest; if (!rest.length) Log.add('兽潮退去，出山的群兽重归深山。', 'system'); }
     }
-    if (y >= w.nextEventYear) { w.nextEventYear = y + 50 + Utils.rand(0, 20); this.fireEvent(p, y); }   // v29：此后 50~70 年一遇
+    if (y >= w.nextEventYear) { w.nextEventYear = y + 18 + Utils.rand(0, 12); this.fireEvent(p, y); }   // v30：此后 18~30 年一遇（原 50~70）
   },
   fireEvent(p, y) {
     const w = p.world;
-    const type = Utils.pickWeighted({ demon: 22, preach: 18, ruins: 18, war: 15, lingchao: 12, beastwave: 8, xianmen: 4, meteor: 3 });
+    // v30 扩池：新增 NPC 牵连型四事件
+    const type = Utils.pickWeighted({ demon: 20, preach: 16, ruins: 16, war: 14, lingchao: 11, beastwave: 8, xianmen: 4, meteor: 3, zhongbao: 9, neiluan: 8, qiren: 8, lingyi: 7 });
     const ev = { type, year: y };
     let text = '';
     if (type === 'demon') {
@@ -109,8 +110,8 @@ const WorldSys = {
       const map = GameData.MAPS.find(m => m.id === ev.mapId) || GameData.MAPS[1];
       Log.add('你奔赴魔域前线，与狂化的魔物战作一团！', 'event');
       const mid = Utils.pickWeighted(map.pool); // 地图池为加权对象 [{id, weight}]
-      const en = buildMonster(mid, Math.max(0, p.realmIdx * 4 + 2 - GameData.MONSTERS[mid].power));
-      en.elite = true;
+      // v30 修瑕：精英基线改由 buildMonster 统一（原事后置 en.elite=true，吃词缀不吃 crit 基线）
+      const en = buildMonster(mid, Math.max(0, p.realmIdx * 4 + 2 - GameData.MONSTERS[mid].power), { elitePlus: true });
       en.hpMax = Math.round(en.hpMax * 1.4); en.atk = Math.round(en.atk * 1.25);
       en.expGain = Math.round(en.expGain * 1.6); en.stoneGain = Math.round(en.stoneGain * 1.8);
       en.hp = en.hpMax;
@@ -162,6 +163,103 @@ const WorldSys = {
       Game.afterAction();
       Battle.start(null, { enemy: en, weType: 'beastwave', mapName: '兽潮前线' });
       return;
+    } else if (ev.type === 'zhongbao') {
+      // v30 重宝现世：争夺战——胜者得宝
+      Log.add('重宝现世之地，修士云集。你循着灵光追至谷底，宝光之侧，已有人虎视眈眈。', 'event');
+      const map = GameData.MAPS.find(m => m.id === ev.mapId) || GameData.MAPS[2];
+      const mid = Utils.pickWeighted(map.pool);
+      const en = buildMonster(mid, Math.max(0, p.realmIdx * 4 + 1 - GameData.MONSTERS[mid].power), { elitePlus: true });
+      en.hpMax = Math.round(en.hpMax * 1.3); en.hp = en.hpMax;
+      en.expGain = Math.round(en.expGain * 1.5); en.stoneGain = Math.round(en.stoneGain * 1.5);
+      Game.afterAction();
+      Battle.start(null, { enemy: en, weType: 'zhongbao', mapName: '夺宝之地', dropMul: 1.5 });
+      return;
+    } else if (ev.type === 'neiluan') {
+      // v30 宗门内乱：三选一
+      Log.add('邻宗内乱的烽烟隔着山都能望见。有门人跪在山道边求援，也有人趁夜背着库房细软出逃。', 'event');
+      const c1 = await UI.popup({
+        title: '天下大事 · 宗门内乱',
+        html: '乱局当前，你如何自处？',
+        options: [
+          { text: '出手相助（平乱有功）', value: 'help', primary: true },
+          { text: '趁乱取利（搜检逃户遗落之物）', value: 'loot' },
+          { text: '冷眼旁观', value: 'watch' },
+        ],
+      });
+      if (c1 === 'help') {
+        if (p.sect) p.sect.contrib += 150;
+        if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 3, '平乱有功');
+        Time.add(10);
+        Log.add(`你仗义出手，助乱局中的守序一派稳住了山门——宗门同袍无不相敬。${p.sect ? '贡献 +150、' : ''}声望 +3。`, 'gain');
+      } else if (c1 === 'loot') {
+        const stones = Math.round(70 * GameData.stoneEco(p.realmIdx));
+        Bag.addStones(stones);
+        KarmaSys.addKarma(8, true);
+        Time.add(10);
+        Log.add(`你趁夜捡拾了逃散门人遗落的细软——灵石 ${Utils.fmtNum(stones)}。夜风里仿佛有人哭。（孽障 +8）`, 'loss');
+      } else {
+        p.insight = Math.min(100, (p.insight || 0) + 4);
+        Time.add(10);
+        Log.add('你在高处看了三日火光，忽然明白：庙堂之倾，从来不在外敌。（感悟 +4）', 'info');
+      }
+    } else if (ev.type === 'qiren') {
+      // v30 奇人访世：论道/切磋/赠礼
+      Log.add('一位青袍奇修在山口支了张棋枰，见人不语，只抬手指了指对面的空位。', 'event');
+      const c2 = await UI.popup({
+        title: '天下大事 · 奇人访世',
+        html: '青袍人指了指棋枰，又指了指你腰间的剑，最后摊开一只空掌。',
+        options: [
+          { text: '坐而论道（求指点）', value: 'talk', primary: true },
+          { text: '以剑会友（切磋一场）', value: 'spar' },
+          { text: '奉上茶资（赠礼结缘）', value: 'gift' },
+        ],
+      });
+      if (c2 === 'talk') {
+        p.insight = Math.min(100, (p.insight || 0) + 8);
+        const gain = Math.round(80 * GameData.eco(p.realmIdx));
+        Cultivate.addExp(p, gain);
+        Time.add(5);
+        Log.add(`青袍人只说了一句话，你却参了五日——修为 +${Utils.fmtNum(gain)}，感悟 +8。`, 'gain');
+      } else if (c2 === 'spar') {
+        const gain2 = Math.round(120 * GameData.eco(p.realmIdx));
+        Cultivate.addExp(p, gain2);
+        Time.add(3);
+        Log.add(`三招过后青袍人收手——你遍体生寒，却也遍体通明。修为 +${Utils.fmtNum(gain2)}。`, 'gain');
+      } else {
+        KarmaSys.addFortune(2);
+        Time.add(1);
+        Log.add('青袍人收了茶资，落下一子，忽然笑道：「好缘。」——你只觉此后诸事，顺遂了几分。（气运 +2）', 'gain');
+      }
+    } else if (ev.type === 'lingyi') {
+      // v30 灵疫蔓延：施药/囤药/自保
+      Log.add('坊市贴出告示：灵疫蔓延，药材紧缺——各家药铺门前排起了长队。', 'event');
+      const c3 = await UI.popup({
+        title: '天下大事 · 灵疫蔓延',
+        html: '药价一日三涨。你有储药，也有手艺——如何自处？',
+        options: [
+          { text: '开棚施药（破财积誉）', value: 'give', primary: true },
+          { text: '高价售药（趁势取利）', value: 'sell' },
+          { text: '闭门自保', value: 'safe' },
+        ],
+      });
+      if (c3 === 'give') {
+        const cost = Math.round(30 * GameData.stoneEco(p.realmIdx));
+        if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 4, '施药济人');
+        KarmaSys.addFortune(4);
+        if (Bag.spendStones(cost)) Log.add(`你开棚施药半月，散尽灵石 ${Utils.fmtNum(cost)}——满城父老焚香相送。（声望 +4，气运 +4）`, 'gain');
+        else Log.add('你把囊中存的药材尽数送了出去——药不够，就搭上手亲自照看病患。（声望 +4，气运 +4）', 'gain');
+        Time.add(15);
+      } else if (c3 === 'sell') {
+        const stones = Math.round(90 * GameData.stoneEco(p.realmIdx));
+        Bag.addStones(stones);
+        KarmaSys.addKarma(6, true);
+        if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, -3, '囤药居奇');
+        Time.add(10);
+        Log.add(`你把存药翻着倍价卖了出去——灵石 ${Utils.fmtNum(stones)}。药铺门口的队伍更长了。（孽障 +6，声望 -3）`, 'loss');
+      } else {
+        Time.add(10);
+        Log.add('你闭门谢客，自炼辟疫丹护住一门老小——乱世自保，不为过。（无事发生）', 'info');
+      }
     } else if (ev.type === 'xianmen') {
       // v20 仙门收徒大会：三题取一，答对得秘传
       Time.add(5);

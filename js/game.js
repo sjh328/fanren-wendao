@@ -96,6 +96,9 @@ const Game = {
       }
       if (e.key !== 'Escape') return;
       if (UI._popupResolve) { UI.popupChoose(-1); return; }
+      // v30：新手引导可 ESC 跳过（此前只能点按钮）
+      const tut = document.getElementById('tutorial');
+      if (tut && !tut.classList.contains('hidden') && typeof Tutorial !== 'undefined' && Tutorial.finish) { Tutorial.finish(); return; }
       const amb = document.getElementById('amb-panel');
       if (amb && !amb.classList.contains('hidden')) { amb.classList.add('hidden'); return; }
       const dao = document.getElementById('dao-modal');
@@ -131,11 +134,17 @@ const Game = {
       if (Game.player && !Game.player.dead) Save.autoSave(true);
     });
     // v18：全局错误捕获
+    // v30 兜底升级：异常时立即强制存档一次并记录 lastError——开始界面可见「上次异常退出，已自动存档」
     window.addEventListener('error', (e) => {
       console.error('未捕获的异常:', e.error || e.message);
-      // 只给用户一个非侵入式提示，不阻断游戏
+      if (Game.player && !Game.player.dead) { try { Save.autoSave(true); } catch (err) { /* ignore */ } }
+      try {
+        const msg = String((e.error && e.error.stack) || e.message || 'unknown').slice(0, 400);
+        if (Save.storage.setItem) Save.storage.setItem(Save.KEY + 'lasterror', JSON.stringify({ ts: Date.now(), msg }));
+        else Save.mem['lasterror'] = JSON.stringify({ ts: Date.now(), msg });
+      } catch (err) { /* ignore */ }
       if (Game.player && !e.defaultPrevented) {
-        UI.toast('道心微澜，一股无名之气掠过识海（不影响存档）', true);
+        UI.toast('道心微澜，一股无名之气掠过识海（已自动存档）', true);
       }
     });
     window.addEventListener('unhandledrejection', (e) => {
@@ -168,6 +177,8 @@ const Game = {
   loadFrom(key) {
     const data = Save.read(key);
     if (!data || !data.player) { UI.toast('此处没有存档'); return false; }
+    // v30：版本门——来自更新版本的存档拒绝盲读（原仅导入路径校验）
+    if (Number(data.v) > 1) { UI.toast('此存档来自更新版本，请更新后再读取', true); return false; }
     if (data.meta && data.meta.dead) { UI.toast('此存档已坐化，无法读取', true); return false; }
     UI.closeOverlays();   // 状态同步：清掉可能残留的战斗 / 弹窗覆盖层
     AutoCult.abort();   // v6
@@ -201,8 +212,9 @@ const Game = {
     const p = this.player;
     if (!p || p.dead || p.day === 0) return;
     // 读取上次存档的 meta.ts（在 Save.write 中写入）
-    const slot = this.slot == null ? 'auto' : this.slot;
-    const data = Save.read(slot === 'auto' ? 'auto' : slot);
+    // v30 修瑕：离线时长恒按 auto 档时间戳计——原按所读档位 ts，读陈旧手动档会把「重读旧档」
+    //          误算成最长 30 日离线（语义模糊且可刷）；auto 每行动实时落盘，才是「上次游玩」的真时点
+    const data = Save.read('auto') || (this.slot == null ? null : Save.read(this.slot));
     if (!data || !data.meta || !data.meta.ts) return;
     const elapsedMs = Date.now() - data.meta.ts;
     if (elapsedMs < 60000) return; // 少于 1 分钟不算离线
@@ -212,11 +224,14 @@ const Game = {
     // 「过熟廿日减半」的规则在长离线下永远无法成立）
     const offlineCrops = (p.cave && p.cave.plots || []).filter(pl => pl && pl.seed).length;
     // v24 离线修行：放置游戏名实相符——离线期间行功不辍，修为按四成效率折算（不冲关、不积丹毒）
+    // v30 修瑕：折算剔除聚灵加速（rushDay 只是在线单日增益，曾把整段离线一并放大五成）
     let offlineExp = 0;
     if (p.realmIdx >= 0 && !p.dead) {
       try {
         const st = Stat.compute(p);
+        const rushDayBak = p.rushDay; p.rushDay = null;
         const perRound = Cultivate.baseGain(p) * (1 + st.cultPct / 100);
+        p.rushDay = rushDayBak;
         offlineExp = Math.round(perRound / 3 * 0.4 * realDays);
         if (offlineExp > 0) Cultivate.addExp(p, offlineExp);
       } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; }
@@ -257,7 +272,10 @@ const Game = {
     this.scrollMem = {};   // v26：滚动记忆一并复位
     Meta.load();    // v6：装载本存档位的成就与图鉴
     AutoCult.abort();
+    Save.snapshotAuto();   // v30：滚动快照——本次会话前的 auto 存一份 bak2
     this.computeOfflineProgress();  // v18：离线进度
+    // v30 修瑕：离线逐日回放中寿元坐化时，不再闪一下游戏界面再弹回开始界面——坐化结算直接接住
+    if (this.player && this.player.dead) { UI.renderStart(); return; }
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('game-screen').classList.remove('hidden');
     UI.renderAll();
@@ -338,6 +356,24 @@ const Game = {
     },
     'st-back': () => StartScreen.back(),
     'st-reroll': () => { StartScreen.attrs = PlayerFactory.rollAttrs(); UI.renderCreate(); },
+    'st-mirror': () => ReincarnationSys.mirror(),   // v30：轮回镜（开始界面）
+    'st-bak2': async () => {
+      // v30 滚动快照回捞：把 bak2 写入 auto 后读档（误删/损坏后的安全网）
+      const snap = Save.read('bak2');
+      if (!snap || !snap.player) { UI.toast('没有可回捞的快照'); return; }
+      const ok = await UI.popup({
+        title: '回捞上次快照',
+        html: `快照时间：第 ${snap.meta.day} 日 · ${snap.meta.realmText} · ${snap.meta.name}。<br>将把这份快照写入自动存档并读取（当前 auto 会被覆盖）。`,
+        options: [{ text: '回 捞', value: true, primary: true }, { text: '作罢', value: false }],
+      });
+      if (!ok) return;
+      try {
+        const raw = JSON.stringify(snap);
+        if (Save.storage.setItem) Save.storage.setItem(Save.KEY + 'auto', raw); else Save.mem['auto'] = raw;
+      } catch (e) { UI.toast('回捞失败', true); return; }
+      Game.loadFrom('auto');
+    },
+    'act-mirror': () => ReincarnationSys.mirror(),   // v30：轮回镜（游戏内）
     'st-start': () => {
       const name = (document.getElementById('create-name').value || '').trim() || Utils.pick(GameData.NAMES);
       Game.newGame(StartScreen.slot, name, StartScreen.attrs);
@@ -500,6 +536,7 @@ const Game = {
     },
     /* --- 战斗 --- */
     'bt-attack': () => Battle.active && Battle.act('attack'),
+    'bt-combo': () => Battle.active && Battle.act('combo'),   // v30：人兽合击
     'bt-ult': (d) => Battle.active && Battle.actUlt(d.ult),
     'bt-info': () => Battle.infoCard(),
     'bt-skill': (d) => Battle.active && Battle.act('skill', d.gf),
@@ -540,9 +577,13 @@ const Game = {
     'dao-pick': (d) => DaoSys.pick(d.dao),
     'act-dao-change': () => DaoSys.changeDao(),
     'trib-strategy': (d) => Tribulation.choose(d.strategy),
+    'trib-borrow': () => Tribulation.borrow(),   // v30：借天运
+    'act-cave-dongtian': () => CaveSys.upgradeDongtian(),   // v30：洞天营造
     'act-slay': () => KarmaSys.slayCorpses(),
     'quest-side': (d) => QuestSys.claimSide(d.side),
     'quest-bonus': (d) => QuestSys.claimBonus(d && d.ch),   // v24/v27 章助缘领赏（支持跨章补领，无参=当前章）
+    'quest-gate-shadow': () => QuestSys.rebattleGateShadow(),   // v30：门前影重战（战败不再永锁终章）
+    'act-tower-redeem': (d) => TowerSys.redeem(d.k),   // v30：塔绩兑换所
     'act-sign': () => DailySign.draw(),
     'act-alchemy': (d) => CraftSys.alchemy(d.recipe),
     'act-study-recipe': (d) => CraftSys.studyRecipe(d.recipe),
@@ -551,6 +592,7 @@ const Game = {
     'act-draw': () => CraftSys.drawTalisman(),
     /* --- v13 祭炼强化 / 炼器 --- */
     'act-enhance': (d) => ForgeSys.enhance(d.slot),
+    'act-recast': (d) => ForgeSys.recast(d.slot),   // v30：器魂重铸
     'act-reroll': (d) => ForgeSys.reroll(d.slot),
     'act-forge': (d) => ForgeSys.forge(d.recipe),
     /* --- v13 洞府 / 灵兽 --- */

@@ -165,8 +165,8 @@ try {
     // 测试词缀系统已在 GameData.BALANCE.AFFIXES 中定义
     return GameData.BALANCE.AFFIXES.prefix.length + GameData.BALANCE.AFFIXES.suffix.length;
   }).then(n => {
-    if (n === 22) pass('装备词缀系统正常（12前缀+10后缀，v19 扩池）');
-    else fail('词缀数量错误', `${n}/22`);
+    if (n === 25) pass('装备词缀系统正常（15前缀+10后缀，v30 高端词缀扩池）');
+    else fail('词缀数量错误', `${n}/25`);
   });
 
   // 14. 炼丹火候

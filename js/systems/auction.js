@@ -41,14 +41,15 @@ const AuctionSys = {
     if (!p.auction || p.auction.until < day) {
       // v29 修瑕：拍品种子带期号 seq——此前同日中标后 hash('auction@'+day) 恒重新掷出同一件，可无限复购
       const seq = (p.auction && p.auction.seq) || 0;
-      const ecoR = Math.min(8, p.realmIdx);   // v29：底价随境界上限 4 → 8（后期拍行重新成为灵石去向）
       const mystery = Utils.chance(10);
       if (mystery) {
         p.auction = { item: 'mystery', seq, base: this.mysteryBase(p), until: day + this.PERIOD };
       } else {
-        const lot = this.LOT_POOL[Utils.hashStr('auction@' + day + '#' + seq) % this.LOT_POOL.length];
-        const gate = Math.min(8, lot.minRealm || 0);
-        p.auction = { item: lot.item, seq, base: Math.round(lot.base * GameData.stoneEco(ecoR) / GameData.stoneEco(gate)), until: day + this.PERIOD };
+        const lot2 = this.LOT_POOL[Utils.hashStr('auction@' + day + '#' + seq) % this.LOT_POOL.length];
+        const gate = Math.min(8, lot2.minRealm || 0);
+        // v30 复核：底价随境界但限三境溢阶——原 3.8^min(8,r) 全幅膨胀，r6+ 拍品性价比远逊坊市，无人竞拍
+        const mul = Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
+        p.auction = { item: lot2.item, seq, base: Math.round(lot2.base * mul), until: day + this.PERIOD };
       }
     }
     return p.auction;
@@ -90,7 +91,8 @@ const AuctionSys = {
       p.counters.auctionWins = (p.counters.auctionWins || 0) + 1;   // v24 章助缘计数
       if (isMystery) {
         // 鉴定：权重向低品倾斜，仙缘罕见
-        const pool = this.MYSTERY_POOL;
+        // v30 修瑕：开奖与定价同池分层——原开奖仍用全量 MYSTERY_POOL，v29 的「低境只出低品」只落了一半（定价分了层、开奖没分），期望倒挂依旧
+        const pool = this.mysteryPool(p);
         const total = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2, 0);
         let r = Math.random() * total, hit = pool[pool.length - 1];
         for (const x of pool) { r -= (6 - Math.min(5, x.grade)) * 2; if (r <= 0) { hit = x; break; } }
@@ -127,11 +129,13 @@ const DonateSys = {
     { id: 'mid',    name: '修桥筑观', stones: 5000,   rep: 6,  fortune: 3, karma: -3 },
     { id: 'large',  name: '广建义庄', stones: 50000,  rep: 15, fortune: 8, karma: -8 },
   ],
+  /** v30：布施定价单源化（卡面显示价与弹窗实收共用此函数） */
+  priceOf(p, t) { return Math.round(t.stones * Math.max(1, GameData.sinkCurve(p.realmIdx) / 2.2)); },   // v30：曲线族统一
   async donate(id) {
     const p = Game.player;
     const t = this.TIERS.find(x => x.id === id);
     if (!t) return;
-    const stones = Math.round(t.stones * Math.max(1, Math.pow(2.2, Math.min(8, p.realmIdx) - 1) / 1));   // v29：封顶 5→8，大后期仍是消孽出口
+    const stones = this.priceOf(p, t);   // v29：封顶 5→8，大后期仍是消孽出口
     const ok = await UI.popup({
       title: `布施 · ${t.name}`,
       html: `散财于世间疾苦——声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。<br>需灵石 <span class="hl">${Utils.fmtNum(stones)}</span>。`,

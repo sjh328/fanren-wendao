@@ -20,7 +20,8 @@ const CaveSys = {
   buildLv(p, id) { return (p.cave && p.cave.builds && p.cave.builds[id]) || 0; },
   buildCost(p, id) {
     const lv = this.buildLv(p, id);
-    return { stones: Math.round(4000 * Math.pow(3, lv) * Math.pow(2, Math.min(4, p.realmIdx))), ore: 4 + lv * 3 };
+    // v30：曲线族统一（原 2^min(4,r) 封顶 r4，与同族 2.2^r 不一致；r7+ 相对贬值 >99%）
+    return { stones: Math.round(4000 * Math.pow(3, lv) * GameData.sinkCurve(p.realmIdx) / 16), ore: 4 + lv * 3 };
   },
   async upgradeBuild(id) {
     const p = Game.player;
@@ -47,11 +48,51 @@ const CaveSys = {
     Game.afterAction();
   },
   /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级；炼丹房（v18：每级+5%成丹率） */
-  cultBonus(p) { return p.cave ? p.cave.lv * 4 : 0; },
+  cultBonus(p) { return p.cave ? p.cave.lv * 4 + (p.cave.dongtian || 0) * 3 : 0; },   // v30：洞天营造每层修炼 +3%
+  /** v30 洞天营造：洞府五层之上再辟洞天（至四重）——r6+ 全幅缩放的灵石沉淀池 */
+  DONGTIAN_MAX: 4,
+  DONGTIAN_NAMES: ['洞天未辟', '一重 · 灵潮洞天', '二重 · 星槎洞天', '三重 · 太虚洞天', '四重 · 大罗洞天'],
+  dongtianCost(p) {
+    const lv = (p.cave && p.cave.dongtian) || 0;
+    return { stones: Math.round(4000 * Math.pow(3, lv) * GameData.sinkCurve(p.realmIdx)), ore: 20 + lv * 10 };
+  },
+  /** v30：洞府卡内「营造洞天」区块 */
+  dongtianRow(p) {
+    const lv = (p.cave && p.cave.dongtian) || 0;
+    const c = this.dongtianCost(p);
+    const maxed = lv >= this.DONGTIAN_MAX;
+    const needCave = p.cave && p.cave.lv < this.MAX_LV;
+    return `<div class="shop-section-title" style="margin-top:8px">◈ 洞天营造 <span class="tag magic">${this.DONGTIAN_NAMES[lv]}</span></div>
+      <div class="tip-line">· 五层之上再辟洞天：每重修炼效率 +3%（现 +${lv * 3}%）。${needCave ? '（须先扩洞府至五层）' : ''}</div>
+      ${maxed || needCave ? '' : `<div class="action-row"><button class="btn btn-primary" data-action="act-cave-dongtian">营造下一重（${Utils.fmtNum(c.stones)}灵石 · 玄铁矿 ×${c.ore}）</button></div>`}`;
+  },
+  async upgradeDongtian() {
+    const p = Game.player;
+    if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
+    if ((p.cave.dongtian || 0) >= this.DONGTIAN_MAX) { UI.toast('洞天已至四重，造化之极'); return; }
+    if (p.cave.lv < this.MAX_LV) { UI.toast('须先将洞府扩至五层，方可营造洞天'); return; }
+    const c = this.dongtianCost(p);
+    const next = this.DONGTIAN_NAMES[(p.cave.dongtian || 0) + 1];
+    const ok = await UI.popup({
+      title: `洞天营造 · ${next}`,
+      html: `洞府五层之上再辟洞天——每重洞天：修炼效率 <b>+3%</b>，聚灵之气更胜一层。<br>
+        需灵石 <span class="hl">${Utils.fmtNum(c.stones)}</span>、玄铁矿 ×${c.ore}。`,
+      options: [{ text: '营 造', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (!Bag.spendStones(c.stones)) { UI.toast('灵石不足'); return; }
+    if (Bag.count('m_xuantie') < c.ore) { UI.toast('玄铁矿不足'); return; }
+    Bag.removeItem('m_xuantie', c.ore);
+    p.cave.dongtian = (p.cave.dongtian || 0) + 1;
+    Log.add(`洞天已成——【<b>${this.DONGTIAN_NAMES[p.cave.dongtian]}</b>】虚境张开，灵潮自天外来投（修炼效率 +3%）。`, 'realm');
+    UI.announce('✦ 洞天营造 · 功成', 'gold');
+    Game.afterAction();
+  },
   pillBonus(p) { return p.cave ? p.cave.lv * 5 : 0; },
   /** v18：访客事件（每日第一次进入洞府时触发）；v27 auto=离线回放模式（不回环 afterAction） */
   visitorEvent(p, auto = false) {
     if (!p.cave || p.cave._visitorDay === Math.floor(p.day)) return;
+    // v30：离线回放静默（30 日离线曾一口气灌 30 条访客日志，与 v27「auto 从简」不符）
     p.cave._visitorDay = Math.floor(p.day);
     // v28 联动：福缘深厚者，来访更频（气运每点 +0.5% 触发率）
     if (!Utils.chance(15 * (typeof KarmaSys !== 'undefined' && KarmaSys.goodEventMult ? KarmaSys.goodEventMult(p) : 1))) return;
@@ -91,7 +132,7 @@ const CaveSys = {
     }
     const ev = Utils.pick(events);
     ev.fn();
-    Log.add(`【洞府访客】${ev.text}`, 'info');
+    if (!auto) Log.add(`【洞府访客】${ev.text}`, 'info');   // v30：离线回放静默（30 日离线曾灌 30 条日志）
     if (!auto) Game.afterAction();
   },
   /** v20 聚灵加速：花灵石点燃聚灵阵，当日修炼效率 ×1.5（日限一次） */
@@ -176,7 +217,7 @@ const CaveSys = {
   upCost(p) {
     const lv = p.cave ? p.cave.lv : 1;
     return {
-      stones: Math.round(2000 * Math.pow(3, lv - 1) * Math.pow(2.2, Math.max(0, p.realmIdx - 1))),
+      stones: Math.round(2000 * Math.pow(3, lv - 1) * GameData.sinkCurve(p.realmIdx) / 2.2),   // v30：曲线族统一
       mats: lv === 1 ? null : { m_xuantie: 2 + lv, m_lingzhi: lv >= 3 ? 2 : 1 },
     };
   },

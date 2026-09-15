@@ -23,7 +23,7 @@ const Achieve = {
     { id: 'r5', cat: 'realm', name: '合体无为', desc: '突破至合体期', reward: { fortune: 13 }, test: p => p.realmIdx >= 6 },
     { id: 'r5b', cat: 'realm', name: '大乘渐满', desc: '突破至大乘期', reward: { fortune: 14 }, test: p => p.realmIdx >= 7 },   // v24 补档
     { id: 'r5c', cat: 'realm', name: '劫火淬身', desc: '突破至渡劫期', reward: { fortune: 16 }, test: p => p.realmIdx >= 8 },   // v24 补档
-    { id: 'r6', cat: 'realm', name: '白日飞升', desc: '修至真仙期', reward: { fortune: 20 }, test: p => p.realmIdx >= 9 },
+    { id: 'r6', cat: 'realm', name: '真仙之体', desc: '修至真仙期', reward: { fortune: 20 }, test: p => p.realmIdx >= 9 },
     /* ---- 职业 ---- */
     { id: 'd0', cat: 'dao', name: '道途初定', desc: '择定第一条大道', reward: { stones: 200 }, test: p => !!p.dao },
     { id: 'd1', cat: 'dao', name: '剑心桀骜', desc: '剑修之身赢下十五场战斗', reward: { stones: 800 }, prog: p => `${Math.min(15, p.counters.wins || 0)}/15`, test: p => p.dao === 'sword' && (p.counters.wins || 0) >= 15 },

@@ -24,10 +24,49 @@ const TowerSys = {
     { id: 'twb_healc',  name: '避劫福纹', desc: '每逢五层的大回复额外 +15%', mod: { healChest: 0.15 } },
     { id: 'twb_risk',   name: '破釜沉舟', desc: '塔内守影防御 -30%，但攻击 +8%', mod: { def: 0.70, atk: 1.08 } },
     { id: 'twb_guard',  name: '金刚护体', desc: '塔内守影攻击再 -8%', mod: { atk: 0.92 } },
+    /* ---- v30 天塔 roguelike：扩池至 25（含诅咒祝福：拿牺牲换强力） ---- */
+    { id: 'twb_all2',   name: '万象俱蚀', desc: '塔内守影全属性 -10%（罕见）', mod: { all: 0.90 } },
+    { id: 'twb_stone3', name: '点金神手', desc: '层奖灵石 ×2（罕见）', mod: { stone: 2 } },
+    { id: 'twb_exp3',   name: '大悟碑文', desc: '层奖修为 ×2（罕见）', mod: { exp: 2 } },
+    { id: 'twb_heal3',  name: '生生玉露', desc: '每层战后回复 26% 气血（罕见）', mod: { heal: 0.26 } },
+    { id: 'twb_def3',   name: '碎玉崩雷', desc: '塔内守影防御 -35%（罕见）', mod: { def: 0.65 } },
+    { id: 'twb_hp2',    name: '摄魂蚀魄', desc: '塔内守影气血 -25%', mod: { hp: 0.75 } },
+    { id: 'twb_cgreed', name: '贪狼血誓', desc: '层奖灵石 +80%，守影攻击 +10%（诅咒祝福）', mod: { stone: 1.8, atk: 1.10 }, curse: true },
+    { id: 'twb_cexp',   name: '慧极必伤', desc: '层奖修为 +80%，守影气血 +12%（诅咒祝福）', mod: { exp: 1.8, hp: 1.12 }, curse: true },
+    { id: 'twb_cglass', name: '琉璃贪匣', desc: '宝箱所获 ×2.5，五层大回复 -30%（诅咒祝福）', mod: { chest: 2.5, healChest: -0.30 }, curse: true },
+    { id: 'twb_cswift', name: '迅影之殇', desc: '守影身法 -40%，防御 +25%（诅咒祝福）', mod: { spd: 0.6, def: 1.25 }, curse: true },
   ],
 
   unlockOk(p) { return p.realmIdx >= 1; },
   extraCost(p) { return Math.round(80 * GameData.stoneEco(p.realmIdx)); },
+
+  /** v30 塔绩兑换所：塔绩 = p.counters.towerWins（累计胜层），兑换扣除；最高层纪录不受影响 */
+  REDEEMS: [
+    { id: 'stones', name: '塔灵纳财', cost: 15, desc: '灵石 120×境界经济' },
+    { id: 'ore',    name: '玄铁一匣', cost: 20, desc: '玄铁矿 ×8' },
+    { id: 'pill',   name: '培元丹一炉', cost: 30, desc: '培元丹 ×1' },
+    { id: 'leijing', name: '雷晶核（塔心所藏）', cost: 60, desc: '雷晶核 ×1——渡劫丹主材' },
+  ],
+  async redeem(k) {
+    const p = Game.player;
+    const r = this.REDEEMS.find(x => x.id === k);
+    if (!r) return;
+    if ((p.counters.towerWins || 0) < r.cost) { UI.toast('塔绩不足'); return; }
+    const ok = await UI.popup({
+      title: `塔绩兑换 · ${r.name}`,
+      html: `${r.desc}。<br>需塔绩 <b>${r.cost}</b>（当前 ${p.counters.towerWins || 0}）。`,
+      options: [{ text: '兑 换', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if ((p.counters.towerWins || 0) < r.cost) { UI.toast('塔绩不足'); return; }
+    p.counters.towerWins -= r.cost;
+    if (r.id === 'stones') { const s = Math.round(120 * GameData.stoneEco(p.realmIdx)); Bag.addStones(s); Log.add(`塔灵倾囊——灵石 +${Utils.fmtNum(s)}。`, 'gain'); }
+    else if (r.id === 'ore') { Bag.addItem('m_xuantie', 8); Log.add('塔灵奉上玄铁矿 ×8——塔基深处所凝。', 'gain'); }
+    else if (r.id === 'pill') { Bag.addItem('pill_peiyuan', 1); Log.add('塔灵奉上培元丹 ×1——塔中丹房的陈年存货。', 'gain'); }
+    else if (r.id === 'leijing') { Bag.addItem('m_leijing', 1); Log.add('塔心深处取出一枚<b>雷晶核</b>——塔灵言道：「此物应劫而生，渡劫丹的主材。」', 'gain'); }
+    UI.renderAll();
+    Game.afterAction();
+  },
 
   /** 塔状态自愈结构（老档无缝） */
   state(p) {
@@ -84,14 +123,23 @@ const TowerSys = {
     return run.buffs.map(id => (this.BUFFS.find(b => b.id === id) || {}).name).filter(Boolean);
   },
 
-  /** 塔内守影：以本档妖兽池为底，按境界 + 层数深度缩放（词缀/习性天然继承） */
+  /** 塔内守影：以本档妖兽池为底，按境界 + 层数深度缩放（词缀/习性天然继承）
+   *  v30 机制层：每 10 层一位「塔守」Boss——精英化、气血×1.5、攻×1.25、必带双词缀 */
   foeFor(p, floor) {
     const target = Utils.clamp(p.realmIdx * 4 + Math.floor((floor - 1) / 2), 0, 60);
     // v29 修瑕：按缩放后战力就近取形——此前全池随机，练气期会打出「塔影·雷狱主宰」的穿帮
     const nearIds = Object.keys(GameData.MONSTERS).filter(k => Math.abs(GameData.MONSTERS[k].power - target) <= 4);
     const id = Utils.pick(nearIds.length ? nearIds : Object.keys(GameData.MONSTERS));
+    const bossFloor = floor % 10 === 0;
     const e = buildMonster(id, target - GameData.MONSTERS[id].power);
-    e.name = '塔影 · ' + e.name;
+    e.name = (bossFloor ? '塔守 · ' : '塔影 · ') + e.name;
+    if (bossFloor) {
+      e.elite = true;
+      e._forceFx2 = true;
+      e.hpMax = Math.round(e.hpMax * 1.5);
+      e.atk = Math.round(e.atk * 1.25);
+      e.expGain = Math.round(e.expGain * 1.5);
+    }
     const m = this.modsOf(p);
     const mul = (v, f) => Math.max(1, Math.round(v * f));
     if (m.all) { e.hpMax = mul(e.hpMax, m.all); e.atk = mul(e.atk, m.all); e.def = mul(e.def, m.all); e.spd = Math.max(1, Math.round(e.spd * m.all)); }
@@ -140,7 +188,9 @@ const TowerSys = {
     const p = Game.player;
     const run = this.state(p).run;
     if (!run) return;
-    if (p.hp <= 1) { UI.toast('气血近乎枯竭——先疗伤，或收手离塔'); UI.renderAll(); return; }
+    // v30 修瑕：濒死劝退口径明确化——原 p.hp<=1 语义模糊（hp=2 可登、hp=1 被拒）
+    const stT = Stat.compute(p);
+    if (p.hp <= Math.max(2, Math.round(stT.maxHp * 0.1))) { UI.toast('气血近乎枯竭——先疗伤，或收手离塔'); UI.renderAll(); return; }
     const foe = this.foeFor(p, run.floor);
     Battle.start(null, {
       tower: true,
@@ -162,7 +212,16 @@ const TowerSys = {
     if (!run) return;
     const mods = this.modsOf(p);
     const exp = Math.round(B.enemy.expGain * 0.5 * (mods.exp || 1));
-    const stones = Math.round((8 + run.floor * 3) * GameData.stoneEco(p.realmIdx) * (mods.stone || 1));
+    // v30 堵漏：层奖灵石设每日总额度（300×境界经济）——原守影战力钳 60 而层奖线性无界，
+    // 高战玩家配回春祝福可近乎无限爬层，塔成了后期最粗的可重复收入管
+    this.syncToday(p);
+    const t2 = this.state(p);
+    t2.today.stones = t2.today.stones || 0;
+    const rawStones = Math.round((8 + run.floor * 3) * GameData.stoneEco(p.realmIdx) * (mods.stone || 1));
+    const allowance = Math.max(0, 300 * GameData.stoneEco(p.realmIdx) - t2.today.stones);
+    const stones = Math.min(rawStones, allowance);
+    t2.today.stones += stones;
+    if (stones < rawStones) Log.add('塔灵今日缘法已尽——再往上的层奖灵石将归于明日（修为照旧）。', 'warn');
     Cultivate.addExp(p, exp);
     Bag.addStones(stones);
     p.counters.wins++;
@@ -171,6 +230,8 @@ const TowerSys = {
     const st = Stat.compute(p);
     const healPct = (mods.heal || 0) + (run.floor % 5 === 0 ? 0.30 + (mods.healChest || 0) : 0);
     if (healPct > 0) p.hp = Math.min(st.maxHp, p.hp + Math.round(st.maxHp * healPct));
+    // v30：登天塔三十层——轮回印记 +1（跨世一次性）
+    if (run.floor >= 30 && typeof ReincarnationSys !== 'undefined' && ReincarnationSys.grantMarks) ReincarnationSys.grantMarks(1, 'tower_30');
     // 纪录（本档 + 跨世）
     if (run.floor > t.best) t.best = run.floor;
     if (run.floor > (p.counters.towerBest || 0)) p.counters.towerBest = run.floor;
@@ -179,10 +240,43 @@ const TowerSys = {
     run.floor++;
     Log.add(`登天塔第 ${floor} 层已克——层奖：修为 +${Utils.fmtNum(exp)}、灵石 +${Utils.fmtNum(stones)}${healPct > 0 ? `，气血回复 ${Math.round(healPct * 100)}%` : ''}。`, 'gain');
     Game.afterAction();
-    // 每 5 层：宝箱；每 3 层：祝福三选一；其余层自动续层
+    // 每 5 层：宝箱；每 7 层：奇遇层；每 3 层：祝福三选一；其余层自动续层
     if (floor % 5 === 0) await this.chestStep(p, run, mods, floor);
+    else if (floor % 7 === 0) await this.eventStep(p, run, mods, floor);
     else if (floor % 3 === 0) await this.blessStep(p, run, floor);
     else { await Battle.wait(900); this.nextFloor(); }
+  },
+
+  /** v30 每 7 层奇遇层：灵泉石台 / 行脚商人 / 塔灵赐福——爬塔从「刷纪录」变「每层都在做选择」 */
+  async eventStep(p, run, mods, floor) {
+    const eco = GameData.stoneEco(p.realmIdx);
+    const vendorMat = Utils.pick(['tw_sand', 'tw_iron', 'tw_core']);
+    const price = Math.round(60 * eco);
+    const pool = this.BUFFS.filter(b => !run.buffs.includes(b.id));
+    const gift = pool.length ? Utils.pick(pool) : null;
+    const v = await UI.popup({
+      title: `✦ 登天塔 · 第 ${floor} 层 · 塔中奇遇`,
+      html: `<div class="tip-line">这一层没有守影——只有一方石台、一个行脚商人，与一缕若有若无的塔灵。</div>`,
+      options: [
+        { text: `灵泉石台（回复六成气血）`, value: 'spring', primary: true },
+        { text: `行脚商人（${Utils.fmtNum(price)} 灵石购【${GameData.ITEMS[vendorMat].name}】×3）`, value: 'vendor' },
+        ...(gift ? [{ text: `塔灵赐福（随机获赠【${gift.name}】）`, value: 'gift' }] : []),
+        { text: '径直登层', value: '__skip' },
+      ],
+    });
+    if (v === 'spring') {
+      const st = Stat.compute(p);
+      p.hp = Math.min(st.maxHp, p.hp + Math.round(st.maxHp * 0.6));
+      Log.add('塔心石台涌出温热灵泉——沐浴一番，气血尽复六成。', 'gain');
+    } else if (v === 'vendor') {
+      if (!Bag.spendStones(price)) { UI.toast('灵石不足，商人耸耸肩走了'); }
+      else { Bag.addItem(vendorMat, 3); Log.add(`行脚商人收了灵石，从褡裢里摸出【${GameData.ITEMS[vendorMat].name}】×3：「塔里的东西，比下面划算。」`, 'gain'); }
+    } else if (v === 'gift' && gift) {
+      run.buffs.push(gift.id);
+      Log.add(`塔灵低语一声——【<b>${gift.name}</b>】入体：${gift.desc}`, 'gain');
+      UI.toast(`✦ 塔灵赐福：${gift.name}`);
+    }
+    this.nextFloor();
   },
 
   /** 祝福三选一（第四项永远是离塔出口） */
@@ -201,7 +295,11 @@ const TowerSys = {
       options: [...picks.map(b => ({ text: `${b.name}｜${b.desc}`, value: b.id })),
         { text: '收手离塔（带足战利品）', value: '__quit' }],
     });
-    if (v === '__quit' || v == null) { if (v === '__quit') this.leave(); return; }
+    if (v === '__quit' || v == null) {
+      if (v === '__quit') this.leave();
+      else UI.toast('你未能决意——本层祝福机会已过（可继续登层）');   // v30 修瑕：ESC 曾静默吞掉三选一
+      return;
+    }
     run.buffs.push(v);
     const b = this.BUFFS.find(x => x.id === v);
     UI.toast(`✦ 塔心祝福：${b.name}`);
@@ -217,7 +315,9 @@ const TowerSys = {
       { id: 'm_gupian', w: 22 }, { id: 'tw_sand', w: 26 }, { id: 'tw_iron', w: 16 },
       { id: 'tw_core', w: 8 }, { id: 'pill_ningqi', w: 16 }, { id: 'pill_xisui', w: 6 },
       { id: 'tal_zilei', w: 6 },
-    ].filter(x => GameData.ITEMS[x.id]);
+      // v30 断头路补全：九天仙袍原全源码零获取渠道，法宝/妖兽图鉴因此永不可能收满——30 层后宝箱可出
+      { id: 'a_xianpao', w: 3, minFloor: 30 },
+    ].filter(x => GameData.ITEMS[x.id] && (!x.minFloor || floor >= x.minFloor));
     const total = pool.reduce((s, x) => s + x.w, 0);
     let roll = Math.random() * total, drop = pool[0].id;
     for (const x of pool) { roll -= x.w; if (roll <= 0) { drop = x.id; break; } }

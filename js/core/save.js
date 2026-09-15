@@ -38,6 +38,7 @@ write(key, player) {
         } else {
           console.warn('存档校验失败，重试写入');
           this.storage.setItem(this.KEY + key, raw);
+          this.storage.removeItem(verifyKey);   // v30 修瑕：校验失败分支曾残留 _v 临时键
         }
       } else {
         this.mem[key] = raw;
@@ -47,6 +48,22 @@ write(key, player) {
       UI.toast('存档写入异常，请检查存储空间', true);
     }
     UI.saveFlash();
+  },
+  /** v30 滚动快照：进入游戏前把 auto 存档复制到 bak2（损坏/误删可回捞；每会话至多一次） */
+  snapshotAuto() {
+    if (Game._snapDone) return;
+    Game._snapDone = true;
+    try {
+      const cur = this.read('auto');
+      if (!cur || !cur.player || !cur.meta || !cur.meta.ts) return;
+      if (Date.now() - cur.meta.ts < 60000) return;   // 刚写过的不算「上次会话」
+      const prev = this.read('bak2');
+      if (!prev || !prev.meta || (prev.meta.ts || 0) < cur.meta.ts) {
+        const raw = JSON.stringify(cur);
+        if (this.storage.setItem) this.storage.setItem(this.KEY + 'bak2', raw);
+        else this.mem['bak2'] = raw;
+      }
+    } catch (e) { /* ignore */ }
   },
   remove(key) {
     try { this.storage.removeItem ? this.storage.removeItem(this.KEY + key) : delete this.mem[key]; } catch (e) { /* ignore */ }

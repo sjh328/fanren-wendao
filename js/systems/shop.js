@@ -11,6 +11,13 @@ const ShopSys = {
     // v20 修瑕：ecoPrice（符箓时价）同步作用于买价——此前只涨卖价，构成「低买高卖」印钞循环
     let base = def.price || 0;
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
+    // v30：法宝直购价随境界微涨（相对上架境界至多三倍）——grade1-3 恒价在后期形同白菜，
+    // 毕业装获取走「炼器/掉落/兑换」三线后，坊市直购保持可行但不再恒价
+    if (def.type === 'artifact' && (def.grade || 0) >= 1) {
+      const row = (GameData.SHOP || []).find(r => r.item === itemId);
+      const minR = row ? (row.minRealm || 0) : 0;
+      base = Math.round(base * Utils.clamp(Math.pow(3.8, p.realmIdx - minR), 1, 3));
+    }
     // v24 声望接线：名望高者坊市给面子（买价九折/九二折，劣迹昭彰者吃溢价）；卖价不受声望影响
     const repMul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
     return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId) * repMul));

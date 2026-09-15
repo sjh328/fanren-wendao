@@ -44,10 +44,13 @@ const Stat = {
       const def = GameData.ITEMS[id];
       if (!def || !def.bonus) continue;
       const enhLv = (typeof ForgeSys !== 'undefined' && ForgeSys.lvOf) ? ForgeSys.lvOf(p, slotId) : 0;
-      const enhMul = 1 + enhLv * 0.1;
+      // v30 装备铸魂：强化全键生效——平铺 10%/级、百分比 2%/级、功能键 1%/级
+      //（纯百分比/功能型饰品此前 +0 与 +10 完全同效却全额收费）
       for (const [k, v] of Object.entries(def.bonus)) {
         const flat = k === 'atk' || k === 'def' || k === 'hp' || k === 'mp' || k === 'spd';
-        total[k] = (total[k] || 0) + (flat ? v * enhMul : v);
+        const fnKey = k === 'crit' || k === 'dodge' || k === 'block' || k === 'luck' || k === 'cult' || k === 'stonePct';
+        const enhMul = flat ? 1 + enhLv * 0.1 : fnKey ? 1 + enhLv * 0.01 : 1 + enhLv * 0.02;
+        total[k] = (total[k] || 0) + v * enhMul;
       }
     }
     // v13 套装加成
@@ -128,7 +131,7 @@ const Stat = {
       crit: Utils.clamp(5 + (A.luck + (eq.luck || 0)) * 0.6 + (gf.crit || 0) + (eq.crit || 0) + (beastPass.crit || 0) + (dx.crit || 0) + (pl.crit || 0), 0, 75),
       dodge: Utils.clamp((gf.dodge || 0) + (eq.dodge || 0) + (sb.dodge || 0) + (beastPass.dodge || 0) + (dx.dodge || 0) + (pl.dodge || 0) + (p.dao === 'array' && DaoSys.tierLevel(p) >= 4 ? 8 : 0), 0, 35),   // v10 阵道六境·迷踪境 · v13 宗门/灵兽
       block: Utils.clamp(8 + (gf.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0), 0, 60),   // v10 般若六境·铁骨境
-      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0),
+      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0) + (pl.cultPct || 0),   // v30 修瑕：补个人线 cultPct 消费（苏白线终章加成原为死键）
       stonePct: (sb.stonePct || 0) + (eq.stonePct || 0) + (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3),   // v20 藏宝阁
       luck: A.luck + (eq.luck || 0),
       pillPct: (sb.pillPct || 0) + (pl.pillPct || 0),

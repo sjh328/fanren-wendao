@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="凡人问道">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <title>凡人问道 · 文字修仙</title>
-<link rel="stylesheet" href="style.css?v=45">
+<link rel="stylesheet" href="style.css?v=46">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=LXGW+WenKai&family=Noto+Serif+SC:wght@400;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
@@ -32,6 +32,7 @@
       <!-- 存档位选择 -->
       <div id="start-slots" class="start-slots"></div>
       <p class="start-tip">选择一处存档位，开启你的仙途。</p>
+      <div class="create-btns" style="margin-top:10px"><button class="btn btn-sm" data-action="st-mirror">🪞 轮 回 镜</button><button class="btn btn-sm" data-action="st-bak2" title="回捞上次会话开始前的自动存档快照">♻ 回捞上次快照</button></div>
     </div>
 
     <!-- 创角界面 -->
@@ -215,13 +216,44 @@
   <div id="toast"></div>
   <div id="announce"></div>
 </div>
-<script src="game.js?v=45"></script>
+<script src="game.js?v=46"></script>
 <script>
   /* v24 PWA：注册 Service Worker——离线可玩、可添加到主屏幕（http/https 环境生效） */
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')
-        .then(() => navigator.serviceWorker.ready)
+        .then((reg) => {
+          // v30 更新链：检测到新版本就绪时提示刷新（只在非战斗/非挂机时机弹，用户点才 reload）
+          const notifyUpdate = () => {
+            if (sessionStorage.getItem('sw_update_notified')) return;
+            sessionStorage.setItem('sw_update_notified', '1');
+            const canReload = () => !(window.Battle && Battle.active) && !(window.AutoCult && AutoCult.active) && !(window.Story && Story.active && Story.active());
+            const show = () => {
+              const tip = document.querySelector('.start-tip');
+              if (!tip || document.getElementById('sw-update-tip')) return;
+              const div = document.createElement('div');
+              div.id = 'sw-update-tip';
+              div.className = 'tip-line';
+              div.style.marginTop = '6px';
+              div.innerHTML = '✦ 新版本已就绪 —— <a href="#" id="sw-update-link" style="color:var(--hl,#c9a86a)">点此刷新启用</a>（挂机进度会自动存档）';
+              tip.after(div);
+              div.querySelector('#sw-update-link').addEventListener('click', (ev) => {
+                ev.preventDefault();
+                if (canReload()) location.reload();
+                else UI.toast('战斗/挂机结束后再刷新更稳妥——进度已自动存档');
+              });
+            };
+            if (document.getElementById('start-screen') && !document.getElementById('start-screen').classList.contains('hidden')) show();
+            else setTimeout(() => { if (canReload()) show(); else setTimeout(show, 30000); }, 15000);
+          };
+          reg.addEventListener('updatefound', () => {
+            const nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener('statechange', () => { if (nw.state === 'installed' && navigator.serviceWorker.controller) notifyUpdate(); });
+          });
+          navigator.serviceWorker.addEventListener('controllerchange', () => { /* 由上方 updatefound 路径统一提示 */ });
+          return navigator.serviceWorker.ready;
+        })
         .then(() => {
           const tip = document.querySelector('.start-tip');
           if (tip && !sessionStorage.getItem('pwa_hint')) {

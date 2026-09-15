@@ -14,6 +14,7 @@ const BlackSys = {
     { id: 's_cx_gou', w: 5 }, { id: 's_xt_pei', w: 5 }, { id: 'gf_feixian', w: 5 },
     { id: 'm_bingpo', w: 12 }, { id: 'seed_xingchen', w: 4 }, { id: 'm_xuecan', w: 10 },
     { id: 'm_jiaojin', w: 6 },   // v29：蛟筋断头路补全——原仅 r6+ 掉落与 22000 贡献一条路，赤霄神剑（grade3 内容）中期无料
+    { id: 'm_yaopi', w: 10 },   // v30 断头路补全：妖兽皮革原仅 tier1 掉落（金丹后随 dropTier 绝迹），f3/f13 炼器线中后期无料
   ],
   /** 暗巷货（确定性哈希）：今日四件货物 */
   goods(p) {
@@ -37,7 +38,8 @@ const BlackSys = {
   price(p, id) {
     const def = GameData.ITEMS[id];
     let base = def.price || 0;
-    if (!base) base = Math.round(2000 * Math.pow(3, Utils.clamp(def.grade ?? def.tier ?? 1, 0, 5)));
+    // v30 修瑕：兜底价接境界行情——原 2000×3^grade 恒价，玄天/赤霄散件 8.64 万在后期形同白送
+    if (!base) base = Math.round(2000 * Math.pow(3, Utils.clamp(def.grade ?? def.tier ?? 1, 0, 5)) * Math.pow(GameData.stoneEco(p.realmIdx), 0.5));
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
     const repMul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
     return Math.max(1, Math.round(base * 1.6 * repMul));
@@ -106,8 +108,14 @@ const BlackSys = {
     const roll = Math.random() * 100;
     if (roll < 25 + luck * 4) {
       Bag.addItem(mat, matQty * 2);
-      Bag.addItem('m_gupian', 1);
-      Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×${matQty * 2}，夹层里还藏着一枚上古法宝碎片——今日的运气，值了。`, 'gain');
+      // v30 堵漏：碎片彩头只发低境——原固定送 m_gupian（面值 6000），r0~r2 赌袋恒正期望
+      if (p.realmIdx < 3) {
+        Bag.addItem('m_gupian', 1);
+        Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×${matQty * 2}，夹层里还藏着一枚上古法宝碎片——今日的运气，值了。`, 'gain');
+      } else {
+        Bag.addItem(mat, Math.ceil(matQty * 0.5));
+        Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×${Math.ceil(matQty * 2.5)}——今日的运气，值了。`, 'gain');
+      }
       Ambience.sfx('rare');
     } else if (roll < 60) {
       Bag.addItem(mat, matQty);

@@ -113,6 +113,17 @@ const DaoSys = {
     if (!ok) return;
     // v27 修瑕：转道清空原道 daoExp——此前重拾原道立即继承全部道境层数，「弃道重修」形同虚设
     if (p.daoExp) delete p.daoExp[p.dao];
+    // v30 修瑕：转道弃旧道秘传功法——原只拦「新学」，已修的旧道专属功法照吃加成，弃道不弃利
+    if (p.gongfa) {
+      const dropped = Object.keys(p.gongfa).filter(id => (GameData.ITEMS[id] || {}).daoLimit === p.dao);
+      for (const id of dropped) delete p.gongfa[id];
+      // 背包中未修习的旧道秘传同样作废（道途不合，留在袋中也是废纸）
+      for (const id of Object.keys(p.bag || {})) {
+        const def = GameData.ITEMS[id];
+        if (def && def.type === 'gongfa' && def.daoLimit === p.dao) delete p.bag[id];
+      }
+      if (dropped.length) Log.add(`旧道秘传随道基一同崩解：${dropped.map(id => (GameData.ITEMS[id] || {}).name || id).join('、')} 尽数散去。`, 'warn');
+    }
     p.realmIdx -= 1; p.layer = 0; p.exp = 0; p.insight = 0; p.dao = null;
     // v29 修瑕：转道名实相符——溢出折存/连败保底一并清去；自废道基折寿五年
     p.expOverflow = 0; p.breakStreak = 0;

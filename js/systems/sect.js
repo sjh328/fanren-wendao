@@ -60,22 +60,25 @@ const SectSys = {
   genTask(p) {
     const realm = p.realmIdx;
     const type = Utils.pick(['kill', 'collect', 'cult']);
+    // v30 宗门特色差事：本宗名目替代通用名目（35%），机制不变、文案见宗门气象
+    const flav = p.sect && GameData.SECT_QUEST_FLAVOR && GameData.SECT_QUEST_FLAVOR[p.sect.id];
+    const flavorName = (flav && Utils.chance(35)) ? flav[type] : null;
     if (type === 'kill') {
       const pool = this.taskMonsters(realm * 4 + p.layer);
       if (pool.length) {
         const target = Utils.pick(pool);
         const need = Utils.rand(3, 5);
-        return { type, target, need, progress: 0, name: `讨伐 · ${GameData.MONSTERS[target].name}`, desc: `击杀 ${GameData.MONSTERS[target].name} ×${need}` };
+        return { type, target, need, progress: 0, name: flavorName || `讨伐 · ${GameData.MONSTERS[target].name}`, desc: flavorName ? `门中差事 · ${flavorName}：击杀 ${GameData.MONSTERS[target].name} ×${need}` : `击杀 ${GameData.MONSTERS[target].name} ×${need}` };
       }
     }
     if (type === 'collect') {
       const tier = Math.min(4, Math.floor(realm / 2) + 1);
       const target = Utils.pick(GameData.matsByTier(tier));
       const need = Utils.rand(3, 6);
-      return { type, target, need, progress: 0, name: `采集 · ${GameData.ITEMS[target].name}`, desc: `上交 ${GameData.ITEMS[target].name} ×${need}` };
+      return { type, target, need, progress: 0, name: flavorName || `采集 · ${GameData.ITEMS[target].name}`, desc: flavorName ? `门中差事 · ${flavorName}：上交 ${GameData.ITEMS[target].name} ×${need}` : `上交 ${GameData.ITEMS[target].name} ×${need}` };
     }
     const need = Math.round(120 * GameData.eco(realm));
-    return { type: 'cult', target: null, need, progress: 0, name: '修行 · 精进不休', desc: `累计获得修为 ${Utils.fmtNum(need)}` };
+    return { type: 'cult', target: null, need, progress: 0, name: flavorName || '修行 · 精进不休', desc: flavorName ? `门中差事 · ${flavorName}：累计获得修为 ${Utils.fmtNum(need)}` : `累计获得修为 ${Utils.fmtNum(need)}` };
   },
   rewards(p, task) {
     const realm = p.realmIdx;
@@ -168,6 +171,20 @@ const SectSys = {
     const p = Game.player;
     const row = GameData.SECT_EXCHANGE[idx];
     if (!row) return;
+    // v30 特殊兑换：贡献换声望礼 / 器魂（单向有损的次级货币汇率网）
+    if (row.special) {
+      if (p.sect.contrib < row.cost) { UI.toast('贡献点不足'); return; }
+      const names = { rep: '侠名帖', qihun: '器魂' };
+      const ok2 = row.special === 'rep';
+      const apply = () => {
+        p.sect.contrib -= row.cost;
+        if (row.special === 'rep') { p.reputation = (p.reputation || 0) + row.qty; Log.add(`你为宗门奔走办差所积的贡献，换作一纸<b>侠名帖</b>传扬江湖——声望 +${row.qty}。`, 'gain'); }
+        else { p.qihun = (p.qihun || 0) + row.qty; Log.add(`宗门藏库取出一匣<b>器魂</b> ×${row.qty}——前代弟子分解的旧器精魄。`, 'gain'); }
+        Game.afterAction();
+      };
+      const UI2 = UI.popup({ title: `兑换 · ${names[row.special]}`, html: `以 <b>${row.cost}</b> 贡献兑 ${names[row.special]} ×${row.qty}？`, options: [{ text: '兑 换', value: true, primary: true }, { text: '作罢', value: false }] });
+      return UI2.then(v => { if (v) apply(); });
+    }
     const def = GameData.ITEMS[row.item];
     if (def.type === 'gongfa' && (p.gongfa[row.item] || p.bag[row.item])) { UI.toast('你已修习或已藏有此功法'); return; }   // v29 修瑕：补背包判重
     if (def.type === 'gongfa' && !DaoSys.canLearnGongfa(p, def)) return; // 体修难悟高阶法诀

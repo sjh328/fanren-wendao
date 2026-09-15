@@ -4,7 +4,7 @@
 //   2. 拼接产物先过 node --check 语法校验，通过才允许写盘
 //   3. 覆盖前自动备份到 attic/game.js.pre-build
 // 开发流程：编辑 js/ 下模块 → node scripts/build.mjs → 刷新页面（index.html 引用不变）
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +14,19 @@ const ROOT = join(__dirname, '..');
 const OUT = join(ROOT, 'game.js');
 
 const ORDER = JSON.parse(readFileSync(join(__dirname, 'modules.json'), 'utf8'));
+
+// ---- 0) v30 护栏：源码↔产物分叉三态检测（仅当产物被手改时拒绝静默覆盖） ----
+const { syncStatus, divergeSample, writeReceipt } = await import('./check-sync.mjs');
+const FORCE = process.argv.includes('--force');
+if (!FORCE) {
+  const st = syncStatus();
+  if (st === 'ARTIFACT_DIRTY') {
+    const d = divergeSample();
+    console.error(`✗ 构建中止：game.js 被直接改动（与源码拼接、上次构建回执均不一致）——首个差异在第 ${d.line} 行附近。`);
+    console.error('  把改动落回 js/ 源码，或 node scripts/split.mjs 以产物重切，或 --force 强行覆盖。');
+    process.exit(1);
+  }
+}
 
 // ---- 1) 存在性校验：缺失即失败 ----
 const missing = ORDER.filter(f => !existsSync(join(ROOT, f)));
@@ -64,5 +77,6 @@ if (existsSync(OUT)) {
   copyFileSync(OUT, join(ROOT, 'attic', 'game.js.pre-build'));
 }
 writeFileSync(OUT, output, 'utf8');
-execSync(`del /q "${tmp}"`, { stdio: 'ignore', shell: 'cmd.exe' });
+writeReceipt();   // v30：记录本次产物哈希，供分叉三态判定
+rmSync(tmp, { force: true });   // v30：跨平台清理（原 del /q 仅 Windows 可用）
 console.log(`✅ 构建完成：${OUT}（${(output.length / 1024).toFixed(0)} KB，${ORDER.length} 个模块）`);

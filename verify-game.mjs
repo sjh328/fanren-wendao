@@ -590,7 +590,7 @@ try {
   }
 
   /* ---------- T12-B 金丹天劫（种子：筑基圆满）——三策博弈，随境界愈难 ---------- */
-  await seedAndLoad({ name: '渡劫道人', realmIdx: 1, layer: 3, exp: 800, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, statLossPct: 0, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
+  await seedAndLoad({ name: '渡劫道人', realmIdx: 1, layer: 3, exp: 1075, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, statLossPct: 0, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
   await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
   await sleep(300);
   const card12b = await page.evaluate(() => {
@@ -612,9 +612,9 @@ try {
     await sleep(3600);
     await dismissRollback();
     let t12b = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
-    if (t12b.realmIdx !== 2) {
+    for (let tries = 0; t12b.realmIdx !== 2 && tries < 2; tries++) {   // v30：渡劫成算钳 95%，重试 1→3 次消抖
       console.log('  - T12 金丹天劫意外失败，重试一次');
-      await seedAndLoad({ name: '渡劫道人', realmIdx: 1, layer: 3, exp: 800, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, statLossPct: 0, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
+      await seedAndLoad({ name: '渡劫道人', realmIdx: 1, layer: 3, exp: 1075, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, statLossPct: 0, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
       await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
       await sleep(300);
       await clickSel(page, '[data-action="act-breakthrough"]');
@@ -633,7 +633,7 @@ try {
   await page.evaluate(() => {
     const d = JSON.parse(localStorage.getItem('fanren_wd_3'));
     const pl = d.player;
-    pl.realmIdx = 9; pl.layer = 3; pl.exp = 175000000; pl.sect = null;
+    pl.realmIdx = 9; pl.layer = 3; pl.exp = 2500000000; pl.sect = null;
     localStorage.setItem('fanren_wd_3', JSON.stringify({ v: 1, player: pl, meta: { name: pl.name, realmText: '真仙圆满', day: 100, age: 20, ts: Date.now(), dead: false } }));
   });
   await clickSel(page, '[data-action="act-newgame"]');
@@ -667,22 +667,32 @@ try {
   await sleep(300);
   const ascTab = await text(page, '#tab-content');
   ascTab.includes('渡劫飞升') ? pass('T13 真仙圆满出现飞升卡片') : fail('T13 飞升卡片', '');
-  await clickSel(page, '[data-action="act-ascend"]');
-  await sleep(400);
-  await clickPopupBtn(0); // 引动天劫
-  await sleep(1800);
-  // v22：飞升含「位列仙班」+「尾声」两段弹窗——轮询逐段点完（以弹窗可见为准，取末按钮，非阻断）
-  for (let i = 0; i < 8; i++) {
-    const open = await page.$eval('#popup-modal', el => !el.className.includes('hidden')).catch(() => false);
-    if (!open) break;
-    const btns = await page.$$('#popup-btns button');
-    if (!btns.length) break;
-    await btns[btns.length - 1].click().catch(() => {});
-    await sleep(700);
+  // v30：飞升改真判定（成算≈95%）——未过则补满修为重叩，最多 4 次
+  let ascended = false;
+  for (let tries = 0; tries < 4 && !ascended; tries++) {
+    await page.evaluate(() => {
+      const p = Game.player;
+      if (p && !p.flags.ascended) { p.exp = GameData.layerNeed(9, 3); p.hp = 999999; }
+    });
+    await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]').catch(() => {});
+    await sleep(200);
+    await clickSel(page, '[data-action="act-ascend"]');
+    await sleep(400);
+    await clickPopupBtn(0); // 引动天劫
+    await sleep(1800);
+    // v22：飞升含「位列仙班」+「尾声」两段弹窗——轮询逐段点完（以弹窗可见为准，取末按钮，非阻断）
+    for (let i = 0; i < 8; i++) {
+      const open = await page.$eval('#popup-modal', el => !el.className.includes('hidden')).catch(() => false);
+      if (!open) break;
+      const btns = await page.$$('#popup-btns button');
+      if (!btns.length) break;
+      await btns[btns.length - 1].click().catch(() => {});
+      await sleep(700);
+    }
+    await sleep(500);
+    ascended = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player.flags.ascended) === true;
   }
-  await sleep(500);
-  const ascended = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player.flags.ascended);
-  ascended === true ? pass('T13 飞升成功置仙班') : fail('T13 飞升', 'flags.ascended != true');
+  ascended ? pass('T13 飞升成功置仙班') : fail('T13 飞升', 'flags.ascended != true');
   await shot(page, 'ascended');
 
   /* ---------- T14 体修：不可购高阶功法 ---------- */
@@ -884,7 +894,7 @@ try {
   }
 
   /* ---------- T21 法宝挡劫（消耗护身法宝+根基虚浮） ---------- */
-  await seedAndLoad({ name: '挡劫人', realmIdx: 1, layer: 3, exp: 800, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
+  await seedAndLoad({ name: '挡劫人', realmIdx: 1, layer: 3, exp: 1075, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
   {
     await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
     await sleep(300);
@@ -895,7 +905,7 @@ try {
       const artBtnEnabled = await page.$eval('[data-action="trib-strategy"][data-strategy="artifact"]', el => !el.disabled).catch(() => false);
       artBtnEnabled ? pass('T21 持对应法宝时挡劫可选') : fail('T21 挡劫可用性', '');
       // 成算上限 95%，5% 天然失败率：失败则重种子重试一次
-      const T21_PATCH = { name: '挡劫人', realmIdx: 1, layer: 3, exp: 800, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } };
+      const T21_PATCH = { name: '挡劫人', realmIdx: 1, layer: 3, exp: 1075, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } };
       await clickSel(page, '[data-action="trib-strategy"][data-strategy="artifact"]');
       await sleep(3600);
       let t21 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);

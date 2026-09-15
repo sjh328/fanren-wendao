@@ -44,8 +44,8 @@ try {
     ? pass('VA5 闪光引导 / 回到顶部 / 火候按钮样式齐备') : fail('VA5 样式件', '');
   /@media \(max-width: 860px\)[^@]*\.battle-box \{[^}]*display: flex/.test(css.replace(/\n/g, ' ')) && /#bt-log \{[^}]*flex: 1 1 auto/.test(css.replace(/\n/g, ' ').replace('  ', ' '))
     ? pass('VA6 战斗壳：战报内滚、操作常驻') : fail('VA6 战斗壳', '缺 flex 壳规则');
-  html.includes('id="back-top"') && html.includes('style.css?v=45') && html.includes('game.js?v=45')
-    ? pass('VA7 回到顶部按钮 + 缓存号 v=45') : fail('VA7 index.html', '');
+  html.includes('id="back-top"') && html.includes('style.css?v=46') && html.includes('game.js?v=46')
+    ? pass('VA7 回到顶部按钮 + 缓存号 v=46') : fail('VA7 index.html', '');
 
   /* ================= VB 移动端壳行为组（390×844） ================= */
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
@@ -306,7 +306,7 @@ try {
   // VD11 离线回放：年龄保持整数、天数推进
   const vd11 = await page.evaluate(() => {
     const p = Game.player;
-    const slotKey = Game.slot == null ? 'auto' : Game.slot;
+    const slotKey = 'auto';   // v30：离线时长恒按 auto 档时间戳计（防读旧档刷离线），测试同步
     const data = JSON.parse(localStorage.getItem('fanren_wd_' + slotKey));
     data.meta.ts = Date.now() - 10 * 60000;   // 离线 10 分钟 → 10 天
     localStorage.setItem('fanren_wd_' + slotKey, JSON.stringify(data));

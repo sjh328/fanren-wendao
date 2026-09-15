@@ -2,7 +2,7 @@
 /* ======================================================================
  * §13 探索与随机事件
  * ====================================================================== */
-const buildMonster = (id, delta = 0) => {
+const buildMonster = (id, delta = 0, opts = {}) => {
   const d = GameData.MONSTERS[id];
   const rp = Utils.clamp(d.power + delta, 0, 60);
   const realmIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
@@ -33,6 +33,10 @@ const buildMonster = (id, delta = 0) => {
     rareDrop: d.rareDrop || null,
     hp: 0,
   };
+  // v30 修瑕：手工精英统一口径——秘境/世界事件曾在 buildMonster 之后才置 e.elite=true，
+  // 吃得到词缀却吃不到精英 crit 基线；elitePlus 只补基线不叠倍率（难度曲线不变）
+  if (opts.elitePlus && !m.elite) { m.elite = true; m.crit = 10 + ((tpl && tpl.crit) || 0); }
+  return m;
 };
 
 /* ======================================================================
@@ -44,6 +48,7 @@ const StatusFx = {
     poison:  { name: '中毒', tag: '毒', cls: 'fx-poison', dot: true },
     burn:    { name: '灼烧', tag: '焰', cls: 'fx-burn', dot: true },
     bleed:   { name: '流血', tag: '血', cls: 'fx-bleed', dot: true },
+    cursed:  { name: '咒雷', tag: '咒', cls: 'fx-burn', dot: true },   // v30：敌方「灭世雷罚」等咒术 DOT（原 kind 无处理器退化为普攻）
     defdown: { name: '破防', tag: '破', cls: 'fx-defdown' },
     slow:    { name: '迟滞', tag: '滞', cls: 'fx-slow' },
     weaken:  { name: '虚弱', tag: '弱', cls: 'fx-weaken' },
@@ -54,6 +59,8 @@ const StatusFx = {
     defup:   { name: '铁骨', tag: '骨', cls: 'fx-def' },
     agiup:   { name: '轻身', tag: '风', cls: 'fx-agi' },
     critup:  { name: '明目', tag: '目', cls: 'fx-agi' },
+    vuln:    { name: '破绽', tag: '隙', cls: 'fx-defdown' },   // v30：下次受击更易被会心（破阵符/连携体系）
+    ward:    { name: '真罡', tag: '罡', cls: 'fx-shield' },   // v30：真罡护体，所受 DOT 减半（真罡符）
   },
   add(list, st) {
     const old = list.find(x => x.kind === st.kind);
@@ -64,7 +71,7 @@ const StatusFx = {
   pctOf(list, kind) { const x = list.find(y => y.kind === kind && y.rounds > 0); return x ? (x.pct || 0) : 0; },
   /** 回合衰减：DOT 状态结算后衰减；其余状态（控制/增减益）由各自时机处理，此处不动 */
   decayDots(list) {
-    const dots = ['poison', 'burn', 'bleed'];
+    const dots = ['poison', 'burn', 'bleed', 'cursed'];
     for (const x of list) if (dots.includes(x.kind)) x.rounds--;
     return list.filter(x => x.rounds > 0);
   },
@@ -73,11 +80,20 @@ const StatusFx = {
     for (const x of list) if (kinds.includes(x.kind)) x.rounds--;
     return list.filter(x => x.rounds > 0);
   },
+  /* v30 状态引擎：统一衰减时相——原衰减清单散落四路调用点各自维护，kind 易漏
+   *（金光盾/敌方虚弱曾双双漏衰减）。所有回合末衰减统一走 tick(list, phase)。 */
+  AUG_MINE: ['defdown', 'slow', 'weaken', 'atkup', 'defup', 'agiup', 'critup', 'shield', 'ward'],
+  AUG_ENEMY: ['defdown', 'slow', 'weaken'],
+  tick(list, phase) {
+    const kinds = phase === 'enemyEnd' ? this.AUG_ENEMY : this.AUG_MINE;
+    for (const x of list) if (kinds.includes(x.kind)) x.rounds--;
+    return list.filter(x => x.rounds > 0);
+  },
   /** 移除指定类别状态（控制状态在其拥有者回合被消耗） */
   removeKinds(list, kinds) { return list.filter(x => !kinds.includes(x.kind)); },
   /** 清除全部负面（清心丹）：负面（DOT/减益/控制）尽去，增益保留 */
   purge(list) {
-    const neg = ['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken', 'stun', 'freeze'];
+    const neg = ['poison', 'burn', 'bleed', 'cursed', 'defdown', 'slow', 'weaken', 'stun', 'freeze', 'vuln'];
     return list.filter(x => !neg.includes(x.kind));
   },
   tagsHtml(list) {

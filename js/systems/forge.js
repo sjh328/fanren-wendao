@@ -7,7 +7,7 @@
  * 炼器：FORGE_RECIPES 材料锻造，天级神兵与套装件的唯一产出途径。
  * ====================================================================== */
 const ForgeSys = {
-  MAX_LV: 10,
+  MAX_LV: 15,
   /** 强化某 id 的当前等级 */
   lvOf(p, id) {
     // v19 修复：id 可为字符串或装备实例（v18 实例化后 equipBonus 传入实例对象）
@@ -24,16 +24,23 @@ const ForgeSys = {
     }
     return (p.enhanced || {})[id] || 0;
   },
-  /** 强化成功率（%）：1~2 必成，+3→+4 起 90% 逐级递减
+  /** 强化成功率（%）：1~2 必成，+3→+4 起 90% 逐级递减（v30 扩至 +15）
    *  v27 修瑕：原 lv<=3 恒 100 使表中 3:90 成为死档（+3→+4 白送必成） */
   rate(lv) {
     if (lv < 3) return 100;
-    return { 3: 90, 4: 82, 5: 72, 6: 60, 7: 50, 8: 40, 9: 30, 10: 22 }[lv] || 50;
+    return { 3: 90, 4: 82, 5: 72, 6: 60, 7: 50, 8: 40, 9: 30, 10: 22, 11: 18, 12: 14, 13: 11, 14: 8 }[lv] || 50;
+  },
+  /** v30 祝福值：+8 起失败 +20，满百下次必成——替代「强化石必成」的钞能力抹平风险设计 */
+  blessOf(p, itemId) { return (p.enhBless || {})[itemId] || 0; },
+  addBless(p, itemId, n) {
+    p.enhBless = p.enhBless || {};
+    p.enhBless[itemId] = Utils.clamp((p.enhBless[itemId] || 0) + n, 0, 100);
+    return p.enhBless[itemId];
   },
   /** 强化费用：灵石随境界与等级递增，玄铁矿 = 等级+1 */
   stonesCost(p, itemId, lv) {
     const def = GameData.ITEMS[itemId];
-    return Math.round((120 + lv * 90) * (1 + (def.grade || 0) * 0.8) * Math.pow(2.4, p.realmIdx));
+    return Math.round((120 + lv * 90) * (1 + (def.grade || 0) * 0.8) * GameData.sinkCurve(p.realmIdx) / 2.4);   // v30：消费端曲线族统一（r9 相对收入提升约 13 倍）
   },
   /** 执行强化 */
   async enhance(slot) {
@@ -42,20 +49,22 @@ const ForgeSys = {
     if (!itemId) { UI.toast('该槽位尚未装备法宝'); return; }
     const def = GameData.ITEMS[itemId];
     const lv = this.lvOf(p, itemId);
-    if (lv >= this.MAX_LV) { UI.toast('此宝已至强化极境（+10）'); return; }
+    if (lv >= this.MAX_LV) { UI.toast('此宝已至强化极境（+15）'); return; }
     const stones = this.stonesCost(p, itemId, lv);
     const oreNeed = lv + 1;
     const hasOre = Bag.count('m_xuantie') >= oreNeed;
     const hasGuard = Bag.count('m_qianghua') > 0;
     const rate = this.rate(lv);
-    p.counters.enhances = (p.counters.enhances || 0) + 1;   // v24 章助缘计数
+    const bless = this.blessOf(p, itemId);
+    const autoSuccess = bless >= 100;
     const ok = await UI.popup({
       title: `祭炼强化 · ${def.name} +${lv} → +${lv + 1}`,
       html: `以灵火温养法宝，可再提升一层。<br>
-        · 成功率 <b class="hl">${rate}%</b>（+10% 数值属性）<br>
+        · 成功率 <b class="hl">${rate}%</b>（平铺+10%/级 · 百分比+2%/级 · 功能+1%/级）<br>
         · 需灵石 <span class="hl">${Utils.fmtNum(stones)}</span>、玄铁矿 ×${oreNeed}（持有 ${Bag.count('m_xuantie')}）<br>
         ${lv >= 7 ? `<span class="neg">· +7 起失败将跌落一级！</span>` : ''}
-        ${hasGuard ? `<label class="opt-line"><input type="checkbox" id="enh-guard" checked> 消耗【强化石】×1——本次必定成功</label>` : ''}
+        ${lv >= 8 ? `<div class="tip-line">· 祝福值 <b class="hl">${bless}/100</b>——失败 +20，满百下次必定成功${autoSuccess ? '（<b>本次必成！</b>）' : ''}</div>` : ''}
+        ${hasGuard ? `<label class="opt-line"><input type="checkbox" id="enh-guard" checked> 消耗【强化石】×1——成功率 +40%</label>` : ''}
         ${hasOre ? '' : '<span class="neg">玄铁矿不足，无法祭炼。</span>'}`,
       options: hasOre
         ? [{ text: '祭 炼', value: true, primary: true }, { text: '再想想', value: false }]
@@ -65,10 +74,15 @@ const ForgeSys = {
     const useGuard = hasGuard && document.getElementById('enh-guard') && document.getElementById('enh-guard').checked;
     if (!Bag.spendStones(stones)) { UI.toast('灵石不足'); return; }
     Bag.removeItem('m_xuantie', oreNeed);
+    p.counters.enhances = (p.counters.enhances || 0) + 1;   // v30 修瑕：确认并付费后才计数（原弹窗前自增，取消也计）
     let success;
-    if (useGuard) {
-      Bag.removeItem('m_qianghua', 1);
+    if (autoSuccess) {
       success = true;
+      if (p.enhBless) delete p.enhBless[itemId];
+    } else if (useGuard) {
+      Bag.removeItem('m_qianghua', 1);
+      this.addBless(p, itemId, 40);   // v30：强化石改充盈祝福（原必成）
+      success = Utils.chance(Math.min(100, rate + 40));
     } else {
       success = Utils.chance(rate);
     }
@@ -78,6 +92,7 @@ const ForgeSys = {
       const eq = p.equipped[slot];
       if (eq && typeof eq === 'object') eq.enhance = Math.min(this.MAX_LV, lv + 1);
       else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv + 1; }
+      if (p.enhBless) delete p.enhBless[itemId];   // v30：祭炼功成，祝福值清零
       Ambience.sfx('forge');
       Log.add(`炉火纯青——<b class="grade-${def.grade}">${def.name}</b> 祭炼功成，升至 <b>+${lv + 1}</b>！法宝灵光更胜往昔。`, 'gain');
       if (lv + 1 >= 7) UI.announce(`✦ ${def.name} +${lv + 1}`, 'gold');
@@ -85,7 +100,9 @@ const ForgeSys = {
       const eq2 = p.equipped[slot];
       if (eq2 && typeof eq2 === 'object') eq2.enhance = Math.max(0, lv - 1);
       else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv - 1; }
-      Log.add(`炉火骤然失控！<b class="grade-${def.grade}">${def.name}</b> 祭炼失利，灵纹黯淡——强化跌至 <b>+${lv - 1}</b>。`, 'loss');
+      let blessNote = '';
+      if (lv >= 8) { const b = this.addBless(p, itemId, 20); blessNote = `（祝福值 ${b}/100${b >= 100 ? '——下次必定成功！' : ''}）`; }
+      Log.add(`炉火骤然失控！<b class="grade-${def.grade}">${def.name}</b> 祭炼失利，灵纹黯淡——强化跌至 <b>+${lv - 1}</b>${blessNote}。`, 'loss');
       UI.toast('祭炼失败，强化跌落一级', true);
     } else {
       Log.add(`此番祭炼火候未至，<b class="grade-${def.grade}">${def.name}</b> 未能精进（强化仍为 +${lv}）。`, 'warn');
@@ -164,16 +181,28 @@ const ForgeSys = {
       const A = this.affixesOf(p, inst);
       if (!A.prefix) continue;
       const d = this.affixDef('prefix', A.prefix);
-      if (d && d.bonus) for (const [k, v] of Object.entries(d.bonus)) total[k] = (total[k] || 0) + v;
+      if (d && d.bonus) {
+        const g = ((GameData.ITEMS[Utils.eqId(inst)] || {}).grade) || 0;
+        const per = d.per || {};
+        for (const [k, v] of Object.entries(d.bonus)) total[k] = (total[k] || 0) + v + (per[k] || 0) * g;   // v30：两段式随品阶缩放
+      }
     }
     return total;
   },
-  /** 词缀后缀战斗特效聚合（Battle 消费） */
+  /** v30 词缀价值估分（重铸保底与对比用） */
+  affixScore(part, id) {
+    const d = this.affixDef(part, id);
+    if (!d || !d.bonus) return 0;
+    const W = { atk: 2, atkPct: 2, def: 1.5, defPct: 1.5, hp: 0.3, hpPct: 0.3, mp: 0.2, mpPct: 0.2, spd: 1, spdPct: 1, crit: 1, dodge: 1, block: 0.5, cult: 1, luck: 2, stonePct: 1 };
+    return Object.entries(d.bonus).reduce((acc, [k, v]) => acc + (W[k] ?? 1) * v, 0);
+  },
+  /** 词缀后缀战斗特效聚合（Battle 消费）
+   *  v30 修瑕：统一走 affixesOf（原直读 inst.affixes，依赖 Stat.compute 先行落缀的时序） */
   suffixFx(p) {
     const fx = { leech: 0, execute: 0, comboUp: 0, thorns: 0, shield: 0, mpRegen: 0 };
     if (!p || !p.equipped) return fx;
     for (const inst of Object.values(p.equipped)) {
-      const A = (inst && inst.affixes) || {};
+      const A = this.affixesOf(p, inst);
       if (!A.suffix) continue;
       const d = this.affixDef('suffix', A.suffix);
       if (!d) continue;
@@ -189,7 +218,7 @@ const ForgeSys = {
     const id = Utils.eqId(inst);
     if (!inst || typeof inst === 'string' || !id) { UI.toast('该槽位未穿戴法宝'); return; }
     const def = GameData.ITEMS[id];
-    const cost = Math.round(300 * Math.pow(2.2, p.realmIdx));
+    const cost = Math.round(300 * GameData.sinkCurve(p.realmIdx) / 2.2);   // v30：曲线族统一
     const needOre = 2;
     const part = await UI.popup({
       title: `词缀洗练 · ${def.name}`,
@@ -199,19 +228,78 @@ const ForgeSys = {
       options: [
         { text: '洗练前缀 ◆', value: 'prefix', primary: true },
         { text: '洗练后缀 ◈', value: 'suffix' },
+        ...(inst.affixes && inst.affixes.prefix && inst.affixes.suffix ? [
+          { text: '锁◈洗◆（双倍价）', value: 'lockP' },
+          { text: '锁◆洗◈（双倍价）', value: 'lockS' },
+        ] : []),
         { text: '作罢', value: null },
       ],
     });
     if (!part) return;
+    const keepSide = part === 'lockP' ? 'suffix' : part === 'lockS' ? 'prefix' : null;
+    if (keepSide) part = part === 'lockP' ? 'prefix' : 'suffix';
+    const realCost = keepSide ? cost * 2 : cost;
     if (Bag.count('m_xuantie') < needOre) { UI.toast('玄铁矿不足'); return; }
-    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    if (!Bag.spendStones(realCost)) { UI.toast('灵石不足'); return; }
     Bag.removeItem('m_xuantie', needOre);
     const pool = GameData.BALANCE.AFFIXES[part].filter(a => a.slot === 'any' || a.slot === def.slot);
     if (!pool.length) { UI.toast('此槽位无可用词缀'); Game.afterAction(); return; }
     inst.affixes = inst.affixes || {};
-    inst.affixes[part] = Utils.pick(pool).id;
+    const oldScore = this.affixScore(part, inst.affixes[part]);
+    const cand = Utils.pick(pool);
+    // v30：洗练保底不降——新词缀估值更低时保留原词缀（灵石玄铁照付，求变不亏底）
+    if (oldScore > 0 && this.affixScore(part, cand) < oldScore) {
+      const d0 = this.affixDef(part, inst.affixes[part]);
+      Log.add(`你以玄铁重淬【${def.name}】——新火候不如旧纹，【<b>${d0.name}</b>】保留不动。`, 'warn');
+      Ambience.sfx('forge');
+      Game.afterAction();
+      return;
+    }
+    inst.affixes[part] = cand.id || cand;
     const d = this.affixDef(part, inst.affixes[part]);
-    Log.add(`你以玄铁重淬【${def.name}】——${part === 'prefix' ? '前缀' : '后缀'}词缀化为【<b>${d.name}</b>】：${d.desc}`, part === 'prefix' ? 'gain' : 'system');
+    Log.add(`你以玄铁重淬【${def.name}】——${part === 'prefix' ? '前缀' : '后缀'}词缀化为【<b>${d.name}</b>】：${d.desc}${keepSide ? `（已锁${keepSide === 'prefix' ? '前缀' : '后缀'}）` : ''}`, part === 'prefix' ? 'gain' : 'system');
+    Ambience.sfx('forge');
+    Game.afterAction();
+  },
+  /** v30 器魂重铸：双缀同洗、保底不降——分解旧器所得「器魂」于此回炉 */
+  async recast(slot) {
+    const p = Game.player;
+    const inst = p.equipped[slot];
+    const id = Utils.eqId(inst);
+    if (!inst || typeof inst === 'string' || !id) { UI.toast('该槽位未穿戴法宝'); return; }
+    const def = GameData.ITEMS[id];
+    const costQ = 8;
+    const costS = Math.round(150 * GameData.sinkCurve(p.realmIdx) / 2.2);   // v30：曲线族统一
+    const ok = await UI.popup({
+      title: `器魂重铸 · ${def.name}`,
+      html: `以旧器之魂为引，词缀前缀后缀<b>一同重铸</b>——每侧保底不降（新不如旧则保留旧纹）。<br>
+        需【器魂】×${costQ}（当前 ${p.qihun || 0}）与灵石 <span class="hl">${Utils.fmtNum(costS)}</span>。`,
+      options: [{ text: '重 铸', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if ((p.qihun || 0) < costQ) { UI.toast('器魂不足——分解闲置法宝可得'); return; }
+    if (!Bag.spendStones(costS)) { UI.toast('灵石不足'); return; }
+    p.qihun -= costQ;
+    inst.affixes = inst.affixes || {};
+    const oldA = { ...inst.affixes };
+    inst.affixes = this.rollAffixes(def);   // 双侧重掷
+    // 保底：任一侧新不如旧则回滚该侧（在 6 次候补里择优，再不济保旧纹）
+    const pool = GameData.BALANCE.AFFIXES;
+    const rollBetter = (part, oldId) => {
+      const oldScore = this.affixScore(part, oldId);
+      let best = oldId, bestScore = oldScore;
+      for (let i = 0; i < 6; i++) {
+        const cands = pool[part].filter(a => a.slot === 'any' || a.slot === def.slot);
+        const c = Utils.pick(cands);
+        if (this.affixScore(part, c.id) > bestScore) { best = c.id; bestScore = this.affixScore(part, c.id); }
+      }
+      return best;
+    };
+    if (oldA.prefix) inst.affixes.prefix = rollBetter('prefix', oldA.prefix);
+    if (oldA.suffix) inst.affixes.suffix = rollBetter('suffix', oldA.suffix);
+    const pre = inst.affixes.prefix && this.affixDef('prefix', inst.affixes.prefix);
+    const suf = inst.affixes.suffix && this.affixDef('suffix', inst.affixes.suffix);
+    Log.add(`旧器之魂入炉，【<b>${def.name}</b>】词缀重铸：${pre ? `◆${pre.name}` : '无前缀'} / ${suf ? `◈${suf.name}` : '无后缀'}——保底不降，器魂 -${costQ}。`, 'gain');
     Ambience.sfx('forge');
     Game.afterAction();
   },
@@ -229,7 +317,7 @@ const ForgeSys = {
     if (!p.benming) p.benming = { lv: 0 };
     if (p.benming.lv >= this.BENMING_MAX) { UI.toast('本命法宝已达十阶圆满'); return; }
     const lv = p.benming.lv;
-    const cost = Math.round(3000 * (lv + 1) * Math.pow(2.2, Math.min(8, p.realmIdx)));   // v29：封顶 6→8
+    const cost = Math.round(3000 * (lv + 1) * GameData.sinkCurve(p.realmIdx) / 2.2);   // v30：曲线族统一   // v29：封顶 6→8
     const ore = 5 + lv * 2;
     const ok = await UI.popup({
       title: `本命法宝喂养 · 第${lv + 1}阶`,
@@ -249,11 +337,21 @@ const ForgeSys = {
     const total = {};
     if (!p.equipped) return total;
     const worn = Object.values(p.equipped).filter(Boolean).map(e => (typeof e === 'string' ? e : e.id));
+    const donePieces = new Set();
     for (const [sid, sdef] of Object.entries(GameData.SETS || {})) {
       const n = sdef.pieces.filter(id => worn.includes(id)).length;
       if (n >= sdef.pieces.length) {
         for (const [k, v] of Object.entries(sdef.bonus)) total[k] = (total[k] || 0) + v;
+        sdef.pieces.forEach(id => donePieces.add(id));   // v30：成套件不重复吃共鸣
+      } else if (n === 2) {
+        // v30 套装阶梯：两件即有六成加成——集套装从「全有或全无」变渐进
+        for (const [k, v] of Object.entries(sdef.bonus)) total[k] = (total[k] || 0) + Math.ceil(v * 0.6);
       }
+    }
+    // v30 仙器共鸣：grade5 法宝不成套也各有小词条（攻防血 +1%/件）
+    for (const id of worn) {
+      const d = GameData.ITEMS[id];
+      if (d && (d.grade || 0) === 5 && !donePieces.has(id)) { total.atkPct = (total.atkPct || 0) + 1; total.defPct = (total.defPct || 0) + 1; total.hpPct = (total.hpPct || 0) + 1; }
     }
     return total;
   },
@@ -266,5 +364,10 @@ const ForgeSys = {
       .map(([sid, sdef]) => sdef);
   },
   /** 强化等级显示后缀 */
-  enhText(p, id) { const lv = this.lvOf(p, id); return lv > 0 ? ` <span class="enh-lv">+${lv}</span>` : ''; },
+  enhText(p, id, asNote = false) {
+    const lv = this.lvOf(p, id);
+    if (lv <= 0) return '';
+    // v30 修瑕：背包副本显示的是「同 id 共享祭炼心得」而非该件自身强化——加注防误读
+    return asNote ? ` <span class="enh-lv" title="同 id 装备的共享祭炼心得，装备后自动承袭">心得 +${lv}</span>` : ` <span class="enh-lv">+${lv}</span>`;
+  },
 };

@@ -381,8 +381,9 @@ try {
     const p = Game.player;
     p.bag.seed_lingzhi = 1;
     const sd = GameData.ITEMS['seed_lingzhi'];
-    p.cave.plots[1] = { seed: 'seed_lingzhi', crop: sd.crop, days: sd.days, plantedDay: 110 };
-    p.day = 110 + sd.days + 25;   // 过熟 25 日
+    // v30 消抖：收成日钉在隆冬（月 11，无季秋丰收 +1）——原落点会撞季节加成使折半产量回到 2
+    p.cave.plots[1] = { seed: 'seed_lingzhi', crop: sd.crop, days: sd.days, plantedDay: 300 };
+    p.day = 300 + sd.days + 25;
     const before = Bag.count('m_lingzhi');
     CaveSys.harvest(1);
     return { got: Bag.count('m_lingzhi') - before, halved: Bag.count('m_lingzhi') - before === 1 };

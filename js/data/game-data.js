@@ -12,12 +12,32 @@ Codex.checkRewards = function () {
   let hit = '';
   for (const cat of Object.keys(this.CAT_NAMES)) {
     const total = this.catalog(cat).length;
-    if (!total || this.catGot(cat) < total || p.flags['codex_' + cat]) continue;
-    p.flags['codex_' + cat] = true;
-    p.codexBonus = (p.codexBonus || 0) + 1;
-    hit = this.CAT_NAMES[cat];
-    UI.announce(`✦ 图鉴大成 · ${hit} ✦`, 'gold');
-    Log.add(`✦ <b>${hit}图鉴</b>业已收录齐全——见多识广，道行精进（全属性永久 +1%，已累计 ${p.codexBonus} 类）。`, 'system');
+    if (!total) continue;
+    // v30 图鉴分档奖励：25/50/75/100% 各有进益（0.4/0.7/0.9/1.0 全属性百分点），
+    // 收录过程本身开始有回报，不再只有「收满才给」的独苗奖励
+    const pct = this.catGot(cat) / total;
+    // 四档合计恰为 1.0（满档回报与旧版「收满 +1%」等同）——过程有回报，终点不加价
+    const TIERS = [[0.25, 0.15, '初成'], [0.5, 0.2, '过半'], [0.75, 0.25, '近全'], [1, 0.4, '大成']];
+    const granted = p.flags['codex_tier_' + cat] || 0;
+    const tierNow = TIERS.filter(([need]) => pct >= need).map(t => t[0]).pop() || 0;
+    if (tierNow > granted + 0.001) {
+      // 补发所有未领档位（一次跳档不遗漏）
+      let add = 0, reached100 = false, topLabel = '';
+      for (const [need, bonus, label] of TIERS) {
+        if (need > granted + 0.001 && need <= tierNow + 0.001) { add += bonus; topLabel = label; if (need >= 1) reached100 = true; }
+      }
+      p.flags['codex_tier_' + cat] = tierNow;
+      if (reached100) p.flags['codex_' + cat] = true;
+      p.codexBonus = Math.round(((p.codexBonus || 0) + add) * 100) / 100;
+      hit = this.CAT_NAMES[cat];
+      if (reached100) {
+        UI.announce(`✦ 图鉴大成 · ${hit} ✦`, 'gold');
+        Log.add(`✦ <b>${hit}图鉴</b>业已收录齐全——见多识广，道行精进（全属性永久 +1%，已累计 ${p.codexBonus} 类）。`, 'system');
+        if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.grantMarks) ReincarnationSys.grantMarks(1, 'codex_' + cat);   // v30：图鉴大成 +1 印记（跨世去重）
+      } else {
+        Log.add(`✦ ${hit}图鉴收录${topLabel}（${Math.round(pct * 100)}%）——见多识广（全属性永久 +${p.codexBonus}%）。`, 'system');
+      }
+    }
   }
   if (hit) { Save.autoSave(); UI.renderAll(); }
 };
@@ -34,7 +54,7 @@ const GameData = {
    *  目标境界越高，劫威与成算折损越高——天劫难度随修为水涨船高。 */
   TRIB_START: 2,
   /** 每个大境界第 1 层所需修为（后续层数乘以 LAYER_MULT） */
-  EXP_BASE: [70, 320, 1500, 7000, 32000, 150000, 700000, 3200000, 15000000, 70000000],
+  EXP_BASE: [70, 430, 2700, 16800, 105000, 660000, 4100000, 25500000, 160000000, 1000000000],   // v30 节奏重校：每境 ×6.2（原 ×4.57 与 eco 同步 → 每境恒 30~50 日、全程约 1 游戏年，寿元/世界大事两轴形同死内容）
   LAYER_MULT: [1, 1.5, 2, 2.5],
   /** 各境界寿元上限（岁） */
   LIFESPAN: [120, 240, 500, 1000, 2000, 4000, 8000, 16000, 32000, 99999],
@@ -50,6 +70,9 @@ const GameData = {
   eco(r) { return Math.pow(4.6, r); },
   /** 灵石经济系数 */
   stoneEco(r) { return Math.pow(3.8, r); },
+  /** v30 消费端曲线族单源：大额灵石 sink 统一挂 3^min(8,r)——原 2.2^r 家族在 r9 相对收入只剩 0.8%，
+   *  「钱多到没处花」的剪刀差由本函数一次抹平（各消费端以原曲线为锚换算，前期体感不变） */
+  sinkCurve(r) { return Math.pow(3, Math.min(8, Math.max(0, Math.floor(r) || 0))); },
   layerNeed(realmIdx, layer) {
     return Math.round(this.EXP_BASE[realmIdx] * this.LAYER_MULT[layer]);
   },
@@ -111,28 +134,34 @@ const GameData = {
         { id: 'lucky', name: '灵韵', slot: 'accessory', bonus: { dodge: 5 }, desc: '闪避+5%' },
         { id: 'fort', name: '磐石', slot: 'any', bonus: { block: 5 }, desc: '格挡+5%' },
         /* ---- v19 词缀扩池 ---- */
-        { id: 'pojun', name: '破军', slot: 'weapon', bonus: { atk: 40 }, desc: '攻击+40' },
-        { id: 'yugu', name: '玉骨', slot: 'armor', bonus: { def: 30 }, desc: '防御+30' },
-        { id: 'guixi', name: '龟息', slot: 'armor', bonus: { hp: 300 }, desc: '气血+300' },
+        /* v30 词缀两段式：平铺值改 base+per×品阶——原恒定值高境被百分比词缀全面碾压（洗到即废） */
+        { id: 'pojun', name: '破军', slot: 'weapon', bonus: { atk: 40 }, per: { atk: 25 }, desc: '攻击+40（每品阶再+25）' },
+        { id: 'yugu', name: '玉骨', slot: 'armor', bonus: { def: 30 }, per: { def: 18 }, desc: '防御+30（每品阶再+18）' },
+        { id: 'guixi', name: '龟息', slot: 'armor', bonus: { hp: 300 }, per: { hp: 180 }, desc: '气血+300（每品阶再+180）' },
         { id: 'tongming', name: '通明', slot: 'accessory', bonus: { crit: 3, dodge: 3 }, desc: '暴击+3%，闪避+3%' },
         { id: 'juling', name: '聚灵', slot: 'any', bonus: { cult: 4 }, desc: '修炼效率+4%' },
+        /* ---- v30 高端词缀扩池 ---- */
+        { id: 'shawei', name: '煞威', slot: 'weapon', bonus: { atkPct: 10, crit: 3 }, desc: '攻击+10%，暴击+3%' },
+        { id: 'huyu', name: '护瑜', slot: 'armor', bonus: { defPct: 10, hpPct: 6 }, desc: '防御+10%，气血+6%' },
+        { id: 'yunling', name: '蕴灵', slot: 'accessory', bonus: { cult: 5, luck: 3 }, desc: '修炼效率+5%，福缘+3' },
       ],
       suffix: [
         { id: 'leech', name: '吸血', slot: 'weapon', desc: '攻击时回复10%伤害的气血', onHit: { leech: 0.1 } },
         { id: 'execute', name: '斩杀', slot: 'weapon', desc: '对血量低于20%的敌人伤害+25%', onHit: { execute: 0.25 } },
         { id: 'thorns', name: '反伤', slot: 'armor', desc: '受击时反弹15%伤害', onHurt: { thorns: 0.15 } },
         { id: 'shield', name: '护盾', slot: 'armor', desc: '战斗开场获得金光护体（减伤10%，两回合）', onStart: { shield: 0.1 } },
-        { id: 'regen', name: '回灵', slot: 'accessory', desc: '每回合回复5%灵力', onTurn: { mpPct: 5 } },
+        { id: 'regen', name: '回灵', slot: 'accessory', desc: '每回合回复5%灵力', onTurn: { mpRegen: 5 } },
         { id: 'combo', name: '连击', slot: 'accessory', desc: '连击上限+2', onHit: { comboUp: 2 } },
         /* ---- v19 词缀扩池 ---- */
         { id: 'duopo', name: '夺魄', slot: 'weapon', desc: '攻击时回复18%伤害的气血', onHit: { leech: 0.18 } },
         { id: 'jingji', name: '荆棘', slot: 'armor', desc: '受击时反弹22%伤害', onHurt: { thorns: 0.22 } },
-        { id: 'ningqi', name: '凝气', slot: 'accessory', desc: '每回合回复8%灵力', onTurn: { mpPct: 8 } },
+        { id: 'ningqi', name: '凝气', slot: 'accessory', desc: '每回合回复8%灵力', onTurn: { mpRegen: 8 } },
         { id: 'lianshan', name: '连山', slot: 'weapon', desc: '连击上限+3', onHit: { comboUp: 3 } },
       ],
     },
     /* ---------- v19 数值说明书（平衡设计意图） ----------
-     * · 修为曲线：EXP_BASE 每境 ×4.6 左右，产出端 eco=4.6^r 同步放大——单位时间进度与境界无关，
+     * · 修为曲线：v30 起 EXP_BASE 每境 ×6.2 超线性（产出端 eco=4.6^r 不变）——每境耗时随境界递增、
+     *   全程约 12~20 游戏年，寿元折损与世界大事（10 余年起）自此落入正常周目视野。原口径：
      *   实际节奏由行动频率决定；溢出修为折半带入新境，杜绝刷层浪费。
      * · 灵石曲线：stoneEco=3.8^r 略慢于修为——后期灵石相对紧俏，消费端（拍卖/布施/喂养/营造）
      *   按 2.2^r 定价吸收通胀。
@@ -144,8 +173,8 @@ const GameData = {
      *   合计上限约 +25%，与装备强化（+10%/级×三件）并行不重叠。 */
     // 强化
     ENHANCE: {
-      MAX_LV: 10,                 // 强化上限
-      PER_LV_BONUS: 0.1,          // 每级属性加成
+      MAX_LV: 15,                 // 强化上限（v30：10→15，配祝福值保底）
+      PER_LV_BONUS: 0.1,          // 每级平铺属性加成（百分比键 0.02/级、功能键 0.01/级）
       DROP_LV_THRESHOLD: 7,       // +7起失败掉级
       DROP_LV: 1,                 // 失败掉级数
       BASE_COST: 120,             // 强化基础灵石
@@ -204,32 +233,34 @@ const GameData = {
     tal_jifengfu: { name: '疾风符', type: 'talisman', grade: 1, price: 35, ecoPrice: true, desc: '身化疾风——两回合内闪避大增（+25%）（战斗中可用）。', fkind: 'dodge', power: 25, rounds: 2 },
     tal_fuling:   { name: '缚灵符', type: 'talisman', grade: 2, price: 62, ecoPrice: true, desc: '符光化索缚敌身——敌方身法迟滞三成，持续两回合（战斗中可用，必中）。', fkind: 'slow', power: 30, rounds: 2 },
     tal_shigu:    { name: '蚀骨符', type: 'talisman', grade: 2, price: 66, ecoPrice: true, desc: '蚀骨腐甲——敌方防御剧降三成五，持续两回合（战斗中可用，必中）。', fkind: 'defdown', power: 35, rounds: 2 },
+    tal_pozhen:   { name: '破阵符', type: 'talisman', grade: 2, price: 90, ecoPrice: true, power: 30, desc: '符光如镜，照出敌方气机破绽——受击更易被会心（+30%，两回合）。', fkind: 'vuln', rounds: 2 },
+    tal_zhengang: { name: '真罡符', type: 'talisman', grade: 2, price: 110, ecoPrice: true, desc: '真罡护体——所受毒火蚀骨之伤减半（两回合）。', fkind: 'ward', rounds: 2 },
     tal_bingpo:   { name: '冰魄符', type: 'talisman', grade: 3, price: 140, ecoPrice: true, desc: '冰魄封形——寒气封敌周身，使其下一回合无法动弹（战斗中可用，必中；强敌抵抗几率略高）。', fkind: 'freeze', rounds: 1 },
     tal_posha:    { name: '破煞符', type: 'talisman', grade: 3, price: 158, ecoPrice: true, power: 4.6, desc: '破军煞符，一符破万法（战斗中造成约4.6倍攻击伤害，符光必中，并使敌方破防两成）。', fkind: 'damage', debuff: { defdown: 20, rounds: 2 } },
     /* ---- 功法 ---- */
     gf_tuna:    { name: '吐纳诀',       type: 'gongfa', gtype: 'support', grade: 0, price: 200,   desc: '最基础的吐纳法门，可提升修炼效率。', bonus: { cult: [6, 3] } },
-    gf_canghai: { name: '沧海剑诀',     type: 'gongfa', gtype: 'attack',  grade: 0, price: 300,   desc: '普通剑修入门剑诀。', bonus: { atkPct: [4, 2] }, skill: { name: '沧浪一剑', kind: 'damage', power: 1.55, mp: 10, desc: '凝聚剑气奋力一斩' } },
+    gf_canghai: { name: '沧海剑诀',     type: 'gongfa', gtype: 'attack',  grade: 0, price: 300,   desc: '普通剑修入门剑诀。', bonus: { atkPct: [4, 2] }, skill: { tag: '剑',  name: '沧浪一剑', kind: 'damage', power: 1.55, mp: 10, desc: '凝聚剑气奋力一斩' } },
     gf_tiebu:   { name: '铁布衫',       type: 'gongfa', gtype: 'defense', grade: 0, price: 260,   desc: '外门横练功法，皮糙肉厚。', bonus: { defPct: [5, 2], hpPct: [4, 2] }, skill: { name: '罡气护体', kind: 'buffDef', power: 70, mp: 12, rounds: 2, desc: '两回合内防御大增' } },
-    gf_lieyang: { name: '烈阳掌',       type: 'gongfa', gtype: 'attack',  grade: 1, price: 2500,  desc: '掌出如烈阳，灼热逼人。', bonus: { atkPct: [6, 3], crit: [1, 0.5] }, skill: { name: '烈阳焚空', kind: 'damage', power: 1.85, mp: 14, desc: '灼热掌力轰击敌人' } },
+    gf_lieyang: { name: '烈阳掌',       type: 'gongfa', gtype: 'attack',  grade: 1, price: 2500,  desc: '掌出如烈阳，灼热逼人。', bonus: { atkPct: [6, 3], crit: [1, 0.5] }, skill: { tag: '焰',  name: '烈阳焚空', kind: 'damage', power: 1.85, mp: 14, desc: '灼热掌力轰击敌人' } },
     gf_xuantian:{ name: '玄天护体功',   type: 'gongfa', gtype: 'defense', grade: 1, price: 2200,  desc: '玄门护体神功，固若金汤。', bonus: { defPct: [8, 3], hpPct: [6, 3], block: [3, 1.5] } },
     gf_jifeng:  { name: '疾风步',       type: 'gongfa', gtype: 'support', grade: 1, price: 2000,  desc: '身法轻灵，来去如风。', bonus: { spdPct: [8, 4], dodge: [2, 1] }, skill: { name: '残影步', kind: 'buffDodge', power: 25, mp: 8, rounds: 2, desc: '两回合内闪避大增' } },
     gf_tiangang:{ name: '天罡炼体诀',   type: 'gongfa', gtype: 'support', grade: 2, price: 9000,  desc: '淬炼肉身如天罡，气血绵长。', bonus: { hpPct: [8, 4], defPct: [6, 3], cult: [5, 2] } },
-    gf_wanjian: { name: '万剑诀',       type: 'gongfa', gtype: 'attack',  grade: 2, price: 0,     desc: '御剑之术大成者，万剑齐发。', bonus: { atkPct: [9, 4] }, skill: { name: '万剑归宗', kind: 'damage', power: 2.3, mp: 20, desc: '万千剑气倾泻而下' } },
-    gf_jianqich:{ name: '剑气长城',     type: 'gongfa', gtype: 'defense', grade: 2, price: 0,     desc: '剑气如城墙般护住周身。', bonus: { defPct: [11, 5], block: [5, 2] }, skill: { name: '剑气壁垒', kind: 'buffDef', power: 110, mp: 16, rounds: 2, desc: '剑气成壁，防御剧增' } },
+    gf_wanjian: { name: '万剑诀',       type: 'gongfa', gtype: 'attack',  grade: 2, price: 0,     desc: '御剑之术大成者，万剑齐发。', bonus: { atkPct: [9, 4] }, skill: { tag: '剑',  name: '万剑归宗', kind: 'damage', power: 2.3, mp: 20, desc: '万千剑气倾泻而下' } },
+    gf_jianqich:{ name: '剑气长城',     type: 'gongfa', gtype: 'defense', grade: 2, price: 0,     desc: '剑气如城墙般护住周身。', bonus: { defPct: [11, 5], block: [5, 2] }, skill: { tag: '剑',  name: '剑气壁垒', kind: 'buffDef', power: 110, mp: 16, rounds: 2, desc: '剑气成壁，防御剧增' } },
     gf_tumo:    { name: '屠魔剑典',     type: 'gongfa', gtype: 'attack',  grade: 3, price: 0,     desc: '上古剑修斩魔所留剑典，杀伐凌厉。', bonus: { atkPct: [13, 6], crit: [2, 1] }, skill: { name: '魔渊斩', kind: 'damage', power: 2.8, mp: 25, desc: '一剑斩落，魔气皆消' } },
     gf_dayan:   { name: '大衍神诀',     type: 'gongfa', gtype: 'support', grade: 3, price: 0,     desc: '推演天机之法，修行事半功倍。', bonus: { cult: [12, 5], mpPct: [10, 5], crit: [1, 0.5] } },
     gf_bumie:   { name: '不灭金身',     type: 'gongfa', gtype: 'defense', grade: 3, price: 0,     desc: '炼就金刚不坏之身。', bonus: { hpPct: [15, 7], defPct: [14, 6] }, skill: { name: '金身不灭', kind: 'heal', power: 40, mp: 22, desc: '恢复四成气血' } },
-    gf_zixiao:  { name: '紫霄仙雷',     type: 'gongfa', gtype: 'attack',  grade: 4, price: 0,     desc: '引九天仙雷入体，一击惊天。', bonus: { atkPct: [14, 6], mpPct: [10, 4] }, skill: { name: '紫霄神雷', kind: 'damage', power: 3.1, mp: 26, desc: '九天神雷轰然而落' } },
-    gf_jianxin: { name: '剑心通明',     type: 'gongfa', gtype: 'attack',  grade: 5, price: 0,     desc: '仙家剑道至高典籍，剑心通明，万法不侵。', bonus: { atkPct: [20, 9], crit: [3, 1.5] }, skill: { name: '剑心一瞬', kind: 'damage', power: 3.6, mp: 30, desc: '剑光一闪，天地失色' } },
+    gf_zixiao:  { name: '紫霄仙雷',     type: 'gongfa', gtype: 'attack',  grade: 4, price: 0,     desc: '引九天仙雷入体，一击惊天。', bonus: { atkPct: [14, 6], mpPct: [10, 4] }, skill: { tag: '雷',  name: '紫霄神雷', kind: 'damage', power: 3.1, mp: 26, desc: '九天神雷轰然而落' } },
+    gf_jianxin: { name: '剑心通明',     type: 'gongfa', gtype: 'attack',  grade: 5, price: 0,     desc: '仙家剑道至高典籍，剑心通明，万法不侵。', bonus: { atkPct: [20, 9], crit: [3, 1.5] }, skill: { tag: '剑',  name: '剑心一瞬', kind: 'damage', power: 3.6, mp: 30, desc: '剑光一闪，天地失色' } },
     gf_hongmeng:{ name: '鸿蒙道经',     type: 'gongfa', gtype: 'support', grade: 5, price: 0,     desc: '记载鸿蒙大道的无上经文，修之百脉皆通。', bonus: { cult: [20, 8], hpPct: [10, 5], mpPct: [10, 5], atkPct: [8, 4] } },
     /* ---- v13 新增功法 ---- */
     gf_hansha:  { name: '寒沙掌',       type: 'gongfa', gtype: 'attack',  grade: 1, price: 2400,  desc: '掌含寒沙，中者气血滞涩。', bonus: { atkPct: [7, 3] }, skill: { name: '寒沙漫天', kind: 'damage', power: 2.0, mp: 15, desc: '寒沙蔽日，冻人筋骨' } },
     gf_yulin:   { name: '御林诀',       type: 'gongfa', gtype: 'defense', grade: 2, price: 8500,  desc: '御木成林为屏，守御一脉的上乘法门。', bonus: { defPct: [9, 4], hpPct: [7, 3] }, skill: { name: '木灵守心', kind: 'heal', power: 32, mp: 18, desc: '木灵生机，疗愈伤势' } },
     gf_feixian: { name: '飞仙步',       type: 'gongfa', gtype: 'support', grade: 3, price: 0,     desc: '举步生风，恍若飞仙。', bonus: { spdPct: [12, 5], dodge: [4, 2] }, skill: { name: '踏虚九步', kind: 'buffDodge', power: 40, mp: 12, rounds: 2, desc: '身形虚幻，两回合内难以捉摸' } },
-    gf_lidu:    { name: '离火神雷',     type: 'gongfa', gtype: 'attack',  grade: 4, price: 0,     desc: '离火淬雷，焚天煮海。', bonus: { atkPct: [15, 7], crit: [2, 1] }, skill: { name: '离火天雷', kind: 'damage', power: 3.2, mp: 28, desc: '雷火交加，轰然炸裂' } },
+    gf_lidu:    { name: '离火神雷',     type: 'gongfa', gtype: 'attack',  grade: 4, price: 0,     desc: '离火淬雷，焚天煮海。', bonus: { atkPct: [15, 7], crit: [2, 1] }, skill: { tag: '雷',  name: '离火天雷', kind: 'damage', power: 3.2, mp: 28, desc: '雷火交加，轰然炸裂' } },
     gf_taiyin:  { name: '太阴炼形',     type: 'gongfa', gtype: 'support', grade: 4, price: 0,     desc: '采太阴之精华炼形养魄，源远流长。', bonus: { cult: [14, 6], hpPct: [12, 5], mpPct: [12, 5] } },
     /* ---- v13 职业专属功法（daoLimit：仅该大道可修习） ---- */
-    gf_zhuixian:{ name: '追星逐月剑',   type: 'gongfa', gtype: 'attack',  grade: 3, price: 0, daoLimit: 'sword', desc: '剑修秘传，剑出如星坠月落，唯剑心不悔者可修。', bonus: { atkPct: [16, 7], spdPct: [6, 3] }, skill: { name: '星坠之剑', kind: 'damage', power: 3.0, mp: 26, desc: '一剑既出，如星坠长空' } },
+    gf_zhuixian:{ name: '追星逐月剑',   type: 'gongfa', gtype: 'attack',  grade: 3, price: 0, daoLimit: 'sword', desc: '剑修秘传，剑出如星坠月落，唯剑心不悔者可修。', bonus: { atkPct: [16, 7], spdPct: [6, 3] }, skill: { tag: '剑',  name: '星坠之剑', kind: 'damage', power: 3.0, mp: 26, desc: '一剑既出，如星坠长空' } },
     gf_danjing: { name: '九转丹经',     type: 'gongfa', gtype: 'support', grade: 3, price: 0, daoLimit: 'pill', desc: '丹道圣典，九转炉火皆在其中，唯丹道传人可修。', bonus: { cult: [14, 6], hpPct: [8, 4] } },
     gf_tianfu:  { name: '天符宝箓',     type: 'gongfa', gtype: 'support', grade: 3, price: 0, daoLimit: 'talisman', desc: '符门至宝，笔下符箓如有天助，唯符修可修。', bonus: { crit: [3, 1.5], mpPct: [10, 4] } },
     gf_banti:   { name: '般若炼体术',   type: 'gongfa', gtype: 'defense', grade: 1, price: 0, daoLimit: 'body', desc: '体修不二法门，以肉身参悟般若，唯体修可修。', bonus: { hpPct: [10, 5], defPct: [8, 4], block: [4, 2] } },
@@ -305,7 +336,7 @@ const GameData = {
     seed_lianhun:  { name: '炼魂花种', type: 'seed', grade: 3, price: 2200,  crop: 'm_lianhun',  days: 50, desc: '播入灵田，五十日可收【炼魂石】。' },
     seed_xingchen: { name: '星辉草种', type: 'seed', grade: 4, price: 15000, crop: 'm_xingchen', days: 60, desc: '播入灵田，六十日可收【星辰砂】。' },
     /* ---- v3 秘境专属：失传功法 / 上古法宝碎片 / 本命法宝 / 派系信物 ---- */
-    gf_wangchen:{ name: '忘尘剑意',   type: 'gongfa', gtype: 'attack',  grade: 4, price: 0, desc: '秘境失传剑意，一剑忘尘，物我两断。', bonus: { atkPct: [16, 7], crit: [3, 1.5] }, skill: { name: '忘尘一剑', kind: 'damage', power: 3.3, mp: 28, desc: '忘却尘俗的一剑，快过天雷' } },
+    gf_wangchen:{ name: '忘尘剑意',   type: 'gongfa', gtype: 'attack',  grade: 4, price: 0, desc: '秘境失传剑意，一剑忘尘，物我两断。', bonus: { atkPct: [16, 7], crit: [3, 1.5] }, skill: { tag: '剑',  name: '忘尘一剑', kind: 'damage', power: 3.3, mp: 28, desc: '忘却尘俗的一剑，快过天雷' } },
     gf_hunyuan: { name: '混元真解',   type: 'gongfa', gtype: 'support', grade: 4, price: 0, desc: '秘境失传心法，混元一气，百脉皆通。', bonus: { cult: [15, 6], hpPct: [12, 5], mpPct: [12, 5] } },
     gf_niepan:  { name: '涅槃圣法',   type: 'gongfa', gtype: 'defense', grade: 5, price: 0, desc: '凤凰涅槃之秘法，置之死地而后生。', bonus: { hpPct: [18, 8], defPct: [15, 7] }, skill: { name: '涅槃重生', kind: 'heal', power: 55, mp: 30, desc: '沐浴火光，重续生机' } },
     m_gupian:   { name: '上古法宝碎片', type: 'material', tier: 4, price: 6000, desc: '上古法宝崩碎后的残片，隐有器灵低鸣。集齐九枚可炼化合成本命法宝。' },
@@ -321,7 +352,7 @@ const GameData = {
     w_lingjie:  { name: '灵墟仙剑',   type: 'artifact', slot: 'weapon',    grade: 5, price: 0, desc: '灵墟仙泽深处出土的仙剑，剑光如霜，可斩虚无。', bonus: { atk: 400, atkPct: 18, crit: 6 } },
     a_xianpao:  { name: '九天仙袍',   type: 'artifact', slot: 'armor',     grade: 5, price: 0, desc: '以九天霓虹织就的仙袍，万法不沾。', bonus: { def: 280, hp: 1200, hpPct: 12 } },
     z_xianyao:  { name: '仙曜石',     type: 'artifact', slot: 'accessory', grade: 5, price: 0, desc: '仙王陨落后留下的本命灵石，蕴含一缕仙道真意。', bonus: { atkPct: 12, defPct: 12, hpPct: 12, cult: 12, luck: 3 } },
-    gf_leishen: { name: '九天雷神经', type: 'gongfa', gtype: 'attack',  grade: 5, price: 0, desc: '雷狱主宰所修的上古雷法，一雷出而万法寂。', bonus: { atkPct: 22, crit: 4, mpPct: 12 }, skill: { name: '九天雷罚', kind: 'damage', power: 4.2, mp: 35, desc: '引九天雷罚轰落，万钧之势' } },
+    gf_leishen: { name: '九天雷神经', type: 'gongfa', gtype: 'attack',  grade: 5, price: 0, desc: '雷狱主宰所修的上古雷法，一雷出而万法寂。', bonus: { atkPct: 22, crit: 4, mpPct: 12 }, skill: { tag: '雷',  name: '九天雷罚', kind: 'damage', power: 4.2, mp: 35, desc: '引九天雷罚轰落，万钧之势' } },
     m_xiancui:  { name: '仙灵翠',     type: 'material', tier: 4, price: 120000, desc: '灵墟仙泽灵气凝结的翡翠，内蕴仙道法则。' },
     m_leijing:  { name: '雷晶核',     type: 'material', tier: 4, price: 150000, desc: '九霄雷狱中雷兽体内凝结的雷晶，雷法至宝。' },
     seed_xianling: { name: '仙灵种',   type: 'seed', grade: 5, price: 45000, crop: 'm_xiancui', days: 80, desc: '播入灵田，八十日可收【仙灵翠】。' },
@@ -444,7 +475,7 @@ const GameData = {
       pool: [{ id: 'm_linglu', weight: 30 }, { id: 'm_xianmo', weight: 25 }, { id: 'm_lingjiang', weight: 25 }, { id: 'm_lingxue', weight: 20 }],
       elite: 'm_tianlong', weights: { battle: 52, treasure: 16, fortune: 14, npc: 6, trap: 8, nothing: 4 } },
     { id: 'leiyu', name: '九霄雷狱', recRealm: 9, recText: '真仙后期', desc: '九天之上的雷霆炼狱，终年雷云不散。传说中藏有仙王陨落前的传承，然雷威之盛，足以灭仙。',
-      pool: [{ id: 'm_leixiao', weight: 30 }, { id: 'm_leimen', weight: 25 }, { id: 'm_tianle', weight: 25 }, { id: 'm_lingxue', weight: 20 }],
+      pool: [{ id: 'm_leixiao', weight: 28 }, { id: 'm_leimen', weight: 24 }, { id: 'm_tianle', weight: 24 }, { id: 'm_lingxue', weight: 16 }, { id: 'm_xianzun', weight: 8 }],
       elite: 'm_leishen', weights: { battle: 55, treasure: 14, fortune: 12, npc: 4, trap: 10, nothing: 5 } },
   ],
 
@@ -463,6 +494,15 @@ const GameData = {
       bonusText: '宗门加成：修炼效率 +8%，闪避 +3%', bonus: { cult: 8, dodge: 3 } },
   ],
 
+  /* ---- v30 宗门特色差事：按宗门改换任务名目与文案（机制沿用击杀/采集/修行三式） ---- */
+  SECT_QUEST_FLAVOR: {
+    qingyun:  { kill: '剑试诸锋', collect: '采铸剑材', cult: '参悟剑心' },
+    danxia:   { kill: '驱护药庐', collect: '采药入炉', cult: '丹心静修' },
+    wanbao:   { kill: '护镖清道', collect: '代收购料', cult: '持筹握算' },
+    panyan:   { kill: '护矿除妖', collect: '采铸矿材', cult: '负重砺体' },
+    zhoutian: { kill: '清除星野', collect: '采集星砂', cult: '观星定心' },
+  },
+
   /** 宗门贡献兑换列表 */
   SECT_EXCHANGE: [
     { item: 'gf_wanjian',     cost: 600 },
@@ -473,7 +513,11 @@ const GameData = {
     { item: 'gf_dayan',       cost: 2500 },
     { item: 'gf_bumie',       cost: 2500 },
     { item: 'pill_jiuzhuan',  cost: 1200 },
+    /* ---- v30 次级货币小汇率网：贡献单向有损折稀缺物/声望（r7+ 过剩贡献的去处） ---- */
+    { item: '_rep_gift',      cost: 2000, special: 'rep', qty: 25 },
+    { item: '_qihun_pill',    cost: 1200, special: 'qihun', qty: 10 },
     { item: 'gf_zixiao',      cost: 9000 },
+    { item: 'pill_dujie',     cost: 8000 },   // v30：宗门兑换补渡劫丹
     { item: 'pill_taichu',    cost: 5000 },
     { item: 'm_xianjing',     cost: 800,  qty: 2 },
     { item: 'gf_jianxin',     cost: 30000 },
@@ -510,10 +554,10 @@ const GameData = {
     { item: 'pill_qingxin', minRealm: 1 }, { item: 'pill_mingmu', minRealm: 1 }, { item: 'pill_qingshen', minRealm: 1 },
     { item: 'pill_tiegu', minRealm: 2 }, { item: 'pill_kuangbao', minRealm: 2 }, { item: 'pill_guben', minRealm: 2 },
     { item: 'pill_dahuan', minRealm: 3 }, { item: 'pill_posha', minRealm: 2 }, { item: 'pill_xuanling', minRealm: 3 },
-    { item: 'pill_yuanshen', minRealm: 5 }, { item: 'pill_tianyuan', minRealm: 7 },
+    { item: 'pill_yuanshen', minRealm: 5 }, { item: 'pill_tianyuan', minRealm: 7 }, { item: 'pill_dujie', minRealm: 3 },   // v30：渡劫丹上架坊市（元婴起）——断头路补全
     { item: 'tal_huoshe', minRealm: 0 }, { item: 'tal_zilei', minRealm: 2 },
     { item: 'tal_jinguang', minRealm: 1 }, { item: 'tal_jifengfu', minRealm: 1 },
-    { item: 'tal_fuling', minRealm: 2 }, { item: 'tal_shigu', minRealm: 2 }, { item: 'tal_bingpo', minRealm: 3 }, { item: 'tal_posha', minRealm: 4 },
+    { item: 'tal_fuling', minRealm: 2 }, { item: 'tal_shigu', minRealm: 2 }, { item: 'tal_pozhen', minRealm: 1 }, { item: 'tal_zhengang', minRealm: 1 }, { item: 'tal_bingpo', minRealm: 3 }, { item: 'tal_posha', minRealm: 4 },
     { item: 'w_tiejian', minRealm: 0 }, { item: 'w_qinggang', minRealm: 1 }, { item: 'w_sanqing', minRealm: 2 }, { item: 'w_zhuxian', minRealm: 3 },
     { item: 'w_tulong', minRealm: 1 }, { item: 'w_hanshuang', minRealm: 2 },
     { item: 'a_buyi', minRealm: 0 }, { item: 'a_huxin', minRealm: 1 }, { item: 'a_xuangui', minRealm: 2 }, { item: 'a_longlin', minRealm: 3 },
@@ -531,11 +575,11 @@ const GameData = {
 
   /* ---------- v13 套装（集齐 pieces 中全部装备于身时触发 bonus） ---------- */
   SETS: {
-    xuantian: { name: '玄天套装', pieces: ['s_xt_jian', 's_xt_jia', 's_xt_pei'], bonus: { defPct: 15, hpPct: 10 }, text: '守御之道：防御 +15%，气血 +10%' },
-    chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, text: '杀伐之道：攻击 +15%，暴击 +5%' },
+    xuantian: { name: '玄天套装', pieces: ['s_xt_jian', 's_xt_jia', 's_xt_pei'], bonus: { defPct: 15, hpPct: 10 }, text: '守御之道：防御 +15%，气血 +10%（两件即得六成）' },
+    chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, text: '杀伐之道：攻击 +15%，暴击 +5%（两件即得六成）' },
     /* ---- v19 新增套装 ---- */
-    xuehe:    { name: '血河套装', pieces: ['s_hj_sha', 's_hj_pao', 's_hj_ling'], bonus: { atkPct: 12, crit: 4 }, text: '血河遗锋：攻击 +12%，暴击 +4%' },
-    xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, text: '仙缘天成：攻击、防御、气血俱 +10%' },
+    xuehe:    { name: '血河套装', pieces: ['s_hj_sha', 's_hj_pao', 's_hj_ling'], bonus: { atkPct: 12, crit: 4 }, text: '血河遗锋：攻击 +12%，暴击 +4%（两件即得六成）' },
+    xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, text: '仙缘天成：攻击、防御、气血俱 +10%（两件即得六成）' },
   },
 
   /* ---------- v19 道韵协同：功法双双修至三层以上，共鸣生韵 ---------- */
@@ -837,6 +881,11 @@ const GameData = {
     { id: 'f14', out: 's_cx_gou',   need: { m_huolin: 1, m_neidan: 2 },              rate: 50 },
     /* ---- v29 天塔纪念（天塔灵砂/云阶铁/镇塔符核自此有了消费端） ---- */
     { id: 'f18', out: 'z_taling',   need: { tw_core: 1, tw_iron: 2, tw_sand: 4 },        rate: 55 },
+    /* ---- v30 毕业装三线：grade5 仙器入炼器（原 a_xianpao 零来源、z_xianyao 仅塔影暗道） ---- */
+    { id: 'f19', out: 's_xy_huan',  need: { m_xianjing: 2, m_xiancui: 2, m_leijing: 1 }, rate: 40 },
+    { id: 'f20', out: 'a_xianpao',  need: { m_xianjing: 2, m_shenmu: 2, m_leijing: 2 },  rate: 35 },
+    { id: 'f21', out: 'w_lingjie',  need: { m_leijing: 2, m_xianjing: 2, m_jiaojin: 2 }, rate: 30 },
+    { id: 'f22', out: 'z_xianyao',  need: { m_xiancui: 3, m_xianjing: 1, m_shenmu: 1 },  rate: 30 },
   ],
 
   /* ---------- §20 红尘劫剧本（历练道德三选一）---------- */
@@ -931,6 +980,11 @@ const GameData = {
     { id: 'beastwave', name: '兽潮',      desc: '妖王振臂，群兽出山！十五年之间某地妖兽横行——凶险倍增，猎杀所获亦厚。' },
     { id: 'xianmen',  name: '仙门收徒大会', desc: '诸宗联席开设收徒大会，以考较选取英才——通过者可获宗门秘传。' },
     { id: 'meteor',   name: '陨星坠落',   desc: '一颗天外陨星划破长空坠入人间——星陨之处，天材地宝俯拾即是。' },
+    /* ---- v30 扩池：NPC 牵连型大事 ---- */
+    { id: 'zhongbao', name: '重宝现世',   desc: '一位散修意外得到一件上古重宝，风声走漏，天下修士云集争夺——凶险与机缘并存。' },
+    { id: 'neiluan',  name: '宗门内乱',   desc: '某宗门因继承之争刀兵相向，门人四散——乱局之中，可出手相助，亦可趁乱取利。' },
+    { id: 'qiren',    name: '奇人访世',   desc: '一位云游奇修路过此地，或指点迷津，或索一战之资，缘法各安天命。' },
+    { id: 'lingyi',   name: '灵疫蔓延',   desc: '一处坊市起了灵疫，药价腾贵——施药济人者积誉，囤药居奇者获利。' },
   ],
 
   /* ---------- v20 节庆（按年内日序触发，每年一遍） ---------- */
@@ -940,6 +994,9 @@ const GameData = {
     { id: 'zhongyuan', name: '中元鬼节', day: 225, desc: '鬼门大开，阴魂夜行——夜里凶险倍增，然超度亡魂者福缘深厚。' },
     { id: 'zhongqiu',  name: '中秋月圆', day: 270, desc: '千里共婵娟。今日赠礼，情谊加倍。' },
     { id: 'chuxi',     name: '除夕年关', day: 360, desc: '爆竹声中一岁除——却有年兽循着人间烟火气而来。' },
+    /* ---- v30 扩池 ---- */
+    { id: 'duanwu',    name: '端午龙舟', day: 90,  desc: '粽香十里，龙舟竞渡——食粽驱邪，百毒不侵。' },
+    { id: 'chongyang', name: '重阳登高', day: 300, desc: '遍插茱萸，登高望远——高处有天机，动处有福气。' },
   ],
 
   /* ---------- v6 图鉴：妖兽背景介绍（其余图鉴条目沿用各 def.desc） ---------- */
@@ -1330,6 +1387,61 @@ const GameData = {
    * fx: 三幕全部完成后的永久加成（Stat.compute 聚合）。
    * ====================================================================== */
   PERSONAL: {
+    /* ---- v30 个人线补全：原无个人线的六位 NPC ---- */
+    n8:  { arc: '秤心', title: '秦重楼 · 秤平斗满', fx: { stoneMult: 1.05 }, doneText: '商道秤心，灵石更进',
+      acts: [
+        { key: 'pl_n8_a1', title: '第一幕 · 缺角的算盘', need: { tier: 'friend', realm: 2 }, brief: '商会账房一笔差三枚灵石的旧账，秦重楼对了二十年。',
+          reward: { insight: 4 } },
+        { key: 'pl_n8_a2', title: '第二幕 · 压舱石', need: { tier: 'bosom', realm: 4 }, brief: '一船一石：金丹是「还」字诀修出来的。',
+          reward: { insight: 6 } },
+        { key: 'pl_n8_a3', title: '第三幕 · 秤平斗满', need: { tier: 'sworn', realm: 6 }, brief: '传家的秤心借你称一回——称的是二十年心账。',
+          reward: { insight: 8 } },
+      ] },
+    n16: { arc: '裂山', title: '楚天阔 · 力可裂山', fx: { atkPct: 3 }, doneText: '力有其源，出手更重',
+      acts: [
+        { key: 'pl_n16_a1', title: '第一幕 · 力从何处来', need: { tier: 'friend', realm: 2 }, brief: '蛮力伤了经脉，铁塔汉子头一回茫然。',
+          reward: { insight: 4 } },
+        { key: 'pl_n16_a2', title: '第二幕 · 最重一击', need: { tier: 'bosom', realm: 4 }, brief: '千斤闸下，他连一只灵犬都不肯抛下。',
+          reward: { insight: 6 } },
+        { key: 'pl_n16_a3', title: '第三幕 · 心不可裂', need: { tier: 'sworn', realm: 6 }, brief: '山裂了还能长——人心不能裂。',
+          reward: { insight: 8 } },
+      ] },
+    n18: { arc: '书剑', title: '顾青书 · 文脉剑脉', fx: { crit: 2, cultPct: 2 }, doneText: '文理剑意两相通',
+      acts: [
+        { key: 'pl_n18_a1', title: '第一幕 · 批注里的剑', need: { tier: 'friend', realm: 2 }, brief: '剑谱当文章读，书生的剑走的是文气。',
+          reward: { insight: 4 } },
+        { key: 'pl_n18_a2', title: '第二幕 · 焚稿', need: { tier: 'bosom', realm: 3 }, brief: '门规焚书之日，他抱着最后一册站在火堆前。',
+          reward: { insight: 6 } },
+        { key: 'pl_n18_a3', title: '第三幕 · 文脉剑脉', need: { tier: 'sworn', realm: 5 }, brief: '他要写一部《剑心笺注》，把三百年的剑写成人人读得懂的话。',
+          reward: { insight: 8 } },
+      ] },
+    n19: { arc: '成色', title: '花千树 · 人比货贵', fx: { stoneMult: 1.04 }, doneText: '看人如看货，财路更宽',
+      acts: [
+        { key: 'pl_n19_a1', title: '第一幕 · 十成成色', need: { tier: 'friend', realm: 2 }, brief: '一件能赚三倍的赝品，摆在金算盘的案上。',
+          reward: { insight: 4 } },
+        { key: 'pl_n19_a2', title: '第二幕 · 亏一单', need: { tier: 'bosom', realm: 4 }, brief: '市价崩了。签了字的纸，比金子重。',
+          reward: { insight: 6 } },
+        { key: 'pl_n19_a3', title: '第三幕 · 人比货贵', need: { tier: 'sworn', realm: 6 }, brief: '一碗阳春面，两条规矩，一笔最不会亏本的账。',
+          reward: { insight: 8 } },
+      ] },
+    n20: { arc: '顽石', title: '石破天 · 顽石点头', fx: { hpPct: 4 }, doneText: '磐石不移，气血弥坚',
+      acts: [
+        { key: 'pl_n20_a1', title: '第一幕 · 认死理', need: { tier: 'friend', realm: 2 }, brief: '谷口界碑字迹磨平，老人守了四十年。',
+          reward: { insight: 4 } },
+        { key: 'pl_n20_a2', title: '第二幕 · 碑下旧誓', need: { tier: 'bosom', realm: 3 }, brief: '山洪冲出师祖的铁匣——开，还是不开？',
+          reward: { insight: 6 } },
+        { key: 'pl_n20_a3', title: '第三幕 · 顽石点头', need: { tier: 'sworn', realm: 5 }, brief: '老顽石开课教认石头，讲得满头是汗。',
+          reward: { insight: 8 } },
+      ] },
+    n21: { arc: '星数', title: '洛神秋 · 星数留白', fx: { dodge: 3 }, doneText: '洞悉星机，身法先行',
+      acts: [
+        { key: 'pl_n21_a1', title: '第一幕 · 算不出的一卦', need: { tier: 'friend', realm: 2 }, brief: '观星老人算了三百年，算不出他自己。',
+          reward: { insight: 4 } },
+        { key: 'pl_n21_a2', title: '第二幕 · 人算', need: { tier: 'bosom', realm: 4 }, brief: '阵眼百日，他以一命换满阁十年。',
+          reward: { insight: 6 } },
+        { key: 'pl_n21_a3', title: '第三幕 · 留白', need: { tier: 'sworn', realm: 6 }, brief: '传了三代的星图，最后一笔他递给了你。',
+          reward: { insight: 8 } },
+      ] },
     n1:  { arc: '剑冢心猿', title: '沈青崖 · 断剑重鸣', fx: { atkPct: 2 }, doneText: '剑心既通，其锋愈利',
       acts: [
         { key: 'pl_n1_a1', title: '第一幕 · 断剑', need: { tier: 'friend', realm: 2 }, brief: '沈青崖的佩剑「青锋」在一场切磋中崩了口——剑痴的剑，从来不只是一件兵器。',
@@ -1349,7 +1461,7 @@ const GameData = {
           reward: { insight: 6, items: { pill_dahuan: 2 } } },
       ] },
     /* ---- v24 个人线补全（有主线戏份而无个人线者） ---- */
-    n3:  { arc: '刀笔春秋', title: '苏白 · 故纸修史', fx: { cult: 3 }, doneText: '通晓故纸掌故，修行愈捷',
+    n3:  { arc: '刀笔春秋', title: '苏白 · 故纸修史', fx: { cultPct: 3 }, doneText: '通晓故纸掌故，修行愈捷',
       acts: [
         { key: 'pl_n3_a1', title: '第一幕 · 一页旧榜', need: { tier: 'friend', realm: 2 }, brief: '他把一页三百年前九宗联席的旧榜抄给你——抄本的墨迹，比正史诚实。',
           reward: { insight: 4 } },
@@ -2690,6 +2802,299 @@ pl_n10_a1: { id: 'pl_n10_a1', title: '百年一阵 · 第一幕 · 空阵眼', s
       p.insight = Math.min(100, (p.insight || 0) + 3); return ['他摇头，又点头：「是，也不是。」\n谜没揭开，但他陪你坐到了日落。（感悟 +3）'];
     } },
   ] },
+/* ============ v30 个人线补全 · 秦重楼（秤心） ============ */
+pl_n8_a1: { id: 'pl_n8_a1', title: '秤心 · 第一幕 · 缺角的算盘', scenes: [
+    { t: 'narr', text: '万宝商会后账房，深夜仍亮着灯。\n秦重楼拨了一整夜的算盘。你进门时，他头也不抬：「替我看看这笔账——二十年前的一笔旧账，差三枚下品灵石，对了二十年，对不上。」' },
+    { t: 'dialog', who: '@c_n8', title: '重楼商君', text: '商会账目，我从来分毫不差。唯独这一笔，账面差三枚灵石——是我故意记错的。\n当年那个卖我灵草的散修，孩儿病重，急着用钱。我压了他三成的价。事后我补了他一百枚——他不知道，账上也没记。' },
+    { t: 'dialog', who: '@c_n8', title: '重楼商君', text: '可这三枚灵石的亏心，我记了二十年。商人修的是心账，你懂么？灵石有价，亏心无价。' },
+    { t: 'choice', text: '灯花爆了一声。这笔账，你替他怎么算？', options: [
+      { text: '「补一百枚是利，差三枚是心——两笔分开记。」', value: 'a' },
+      { text: '「找到他，当面把这三枚还了。」', value: 'b' },
+      { text: '「把它记在账上，让商会后人都看见。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他拨算盘的手停了：「分开记……好一个分开记。」\n灵石之账与人心之账，从这一夜起各归各册。（感悟 +3）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他沉吟半晌：「找人？二十年了，人早不知去向。」\n但他还是让商会发了寻人帖——账未清，心不安。（感悟 +4）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); Bag.addStones(50); return ['「记账？」他笑了，「商会秘账岂能示人——」话到一半，他自己顿住了。\n当夜，账房多了一册新账，首页记的就是这三枚灵石。（感悟 +3，灵石 +50）'];
+    } },
+  ] },
+pl_n8_a2: { id: 'pl_n8_a2', title: '秤心 · 第二幕 · 压舱石', scenes: [
+    { t: 'narr', text: '商队远行归来，秦重楼押着最后一船货。\n船入浅滩，他忽然指着一方不起眼的青石给你看：「这是压舱石。船越空，它越重——商会最险的年月，是它压着船没翻。」' },
+    { t: 'dialog', who: '@c_n8', title: '重楼商君', text: '我修为是金丹，你猜怎么成的？早年囤货，豪赌一把，赔得只剩这条船。\n陪我赔进去的，还有十七个散商的本钱。他们没逼我赔——是我自己一家一家登门，本息分文不少还了七年。' },
+    { t: 'dialog', who: '@c_n8', title: '重楼商君', text: '第七年还清那日，我灵台一清，金丹自成。有人说我修的是聚灵诀——不，我修的是「还」字诀。\n欠债要还，亏心要还，天也要还。' },
+    { t: 'choice', text: '他把压舱石推到你面前。你如何接这一课？', options: [
+      { text: '「还债七年，还的是信——信比灵石压舱。」', value: 'a' },
+      { text: '「可若还不清呢？」', value: 'b' },
+      { text: '「这石头，我想求一块压我的船。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他抚掌大笑：「正是！商会传到我这代，靠的不是货，是字据上的信。」\n当夜他赠你一枚商戳：「凭此，万宝商会永远给你个公道价。」（感悟 +4）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(2); return ['他神色一肃：「还不清，就用余生慢慢还——债主肯等，是恩；不肯等，是债。两样都受着。」\n天平在他心里，从未歪过。（感悟 +4，气运 +2）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他愣了愣，随即把那块压舱石塞进你怀里：「拿去——石头无灵，压的是人心。\n愿你此生船满，心不空。」（感悟 +3）'];
+    } },
+  ] },
+pl_n8_a3: { id: 'pl_n8_a3', title: '秤心 · 第三幕 · 秤平斗满', scenes: [
+    { t: 'narr', text: '商会大掌柜交接之礼上，秦重楼当众宣布退居二线。\n他手里托着一杆老秤——商会传家的「秤心」，据说秤的不是货，是掌柜自己的心。' },
+    { t: 'dialog', who: '@c_n8', title: '重楼商君', text: '新掌柜是我徒弟，本事比我大，我唯一不放心的，是他还没输过。\n没输过的人不知道：秤上亏谁一分，秤砣就往自己心口沉一分。' },
+    { t: 'dialog', who: '@c_n8', title: '重楼商君', text: '这杆秤，我想先借你称一回。你我相识一场，买卖无数——你说，我称你之时，可曾亏过你？我称天下之时，可曾亏过心？' },
+    { t: 'choice', text: '满堂宾客静下来。这杆传家的秤，你怎么称？', options: [
+      { text: '「你称我，从未亏分毫。」', value: 'a' },
+      { text: '「亏过——二十年前那三枚灵石。但你记了二十年。」', value: 'b' },
+      { text: '「秤平斗满。往后教徒弟，把这一课也传下去。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'b') { KarmaSys.addFortune(4); p.insight = Math.min(100, (p.insight || 0) + 6); return ['满堂哗然，他却在众目睽睽下郑重一揖：「多谢你替我记得。」\n当众认亏，是商人最大的体面。（气运 +4，感悟 +6）']; }
+      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 5); Bag.addItem('m_gupian', 1); return ['他把秤递给徒弟，把另一只手按在你肩上：「好——秤心传心，心账代代有人记。」\n他赠你一块上古碎片作谢礼。（感悟 +5，碎片 ×1）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 5); return ['他朗声大笑：「有你这句话，我这秤没白传！」\n笑声里二十年的心账，终于平了。（感悟 +5）'];
+    } },
+    { t: 'narr', text: '退位礼散，他邀你看了最后一眼账房。\n灯下那册新账摊开着，三枚灵石那一行，墨迹已经发旧。\n他提笔，在末尾添了一行小字：「心账已平，传诸后人。」' },
+  ] },
+
+/* ============ v30 个人线补全 · 楚天阔（裂山） ============ */
+pl_n16_a1: { id: 'pl_n16_a1', title: '裂山 · 第一幕 · 力从何处来', scenes: [
+    { t: 'narr', text: '磐岩谷演武场，楚天阔一拳轰碎了三块磨盘。\n可你分明看见，他收拳时右臂在抖——不是脱力，是经脉在颤。' },
+    { t: 'dialog', who: '@c_n16', title: '裂山力士', text: '「痛快！」他大笑着甩了甩手臂，「别拿那种眼神看我，这点小伤，睡一觉就好。」\n可当夜你路过他的院子，听见里面一声压着嗓子的闷哼。' },
+    { t: 'dialog', who: '@c_n16', title: '裂山力士', text: '他被你撞破了，索性盘腿坐倒：「罢了，瞒不住。磐岩功练到第七重，经脉承不住蛮力了——师父说，我的力用错了地方。」\n「力不从心，力从何来？我一直没想明白。」' },
+    { t: 'choice', text: '月色下，这条铁塔般的汉子头一回露出茫然。你怎么答？', options: [
+      { text: '「力从地里来——你少了两脚钉在地上的功夫。」', value: 'a' },
+      { text: '「力从心口来——你想护什么？」', value: 'b' },
+      { text: '「力从收着来。能收住的拳，才是真重。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他怔了半天，慢慢握拳再缓缓松开：「收着……娘以前纳鞋底，线拉太紧就断。」\n第二日演武场，他一拳只碎了半块磨盘——可碎石纹路笔直如刀切。（感悟 +4）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(2); return ['他挠头想了半天：「护谷？护师父？护……师弟们的酒？」\n笑着笑着忽然收声：「护住他们，我的力好像就不抖了。」（感悟 +3，气运 +2）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他二话不说扎马步扎了一夜。清晨你再看，双脚下的青石板凹了两个脚印。\n「还差得远！」他咧嘴一笑，「但脚下有根了！」（感悟 +3）'];
+    } },
+  ] },
+pl_n16_a2: { id: 'pl_n16_a2', title: '裂山 · 第二幕 · 最重一击', scenes: [
+    { t: 'narr', text: '矿道塌了。\n磐岩谷新开的灵矿起了一层塌方，十几名矿工被困在千斤闸下。楚天阔第一个冲到，双臂撑住下坠的巨岩，青筋暴起如虬龙。' },
+    { t: 'dialog', who: '@c_n16', title: '裂山力士', text: '「快——带人走！」他一字一顿，声音稳得可怕，双腿却已陷进岩层三寸。\n你催动灵力助他，只觉他全身经脉如烧红的铁——磐岩功第七重强行超载，这是要经脉尽断的打法。' },
+    { t: 'dialog', who: '@c_n16', title: '裂山力士', text: '最后一个矿工爬出去了。他还不撒手——「再撑三息，里面有只灵犬，是伙计们的伴儿。」\n三息。他真的又撑了三息，直到那条灰犬蹿出去，他才轰然放手，任巨岩砸落。' },
+    { t: 'choice', text: '他瘫在碎石里咳血，冲你咧嘴。你怎么接？', options: [
+      { text: '「痴汉！命比灵犬金贵！」', value: 'a' },
+      { text: '替他渡入真气护住心脉，一言不发', value: 'b' },
+      { text: '「这最重一击，你打在自己身上了。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); Bag.addItem('pill_liaoshang', 2); return ['你一句话没说，真气渡过去护住他心脉。他也不说话，由着你渡。\n半晌，他瓮声瓮气：「……谢了。明年的酒钱，我包了。」（感悟 +3，疗伤丹 ×2）']; }
+      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他仰头望着塌下来的岩壁，忽然笑了：「对啊……最重的一击，从来是打自己的。\n那我下回，学着轻点儿。」（感悟 +4）']; }
+      KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 3); return ['「命金贵，灵犬也金贵——它们全是家里等着的人。」他梗着脖子，「这条理，师父讲了一百遍，我今日才真懂。」\n（气运 +3，感悟 +3）'];
+    } },
+  ] },
+pl_n16_a3: { id: 'pl_n16_a3', title: '裂山 · 第三幕 · 心不可裂', scenes: [
+    { t: 'narr', text: '磐岩谷百年一次的「负山礼」：弟子负重登山，以证道心。\n楚天阔背了一块和他等高的山岩，走在最前。走到半山，岩上忽然裂开一道缝。' },
+    { t: 'dialog', who: '@c_n16', title: '裂山力士', text: '他停下来，看着那道缝，忽然回头问你：「你说，我这身力，上可裂山，下可碎岳——要是有一天，我连自己背的这点东西都扛不住，裂的是山，还是我？」' },
+    { t: 'dialog', who: '@c_n16', title: '裂山力士', text: '不等他答，他自己把那块裂了缝的岩放了下来，独自走到崖边站了半晌。\n回来时，他神色竟前所未有地轻快：「想通了。山裂了还能长，人心要是裂了，拿什么长？」\n「往后我的力气，一半用来扛，一半用来护着心里那点不肯裂的东西。」' },
+    { t: 'choice', text: '负山礼的终点就在崖顶。这最后一程，你陪他怎么走？', options: [
+      { text: '「把那块裂岩背上去——缝里能长出花来。」', value: 'a' },
+      { text: '「空手登顶。有些礼，重在心不在物。」', value: 'b' },
+      { text: '「我背一段，你背一段。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(2); return ['一块裂岩，两个活人，一段一段往崖顶挪。到了顶，他把你和岩一起放下，仰天大笑。\n「这一路背的不是山——是并肩！」（感悟 +4，气运 +2）']; }
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他扛起裂岩一口气登顶，把岩立在礼台上。第二年春天，岩缝里真的开出一丛不知名的花。\n他逢人便讲：看，缝里长出来的。（感悟 +4）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 5); return ['他两手空空登了顶。长老皱眉，他却拜得坦荡：「弟子今日背的东西，秤不出斤两。」\n满谷长老竟无人再问。（感悟 +5）'];
+    } },
+  ] },
+
+/* ============ v30 个人线补全 · 顾青书（书剑） ============ */
+pl_n18_a1: { id: 'pl_n18_a1', title: '书剑 · 第一幕 · 批注里的剑', scenes: [
+    { t: 'narr', text: '藏经阁西窗，顾青书又在抄书。\n他抄的是《青萍剑谱》，可抄本边页写满了蝇头小楷——那不是抄录，是批注。' },
+    { t: 'dialog', who: '@c_n18', title: '青衿剑生', text: '他见你看得入神，把抄本推过来：「请指教。」\n批注里写着：「第九式『萍踪』，谱云身如浮萍——谬。萍生无根，剑行无据。此式当以书生之步解之：读书人走路，脚跟不虚，眼不斜。」' },
+    { t: 'dialog', who: '@c_n18', title: '青衿剑生', text: '「门里人笑我，练剑先抄书。」他倒了盏清茶，「可我总觉得——剑谱是书，剑招是文章。读懂了文气，剑才通。」\n「你说，我错了么？」' },
+    { t: 'choice', text: '西窗日影斜，一册抄本摊在你们中间。', options: [
+      { text: '「没错。剑意即文意，续写你的批注。」', value: 'a' },
+      { text: '「纸上得来终觉浅——出手，我陪你拆三招。」', value: 'b' },
+      { text: '「把批注誊一份给我。你的文章，我读定了。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他执笔的手稳了：「……知己。」\n那一夜藏经阁的灯亮到天明，批注又添了七条。（感悟 +4）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); Bag.addItem('tal_pozhen', 1); return ['三招拆完，他输了，笑得却极畅快：「纸上千言，不如手上一败！」\n他回赠你一枚亲手画的破阵符：「败仗送你，礼轻文重。」（感悟 +3，破阵符 ×1）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他郑重其事誊了一份，卷尾题字：「以书会友，以剑证心。」\n（感悟 +3）'];
+    } },
+  ] },
+pl_n18_a2: { id: 'pl_n18_a2', title: '书剑 · 第二幕 · 焚稿', scenes: [
+    { t: 'narr', text: '剑宗下了门规：百年前一位叛门长老所著的《孤鸿剑典》，全书收缴焚毁。\n收缴的火堆就架在演武场边。顾青书站在火堆前，怀里抱着最后一册。' },
+    { t: 'dialog', who: '@c_n18', title: '青衿剑生', text: '「书没有错。」他声音不高，「写书的人错了，字没错。这册书里有一式『归鸿』，救过三条人命——难道错人一字，连对的也烧？」\n「可门规如山。我抄了它十年，今日要亲手把它扔进去。」' },
+    { t: 'choice', text: '火光映着他的脸。这册书，是焚，是留？', options: [
+      { text: '「焚。但你的批注留下——字在你心里烧不掉。」', value: 'a' },
+      { text: '「留。错在人不在书，我陪你担这个责。」', value: 'b' },
+      { text: '「一页页拆开：对的那几式留着，错的烧掉。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他把书投进火里，双手合十拜了三拜。\n三日后，门中弟子传阅起一册没有书名的批注——只讲剑理，不题来历。书死了，文脉没死。（感悟 +4）']; }
+      if (v === 'b') { KarmaSys.addFortune(4); p.insight = Math.min(100, (p.insight || 0) + 5); return ['他震动了：「……你知道这意味着什么吗？」\n你们一起受了门规戒罚。抄没的剑典封入库房，他受罚回来第一句话是：「值得。」（气运 +4，感悟 +5）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); Bag.addStones(200); return ['拆书那天他手一直在抖。留下的几页被他重新装订成册，题名《归鸿残卷》。\n「烧掉的是错，留下的是人。」（感悟 +3，灵石 +200）'];
+    } },
+  ] },
+pl_n18_a3: { id: 'pl_n18_a3', title: '书剑 · 第三幕 · 文脉剑脉', scenes: [
+    { t: 'narr', text: '顾青书要下山游学了。\n行囊里没有几件衣物，全是手抄的书。你送他到山门，他忽然从袖中取出一支毛笔，笔杆已被摩挲得温润。' },
+    { t: 'dialog', who: '@c_n18', title: '青衿剑生', text: '「这是我开蒙用的笔。师父说，剑宗的剑，护的是天下人——可天下人读的理，也得有人写下来。」\n「我此行要写的，是一部《剑心笺注》：把剑宗三百年的剑，写成人人读得懂的话。」' },
+    { t: 'dialog', who: '@c_n18', title: '青衿剑生', text: '「可能十年，可能三十年。等我写完，回来第一个给你看。」\n他顿了顿，忽然一笑：「你信我能成么？」' },
+    { t: 'choice', text: '山门外的路很长。你如何送这个书生？', options: [
+      { text: '「信。文脉不断，剑脉就不断。」', value: 'a' },
+      { text: '「写不完也没关系——留一部残卷，后人续。」', value: 'b' },
+      { text: '把你的剑借他一程：「书剑同行，路上壮胆。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 6); return ['他深深一揖，起身时眼眶微红：「有此一诺，笔下有神。」\n多年后《剑心笺注》风行修界，卷首只题两个字：信人。（气运 +3，感悟 +6）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 5); Bag.addItem('m_gupian', 1); return ['他怔了怔，随即释然大笑：「残卷好啊——残卷才轮得到后来人提笔！」\n他把随身的剑穗解下来赠你，权当谢礼。（感悟 +5，碎片 ×1）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 5); return ['他捧着你的剑，郑重还了个剑宗的礼。半年后剑还回来，剑柄上多了一圈新缠的书绳。\n「借剑一程，记剑一生。」（感悟 +5）'];
+    } },
+  ] },
+
+/* ============ v30 个人线补全 · 花千树（成色） ============ */
+pl_n19_a1: { id: 'pl_n19_a1', title: '成色 · 第一幕 · 十成成色', scenes: [
+    { t: 'narr', text: '坊市后堂，花千树鉴一批新收的货。\n他拿起一只玉瓶，光照、指弹、闻香、水试，四验之后眉头拧成了一个疙瘩。' },
+    { t: 'dialog', who: '@c_n19', title: '金算盘', text: '「道友来得巧。」他语气难得没了笑意，「这玉瓶，上家拍胸脯说是古物，能转手赚三倍。」\n「可成色不对。是赝品——做得极好，好到十个人里九个看走眼。」' },
+    { t: 'dialog', who: '@c_n19', title: '金算盘', text: '「照卖，我能赚三倍；照实说，我赔定金，还丢大客户的脸。」他忽然自嘲一笑，「我这双眼睛能看穿货物十成成色，却总有人问我：人的成色，怎么验？」' },
+    { t: 'choice', text: '玉瓶搁在案上，像一道题。', options: [
+      { text: '「验人如验货：火一烧，便知真假。」', value: 'a' },
+      { text: '「照实说。脸能丢，秤不能歪。」', value: 'b' },
+      { text: '「赝品也费了人心思——退回去，附一句实话。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他一拍案：「好！秤歪一次，后头就次次歪。」\n他当着大客户的面认了赔。客户拂袖而去，他却像卸下了千斤担。（感悟 +4）']; }
+      if (v === 'c') { KarmaSys.addFortune(2); p.insight = Math.min(100, (p.insight || 0) + 3); return ['他提笔写了句实话附在退货单上：「货假，人心不可假。」\n半月后那上家竟登门致歉——世上还是实诚人经得起处。（气运 +2，感悟 +3）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); return ['「烧火？」他咀嚼着这两个字，「对，火候到了，人自己会露成色。」\n他把玉瓶锁进了柜底，说是留着「烧火」。（感悟 +3）'];
+    } },
+  ] },
+pl_n19_a2: { id: 'pl_n19_a2', title: '成色 · 第二幕 · 亏一单', scenes: [
+    { t: 'narr', text: '坊市大宗生意，花千树接了一单灵材包销。\n货到一半，市价崩了——按契约收，亏得他三年白干；毁约，他花千树两个字就成了坊市的笑话。' },
+    { t: 'dialog', who: '@c_n19', title: '金算盘', text: '「卖货的都劝我毁约。」他拨着算盘，拨得极慢，「他们说商人逐利，天经地义。」\n「可我入行第一天，师父教的是另一句：签了字的纸，比金子重。」' },
+    { t: 'dialog', who: '@c_n19', title: '金算盘', text: '他猛地合上算盘：「这一单，我认亏。三年积蓄，买一句『花千树守约』——你说亏不亏？」' },
+    { t: 'choice', text: '账算得清，人心算不清。你怎么说？', options: [
+      { text: '「不亏。你买的是往后十年的生意。」', value: 'a' },
+      { text: '「亏。但有些亏，是招牌的本钱。」', value: 'b' },
+      { text: '「我入一半。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 3); Bag.spendStones(Math.round(200 * GameData.stoneEco(Math.min(4, p.realmIdx)))); return ['他愣住，随即红了眼眶：「你——罢了！这一单有你一半，天塌了也算两头扛！」\n你入的股钱一分没回来。可从那天起，你在坊市办事，处处有人肯让三分。（感悟 +3）']; }
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他拨算盘的手停了：「……对。守约的名声传开，下回人家有紧俏货，头一个想到我。」\n他照约收完了货。次年行情回涨，那批灵材成了商会最厚的一笔。（感悟 +4）']; }
+      KarmaSys.addFortune(2); p.insight = Math.min(100, (p.insight || 0) + 3); return ['「招牌的本钱——」他咀嚼着，把这句话写进了账本扉页。\n那一单他赔得干净利落。坊市里从此多了一句行话：金算盘的秤，压不弯。（气运 +2，感悟 +3）'];
+    } },
+  ] },
+pl_n19_a3: { id: 'pl_n19_a3', title: '成色 · 第三幕 · 人比货贵', scenes: [
+    { t: 'narr', text: '花千树升任商会大管事那天，没摆酒。\n他请你吃了一碗坊市最便宜的阳春面，面上卧着两个蛋。「从前穷，一碗面都舍不得加蛋。」他说，「今日两个蛋，一个谢你，一个敬从前的我。」' },
+    { t: 'dialog', who: '@c_n19', title: '金算盘', text: '「我盘了一笔账。」他搅着面，「这些年经我手的货，值几百万灵石；经我手的人，成百上千。」\n「货卖完了就没了，人却越处越厚。你说怪不怪——最不会亏本的买卖，居然是『不把人当货』。」' },
+    { t: 'dialog', who: '@c_n19', title: '金算盘', text: '「往后商会我立三条规矩：不欺生客、不赚救命钱、不压散修价。」他笑得像只偷到米的狐狸，「你替我掌掌眼——这三条，傻不傻？」' },
+    { t: 'choice', text: '面还冒着热气。你怎么答这位新任大管事？', options: [
+      { text: '「不傻。三条规矩，条条是活招牌。」', value: 'a' },
+      { text: '「傻。但商会就缺这一味傻药。」', value: 'b' },
+      { text: '「再加一条：赝品明说，价钱照公道。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'c') { KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 5); return ['他一拍桌子，面汤都跳了起来：「妙！第四条我再加半句——退货不问缘由！」\n四条规矩钉上墙那天，坊市里不知道多少人偷偷叫好。（气运 +3，感悟 +5）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 5); Bag.addItem('pill_peiyuan', 1); return ['他大笑：「傻就傻！傻药才治得了商会百年的精明病。」\n他把培元丹推给你：「大管事谢礼。别推——推就是看不起我这碗阳春面。」（感悟 +5，培元丹 ×1）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 4); return ['「活招牌……」他把这三个字咂摸了一遍，郑重记下。\n多年后商会果然立稳了这三条，坊市老人说：规矩是花千树立的，话是你说的。（感悟 +4）'];
+    } },
+    { t: 'narr', text: '两碗面见了底。\n他把碗一推：「成行了吧——人比货贵，面比席香。」\n那天的阳春面，是你此生吃过最贵的一顿。' },
+  ] },
+
+/* ============ v30 个人线补全 · 石破天（顽石） ============ */
+pl_n20_a1: { id: 'pl_n20_a1', title: '顽石 · 第一幕 · 认死理', scenes: [
+    { t: 'narr', text: '磐岩谷口立着一块斑驳界碑，字迹早磨平了。\n石破天每日绕碑三圈，风雨无阻，谁也不知道为什么。谷里年轻人背后叫他「守碑老顽石」。' },
+    { t: 'dialog', who: '@c_n20', title: '顽石真人', text: '他被你撞见了，挠挠头：「俺嘴笨，说不过你们读书人……」\n可问起这块碑，他话忽然多了：「这是俺师祖立的。师祖说，谷里的规矩不在谷里，在这块碑上。」' },
+    { t: 'dialog', who: '@c_n20', title: '顽石真人', text: '「啥规矩？俺师祖没说完就坐化了。俺师父也不懂。可俺想——他立碑总有个道理，俺就替他守着，守到懂的那天。」\n「你们笑俺认死理。俺就这一个死理，俺认。」' },
+    { t: 'choice', text: '界碑沉默，老人也沉默。你如何接？', options: [
+      { text: '「死理认到底，就是活道理。」', value: 'a' },
+      { text: '「陪你一起查碑文——磨平的字，拓出来兴许还在。」', value: 'b' },
+      { text: '「守碑不如问碑：拜三拜，问问师祖。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['你们借来拓印的工具，折腾了整整三日。碑底剥落的苔层下，拓出四个残字：「磐石……不移」。\n他捧着拓片看了半宿，忽然抹了把脸：「俺守对了。」（感悟 +4）']; }
+      if (v === 'a') { KarmaSys.addFortune(2); p.insight = Math.min(100, (p.insight || 0) + 3); return ['他咧开嘴笑，像块晒暖的石头：「对头！死理认到底，就是活道理！」\n他硬塞给你一张新编的草垫：「俺自己编的，坐得舒服。」（气运 +2，感悟 +3）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他真拜了三拜，拜完一拍大腿：「问得对！碑不说话，可俺心里踏实了——守着，就是答。」\n（感悟 +3）'];
+    } },
+  ] },
+pl_n20_a2: { id: 'pl_n20_a2', title: '顽石 · 第二幕 · 碑下旧誓', scenes: [
+    { t: 'narr', text: '山洪冲垮了谷口半边山道，界碑轰然倒地，碑座下露出一只锈死的铁匣。\n石破天守在匣前，谁也不让碰——包括他自己。' },
+    { t: 'dialog', who: '@c_n20', title: '顽石真人', text: '「这是师祖埋的。」他嗓音发干，「没他的话，匣子开不得。」\n可山道塌着，谷里物资进出全断，人人都知道：匣子里八成是师祖留下的应急粮契或灵石——开匣，谷就活了。' },
+    { t: 'dialog', who: '@c_n20', title: '顽石真人', text: '他蹲在匣前蹲了一夜。天亮时，他站起来，像把一百年的心思都站直了：「俺想明白了。师祖守的是谷，不是匣。碑倒了，谷塌了，他老人家要是在，头一个抡镐。」\n「开。错了，俺一力承担——顽石真人认死理，也认错。」' },
+    { t: 'choice', text: '锈锁砸开，匣中是一本手记与一袋灵石。手记怎么处理？', options: [
+      { text: '「当众念。师祖的话，就该谷里人人都听见。」', value: 'a' },
+      { text: '「你收着。守了四十年，这匣子本就是你的。」', value: 'b' },
+      { text: '「抄一份入谷史，原本放回碑座重埋。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(2); return ['手记里只有一句话：「磐石之谷，人心为基。碑是死的，人是活的。」\n念完，满谷寂静。他朝着碑座方向，结结实实磕了一个头。（感悟 +4，气运 +2）']; }
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); Bag.addItem('m_xuantie', 5); return ['他把灵石全数入了谷库，手记却抱着不肯撒手。\n「四十年……总算听着师祖说话了。」他回赠你一把玄铁，说是匣底的压匣石。（感悟 +4，玄铁矿 ×5）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 5); return ['他挑了第三条：「师祖的理，让后人接着守。」\n新界碑立起那天，谷里弟子一人添了一块基石——碑比从前高了一丈。（感悟 +5）'];
+    } },
+  ] },
+pl_n20_a3: { id: 'pl_n20_a3', title: '顽石 · 第三幕 · 顽石点头', scenes: [
+    { t: 'narr', text: '石破天要在谷里开一课，教 youngest 一辈认石头。\n满谷哗然：一聋一倔的老顽石，能教什么？他自己也嘀咕，来问你。' },
+    { t: 'dialog', who: '@c_n20', title: '顽石真人', text: '「俺就认得石头。」他搓着手，「认得哪块能做磨盘，哪块能垒墙，哪块底下有灵脉——可这些算本事么？你们的本事都是书里的、剑上的。」' },
+    { t: 'dialog', who: '@c_n20', title: '顽石真人', text: '你还没答，一群谷里的小豆丁已经围上来了——他们是听说了「石爷爷一眼能认出灵脉石」才来的。\n他手忙脚乱地拿出他的宝贝石头，笨嘴拙舌地讲，讲得满头是汗。' },
+    { t: 'choice', text: '孩子们听得入神。这一课，你怎么帮他开讲？', options: [
+      { text: '「让他们摸。石头的话，手听得懂。」', value: 'a' },
+      { text: '「讲你当年怎么一块块认过来——错认的也讲。」', value: 'b' },
+      { text: '「你只管认，我来讲理。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他把当年错认的三块石头全搬了出来，讲得孩子们前仰后合。\n「错认不怕，」他总结得笨拙又郑重，「就怕不敢再认。」——满堂寂静，这话他要记一辈子。（感悟 +4）']; }
+      if (v === 'c') { KarmaSys.addFortune(2); p.insight = Math.min(100, (p.insight || 0) + 4); return ['一人讲理，一人示物，竟成了谷里最受欢迎的一课。\n课后他非要谢你，把攒了多年的灵石硬塞一半给你。（气运 +2，感悟 +4）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 5); return ['孩子们一拥而上摸石头。有个女娃忽然指着一块喊：「这块烫手！」——底下真是一条小灵脉。\n他愣了半天，忽然老泪纵横：「石头点头了……石头会点头啊！」（感悟 +5）'];
+    } },
+    { t: 'narr', text: '开课之后，谷口那块界碑旁多了一块小木牌，是孩子们的字：\n「石爷爷的课，比石头还结实。」\n顽石真人每回路过，都要装作没看见——再偷偷看一眼。' },
+  ] },
+
+/* ============ v30 个人线补全 · 洛神秋（星数） ============ */
+pl_n21_a1: { id: 'pl_n21_a1', title: '星数 · 第一幕 · 算不出的一卦', scenes: [
+    { t: 'narr', text: '周天阁观星台，洛神秋夜夜在此。\n你登台时，他正对着一片星图出神——星图上有一处空缺，像棋盘上少了一子。' },
+    { t: 'dialog', who: '@c_n21', title: '观星老人', text: '「人人说我能算人间气数。」他头也不回，「那你可知，我算了三百年，算不出我自己？」\n「星轨行到这里，有一处空白。不在天上——在我心里。」' },
+    { t: 'dialog', who: '@c_n21', title: '观星老人', text: '「当年我师父坐化前问我：神秋，星轨若偏，你改是不改？」\n「我说：星轨是天数，改不得。他笑了笑，走了。三百年了，我总疑心我答错了。」' },
+    { t: 'choice', text: '星图空缺处，正对着他常坐的位置。你替他补这一卦？', options: [
+      { text: '「天数改不得——但人可以走在天数前头。」', value: 'a' },
+      { text: '「师父笑的或许不是答案，是你答得太快。」', value: 'b' },
+      { text: '「空白不是算不出——是你不敢往下算。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他执子之手悬在半空，许久，忽然朗声大笑：「对啊——我那年二十岁，答得太快了！」\n三百年心结，一夜松了大半。（感悟 +4）']; }
+      if (v === 'a') { KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 3); return ['他缓缓点头：「走在天数前头……好。」\n他把星图上那处空白描成了一颗虚星：「就当你说的这一颗。」（气运 +3，感悟 +3）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他背影一僵，随即苦笑：「观星老人，怕的从来不是算不出天——是算出了自己不肯认的答案。」\n空白依旧，心却亮了。（感悟 +4）'];
+    } },
+  ] },
+pl_n21_a2: { id: 'pl_n21_a2', title: '星数 · 第二幕 · 人算', scenes: [
+    { t: 'narr', text: '周天阁大阵年检，阵眼需要一位修士坐镇百日。\n洛神秋点名了自己。众人哗然：阁主之尊，何必亲赴险位？' },
+    { t: 'dialog', who: '@c_n21', title: '观星老人', text: '「星轨里，周天阁十年后有一劫。」他对你说得平静，「阵眼坐镇百日，能延一劫——一命换十年满阁安稳，这笔账，我算得过来。」\n「何况我早算过自己：我这颗星，就挂在这个位置最亮。」' },
+    { t: 'dialog', who: '@c_n21', title: '观星老人', text: '百日阵眼，孤身枯坐，经脉如受凌迟。他进阵前把观星台的钥匙交给你：「替我看看今夜的星。若我出不来，台上那片星图，往后你来描。」' },
+    { t: 'choice', text: '阵门将合。这一百日，你怎么应他？', options: [
+      { text: '「我每夜替你记星。百日之后，一图不少还你。」', value: 'a' },
+      { text: '「我陪你坐阵。两个人分一劫，劫轻一半。」', value: 'b' },
+      { text: '「星轨由天，人算由人——你定要换十年，我替你把好这十年。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); Bag.addItem('m_gupian', 1); return ['百日之间，你夜夜登台记星，一百张星图一日不落。\n他出阵那日，接图的手抖了：「好……好。三百年来，头一回有人替我看星。」（感悟 +4，碎片 ×1）']; }
+      if (v === 'b') { KarmaSys.addFortune(4); p.insight = Math.min(100, (p.insight || 0) + 5); return ['他默许了。两人枯坐百日，出阵时皆形容枯槁，相视一笑。\n「劫轻一半？」他摇头，「情分重一倍。」（气运 +4，感悟 +5）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他深深看你一眼：「好一个『人算由人』——师父当年要的答案，你替我答出来了。」\n百日之后他出阵，周天阁十年无恙。（感悟 +4）'];
+    } },
+  ] },
+pl_n21_a3: { id: 'pl_n21_a3', title: '星数 · 第三幕 · 留白', scenes: [
+    { t: 'narr', text: '洛神秋要重绘那幅传了三代的周天星图。\n画到最后一处，他停了笔——又是那片空白。三百年前它在那里，如今，它还在。' },
+    { t: 'dialog', who: '@c_n21', title: '观星老人', text: '「年轻时我恨这片空白，恨不得拿三百年光阴把它填满。」他洗了笔，换了你送的那管新墨，「如今我谢它。」\n「星图若无空白，后人画什么？」' },
+    { t: 'dialog', who: '@c_n21', title: '观星老人', text: '「我此生算人、算事、算天下——最后一卦，我留给你。」\n他把笔递过来：「这一笔，你来落。落在哪里，落在何处，都好。星图从今往后，有你一笔。」' },
+    { t: 'choice', text: '传了三代的星图摊在面前，笔在你手中。这一笔，落向哪里？', options: [
+      { text: '落在空白正中——「空白该有一颗新的星。」', value: 'a' },
+      { text: '落在他常坐的位置——「观星台也该入星图。」', value: 'b' },
+      { text: '不落。把笔还他——「这一笔，留给三百年后来的人。」', value: 'c' },
+    ], pick: (v) => {
+      const p = Game.player;
+      if (v === 'c') { KarmaSys.addFortune(4); p.insight = Math.min(100, (p.insight || 0) + 6); return ['他接过笔，久久无言，最后郑重收起：「留白留得最好——原来这才是师父当年那句『改不得』的真意。」\n星图留白，气数自长。（气运 +4，感悟 +6）']; }
+      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 5); Bag.addItem('m_gupian', 1); return ['新星落定，光华隐隐。他抚掌长笑：「好！三百年的空白，等的就是这一笔！」\n他赠你一枚上古碎片：「星图有你，此台有你。」（感悟 +5，碎片 ×1）']; }
+      p.insight = Math.min(100, (p.insight || 0) + 5); return ['星点落在观星台的位置。他望着那一小点墨，忽然眼眶微热：「原来在星图里，我也占一处天。」\n（感悟 +5）'];
+    } },
+    { t: 'narr', text: '新图挂上了观星台的正壁。\n空白比旧图多了一处——他亲手新留的。边上题着一行小字：\n「星数可算，人心留白。」' },
+  ] },
+
+/* ============ v30 终章暗线补全 · c10 暗线插章 ============ */
+c10_mid2: { id: 'c10_mid2', title: '第十章 · 星海旧档', scenes: [
+    { t: 'narr', text: '塔影照心的第八层，你在阶壁上摸到一行刻痕。\n刻痕极旧，指腹抚过时识海忽然一震——这字迹，是守门人的。' },
+    { t: 'dialog', who: '@c_gatekeeper', req: [], title: '刻痕 · 旧话', text: '（一道苍老的声音自刻痕里渗出，像早已封存的回响）\n「老朽立塔百万年，送走的人，都死在这一问上。他们都在塔下练剑、练丹、练心——练到门前，独独没练过『认输』。」' },
+    { t: 'dialog', who: '@c_gatekeeper', title: '刻痕 · 旧话', text: '「孩子，门前的影不会输给你，因为你赢不了你自己。老朽只嘱咐一句：那一战，若实在赢不得——认下来，也是答案。」\n「门不拒输家。门拒的，是不肯回头的人。」' },
+    { t: 'narr', text: '刻痕到此而止。塔风穿阶而过，像一声很旧很旧的叹息。\n你把这句话收进识海最深处——门前那一战若真有变数，这一句，或许就是守门人留给你最后的路。\n\n【第十章 · 暗线 · 星海旧档】' },
+  ] },
+
 pl_n10_a2: { id: 'pl_n10_a2', title: '百年一阵 · 第二幕 · 阵失其人', scenes: [
     { t: 'narr', text: '今夜他饮了酒——百年头一遭。\n「百年前，此阵是我与师弟同摆。三百六十五石，我摆单日，他摆双日。」' },
     { t: 'dialog', who: '@c_n10', title: '阵道大家', text: '「阵成那日，天降异象，妖潮来袭。师弟以身入阵，代阵眼镇了三日三夜——阵保住了，人没了。」\n「那空着的阵眼，本该是他的位置。我留着它——等着，或者不敢等，我也说不清。」' },

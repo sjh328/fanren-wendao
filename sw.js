@@ -7,7 +7,7 @@
  *   · Google Fonts（字体 CSS/woff2）：运行时缓存，首访后离线也有书卷气
  * 升级提示：改动 sw.js 时把 VERSION 常量 +1 即可，旧缓存自动清空。
  * ====================================================================== */
-const VERSION = 'fanren-wd-v4';
+const VERSION = 'fanren-wd-v5';
 const CORE = [
   './',
   './index.html',
@@ -16,6 +16,7 @@ const CORE = [
   './icons/icon-512.png',
   './icons/maskable-512.png',
   './icons/favicon-32.png',
+  './icons/apple-touch-icon.png',   // v30：iOS 离线首装图标补齐（index.html 已引用）
 ];
 
 self.addEventListener('install', (e) => {
