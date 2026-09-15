@@ -247,6 +247,17 @@ const Tribulation = {
     }
     // v29 天年：渡劫失利折寿十年（选择回溯者本次渡劫已尽数抹去，不折寿）
     if (!p.dead) Time.cutLife(p, 10, '天劫反噬');
+    // v30 补遗：道侣共渡天劫——失利之际道侣扶住你（心魔 -2，患难见真情）
+    if (!p.dead && p.partner) {
+      const ps = (typeof NpcSys !== 'undefined' && NpcSys.state) ? NpcSys.state(p, p.partner) : null;
+      const pd = (typeof NpcSys !== 'undefined' && NpcSys.def) ? NpcSys.def(p.partner) : null;
+      if (ps && ps.alive && pd) {
+        ps.rel = Utils.clamp(ps.rel + 3, -100, 100);
+        if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, -2, '道侣安慰');
+        if (typeof NpcSys !== 'undefined' && NpcSys.mem) NpcSys.mem(p, p.partner, 'story', '共渡天劫');
+        Log.add(`<b>${pd.name}</b> 顶着余雷冲上雷台扶住你：「劫输了，人还在——来日方长。」（交情 +3，心魔 -2）`, 'gain');
+      }
+    }
     // §24 渡劫虚弱期：宿敌趁火打劫
     let ambushNpc = null;
     if (!p.dead) {

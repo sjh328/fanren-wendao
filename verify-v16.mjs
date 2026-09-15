@@ -101,6 +101,10 @@ console.log('===== SA 源码静态组 =====');
   gd2.includes("fx: { cultPct: 3 }") ? pass('SA54 苏白线键名修正（E42）') : fail('SA54 键名', '');
   const sfx = R('systems/status-fx.js');
   sfx.includes('elitePlus') && R('systems/dungeon.js').includes('elitePlus') ? pass('SA55 手工精英统一口径（E6）') : fail('SA55 精英', '');
+  const trib2 = R('systems/tribulation.js');
+  trib2.includes('道侣安慰') && trib2.includes('共渡天劫') ? pass('SA56 道侣共渡天劫安慰（补遗）') : fail('SA56 道侣劫', '');
+  const gamejs2 = readFileSync(join(__dirname, 'js', 'game.js'), 'utf8');
+  gamejs2.includes('pendingDao = true') && gamejs2.includes('discipleDaily') ? pass('SA57 dao-modal ESC 自愈+弟子历练接线（补遗）') : fail('SA57 补遗接线', '');
 }
 
 /* ================= 浏览器运行时组（RB） ================= */
@@ -361,6 +365,43 @@ if (browser) {
     g1.sideSum ? pass('RB36 内容总览计数器（G7）') : fail('RB36 总览', '');
     g1.subai ? pass('RB37 苏白终章加成实际生效（E42）') : fail('RB37 苏白', String(g1.subai));
 
+    /* ---- 补遗组：宗门五式差事 / 弟子历练 / 道侣共渡天劫 ---- */
+    const g2 = await page.evaluate(() => {
+      const out = {};
+      const p = Game.player;
+      // 差事五式：钩子在位
+      out.hooks = typeof SectSys.onExplore === 'function' && typeof SectSys.onSign === 'function';
+      // 五类任务各生成一次（types 全覆盖）
+      p.sect = { id: 'qingyun', contrib: 100, tasks: [], faction: null };
+      const seen = new Set();
+      for (let i = 0; i < 40; i++) { const t = SectSys.genTask(p); seen.add(t.type); }
+      out.fiveTypes = ['kill', 'collect', 'cult', 'explore', 'sign'].every(t => seen.has(t));
+      out.flavor5 = Object.keys(GameData.SECT_QUEST_FLAVOR.qingyun).length === 5;
+      // explore/sign 钩子推进
+      p.sect.tasks = [{ type: 'explore', target: null, need: 2, progress: 0, name: 'x', desc: 'x' }];
+      SectSys.onExplore(); SectSys.onExplore();
+      out.exploreHook = p.sect.tasks[0].progress === 2;
+      p.sect.tasks = [{ type: 'sign', target: null, need: 1, progress: 0, name: 'x', desc: 'x' }];
+      SectSys.onSign();
+      out.signHook = p.sect.tasks[0].progress === 1;
+      // 亲传弟子历练：亲传有产出、外门无
+      p.realmIdx = 3; p.sect.contrib = 2500;
+      p.sect._discipleDay = -1;
+      const st0 = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
+      SectSys.discipleDaily(p, true);
+      const st1 = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
+      out.disciple = st1 > st0;
+      p.sect.contrib = 100;   // 降回外门
+      p.sect._discipleDay = -1;
+      const st2 = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
+      SectSys.discipleDaily(p, true);
+      out.discipleGate = (p.stones.low + p.stones.mid * 100 + p.stones.high * 10000) === st2;
+      p.sect = null;
+      return out;
+    });
+    g2.hooks && g2.fiveTypes && g2.flavor5 ? pass('RB39 差事五式生成与名目表（补遗）') : fail('RB39 差事五式', JSON.stringify({ h: g2.hooks, f: g2.fiveTypes, n: g2.flavor5 }));
+    g2.exploreHook && g2.signHook ? pass('RB40 历练/问签钩子推进（补遗）') : fail('RB40 钩子', JSON.stringify({ e: g2.exploreHook, s: g2.signHook }));
+    g2.disciple && g2.discipleGate ? pass('RB41 亲传弟子历练产出+职位门（补遗）') : fail('RB41 弟子历练', JSON.stringify({ d: g2.disciple, g: g2.discipleGate }));
     consoleErrors.length === 0 ? pass('RB38 运行时 0 控制台错误') : fail('RB38 控制台', consoleErrors.slice(0, 3).join(' | '));
   } catch (e) {
     fail('RB 流程', (e && e.stack || String(e)).slice(0, 600));

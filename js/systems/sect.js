@@ -59,7 +59,8 @@ const SectSys = {
   },
   genTask(p) {
     const realm = p.realmIdx;
-    const type = Utils.pick(['kill', 'collect', 'cult']);
+    // v30 补遗：差事五式——历练（任意地图探索）与问签（黄历求签）两类真钩子补齐每宗五条
+    const type = Utils.pick(['kill', 'collect', 'cult', 'explore', 'sign']);
     // v30 宗门特色差事：本宗名目替代通用名目（35%），机制不变、文案见宗门气象
     const flav = p.sect && GameData.SECT_QUEST_FLAVOR && GameData.SECT_QUEST_FLAVOR[p.sect.id];
     const flavorName = (flav && Utils.chance(35)) ? flav[type] : null;
@@ -78,6 +79,13 @@ const SectSys = {
       return { type, target, need, progress: 0, name: flavorName || `采集 · ${GameData.ITEMS[target].name}`, desc: flavorName ? `门中差事 · ${flavorName}：上交 ${GameData.ITEMS[target].name} ×${need}` : `上交 ${GameData.ITEMS[target].name} ×${need}` };
     }
     const need = Math.round(120 * GameData.eco(realm));
+    if (type === 'explore') {
+      const need2 = Utils.rand(3, 5);
+      return { type, target: null, need: need2, progress: 0, name: flavorName || '历练 · 行走山河', desc: flavorName ? `门中差事 · ${flavorName}：外出历练 ${need2} 次（任意地图）` : `外出历练 ${need2} 次（任意地图）` };
+    }
+    if (type === 'sign') {
+      return { type, target: null, need: 1, progress: 0, name: flavorName || '问签 · 黄历一卦', desc: flavorName ? `门中差事 · ${flavorName}：黄历求签 1 次` : '黄历求签 1 次' };
+    }
     return { type: 'cult', target: null, need, progress: 0, name: flavorName || '修行 · 精进不休', desc: flavorName ? `门中差事 · ${flavorName}：累计获得修为 ${Utils.fmtNum(need)}` : `累计获得修为 ${Utils.fmtNum(need)}` };
   },
   rewards(p, task) {
@@ -245,6 +253,47 @@ const SectSys = {
         else Log.add(`讨伐任务进度：${t.progress}/${t.need}。`, 'info');
       }
     }
+  },
+  /** v30 补遗：历练钩子（任意地图探索 +1）——探索计数处调用 */
+  onExplore() {
+    const p = Game.player;
+    if (!p.sect) return;
+    for (const t of p.sect.tasks) {
+      if (t.type === 'explore' && t.progress < t.need) {
+        t.progress++;
+        if (t.progress >= t.need) Log.add('宗门历练任务已完成，可回去领取奖励！', 'gain');
+      }
+    }
+  },
+  /** v30 补遗：问签钩子（黄历求签）——求签处调用 */
+  onSign() {
+    const p = Game.player;
+    if (!p.sect) return;
+    for (const t of p.sect.tasks) {
+      if (t.type === 'sign' && t.progress < t.need) {
+        t.progress = t.need;
+        Log.add('宗门问签任务已完成，可回去领取奖励！', 'gain');
+      }
+    }
+  },
+  /** v30 补遗：亲传弟子「门中弟子历练」——门中后辈代师行走江湖，每日有产出（离线回放同样入账） */
+  discipleDaily(p, auto = false) {
+    if (!p.sect) return;
+    const r = this.rank(p);
+    if (!r || (r.id !== 'core' && r.id !== 'elder')) return;
+    const today = Math.floor(p.day || 0);
+    if ((p.sect._discipleDay || -1) === today) return;
+    p.sect._discipleDay = today;
+    const stones = Math.round(12 * GameData.stoneEco(Math.min(6, p.realmIdx)));
+    Bag.addStones(stones);
+    let extra = '';
+    if (Utils.chance(18)) {
+      const tier = Utils.clamp(Math.floor(p.realmIdx / 2) + 1, 1, 3);
+      const mat = Utils.pick(GameData.matsByTier(tier));
+      Bag.addItem(mat, 1);
+      extra = `，还捎回一份【${GameData.ITEMS[mat].name}】`;
+    }
+    Log.add(`【门中弟子历练】亲传在身，门中后辈代师行走江湖——缴回灵石 ${Utils.fmtNum(stones)}${extra}。`, auto ? 'info' : 'gain');
   },
   /** 修炼钩子：推进修行任务 */
   onCultivate(amount) {

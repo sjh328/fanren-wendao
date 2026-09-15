@@ -8,6 +8,7 @@ const Explore = {
     p.counters.explores++;
     const mapExp = p.counters.mapExplores = (p.counters.mapExplores || {});
     mapExp[map.id] = (mapExp[map.id] || 0) + 1;
+    if (typeof SectSys !== 'undefined' && SectSys.onExplore) SectSys.onExplore();   // v30：宗门历练差事钩子
     Time.add(2);
     if (p.dead) return;
     const under = p.realmIdx < map.recRealm;

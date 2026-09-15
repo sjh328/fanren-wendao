@@ -1730,11 +1730,11 @@ const GameData = {
 
   /* ---- v30 宗门特色差事：按宗门改换任务名目与文案（机制沿用击杀/采集/修行三式） ---- */
   SECT_QUEST_FLAVOR: {
-    qingyun:  { kill: '剑试诸锋', collect: '采铸剑材', cult: '参悟剑心' },
-    danxia:   { kill: '驱护药庐', collect: '采药入炉', cult: '丹心静修' },
-    wanbao:   { kill: '护镖清道', collect: '代收购料', cult: '持筹握算' },
-    panyan:   { kill: '护矿除妖', collect: '采铸矿材', cult: '负重砺体' },
-    zhoutian: { kill: '清除星野', collect: '采集星砂', cult: '观星定心' },
+    qingyun:  { kill: '剑试诸锋', collect: '采铸剑材', cult: '参悟剑心', explore: '游历砺剑', sign: '卜问剑程' },
+    danxia:   { kill: '驱护药庐', collect: '采药入炉', cult: '丹心静修', explore: '寻方问药', sign: '药王签愿' },
+    wanbao:   { kill: '护镖清道', collect: '代收购料', cult: '持筹握算', explore: '踏勘商路', sign: '开市问吉' },
+    panyan:   { kill: '护矿除妖', collect: '采铸矿材', cult: '负重砺体', explore: '踏山探脉', sign: '山神问路' },
+    zhoutian: { kill: '清除星野', collect: '采集星砂', cult: '观星定心', explore: '夜测星轨', sign: '星签问天' },
   },
 
   /** 宗门贡献兑换列表 */
@@ -7597,7 +7597,8 @@ const SectSys = {
   },
   genTask(p) {
     const realm = p.realmIdx;
-    const type = Utils.pick(['kill', 'collect', 'cult']);
+    // v30 补遗：差事五式——历练（任意地图探索）与问签（黄历求签）两类真钩子补齐每宗五条
+    const type = Utils.pick(['kill', 'collect', 'cult', 'explore', 'sign']);
     // v30 宗门特色差事：本宗名目替代通用名目（35%），机制不变、文案见宗门气象
     const flav = p.sect && GameData.SECT_QUEST_FLAVOR && GameData.SECT_QUEST_FLAVOR[p.sect.id];
     const flavorName = (flav && Utils.chance(35)) ? flav[type] : null;
@@ -7616,6 +7617,13 @@ const SectSys = {
       return { type, target, need, progress: 0, name: flavorName || `采集 · ${GameData.ITEMS[target].name}`, desc: flavorName ? `门中差事 · ${flavorName}：上交 ${GameData.ITEMS[target].name} ×${need}` : `上交 ${GameData.ITEMS[target].name} ×${need}` };
     }
     const need = Math.round(120 * GameData.eco(realm));
+    if (type === 'explore') {
+      const need2 = Utils.rand(3, 5);
+      return { type, target: null, need: need2, progress: 0, name: flavorName || '历练 · 行走山河', desc: flavorName ? `门中差事 · ${flavorName}：外出历练 ${need2} 次（任意地图）` : `外出历练 ${need2} 次（任意地图）` };
+    }
+    if (type === 'sign') {
+      return { type, target: null, need: 1, progress: 0, name: flavorName || '问签 · 黄历一卦', desc: flavorName ? `门中差事 · ${flavorName}：黄历求签 1 次` : '黄历求签 1 次' };
+    }
     return { type: 'cult', target: null, need, progress: 0, name: flavorName || '修行 · 精进不休', desc: flavorName ? `门中差事 · ${flavorName}：累计获得修为 ${Utils.fmtNum(need)}` : `累计获得修为 ${Utils.fmtNum(need)}` };
   },
   rewards(p, task) {
@@ -7783,6 +7791,47 @@ const SectSys = {
         else Log.add(`讨伐任务进度：${t.progress}/${t.need}。`, 'info');
       }
     }
+  },
+  /** v30 补遗：历练钩子（任意地图探索 +1）——探索计数处调用 */
+  onExplore() {
+    const p = Game.player;
+    if (!p.sect) return;
+    for (const t of p.sect.tasks) {
+      if (t.type === 'explore' && t.progress < t.need) {
+        t.progress++;
+        if (t.progress >= t.need) Log.add('宗门历练任务已完成，可回去领取奖励！', 'gain');
+      }
+    }
+  },
+  /** v30 补遗：问签钩子（黄历求签）——求签处调用 */
+  onSign() {
+    const p = Game.player;
+    if (!p.sect) return;
+    for (const t of p.sect.tasks) {
+      if (t.type === 'sign' && t.progress < t.need) {
+        t.progress = t.need;
+        Log.add('宗门问签任务已完成，可回去领取奖励！', 'gain');
+      }
+    }
+  },
+  /** v30 补遗：亲传弟子「门中弟子历练」——门中后辈代师行走江湖，每日有产出（离线回放同样入账） */
+  discipleDaily(p, auto = false) {
+    if (!p.sect) return;
+    const r = this.rank(p);
+    if (!r || (r.id !== 'core' && r.id !== 'elder')) return;
+    const today = Math.floor(p.day || 0);
+    if ((p.sect._discipleDay || -1) === today) return;
+    p.sect._discipleDay = today;
+    const stones = Math.round(12 * GameData.stoneEco(Math.min(6, p.realmIdx)));
+    Bag.addStones(stones);
+    let extra = '';
+    if (Utils.chance(18)) {
+      const tier = Utils.clamp(Math.floor(p.realmIdx / 2) + 1, 1, 3);
+      const mat = Utils.pick(GameData.matsByTier(tier));
+      Bag.addItem(mat, 1);
+      extra = `，还捎回一份【${GameData.ITEMS[mat].name}】`;
+    }
+    Log.add(`【门中弟子历练】亲传在身，门中后辈代师行走江湖——缴回灵石 ${Utils.fmtNum(stones)}${extra}。`, auto ? 'info' : 'gain');
   },
   /** 修炼钩子：推进修行任务 */
   onCultivate(amount) {
@@ -7992,6 +8041,7 @@ const Explore = {
     p.counters.explores++;
     const mapExp = p.counters.mapExplores = (p.counters.mapExplores || {});
     mapExp[map.id] = (mapExp[map.id] || 0) + 1;
+    if (typeof SectSys !== 'undefined' && SectSys.onExplore) SectSys.onExplore();   // v30：宗门历练差事钩子
     Time.add(2);
     if (p.dead) return;
     const under = p.realmIdx < map.recRealm;
@@ -9086,6 +9136,7 @@ const DailySign = {
     const effect = item.apply(p);
     p.signDay = today;
     p.counters.signs = (p.counters.signs || 0) + 1;   // v24 章助缘计数
+    if (typeof SectSys !== 'undefined' && SectSys.onSign) SectSys.onSign();   // v30：宗门问签差事钩子
     p.signText = item.text;
     p.signDesc = item.desc;
     Log.add(`【黄历】你诚心摇签，得一支<b>${item.text}</b>——${item.desc}（${effect}）`, item.id === 'mishap' ? 'warn' : 'gain');
@@ -9511,6 +9562,17 @@ const Tribulation = {
     }
     // v29 天年：渡劫失利折寿十年（选择回溯者本次渡劫已尽数抹去，不折寿）
     if (!p.dead) Time.cutLife(p, 10, '天劫反噬');
+    // v30 补遗：道侣共渡天劫——失利之际道侣扶住你（心魔 -2，患难见真情）
+    if (!p.dead && p.partner) {
+      const ps = (typeof NpcSys !== 'undefined' && NpcSys.state) ? NpcSys.state(p, p.partner) : null;
+      const pd = (typeof NpcSys !== 'undefined' && NpcSys.def) ? NpcSys.def(p.partner) : null;
+      if (ps && ps.alive && pd) {
+        ps.rel = Utils.clamp(ps.rel + 3, -100, 100);
+        if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, -2, '道侣安慰');
+        if (typeof NpcSys !== 'undefined' && NpcSys.mem) NpcSys.mem(p, p.partner, 'story', '共渡天劫');
+        Log.add(`<b>${pd.name}</b> 顶着余雷冲上雷台扶住你：「劫输了，人还在——来日方长。」（交情 +3，心魔 -2）`, 'gain');
+      }
+    }
     // §24 渡劫虚弱期：宿敌趁火打劫
     let ambushNpc = null;
     if (!p.dead) {
@@ -17735,7 +17797,11 @@ const Game = {
       const amb = document.getElementById('amb-panel');
       if (amb && !amb.classList.contains('hidden')) { amb.classList.add('hidden'); return; }
       const dao = document.getElementById('dao-modal');
-      if (dao && !dao.classList.contains('hidden')) dao.classList.add('hidden');
+      if (dao && !dao.classList.contains('hidden')) {
+        dao.classList.add('hidden');
+        // v30 补遗：ESC 合上叩问弹窗时保留叩问机缘——「大道未定」提醒可随时重新叩问
+        if (Game.player && !Game.player.dao) Game.player.pendingDao = true;
+      }
       // v29：只读剧情（问道录回顾）随 ESC 合上
       const storyM = document.getElementById('story-modal');
       if (storyM && !storyM.classList.contains('hidden') && typeof Story !== 'undefined' && Story.cur && Story.cur.readonly) { Story.close(); return; }
@@ -17896,6 +17962,7 @@ const Game = {
     // v24：日常结算统一收口到行动后（原先藏在各页签渲染函数里，打开页面才结算）
     try { if (typeof RankSys !== 'undefined' && RankSys.dailyReward && RankSys.isTop(p)) RankSys.dailyReward(p); } catch (err) { console.error('登顶日赏异常:', err); }
     try { if (p.cave) { CaveSys.visitorEvent(p, auto); CaveSys.checkPest(p); CaveSys.springDaily(p, auto); } } catch (err) { console.error('洞府日常异常:', err); }
+    try { if (typeof SectSys !== 'undefined' && SectSys.discipleDaily) SectSys.discipleDaily(p, auto); } catch (err) { console.error('弟子历练异常:', err); }   // v30 补遗：亲传门中弟子历练（离线亦入账）
     try { if (typeof Codex !== 'undefined' && Codex.checkRewards) Codex.checkRewards(); } catch (err) { console.error('图鉴检查异常:', err); }
   },
 

@@ -496,11 +496,11 @@ const GameData = {
 
   /* ---- v30 宗门特色差事：按宗门改换任务名目与文案（机制沿用击杀/采集/修行三式） ---- */
   SECT_QUEST_FLAVOR: {
-    qingyun:  { kill: '剑试诸锋', collect: '采铸剑材', cult: '参悟剑心' },
-    danxia:   { kill: '驱护药庐', collect: '采药入炉', cult: '丹心静修' },
-    wanbao:   { kill: '护镖清道', collect: '代收购料', cult: '持筹握算' },
-    panyan:   { kill: '护矿除妖', collect: '采铸矿材', cult: '负重砺体' },
-    zhoutian: { kill: '清除星野', collect: '采集星砂', cult: '观星定心' },
+    qingyun:  { kill: '剑试诸锋', collect: '采铸剑材', cult: '参悟剑心', explore: '游历砺剑', sign: '卜问剑程' },
+    danxia:   { kill: '驱护药庐', collect: '采药入炉', cult: '丹心静修', explore: '寻方问药', sign: '药王签愿' },
+    wanbao:   { kill: '护镖清道', collect: '代收购料', cult: '持筹握算', explore: '踏勘商路', sign: '开市问吉' },
+    panyan:   { kill: '护矿除妖', collect: '采铸矿材', cult: '负重砺体', explore: '踏山探脉', sign: '山神问路' },
+    zhoutian: { kill: '清除星野', collect: '采集星砂', cult: '观星定心', explore: '夜测星轨', sign: '星签问天' },
   },
 
   /** 宗门贡献兑换列表 */

@@ -1057,10 +1057,15 @@ try {
 
   // W14 移动端弹层近全屏贴底
   const w14 = await page.evaluate(async () => {
+    // v30 消抖：弹层入场动画期间测量会差几像素——轮询至动画收尾（至多 1s）
     UI.popup({ title: '底部弹层', html: 'x', options: [{ text: '确定', value: true, primary: true }] });
-    await new Promise(r => setTimeout(r, 150));
-    const r = document.querySelector('.popup-box').getBoundingClientRect();
-    const full = r.width >= window.innerWidth * 0.95 && Math.abs(r.bottom - window.innerHeight) <= 4;
+    let r = null, full = false;
+    for (let t = 0; t < 10; t++) {
+      await new Promise(rr => setTimeout(rr, 100));
+      r = document.querySelector('.popup-box').getBoundingClientRect();
+      full = r.width >= window.innerWidth * 0.95 && Math.abs(r.bottom - window.innerHeight) <= 4;
+      if (full) break;
+    }
     UI.popupChoose(-1);
     return { full, w: Math.round(r.width), bottom: Math.round(r.bottom), vh: window.innerHeight };
   });

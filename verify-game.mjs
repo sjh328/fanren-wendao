@@ -484,7 +484,8 @@ try {
     await sleep(500);
     const sectAfter = await text(page, '#tab-content');
     sectAfter.includes('青云剑宗') && sectAfter.includes('贡献') ? pass('T10.7 拜入青云剑宗') : fail('T10.7 拜入宗门', sectAfter.slice(0, 60));
-    const taskCount = (sectAfter.match(/讨伐 ·|采集 ·|修行 ·/g) || []).length;
+    // v30 补遗：差事五式带本宗名目（不再固定「讨伐 ·」前缀）——按任务行数计数（每条任务恒有「进度 x/y」行）
+    const taskCount = (sectAfter.match(/—— 进度 /g) || []).length;
     taskCount === 3 ? pass('T10.7 宗门任务×3生成') : fail('T10.7 宗门任务', '数量=' + taskCount);
     sectAfter.includes('贡献兑换') ? pass('T10.7 贡献兑换区显示') : fail('T10.7 兑换区', '');
     // 贡献不足时点击兑换：应提示且不产生物品

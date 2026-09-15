@@ -102,7 +102,11 @@ const Game = {
       const amb = document.getElementById('amb-panel');
       if (amb && !amb.classList.contains('hidden')) { amb.classList.add('hidden'); return; }
       const dao = document.getElementById('dao-modal');
-      if (dao && !dao.classList.contains('hidden')) dao.classList.add('hidden');
+      if (dao && !dao.classList.contains('hidden')) {
+        dao.classList.add('hidden');
+        // v30 补遗：ESC 合上叩问弹窗时保留叩问机缘——「大道未定」提醒可随时重新叩问
+        if (Game.player && !Game.player.dao) Game.player.pendingDao = true;
+      }
       // v29：只读剧情（问道录回顾）随 ESC 合上
       const storyM = document.getElementById('story-modal');
       if (storyM && !storyM.classList.contains('hidden') && typeof Story !== 'undefined' && Story.cur && Story.cur.readonly) { Story.close(); return; }
@@ -263,6 +267,7 @@ const Game = {
     // v24：日常结算统一收口到行动后（原先藏在各页签渲染函数里，打开页面才结算）
     try { if (typeof RankSys !== 'undefined' && RankSys.dailyReward && RankSys.isTop(p)) RankSys.dailyReward(p); } catch (err) { console.error('登顶日赏异常:', err); }
     try { if (p.cave) { CaveSys.visitorEvent(p, auto); CaveSys.checkPest(p); CaveSys.springDaily(p, auto); } } catch (err) { console.error('洞府日常异常:', err); }
+    try { if (typeof SectSys !== 'undefined' && SectSys.discipleDaily) SectSys.discipleDaily(p, auto); } catch (err) { console.error('弟子历练异常:', err); }   // v30 补遗：亲传门中弟子历练（离线亦入账）
     try { if (typeof Codex !== 'undefined' && Codex.checkRewards) Codex.checkRewards(); } catch (err) { console.error('图鉴检查异常:', err); }
   },
 
