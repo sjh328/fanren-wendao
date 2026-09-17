@@ -131,9 +131,7 @@ const XianSys = {
   /** 仙界访客（dailySettle 钩子，日一次；(p, auto) 离线静默入账） */
   dailyCheck(p, auto = false) {
     if (!this.unlocked(p) || this.cur(p) === 0 || p.dead) return;
-    const today = Math.floor(p.day || 0);
-    if (p._xianVisitDay === today) return;
-    p._xianVisitDay = today;
+    if (!Daily.resetIfNew(p, '_xianVisitDay')) return;   // v32（G3）：日界判定迁入日结总线单源
     if (!Utils.chance(30)) return;
     const ev = Utils.pick(GameData.XIAN_VISITORS);
     const got = ev.fn(p);

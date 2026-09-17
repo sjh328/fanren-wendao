@@ -291,7 +291,7 @@ const Bag = {
     // v30：分解同清词缀留档
     if (p.affixKept && p.affixKept[itemId]) delete p.affixKept[itemId];
     // v30：分解产「器魂」——重铸词缀的新货币（品阶越高、强化越深，器魂越多）
-    const qihun = 2 + (def.grade || 0) * 2 + enh;
+    const qihun = 2 + (def.grade || 0) * 2 + enh + ((p.flags && p.flags.visionGuangli) ? 1 : 0);   // v32（D6）：仙官观礼——分解器魂 +1
     p.qihun = (p.qihun || 0) + qihun;
     Bag.addItem('m_xuantie', oreBack);
     Bag.addStones(stones);

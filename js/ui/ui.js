@@ -1148,13 +1148,13 @@ const UI = {
     return `
       <div class="card">
         <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}${(typeof RepSys !== 'undefined' && RepSys.priceMul && RepSys.priceMul(p) !== 1) ? `声望买价 ×${RepSys.priceMul(p)} · ` : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
-        <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。</div>
-        <div class="card-tags">
+        <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。面额折算总额见顶栏；灵石兑换四键收进下方折叠（v32 E8：上/中品自此只是背景设定）。</div>
+        <details class="fold"><summary style="cursor:pointer;color:var(--text-faint)">灵石兑换 ▾</summary><div class="card-tags" style="margin-top:6px">
           <button class="btn btn-sm" data-action="act-convert" data-dir="up1">100下品 → 1中品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="down1">1中品 → 100下品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="up2">100中品 → 1上品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="down2">1上品 → 100中品</button>
-        </div>
+        </div></details>
         ${group('pill', '丹药', true)}
         ${group('artifact', '法器')}
         ${group('gongfa', '功法典籍')}

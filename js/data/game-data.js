@@ -456,6 +456,13 @@ const GameData = {
     { id: 4, name: '大罗', layerNeed: 80000, life: 30000, ascendText: '跳出三界外，不在五行中——大罗天上，再无拘束。', aura: '#c77ce8' },
   ],
   XIAN_LAYER_NAMES: ['初期', '中期', '后期'],
+  /* ---------- v32（D6）仙劫异象池：按三策各授一道永久仙绩小词缀（仙劫与天劫自此各具气象） ---------- */
+  XIAN_VISIONS: [
+    { strategy: 'endure',   name: '雷池淬体', desc: '你于雷池中赤身淬炼——此后修为溢流所炼的仙元 +10%。', flag: 'visionLeichi' },
+    { strategy: 'artifact', name: '仙官观礼', desc: '云端仙官观礼落槌，赠你一分点化之缘——此后分解法宝所得器魂 +1。', flag: 'visionGuangli' },
+    { strategy: 'hide',     name: '仙障心魔试炼', desc: '仙障化作心魔与你论道三日夜——道基愈坚，此后突破成算永久 +2。', flag: 'visionXinzhang' },
+  ],
+
   XIAN_VISITORS: [
     { text: '仙缘童子奉命送来一枚仙元凝成的宝珠，言道「上仙莫忘尘世旧缘」。', fn: (p) => { p.counters.xianyuan = (p.counters.xianyuan || 0) + Math.round(1500); return '仙元 +1500'; } },
     { text: '一位仙官路过洞府，与你论及天条规章，言及人间修行利弊，相谈甚欢。', fn: (p) => { Cultivate.addInsight(p, 6); return '感悟 +6'; } },

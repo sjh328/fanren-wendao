@@ -202,6 +202,9 @@ console.log('===== SA 源码静态组 =====');
   relscript.includes('版本号单源注入') && relscript.includes('game.js?v=${cacheV}') ? pass('SA117 release 版本单源注入（G7/E58）') : fail('SA117 单源', '');
   (gdata.match(/c_n\d+:/g) || []).length >= 24 ? pass('SA118 人物志 24 人全注册（A7）') : fail('SA118 人物志', '');
   reinc.includes("'道胎'") && reinc.includes("'轮回行者'") ? pass('SA119 树 11~15 名录在位（D2）') : fail('SA119 树名录', '');
+  gdata.includes('XIAN_VISIONS') && trib.includes('异象 · ${vision.name}') && cult.includes('visionLeichi') && bag.includes('visionGuangli') && cult.includes('visionXinzhang') ? pass('SA120 仙劫异象池+三策小词缀接线（D6 补遗）') : fail('SA120 异象池', '');
+  ui.includes('灵石兑换 ▾') && ui.includes('面额折算总额见顶栏') ? pass('SA121 convert 四键收纳折叠（E8 补遗）') : fail('SA121 收纳', '');
+  utils.includes('const Daily = {') && utils.includes('resetIfNew(p, key)') && R('systems/xian.js').includes("Daily.resetIfNew(p, '_xianVisitDay')") ? pass('SA122 日结总线 helper+首例迁移（G3 补遗）') : fail('SA122 Daily', '');
 }
 
 /* ================= 浏览器运行时组（RB） ================= */

@@ -196,6 +196,14 @@ const Tribulation = {
         p.hp = st2.maxHp; p.mp = st2.maxMp;
         this.log('仙劫散去，霞光满身——你于云端之上缓缓睁眼——成了！', 'log-realm');
         UI.realmShow((GameData.XIAN_TIERS[S.xianTo - 1] || {}).ascendText || '仙劫散去，仙骨自成。', GameData.REALM_AURA[9] || '#e8e8e8');
+        // v32（D6）：仙劫异象池——按三策授一道永久仙绩小词缀（雷池淬体/仙官观礼/仙障心魔试炼）
+        const vision = (GameData.XIAN_VISIONS || []).find(v2 => v2.strategy === strategy);
+        if (vision) {
+          p.flags = p.flags || {};
+          p.flags[vision.flag] = true;
+          this.log(`【异象 · ${vision.name}】${vision.desc}`, 'log-gain');
+          Log.add(`仙劫异象铭入仙骨——【${vision.name}】成永绩。`, 'realm');
+        }
         if (typeof XianSys !== 'undefined') XianSys.tribSuccess(p, S.xianTo, strategy);
         UI.toast(`仙劫功成！晋 ${GameData.XIAN_TIERS[S.xianTo - 1].name}`);
         await Utils.sleep(900);

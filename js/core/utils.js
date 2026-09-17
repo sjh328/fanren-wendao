@@ -90,3 +90,17 @@ const Utils = {
   /** 稳定字符串哈希（v5：坊市行情 / NPC 行游轮换用，同输入同输出） */
   hashStr(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h * 31 + s.charCodeAt(i)) >>> 0; } return h; },
 };
+
+/* ======================================================================
+ * v32（G3）日结总线 Daily：日界判定与「{key, day}」日限形态的单源 helper——
+ * 新代码一律走此口，旧字段渐进迁移（首例：XianSys.dailyCheck 的 _xianVisitDay）。
+ * resetIfNew(p, key)：key 对应日戳与今日不同则盖戳并返回 true（新一日）。
+ * ====================================================================== */
+const Daily = {
+  resetIfNew(p, key) {
+    const t = Math.floor(p.day || 0);
+    if ((p[key] || -1) === t) return false;
+    p[key] = t;
+    return true;
+  },
+};

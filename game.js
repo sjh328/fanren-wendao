@@ -92,6 +92,20 @@ const Utils = {
 };
 
 /* ======================================================================
+ * v32（G3）日结总线 Daily：日界判定与「{key, day}」日限形态的单源 helper——
+ * 新代码一律走此口，旧字段渐进迁移（首例：XianSys.dailyCheck 的 _xianVisitDay）。
+ * resetIfNew(p, key)：key 对应日戳与今日不同则盖戳并返回 true（新一日）。
+ * ====================================================================== */
+const Daily = {
+  resetIfNew(p, key) {
+    const t = Math.floor(p.day || 0);
+    if ((p[key] || -1) === t) return false;
+    p[key] = t;
+    return true;
+  },
+};
+
+/* ======================================================================
  * §1.5 增量扩展（v4）：数字滚动动画 Anim
  * 数值变化（修为 / 灵石 / 血量等）不直接跳字，而是缓动滚到目标值。
  * 用法：渲染时输出 <span class="num-anim" data-nk="键" data-nv="目标值"
@@ -1715,6 +1729,13 @@ const GameData = {
     { id: 4, name: '大罗', layerNeed: 80000, life: 30000, ascendText: '跳出三界外，不在五行中——大罗天上，再无拘束。', aura: '#c77ce8' },
   ],
   XIAN_LAYER_NAMES: ['初期', '中期', '后期'],
+  /* ---------- v32（D6）仙劫异象池：按三策各授一道永久仙绩小词缀（仙劫与天劫自此各具气象） ---------- */
+  XIAN_VISIONS: [
+    { strategy: 'endure',   name: '雷池淬体', desc: '你于雷池中赤身淬炼——此后修为溢流所炼的仙元 +10%。', flag: 'visionLeichi' },
+    { strategy: 'artifact', name: '仙官观礼', desc: '云端仙官观礼落槌，赠你一分点化之缘——此后分解法宝所得器魂 +1。', flag: 'visionGuangli' },
+    { strategy: 'hide',     name: '仙障心魔试炼', desc: '仙障化作心魔与你论道三日夜——道基愈坚，此后突破成算永久 +2。', flag: 'visionXinzhang' },
+  ],
+
   XIAN_VISITORS: [
     { text: '仙缘童子奉命送来一枚仙元凝成的宝珠，言道「上仙莫忘尘世旧缘」。', fn: (p) => { p.counters.xianyuan = (p.counters.xianyuan || 0) + Math.round(1500); return '仙元 +1500'; } },
     { text: '一位仙官路过洞府，与你论及天条规章，言及人间修行利弊，相谈甚欢。', fn: (p) => { Cultivate.addInsight(p, 6); return '感悟 +6'; } },
@@ -5647,7 +5668,7 @@ const Cultivate = {
         p.exp = need;
         if (p.realmIdx >= 9) {
           // v30 仙途续航：真仙圆满之后修为溢流炼作「仙元」（道境资粮）——修为轴有终点，道境没有
-          const daoGain = Math.max(1, Math.round(over / (GameData.eco(9) * 0.05)));
+          const daoGain = Math.max(1, Math.round(over / (GameData.eco(9) * 0.05) * ((p.flags && p.flags.visionLeichi) ? 1.1 : 1)));   // v32（D6）：雷池淬体——仙元溢流 +10%
           p.counters.xianyuan = (p.counters.xianyuan || 0) + daoGain;
           DaoSys.gain(p, daoGain);
           if (p.counters.xianyuan % 50 < daoGain) Log.add(`修为满溢，尽数炼作 <b>仙元</b>（道境资粮 +${daoGain} · 累计 ${p.counters.xianyuan}）——修为轴有终点，道境没有。`, 'gain');
@@ -5931,6 +5952,7 @@ const Cultivate = {
     chance -= (p.karma || 0) * 0.2;     // 孽障：每10点 -2%
     chance -= Math.floor((p.xinmo || 0) / 10);   // v28 联动：心魔蚀道——未降伏的心魔每10点 -1% 成算（满百另有心魔劫）
     chance += Math.min(15, (p.breakStreak || 0) * 5);   // v8 挫而愈坚：连败保底，每次失利 +5%（上限 +15%）
+    if (p.flags && p.flags.visionXinzhang) chance += 2;   // v32（D6）：仙障心魔试炼——道基愈坚，突破成算永久 +2
     if (p.realmIdx >= 8) chance += 8;   // v10 境界特性 · 劫体（渡劫）：半身已在雷海
     if (p.dao === 'sword') chance *= 0.77;  // 剑心桀骜：渡劫难度+30%
     if (p.dao === 'body') chance *= 1.4;    // 金刚不坏：渡劫成算+40%
@@ -6410,7 +6432,7 @@ const Bag = {
     // v30：分解同清词缀留档
     if (p.affixKept && p.affixKept[itemId]) delete p.affixKept[itemId];
     // v30：分解产「器魂」——重铸词缀的新货币（品阶越高、强化越深，器魂越多）
-    const qihun = 2 + (def.grade || 0) * 2 + enh;
+    const qihun = 2 + (def.grade || 0) * 2 + enh + ((p.flags && p.flags.visionGuangli) ? 1 : 0);   // v32（D6）：仙官观礼——分解器魂 +1
     p.qihun = (p.qihun || 0) + qihun;
     Bag.addItem('m_xuantie', oreBack);
     Bag.addStones(stones);
@@ -10105,6 +10127,14 @@ const Tribulation = {
         p.hp = st2.maxHp; p.mp = st2.maxMp;
         this.log('仙劫散去，霞光满身——你于云端之上缓缓睁眼——成了！', 'log-realm');
         UI.realmShow((GameData.XIAN_TIERS[S.xianTo - 1] || {}).ascendText || '仙劫散去，仙骨自成。', GameData.REALM_AURA[9] || '#e8e8e8');
+        // v32（D6）：仙劫异象池——按三策授一道永久仙绩小词缀（雷池淬体/仙官观礼/仙障心魔试炼）
+        const vision = (GameData.XIAN_VISIONS || []).find(v2 => v2.strategy === strategy);
+        if (vision) {
+          p.flags = p.flags || {};
+          p.flags[vision.flag] = true;
+          this.log(`【异象 · ${vision.name}】${vision.desc}`, 'log-gain');
+          Log.add(`仙劫异象铭入仙骨——【${vision.name}】成永绩。`, 'realm');
+        }
         if (typeof XianSys !== 'undefined') XianSys.tribSuccess(p, S.xianTo, strategy);
         UI.toast(`仙劫功成！晋 ${GameData.XIAN_TIERS[S.xianTo - 1].name}`);
         await Utils.sleep(900);
@@ -13251,9 +13281,7 @@ const XianSys = {
   /** 仙界访客（dailySettle 钩子，日一次；(p, auto) 离线静默入账） */
   dailyCheck(p, auto = false) {
     if (!this.unlocked(p) || this.cur(p) === 0 || p.dead) return;
-    const today = Math.floor(p.day || 0);
-    if (p._xianVisitDay === today) return;
-    p._xianVisitDay = today;
+    if (!Daily.resetIfNew(p, '_xianVisitDay')) return;   // v32（G3）：日界判定迁入日结总线单源
     if (!Utils.chance(30)) return;
     const ev = Utils.pick(GameData.XIAN_VISITORS);
     const got = ev.fn(p);
@@ -17991,13 +18019,13 @@ const UI = {
     return `
       <div class="card">
         <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}${(typeof RepSys !== 'undefined' && RepSys.priceMul && RepSys.priceMul(p) !== 1) ? `声望买价 ×${RepSys.priceMul(p)} · ` : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
-        <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。</div>
-        <div class="card-tags">
+        <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。面额折算总额见顶栏；灵石兑换四键收进下方折叠（v32 E8：上/中品自此只是背景设定）。</div>
+        <details class="fold"><summary style="cursor:pointer;color:var(--text-faint)">灵石兑换 ▾</summary><div class="card-tags" style="margin-top:6px">
           <button class="btn btn-sm" data-action="act-convert" data-dir="up1">100下品 → 1中品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="down1">1中品 → 100下品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="up2">100中品 → 1上品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="down2">1上品 → 100中品</button>
-        </div>
+        </div></details>
         ${group('pill', '丹药', true)}
         ${group('artifact', '法器')}
         ${group('gongfa', '功法典籍')}

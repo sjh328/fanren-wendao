@@ -45,7 +45,7 @@ const Cultivate = {
         p.exp = need;
         if (p.realmIdx >= 9) {
           // v30 仙途续航：真仙圆满之后修为溢流炼作「仙元」（道境资粮）——修为轴有终点，道境没有
-          const daoGain = Math.max(1, Math.round(over / (GameData.eco(9) * 0.05)));
+          const daoGain = Math.max(1, Math.round(over / (GameData.eco(9) * 0.05) * ((p.flags && p.flags.visionLeichi) ? 1.1 : 1)));   // v32（D6）：雷池淬体——仙元溢流 +10%
           p.counters.xianyuan = (p.counters.xianyuan || 0) + daoGain;
           DaoSys.gain(p, daoGain);
           if (p.counters.xianyuan % 50 < daoGain) Log.add(`修为满溢，尽数炼作 <b>仙元</b>（道境资粮 +${daoGain} · 累计 ${p.counters.xianyuan}）——修为轴有终点，道境没有。`, 'gain');
@@ -329,6 +329,7 @@ const Cultivate = {
     chance -= (p.karma || 0) * 0.2;     // 孽障：每10点 -2%
     chance -= Math.floor((p.xinmo || 0) / 10);   // v28 联动：心魔蚀道——未降伏的心魔每10点 -1% 成算（满百另有心魔劫）
     chance += Math.min(15, (p.breakStreak || 0) * 5);   // v8 挫而愈坚：连败保底，每次失利 +5%（上限 +15%）
+    if (p.flags && p.flags.visionXinzhang) chance += 2;   // v32（D6）：仙障心魔试炼——道基愈坚，突破成算永久 +2
     if (p.realmIdx >= 8) chance += 8;   // v10 境界特性 · 劫体（渡劫）：半身已在雷海
     if (p.dao === 'sword') chance *= 0.77;  // 剑心桀骜：渡劫难度+30%
     if (p.dao === 'body') chance *= 1.4;    // 金刚不坏：渡劫成算+40%
