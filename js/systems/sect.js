@@ -60,7 +60,15 @@ const SectSys = {
   genTask(p) {
     const realm = p.realmIdx;
     // v30 补遗：差事五式——历练（任意地图探索）与问签（黄历求签）两类真钩子补齐每宗五条
-    const type = Utils.pick(['kill', 'collect', 'cult', 'explore', 'sign']);
+    // v32（F4）差事按宗门特色加权——剑宗多讨伐、丹/商多采集、磐岩多修行、周天多历练问签
+    const SECT_W = {
+      qingyun: { kill: 3, collect: 1, cult: 1, explore: 2, sign: 1 },
+      danxia:  { kill: 1, collect: 3, cult: 2, explore: 1, sign: 1 },
+      wanbao:  { kill: 1, collect: 3, cult: 1, explore: 2, sign: 2 },
+      panyan:  { kill: 2, collect: 2, cult: 3, explore: 1, sign: 1 },
+      zhoutian:{ kill: 1, collect: 1, cult: 2, explore: 3, sign: 2 },
+    };
+    const type = Utils.pickWeighted((p.sect && SECT_W[p.sect.id]) || { kill: 1, collect: 1, cult: 1, explore: 1, sign: 1 });
     // v30 宗门特色差事：本宗名目替代通用名目（35%），机制不变、文案见宗门气象
     const flav = p.sect && GameData.SECT_QUEST_FLAVOR && GameData.SECT_QUEST_FLAVOR[p.sect.id];
     const flavorName = (flav && Utils.chance(35)) ? flav[type] : null;
@@ -140,10 +148,14 @@ const SectSys = {
     if (!t || t.progress < t.need) return;
     const r = this.rewards(p, t);
     p.sect.contrib += r.contrib;
+    // v32（F4）连勤有赏：每完成三桩差事额外 +20% 贡献——门中勤勉自此有复利
+    p.sect.questsDone = (p.sect.questsDone || 0) + 1;
+    const streakBonus = (p.sect.questsDone % 3 === 0) ? Math.round(r.contrib * 0.2) : 0;
+    if (streakBonus) p.sect.contrib += streakBonus;
     Bag.addStones(r.stones);
     // v27 联动：门派差事践诺立信——声望 +1（声望体系新产出端）
     if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 1, '门派差事践诺');
-    Log.add(`任务完成！获得 <b>贡献 ${r.contrib}</b> 点、灵石 ${Utils.fmtNum(r.stones)}。`, 'gain');
+    Log.add(`任务完成！获得 <b>贡献 ${r.contrib}</b> 点、灵石 ${Utils.fmtNum(r.stones)}。${streakBonus ? `（连勤有赏 · 贡献 +${streakBonus}）` : ''}`, 'gain');
     p.sect.tasks[taskIdx] = this.newTask(p);
     Game.afterAction();
   },
@@ -293,7 +305,14 @@ const SectSys = {
       Bag.addItem(mat, 1);
       extra = `，还捎回一份【${GameData.ITEMS[mat].name}】`;
     }
-    Log.add(`【门中弟子历练】亲传在身，门中后辈代师行走江湖——缴回灵石 ${Utils.fmtNum(stones)}${extra}。`, auto ? 'info' : 'gain');
+    // v32 修瑕（E60）：离线回放原逐日刷 30 条日志——聚合进离线日报（Game.flushOfflineAgg 收口）
+    if (auto && Game._offlineReplay) {
+      const agg = Game._offlineAgg = Game._offlineAgg || {};
+      agg.disciple = (agg.disciple || 0) + stones;
+      if (extra) agg.discipleExtra = (agg.discipleExtra || 0) + 1;
+    } else if (!auto) {
+      Log.add(`【门中弟子历练】亲传在身，门中后辈代师行走江湖——缴回灵石 ${Utils.fmtNum(stones)}${extra}。`, 'gain');
+    }
   },
   /** 修炼钩子：推进修行任务 */
   onCultivate(amount) {

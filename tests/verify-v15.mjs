@@ -78,9 +78,9 @@ try {
     ? pass('TA22 滚动只在切页时 + 日志相邻去重 ×N') : fail('TA22 体验件', '');
   js.includes('SELL_CAP = 80') && js.includes("box.remove(); }, 5000)")
     ? pass('TA23 出售区惰性渲染 + 结算卡 5s 可点击') : fail('TA23 体验件', '');
-  html.includes('style.css?v=47') && html.includes('game.js?v=47') && html.includes('media="print"')
-    ? pass('TA24 缓存号 v=47 + 字体异步加载') : fail('TA24 缓存号/字体', '');
-  fs.readFileSync('sw.js', 'utf8').includes("const VERSION = 'fanren-wd-v6';")
+  /style\.css\?v=\d+/.test(html) && /game\.js\?v=\d+/.test(html) && html.includes('media="print"')
+    ? pass('TA24 缓存号在位（版本无关 v32）+ 字体异步加载') : fail('TA24 缓存号/字体', '');
+  /const VERSION = 'fanren-wd-v\d+';/.test(fs.readFileSync('sw.js', 'utf8'))
     ? pass('TA25 SW 版本 v6') : fail('TA25 SW', '');
   !js.includes('BREAKTHROUGH: {') && !js.includes('rushMul(p)') && js.includes('function depth2')
     ? pass('TA26 死代码清除（BALANCE 数值双轨 / rushMul / depth2 归位）') : fail('TA26 死代码', '');

@@ -16,6 +16,7 @@ const BeastSys = {
   async tame() {
     const B = Battle.active;
     const p = Game.player;
+    if (B && B.busy) return;   // v32 修瑕（E5）：原无 busy 守卫——在途回合中点驯服，双流程并发操作同一 B.enemy
     if (!B || B.over || !B.enemy) return;
     const e = B.enemy;
     if (B.ctx && B.ctx.tower) { UI.toast('塔影乃气相所化，散即重凝——无从驯服'); return; }   // v31 修瑕：塔影可驯曾致一次登塔内无限重踏无限驯兽
@@ -41,6 +42,7 @@ const BeastSys = {
         uid: p.beasts.nextId || 1,
         id: e.id, name: e.name, species: e.species, power: e.power,
         level: 1, exp: 0,
+        bond: Math.min(100, p.bondGift || 0),   // v32（D2）传承树十二层「灵兽通心」：驯服初始亲昵
         skills: (e.skills || []).slice(0, 1).map(s => ({ ...s })),
       };
       p.beasts.nextId = (p.beasts.nextId || 1) + 1;
@@ -91,6 +93,14 @@ const BeastSys = {
       : `${B.enemy.name} 认主之后，自动为你衔来修为造化：修为 +${Utils.fmtNum(gain)}。`, 'gain');
     Battle.end();
     UI.announce(fled ? '灵 兽 走 脱' : '驯 服 功 成', fled ? 'bad' : 'ok');
+    // v32 修瑕（A2）：驯服结算原绕过全部战斗上下文分发——剧情战被驯服则 onEnd 丢失（第一章野猪
+    // 可被驯服，章节永久卡死）、秘境被驯服则推进蒸发、生死状被驯服则宗门战不结算。
+    // 此处按 ctx 补齐与 Battle.victory 同款的分发（canTame 已同步排除上述场合，此处为双保险）。
+    if (B.ctx) {
+      if (B.ctx.dungeon) DungeonSys.onVictory(B.ctx.dungeon, B.ctx.boss);
+      if (B.ctx.sectDanger != null) SectSys.onDangerWin(B.ctx.sectDanger);
+      if (B.ctx.story) { const cb = B.ctx.story.onEnd; B.ctx.story.onEnd = null; if (cb) cb(true); }
+    }
   },
   /** 出战灵兽的被动加成（Stat.compute 调用） */
   passive(p) {
@@ -143,7 +153,13 @@ const BeastSys = {
     const p = Game.player;
     const b = this.activeBeast(p);
     if (!B || !b || B.over) return false;
-    const chase = 28 + (B.combo || 0) * 5 + (b.bond || 0) * 0.2 + (B.lastAct === 'attack' ? 15 : 0) + (typeof B.lastSkillTag === 'string' ? 10 : 0);
+    // v32（C4）：协战策略三选（b.tactic 持久化，兽栏可切）——集火（敌残血追击欲 +30）/
+    // 控场（+12 且缠敌更紧）/护主（主人危难时挺身，护主/回哺技效力 +50%）
+    const tac = b.tactic || 'focus';
+    let chase = 28 + (B.combo || 0) * 5 + (b.bond || 0) * 0.2 + (B.lastAct === 'attack' ? 15 : 0) + (typeof B.lastSkillTag === 'string' ? 10 : 0);
+    if (tac === 'focus' && B.enemy.hp <= B.enemy.hpMax * 0.3) chase += 30;
+    if (tac === 'control') chase += 12;
+    if (tac === 'guard' && p.hp < Stat.compute(p).maxHp * 0.4) chase += 15;
     if (!Utils.chance(Utils.clamp(chase, 5, 80))) return false;   // v30：亲昵/连击/招式呼应皆入追击成算
     const dmg = Math.max(1, Math.round(st.atk * (0.22 + b.level * 0.03) * (1 + b.power * 0.02) * (b.evolved ? 1.3 : 1) * Utils.randF(0.8, 1.2)));   // v19 进化 ×1.3
     B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
@@ -155,11 +171,18 @@ const BeastSys = {
     //          傀儡/阴魂系招式被静默丢弃；现按语义分别结算（伤敌/削敌/护主/续主）
     let skillNote = '';
     const mySt = Stat.compute(p);
-    for (const sk of (b.skills || []).slice(0, (b.bond || 0) >= 80 ? 3 : 2)) {
+      for (const sk of (b.skills || []).slice(0, (b.bond || 0) >= 80 ? 3 : 2)) {
       if (!sk.kind) continue;
-      if (['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken', 'stun', 'freeze'].includes(sk.kind)) {
-        Battle.applyEnemyFx(B.enemy, { kind: sk.kind, pct: (sk.pct || 2) * 0.6, rounds: sk.kind === 'freeze' || sk.kind === 'stun' ? 1 : (sk.rounds || 2) });
+      if (['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken'].includes(sk.kind)) {
+        Battle.applyEnemyFx(B.enemy, { kind: sk.kind, pct: (sk.pct || 2) * 0.6, rounds: sk.rounds || 2 });
         skillNote += `【${sk.name}】`;
+      } else if (sk.kind === 'stun' || sk.kind === 'freeze') {
+        // v32 修瑕（E9）：协战施控原直施加不进递减——高亲昵灵兽每回合 28~80% 追击附带冰缚，
+        // 可把敌方链式永控（恰是 v31 D3 控制递减要终结的玩法的镜像）。走玩家侧控制递减。
+        if (Utils.chance(100 * Battle.ctrlDecayOnEnemy())) {
+          Battle.applyEnemyFx(B.enemy, { kind: sk.kind, pct: (sk.pct || 2) * 0.6, rounds: 1 });
+          skillNote += `【${sk.name}】`;
+        } else skillNote += `【${sk.name}·被挣脱】`;
       } else if (sk.kind === 'drain') {
         const heal = Math.max(1, Math.round(dmg * (sk.leech || 0.4)));
         p.hp = Math.min(mySt.maxHp, p.hp + heal);
@@ -170,10 +193,10 @@ const BeastSys = {
         if (B.stats) { B.stats.out += extra; if (B.stats.src) B.stats.src.beast += extra; }
         skillNote += `【${sk.name}·蚀魂 +${extra}】`;
       } else if (sk.kind === 'guard') {
-        StatusFx.add(B.myFx, { kind: 'shield', pct: 20, rounds: 2 });
+        StatusFx.add(B.myFx, { kind: 'shield', pct: tac === 'guard' ? 30 : 20, rounds: 2 });   // v32（C4）：护主策略下金光更厚
         skillNote += `【${sk.name}·护主金光】`;
       } else if (sk.kind === 'heal') {
-        const heal = Math.max(1, Math.round(mySt.maxHp * 0.08));
+        const heal = Math.max(1, Math.round(mySt.maxHp * (tac === 'guard' ? 0.12 : 0.08)));   // v32（C4）：护主策略下回哺更沛
         p.hp = Math.min(mySt.maxHp, p.hp + heal);
         skillNote += `【${sk.name}·回春 +${heal}】`;
       }
@@ -193,6 +216,27 @@ const BeastSys = {
     return B.enemy.hp <= 0;
   },
   /** 喂食内丹：+500 灵兽经验 */
+  /** v32 修瑕（E2）：第三天生技补发——十阶且亲昵 ≥80 即独立检查（原判定嵌在升阶分支内：
+   *  先满十阶、后磨亲昵的正常养成顺序 up 恒 false，第三技对多数存档永久不可得） */
+  checkThirdSkill(b) {
+    if (!b || b.level < 10 || (b.bond || 0) < 80) return false;
+    if ((b.skills || []).length >= 3 || !this.SPECIES_SKILLS3[b.species]) return false;
+    b.skills.push({ ...this.SPECIES_SKILLS3[b.species] });
+    Log.add(`亲昵已深——【${b.name}】将毕生所悟与你相授，领悟第三天生技【${b.skills[b.skills.length - 1].name}】！！`, 'gain');
+    UI.announce('✦ 人兽契合 · 第三天生技 ✦', 'gold');
+    return true;
+  },
+  /** v32（C4）：协战策略三选——集火/控场/护主（随灵兽持久化，兽栏「照管」内切换） */
+  TACTICS: { focus: '集火', control: '控场', guard: '护主' },
+  cycleTactic(uid) {
+    const p = Game.player;
+    const b = p.beasts.list.find(x => x.uid === uid);
+    if (!b) return;
+    const order = ['focus', 'control', 'guard'];
+    b.tactic = order[(order.indexOf(b.tactic || 'focus') + 1) % order.length];
+    Log.add(`【${b.name}】的协战策略调整为<b>${this.TACTICS[b.tactic]}</b>——集火：敌残血追击愈勇；控场：出手更勤、缠敌更紧；护主：你危难时它必挺身（金光/回哺 +50%）。`, 'info');
+    Game.afterAction();
+  },
   feed(uid) {
     const p = Game.player;
     const b = p.beasts.list.find(x => x.uid === uid);
@@ -218,18 +262,13 @@ const BeastSys = {
           b.skills.push({ ...this.SPECIES_SKILLS2[b.species] });
           extra = `，并领悟第二天生技【${b.skills[b.skills.length - 1].name}】！`;
         }
-        // v31（E-灵兽）：亲昵 ≥80 且十阶——人兽默契相感，可习得第三天生技（协战时结算三技）
-        if (b.level >= 10 && (b.bond || 0) >= 80 && (!b.skills || b.skills.length < 3) && this.SPECIES_SKILLS3[b.species]) {
-          b.skills = b.skills || [];
-          b.skills.push({ ...this.SPECIES_SKILLS3[b.species] });
-          extra = `，亲昵已深——它将毕生所悟与你相授，领悟第三天生技【${b.skills[b.skills.length - 1].name}】！！`;
-          UI.announce(`✦ 人兽契合 · 第三天生技 ✦`, 'gold');
-        }
+        // v32 修瑕（E2）：第三技判定移出 if(up)（checkThirdSkill 在下方独立执行，亲昵路线不再漏发）
         Log.add(`【${b.name}】吞下内丹，周身妖气一涨——灵兽升至 <b>${b.level} 阶</b>！${extra || '协助作战愈发骁勇。'}`, 'gain');
         UI.toast(`${b.name} 升至 ${b.level} 阶`);
       } else {
       Log.add(`【${b.name}】吞下内丹，妖气渐长（灵兽经验 +500）。`, 'info');
     }
+    this.checkThirdSkill(b);   // v32 修瑕（E2）：喂食即检查第三技（十阶+亲昵 ≥80 任意时点补发）
     Game.afterAction();
   },
   setActive(uid) {
@@ -238,6 +277,7 @@ const BeastSys = {
     const b0 = p.beasts.list.find(x => x.uid === uid);
     if (b0 && b0.trip) { UI.toast('它还在外头寻宝未归，无暇出战'); return; }
     p.beasts.active = p.beasts.active === uid ? null : uid;
+    if (p.beasts.active != null && p.beasts.active2 === uid) p.beasts.active2 = null;   // v32 修瑕（E3）：同一灵兽曾可同时占出战+副战双槽（被动按 1.0+0.5 双份白赚 ×1.5）
     const b = this.activeBeast(p);
     Log.add(b ? `你放出 <b>${b.name}</b> 随行出战。` : '灵兽归栏歇息。', 'info');
     Game.afterAction();
@@ -289,6 +329,7 @@ const BeastSys = {
     b.patDay = today;
     b.bond = Math.min(100, (b.bond || 0) + Utils.rand(4, 8));
     Log.add(`你轻抚 <b>${b.name}</b> 的脊背，它眯起眼，尾巴轻轻扫过你的手腕。（亲昵 ${b.bond}/100，协战几率微增）`, 'gain');
+    this.checkThirdSkill(b);   // v32 修瑕（E2）：抚摸到 80 的当下即补发第三技
     Game.afterAction();
   },
   /** v20 寻宝派遣：灵兽外出 N 日带回灵材（离线也计时） */
@@ -345,12 +386,13 @@ const BeastSys = {
       b.bond = Math.min(100, (b.bond || 0) + 6);
       b.exp += days * 60;
       Log.add(`你把灵石收下，把竹篓还给它，揉了揉它的脑袋——亲昵 +6，经验 +${days * 60}。【${b.name}】蹭了蹭你的手心。`, 'gain');
+      this.checkThirdSkill(b);   // v32 修瑕（E2）：归来路线同样补检第三技
     } else {
       Bag.addItem(mat, qty);
       Bag.addStones(stones);
       Log.add(`【${b.name}】叼着竹篓归来——带回【${GameData.ITEMS[mat].name}】×${qty}、灵石 ${Utils.fmtNum(stones)}，妖气也涨了几分。`, 'gain');
     }
-    if (b.exp >= b.level * 400) UI.toast(`${b.name} 经验涨了，可喂内丹升阶`);
+    if (b.level < 10 && b.exp >= b.level * 400) UI.toast(`${b.name} 经验涨了，可喂内丹升阶`);   // v32 修瑕（E13）：十阶封顶后此提示是永久误导
     b.trip = null;
     Game.afterAction();
   },

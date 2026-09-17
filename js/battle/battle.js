@@ -167,6 +167,9 @@ const Battle = {
     }
     const box = document.getElementById('bt-log');
     if (!box) return;
+    // v32 修瑕（E15）：DOM 与数组同步裁剪——原只 append 不删首子，第 121 条起 DOM 子数恒大于
+    // 数组长度，render 的「搬回」条件永不成立，每次渲染退回整段重建 120 条（v30 增量优化失效回退）
+    while (box.children.length >= 120 && box.firstChild) box.removeChild(box.firstChild);
     const div = document.createElement('div');
     div.className = 'log-entry ' + cls;
     div.innerHTML = html;
@@ -185,13 +188,14 @@ const Battle = {
   },
   moraleMul() {
     const B = this.active;
-    return 1 + (B && B.morale ? B.morale * 0.004 : 0);
+    return 1 + (B && B.morale ? B.morale * GameData.BALANCE.COMBAT.MORALE_PER_POINT : 0);   // v32（E24）：接线集中配置
   },
   /** v13：连击倍率（每层 +4%，上限五层 +20%）；受击中断 */
   comboMul() {
     const B = this.active;
-    const cap = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? 5 + (ForgeSys.suffixFx(Game.player).comboUp || 0) : 5;   // v19 词缀·连击上限
-    return 1 + (B ? Math.min(cap, B.combo || 0) * 0.04 : 0);
+    const C = GameData.BALANCE.COMBAT;   // v32（E24）：接线集中配置
+    const cap = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? C.COMBO_MAX + (ForgeSys.suffixFx(Game.player).comboUp || 0) : C.COMBO_MAX;   // v19 词缀·连击上限
+    return 1 + (B ? Math.min(cap, B.combo || 0) * C.COMBO_PER_LAYER : 0);
   },
   /** v13：战斗速度（1=原速 2=两倍 3=极速），偏好持久化 */
   SPEED_KEY: 'fanren_wd_bspeed',
@@ -272,8 +276,8 @@ const Battle = {
     if (!B || !B.enemy) return;
     const e = B.enemy;
     const rel = GameData.speciesRelation(e.species, 'human');
-    const relTxt = rel > 0 ? '<span class="neg">克制你（你对其伤害 -15%，其对你 +15%）</span>'
-      : rel < 0 ? '<span style="color:var(--ok)">你克制它（伤害 +15%）</span>' : '无克制';
+    const relTxt = rel > 0 ? '<span class="neg">克制你（普攻伤害 -15%，其对你 +15%；法诀/符箓/必杀不吃克制）</span>'
+      : rel < 0 ? '<span style="color:var(--ok)">你克制它（普攻伤害 +15%）</span>' : '无克制';   // v32 修瑕（E11）：克制实发只乘普攻——情报卡曾宣称一切伤害 ±15%
     const skillTxt = (e.skills || []).map(sk => `· <b>${sk.name}</b>（${StatusFx.DEFS[sk.kind] ? StatusFx.DEFS[sk.kind].name : sk.kind}）`).join('<br>') || '· 普攻与重击';
     const affTxt = (B.enemyFxIds || []).map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `◆<b>${d.name}</b>：${d.desc}` : ''; }).filter(Boolean).join('<br>') || '无';
     const drops = e.dropTier ? `材料品阶：${['', '凡', '灵', '玄', '地'][e.dropTier] || e.dropTier}级${e.rareDrop ? `；稀有掉落：<b>${(GameData.ITEMS[e.rareDrop] || {}).name || '?'}</b>` : ''}` : '来历不明之物';
@@ -402,6 +406,17 @@ const Battle = {
     }
     return '？';
   },
+  /** v32（C1）：意图伤害预估——按敌方出手公式估 85%~115% 区间（格挡/防御/护体另算），
+   *  「这手要不要防、能不能抢破招」从体感变成可计算的决策 */
+  intentEstimate(intent) {
+    const B = this.active;
+    if (!B || !intent || (intent.kind !== 'strike' && intent.kind !== 'finisher')) return '';
+    const p = Game.player;
+    const st = Stat.compute(p);
+    const mult = intent.kind === 'finisher' ? 2.1 : (intent.heavy ? 1.55 : 1);
+    const base = Stat.afterDef(this.enAtk(B.enemy) * mult, this.myDef(st));
+    return ` ≈${Math.max(1, Math.round(base * 0.85))}~${Math.round(base * 1.15)}`;
+  },
 
   /* ---------- v19 职业必杀技 ---------- */
   ultList() {
@@ -419,6 +434,7 @@ const Battle = {
     B.busy = true;
     B.zhenyuan -= sk.cost;
     B.menu = null;
+    try {
     // v20 必杀熟练度：每式使用累积，每 8 次升一重（至三重），效果 +6%/重
     p.ultLv = p.ultLv || {};
     const uses = (p.ultLv[id] || 0) + 1;
@@ -443,6 +459,7 @@ const Battle = {
       this.pushFloat('enemy', `-${dmg}`, crit ? 'crit' : 'dmg');
       B.hitShake = true;
       this.addMorale(10);
+      this.gainZyOnCrit(p, crit);   // v32 修瑕（E8）：必杀多段会心同样回真元（聚气归元）
       if (sk.leech && p.hp < st.maxHp) {
         const heal = Math.max(1, Math.round(dmg * sk.leech));
         p.hp = Math.min(st.maxHp, p.hp + heal);
@@ -461,8 +478,8 @@ const Battle = {
     if (sk.weaken && B.enemy.hp > 0) { StatusFx.add(B.enemy.fx, { kind: 'weaken', pct: sk.weaken, rounds: sk.rounds || 2 }); this.log(`${B.enemy.name} 力量被蚀！`, 'log-gain'); }
     if (sk.slow && B.enemy.hp > 0) { StatusFx.add(B.enemy.fx, { kind: 'slow', pct: sk.slow, rounds: sk.rounds || 2 }); this.log(`${B.enemy.name} 身形迟滞！`, 'log-gain'); }
     if (sk.guard) { this.gainBuff({ kind: 'shield', pct: sk.guard, rounds: sk.rounds || 3 }); this.log('金身罩体，水火难侵！', 'log-gain'); }
-    if (sk.stun && B.enemy.hp > 0 && Utils.chance(sk.stun)) { StatusFx.add(B.enemy.fx, { kind: 'stun', rounds: 1 }); this.log(`${B.enemy.name} 被震得神魂摇晃，下回合难以行动！`, 'log-gain'); }
-    if (sk.freeze && B.enemy.hp > 0 && Utils.chance(sk.freeze)) { StatusFx.add(B.enemy.fx, { kind: 'freeze', rounds: 1 }); this.log(`紫雷封形——${B.enemy.name} 被冻结一回合！`, 'log-gain'); }
+    if (sk.stun && B.enemy.hp > 0 && Utils.chance(sk.stun * this.ctrlDecayOnEnemy())) { StatusFx.add(B.enemy.fx, { kind: 'stun', rounds: 1 }); this.log(`${B.enemy.name} 被震得神魂摇晃，下回合难以行动！`, 'log-gain'); }
+    if (sk.freeze && B.enemy.hp > 0 && Utils.chance(sk.freeze * this.ctrlDecayOnEnemy())) { StatusFx.add(B.enemy.fx, { kind: 'freeze', rounds: 1 }); this.log(`紫雷封形——${B.enemy.name} 被冻结一回合！`, 'log-gain'); }   // v32（E9）：必杀控制同吃递减
     if (B.enemy.hp <= 0) { await this.victory(); return; }
     await this.enemyTurn(st);
     if (!B.over) {
@@ -472,6 +489,12 @@ const Battle = {
     this.render();
     B.busy = false;
     this.autoNext();
+    } catch (err) {
+      // v32 修瑕（A1）：必杀路径原无异常兜底——任何异常都会让 busy 永不复位（全场按钮禁用、自动战斗卡死）
+      console.error('必杀异常:', err);
+      B.busy = false;
+      if (!B.over) { this.log('（气机一时紊乱，此回合作废）', 'log-warn'); this.render(); }
+    }
   },
 
   /** v20 本命法宝觉醒战技：guard3 金光 / strike6 锁魂 / strike9 归一斩（每战各一次） */
@@ -486,6 +509,7 @@ const Battle = {
     if (bmLv < need) { UI.toast('本命法宝阶数不足'); return; }
     B.busy = true;
     B.menu = null;
+    try {
     if (k === 'guard3') {
       B.bmUsed.guard3 = true;
       this.gainBuff({ kind: 'shield', pct: 30, rounds: 2 });
@@ -529,9 +553,66 @@ const Battle = {
     B.busy = false;
     this.render();
     this.autoNext();
+    } catch (err) {
+      // v32 修瑕（A1）：本命战技路径同补异常兜底（busy 永锁防护与必杀一致）
+      console.error('本命战技异常:', err);
+      B.busy = false;
+      if (!B.over) { this.log('（气机一时紊乱，此回合作废）', 'log-warn'); this.render(); }
+    }
+  },
+
+  /** v32（C7）：凝神——战意与真元的主动互转通道（不耗行动回合，每回合一次）：
+   *  20 战意换 1 真元，或 15 战意净化一项自身负面。给防御/控制抗压局一个主动解法。 */
+  async actNingshen() {
+    const B = this.active;
+    if (!B || B.busy || B.over) return;
+    if (B._ningUsed) { UI.toast('凝神一转——本回合已用过（敌方回合后可再用）'); return; }
+    const negs = (B.myFx || []).filter(x => ['poison', 'burn', 'bleed', 'cursed', 'defdown', 'slow', 'weaken', 'stun', 'freeze', 'vuln'].includes(x.kind) && x.rounds > 0);
+    const v = await UI.popup({
+      title: '⚡ 凝 神',
+      html: `敛息凝神，战意与真元互换一息（<b>不耗行动回合</b>，每回合一次）。<br>当前战意 <b>${B.morale || 0}</b> · 真元 <b>${B.zhenyuan || 0}/${B.zmax || 6}</b>。`,
+      options: [
+        { text: '20 战意 → 1 真元', value: 'zy' },
+        ...(negs.length ? [{ text: `15 战意 → 净化【${(StatusFx.DEFS[negs[0].kind] || {}).name || '负面'}】`, value: 'purge' }] : []),
+        { text: '收 势', value: null },
+      ],
+    });
+    if (v === 'zy') {
+      if ((B.morale || 0) < 20) { UI.toast('战意不足 20'); return; }
+      B.morale -= 20;
+      B.zhenyuan = Math.min(B.zmax || 6, (B.zhenyuan || 0) + 1);
+      this.log('你凝神一转，滚腾的战意化作一缕真元。（战意 -20，真元 +1）', 'log-gain');
+      B._ningUsed = true;
+    } else if (v === 'purge') {
+      if ((B.morale || 0) < 15) { UI.toast('战意不足 15'); return; }
+      if (!(B.morale || 0)) return;
+      B.morale -= 15;
+      const target = negs[0];
+      B.myFx = StatusFx.removeKinds(B.myFx, [target.kind]);
+      this.log(`你凝神护体，战意化作金光涤荡——【${(StatusFx.DEFS[target.kind] || {}).name || '负面'}】尽数消散！（战意 -15）`, 'log-gain');
+      B._ningUsed = true;
+    }
+    this.render();
   },
 
   /** v13：给敌方施加状态（符箓/破煞法诀） */
+  /** v32 修瑕（E8）：塔规则祝福「聚气归元」单源入口——各伤害会心入口统一调用 */
+  gainZyOnCrit(p, crit) {
+    const B = this.active;
+    if (!B || !crit) return;
+    const gain = (B.ctx && B.ctx.tower && typeof TowerSys !== 'undefined' && TowerSys.modsOf) ? (TowerSys.modsOf(p).zyCrit || 0) : 0;
+    if (!gain) return;
+    B.zhenyuan = Math.min(B.zmax || 6, (B.zhenyuan || 0) + gain);
+  },
+  /** v32 修瑕（E9）：玩家侧控制递减——与 v31 D3 敌方侧对称。同一敌人连续受束缚/冰封，
+   *  控制成算每次 -15%（下限 40%）：高亲昵灵兽追击+符箓/必杀曾可把敌方链式永控。 */
+  ctrlDecayOnEnemy() {
+    const B = this.active;
+    if (!B) return 1;
+    B.enemyCtrlN = (B.enemyCtrlN || 0) + 1;
+    return Math.max(40, 100 - (B.enemyCtrlN - 1) * 15) / 100;
+  },
+
   applyEnemyFx(e, st, logFmt) {
     StatusFx.add(e.fx, st);
     const d = StatusFx.DEFS[st.kind];
@@ -542,9 +623,12 @@ const Battle = {
     const B = this.active;
     if (!B) return '';
     const parts = [];
+    // v32 修瑕（A1）：p/st 原只声明在 me 分支内——v31 塔规则祝福「蚀骨双煞」在敌方分支引用
+    // st.maxHp/p.hp 即 ReferenceError：持祝福的塔战只要敌方带 DOT，敌方回合整体作废（被 act 的
+    // try/catch 吞成「气机紊乱」）且 DOT 永不衰减＝敌方被永久定身。提升至顶部两分支共用。
+    const p = Game.player;
+    const st = Stat.compute(p);
     if (who === 'me') {
-      const p = Game.player;
-      const st = Stat.compute(p);
       const rain = B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain';
       let dotDmg = 0;
       for (const x of B.myFx) {
@@ -585,6 +669,7 @@ const Battle = {
         e.hp = Math.max(0, e.hp - dotDmg);
         this.pushFloat('enemy', `-${dotDmg}`, 'dmg');
         if (B.stats && B.stats.src) B.stats.src.dot += dotDmg;
+        if (B.stats) B.stats.out += dotDmg;   // v32 修瑕（E4）：敌方毒火原不入总伤——结算卡「共造成」小于构成之和
         parts.push(`${e.name} 在毒火中哀嚎（气血 -${dotDmg}）`);
       }
       e.fx = StatusFx.decayDots(e.fx);
@@ -638,10 +723,10 @@ const Battle = {
           this.addMorale(-4);
           B.combo = 0;
         } else {
-          let dmg = Stat.afterDef(this.myAtk(st), this.enDef(B.enemy)) * Utils.randF(0.85, 1.15) * this.moraleMul() * this.comboMul();
+          let dmg = Stat.afterDef(this.myAtk(st), this.enDef(B.enemy)) * Utils.randF(GameData.BALANCE.COMBAT.DMG_RAND_MIN, GameData.BALANCE.COMBAT.DMG_RAND_MAX) * this.moraleMul() * this.comboMul();   // v32（E24）：伤害随机区间接线集中配置
           // v30 连携·势尽一击：法诀之后接普攻收尾——招式相衔，一击 +15%
           if (B.lastSkillTag != null) { dmg *= 1.15; this.log('【连携·势尽】法力余韵未散，此击顺势而发——+15%！', 'log-gain'); }
-          B.lastSkillTag = null; B.skillChain = 0;
+          B.lastSkillTag = null; B.skillChain = 0; B.skillSeq = 0;   // v32（C3）：普攻断连珠之势
           // v18 种族克制（玩家恒为人族；v20 修瑕：移除恒真三元死条件）
           const speciesRel = GameData.speciesRelation('human', B.enemy.species);
           if (speciesRel > 0) dmg *= 1.15;
@@ -652,7 +737,7 @@ const Battle = {
           // v30：破绽状态——敌人露出破绽时更易被会心
           const crit = Utils.chance(this.myCrit(st) + StatusFx.pctOf(B.enemy.fx, 'vuln'));
           // v10 剑心六境·剑芒境：暴击伤害 +20%
-          if (crit) dmg *= (p.dao === 'sword' && daoTier >= 2 ? 1.9 : 1.7);
+          if (crit) dmg *= (p.dao === 'sword' && daoTier >= 2 ? 1.9 : GameData.BALANCE.COMBAT.CRIT_MULT);   // v32（E24）：暴击倍率接线集中配置
           // 剑修：剑心通明伤害翻倍（剑心通明境触发率提至三成）
           const jianxin = p.dao === 'sword' && Utils.chance(daoTier >= 3 ? 30 : 20);
           if (jianxin) dmg *= 2;
@@ -677,8 +762,8 @@ const Battle = {
           B.stats.out += dmg; if (B.combo > B.stats.maxCombo) B.stats.maxCombo = B.combo;   // v19 统计
           // v31（D4）：塔规则祝福「聚气归元」——会心额外 +1 真元
           let zyGain = (crit || jianxin) ? 2 : 1;
-          if (crit && B.ctx.tower && typeof TowerSys !== 'undefined' && TowerSys.modsOf) zyGain += TowerSys.modsOf(p).zyCrit || 0;
           B.zhenyuan = Math.min(B.zmax || 6, (B.zhenyuan || 0) + zyGain);   // v19 真元（v20 上限随道境）
+          this.gainZyOnCrit(p, crit);   // v32 修瑕（E8）：聚气归元单源化——原只在普攻会心结算，必杀/合击会心不回真元
           if (p.dao === 'sword') DaoSys.gain(p, (crit || jianxin) ? 20 : 12);   // v16 剑意
           this.pushFloat('enemy', `-${dmg}`, (crit || jianxin) ? 'crit' : 'dmg');
           B.hitShake = true;
@@ -763,6 +848,14 @@ const Battle = {
           B.skillChain = 0;
         } else B.skillChain = 0;
         B.lastSkillTag = tag;
+        // v32（C3）连珠：连续施法三连起每连 +4%（上限 +12%）——盘内连绵成势的构筑奖励；
+        // 普攻/防御/道具断势（连招状态经 C2 势标签可视化）
+        B.skillSeq = (B.skillSeq || 0) + 1;
+        if (B.skillSeq >= 3) {
+          const lz = Math.min(3, B.skillSeq - 2) * 0.04;
+          power *= 1 + lz;
+          this.log(`【连珠】法诀如珠连贯，第 ${B.skillSeq} 诀顺势而燃——+${Math.round(lz * 100)}%！`, 'log-gain');
+        }
         const deck = (Array.isArray(p.battleDeck) ? p.battleDeck : []).filter(id => p.gongfa[id] && GameData.ITEMS[id] && GameData.ITEMS[id].skill);
         if (deck.length > 1) {
           const pos = deck.indexOf(arg);
@@ -862,7 +955,7 @@ const Battle = {
           } else if (fk === 'freeze') {
             Battle.fxShow('ice');
             const resist = B.enemy.elite ? 30 : 12;
-            if (Utils.chance(resist)) {
+            if (Utils.chance(resist + (1 - this.ctrlDecayOnEnemy()) * 100)) {   // v32（E9）：冰封符吃控制递减——连续祭符成功率衰减
               this.log(`【${def.name}】寒气罩落，却被 ${B.enemy.name} 以妖力震碎——未能封住其身形！`, 'log-warn');
             } else {
               Battle.fxShow('ice-frost');
@@ -898,7 +991,7 @@ const Battle = {
       case 'defend': {
         B.defending = true;
         // v31 修瑕（E15）：防御打断连携——lastSkillTag 跨回合保留曾让「法诀→防御→普攻」白吃势尽加成（免费囤 buff）
-        B.lastSkillTag = null; B.skillChain = 0;
+        B.lastSkillTag = null; B.skillChain = 0; B.skillSeq = 0;   // v32（C3）：防御断连珠之势
         if (p.dao === 'body') DaoSys.gain(p, 6);   // v16 体魄
         this.addMorale(6);
         B.zhenyuan = Math.min(B.zmax || 6, (B.zhenyuan || 0) + 1);   // v19 真元（v20 上限随道境）
@@ -939,7 +1032,7 @@ const Battle = {
       }
       case 'flee': {
         // v27 修瑕：遁走成算改用结算后身法口径（此前用敌方原始 spd，「迅影」「迟滞」均不参与）
-        const chance = Utils.clamp(45 + (this.mySpd(st) - this.enSpd(B.enemy)) * 2, 10, 90);
+        const chance = Utils.clamp(GameData.BALANCE.COMBAT.FLEE_BASE + (this.mySpd(st) - this.enSpd(B.enemy)) * 2, 10, 90);   // v32（E24）：遁走基础成算接线集中配置
         if (Utils.chance(chance)) {
           this.log('你虚晃一招，遁走而去，好汉不吃眼前亏！', 'log-warn');
           await this.wait(700);
@@ -1006,6 +1099,14 @@ const Battle = {
     // 玩家身上 DOT 结算（毒/焰/血）
     const dotTxt = this.tickDots('me');
     if (dotTxt) { this.log(dotTxt, 'log-loss'); this.render(); }
+    // v32 修瑕（E7）：塔心不灭原只在 enemyStrike 直伤结算内拦截——中毒/蚀骨反噬致死直接走
+    // defeat，与「每场首次致死伤害」描述不符。挪到收口处统一拦截（DOT/反噬/直伤全覆盖）。
+    if (p.hp <= 0 && B.ctx && B.ctx.tower && typeof TowerSys !== 'undefined' && TowerSys.modsOf && TowerSys.modsOf(p).undying && !B._undied) {
+      B._undied = true;
+      p.hp = 1;
+      this.log('【塔心不灭】塔灵托住你将散的气机——一息生机尚存（本场不再触发）！', 'log-gain');
+      UI.announce('✦ 塔心不灭 ✦', 'gold');
+    }
     if (p.hp <= 0 && !(await this.infantSave())) { await this.defeat(); return true; }
     if (!this.active) return true;   // 回溯/转世等导致战斗被清空的兜底
     // v10 般若六境·不灭境：行动一次，气血自续
@@ -1022,6 +1123,7 @@ const Battle = {
       this.log(`法宝温养灵台——灵力回涌 ${mpReg} 点。`, 'log-gain');
     }
     B.turn = (B.turn || 1) + 1;
+    B._ningUsed = false;   // v32（C7）：凝神每回合一次，敌方回合后恢复
     return false;
   },
 
@@ -1081,9 +1183,9 @@ const Battle = {
     if (!B || B.busy || B.over) return;
     const cfg = this.autoCfg();
     const hpLine = st.maxHp * (cfg.hp / 100);
-    // 1) 残血：优先疗伤丹，其次大还丹/固本丹
+    // 1) 残血：优先疗伤丹（v32 修瑕 E12：改由廉到贵——原最贵的大还丹先吃）
     if (p.hp < hpLine) {
-      const healPill = ['pill_dahuan', 'pill_guben', 'pill_liaoshang'].find(id => Bag.count(id) > 0);
+      const healPill = ['pill_liaoshang', 'pill_guben', 'pill_dahuan'].find(id => Bag.count(id) > 0);
       if (healPill) { this.act('item', healPill); return; }
     }
     // 2) 敌方蓄力杀招在即：防御化解
@@ -1130,7 +1232,10 @@ const Battle = {
     if (skills.length) {
       const healSkills = skills.filter(([id]) => (GameData.ITEMS[id].skill || {}).kind === 'heal');
       const dmgSkills = skills.filter(([id]) => (GameData.ITEMS[id].skill || {}).kind === 'damage');
-      if (p.hp < st.maxHp * 0.35 && healSkills.length) { this.act('skill', healSkills[0][0]); return; }
+      if (p.hp < st.maxHp * 0.35 && healSkills.length) {
+        healSkills.sort((a2, b2) => ((GameData.ITEMS[b2[0]].skill || {}).heal || 0) - ((GameData.ITEMS[a2[0]].skill || {}).heal || 0));   // v32 修瑕（E12）：按回复量择优（原恒取第一个）
+        this.act('skill', healSkills[0][0]); return;
+      }
       if (dmgSkills.length) {
         dmgSkills.sort((a, b) => (GameData.ITEMS[b[0]].skill.power) - (GameData.ITEMS[a[0]].skill.power));
         this.act('skill', dmgSkills[0][0]);
@@ -1147,6 +1252,22 @@ const Battle = {
     const p = Game.player;
     const st = Stat.compute(p);
     const e = B.enemy;
+    // v32（C5）：敌方自状态管理——坚韧/铁壁型回合初两成五几率「运功逼毒」清自身最早一条
+    // 毒火/减益；狡诈型两成几率偷取玩家一项增益转为己用。长战不再单边倒计时。
+    const NEG_KINDS = ['poison', 'burn', 'bleed', 'cursed', 'defdown', 'slow', 'weaken', 'vuln'];
+    if ((e.tpl === 'tough' || e.tpl === 'iron') && (e.fx || []).some(x2 => NEG_KINDS.includes(x2.kind)) && Utils.chance(25)) {
+      const idx2 = e.fx.findIndex(x2 => NEG_KINDS.includes(x2.kind));
+      const removed = e.fx.splice(idx2, 1)[0];
+      this.log(`${e.name} 沉腰坐马运功逼毒——【${(StatusFx.DEFS[removed.kind] || {}).name || removed.kind}】被生生逼出体外！`, 'log-warn');
+    } else if (e.tpl === 'cunning' && Utils.chance(20)) {
+      const GOOD_STEAL = ['atkup', 'agiup', 'critup'];
+      const idx3 = (B.myFx || []).findIndex(x3 => GOOD_STEAL.includes(x3.kind) && x3.rounds > 0);
+      if (idx3 >= 0) {
+        const stolen = B.myFx.splice(idx3, 1)[0];
+        StatusFx.add(e.fx, { kind: stolen.kind, pct: stolen.pct, rounds: stolen.rounds });
+        this.log(`【偷梁换柱】${e.name} 袖中一拂，你的【${(StatusFx.DEFS[stolen.kind] || {}).name || ''}】竟被夺去转嫁己身！`, 'log-warn');
+      }
+    }
     // v30 节奏2.0：久战力竭——第 8 回合起守势崩解（防 -25%）、第 14 回合起气力不济（攻 -15%），
     // 终结「坚守+治疗×2+铁壁」的拖沓对局螺旋
     if (!(B.ctx.spar || B.ctx.story || B.ctx.tourney) && (B.turn || 1) >= 8 && !e._exhausted) {
@@ -1373,8 +1494,8 @@ const Battle = {
     if (crit) dmg *= 1.6;
     const preMit = dmg;   // v29：总减伤封顶锚点（攻防/克制/暴击之后）
     const blocked = Utils.chance(st.block);
-    if (blocked) dmg *= 0.45;
-    if (B.defending) dmg *= 0.4;
+    if (blocked) dmg *= GameData.BALANCE.COMBAT.BLOCK_REDUCTION;   // v32（E24）：接线集中配置
+    if (B.defending) dmg *= GameData.BALANCE.COMBAT.DEFEND_REDUCTION;
     // v13 金光护体（金光符）：减伤
     const shieldPct = StatusFx.pctOf(B.myFx, 'shield');
     if (shieldPct > 0) dmg *= 1 - shieldPct / 100;
@@ -1387,13 +1508,6 @@ const Battle = {
     dmg = Math.max(preMit * 0.15, dmg);
     dmg = Math.max(1, Math.round(dmg));
     p.hp = Math.max(0, p.hp - dmg);
-    // v31（D4）：塔规则祝福「塔心不灭」——每场首次致死伤害保留一息生机
-    if (p.hp <= 0 && B.ctx.tower && typeof TowerSys !== 'undefined' && TowerSys.modsOf && TowerSys.modsOf(p).undying && !B._undied) {
-      B._undied = true;
-      p.hp = 1;
-      this.log('【塔心不灭】塔灵托住你将散的气机——一息生机尚存（本场不再触发）！', 'log-gain');
-      UI.announce('✦ 塔心不灭 ✦', 'gold');
-    }
     B.stats.in += dmg;   // v19 统计
     B.combo = 0;   // v13 受击中断连击
     B.playerHit = true; // v18：玩家受击标记
@@ -1492,6 +1606,11 @@ const Battle = {
         drops.push(`【${rd.name}】`);
       }
     }
+    // v32 修瑕（E7）：仙缘套装断头路补源——灵墟/雷狱精英第二稀有掉落（仙缘剑/铃，一成几率）
+    if (e.rareDrop2 && Utils.chance(10 + KarmaSys.rareDropBonus(p))) {
+      const rd2 = GameData.ITEMS[e.rareDrop2];
+      if (rd2) { Bag.addItem(e.rareDrop2, 1); drops.push(`【${rd2.name}】`); }
+    }
     return drops;
   },
 
@@ -1523,11 +1642,23 @@ const Battle = {
       // v31 修瑕（E6）：灵压/慑魂为常驻气场——续波同样受压（原开场压制只作用首波，续波相对变强）
       if (p.realmIdx >= 1) { e2.atk = Math.round(e2.atk * 0.9); e2.def = Math.round(e2.def * 0.9); }
       if (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 4) e2.crit = Math.round((e2.crit || 0) / 2);
+      // v32 修瑕（E6）：阵道开场压制原只作用首波——后两波敌攻防凭空回升三成，与「抢先布阵」矛盾。
+      // 续波按同款概率重掷阵法压制。
+      if (B.ctx.arraySetup) {
+        const pot = B.ctx.arrayGrand ? 0.5 : (B.ctx.arrayPotent ? 0.6 : 0.7);
+        e2.atk = Math.round(e2.atk * pot); e2.def = Math.round(e2.def * pot);
+        this.log('【阵旗重张】阵光再起——新扑上来的妖兽同样被困入阵中！', 'log-gain');
+      } else if (p.dao === 'array' && DaoSys.tierLevel(p) >= 5 && Utils.chance(DaoSys.tierLevel(p) >= 6 ? 35 : 20)) {
+        e2.atk = Math.round(e2.atk * 0.6); e2.def = Math.round(e2.def * 0.6);
+        this.log('【杀阵】阵光骤起——新入阵者攻守尽堕四成！', 'log-crit');
+      }
       // v31 修瑕（E6）：续波重置「每战一次」标记——原十波妖群只有一次人兽合击/一次本命觉醒/一次元婴代死
       B.comboUsed = 0;   // 合击改付费充能后续波重置为「首用免费」
       B.bmUsed = {};
       B.infantSaved = false;
       B.jadeSaved = false;
+      B.enemyCtrlN = 0;   // v32（E9）：控制递减按波重计
+      B.turn = 1;   // v32 修瑕（E14）：回合数跨波累计曾让续波新怪一进场就自带「久战力竭 -25%」（口径与「久战」文案不符）
       B.morale = Math.max(0, (B.morale || 0) - 30);   // 续波喘息：战意小幅回落，避免跨波无限滚存
       B.enemy = e2;
       B.enemyFxIds = [];
@@ -1624,6 +1755,8 @@ const Battle = {
     if (B.ctx.mode === 'war' && p.sect) {
       p.sect.contrib += 200;
       this.log('战功赫赫！宗门贡献 +200。', 'log-gain');
+      // v32 修瑕（E41）：宗门大战击杀 NPC 原零后果——「NPC 牵连」打完即忘（rel/grudge/记忆全不变）
+      if (B.ctx.npcId && typeof NpcSys !== 'undefined' && NpcSys.onWarKill) NpcSys.onWarKill(p, B.ctx.npcId);
     }
     if (B.ctx.sectDanger != null) SectSys.onDangerWin(B.ctx.sectDanger);
     // §23 魔界入侵：参与奖励
@@ -1858,9 +1991,10 @@ const Battle = {
       `<button class="btn btn-sm ${B.auto ? 'btn-primary' : ''}" data-action="bt-auto" ${B.over ? 'disabled' : ''}>${B.auto ? '◼ 停止自动' : '▶ 自动战斗'}</button>`,
       `<button class="btn btn-sm" data-action="bt-autocfg" title="自动战斗策略">⚙策略</button>`,
       `<button class="btn btn-sm" data-action="bt-speed" title="战斗速度">速度 ${speedLabels[this.speed] || '×1'}</button>`,
+      `<button class="btn btn-sm" data-action="bt-ning" ${B.over ? 'disabled' : ''} title="凝神：20战意换1真元，或15战意净化一项负面（不耗行动，每回合一次）">⚡凝神</button>`,   // v32（C7）
     ].join('');
-    const canTame = !!(B.enemy.id && !B.enemy.elite && !(B.ctx && B.ctx.tower) && typeof BeastSys !== 'undefined' && BeastSys.TAMEABLE.includes(B.enemy.species)
-      && B.enemy.hp > 0 && B.enemy.hp <= B.enemy.hpMax * 0.2 && !B.over);   // v30：直接按 TAMEABLE 表判定；v31：塔影为气相投影不可驯（驯服曾可无限重踏刷兽）
+    const canTame = !!(B.enemy.id && !B.enemy.elite && !(B.ctx && (B.ctx.tower || B.ctx.story || B.ctx.dungeon || B.ctx.weType || B.ctx.sectDanger != null)) && typeof BeastSys !== 'undefined' && BeastSys.TAMEABLE.includes(B.enemy.species)
+      && B.enemy.hp > 0 && B.enemy.hp <= B.enemy.hpMax * 0.2 && !B.over);   // v30：按 TAMEABLE 表判定；v31：塔影不可驯；v32（A2）：剧情/秘境/生死状/世界事件之敌非无主野兽，不可驯（驯服曾绕过全部结算分发，第一章可被驯服卡死）
     // v30 灵兽合击：亲昵 ≥60 的出战灵兽解锁人兽合击；v31（D2）：首用免费，此后 3 战意 2 真元充能
     const comboReady = typeof BeastSys !== 'undefined' && BeastSys.comboReady(p) && !B.over
       && (!(B.comboUsed > 0) || ((B.morale || 0) >= 3 && (B.zhenyuan || 0) >= 2));
@@ -1877,14 +2011,14 @@ const Battle = {
     document.getElementById('battle-box').innerHTML = `
       <div class="battle-head">— 修 罗 场 —</div>
       <div class="bt-side side-enemy ${e.raged ? 'raged' : ''}" data-species="${e.species || 'beast'}">
-        <div class="bt-name-row"><span class="bt-name enemy"><button class="bt-info-btn" data-action="bt-info" title="查看情报">🔍</button>${e.name}${e.elite ? ' <span class="tag danger">精英</span>' : ''}${e.tplName ? ` <span class="tag tpl" title="习性模板：${(GameData.MONSTER_TEMPLATES.find(t => t.id === e.tpl) || {}).desc || ''}">${e.tplName}</span>` : ''}${(B.waveIds && B.waveIds.length > 1) ? ` <span class="tag warn">第 ${B.waveIdx + 1}/${B.waveIds.length} 波</span>` : ''}${B.intent && !B.over ? ` <span class="tag intent-tag" title="意图预演：据此选择防御、破招或遁走">下一手 · ${this.intentLabel(B.intent)}</span>` : ''}${!(B.ctx.spar || B.ctx.story || B.ctx.tourney) && (B.turn || 1) === 7 && !e._exhausted ? ' <span class="tag safe">力竭将现</span>' : ''}${(B.enemyFxIds || []).length ? ' ' + B.enemyFxIds.map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `<span class="tag danger" title="${d.desc}">◆${d.name}</span>` : ''; }).join('') : ''}${e.raged ? ' <span class="tag danger">狂暴</span>' : ''}${e._raged2 ? ' <span class="tag danger">血性</span>' : ''}${e._phase2 ? ' <span class="tag danger">狂乱</span>' : ''}${e.charging ? ' <span class="tag danger">蓄力杀招</span>' : ''}${StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze') ? ' <span class="tag">被缚</span>' : ''}</span><span class="bt-realm">${e.realmLabel} · 攻${this.enAtk(e)} 防${this.enDef(e)}</span></div>
+        <div class="bt-name-row"><span class="bt-name enemy"><button class="bt-info-btn" data-action="bt-info" title="查看情报">🔍</button>${e.name}${e.elite ? ' <span class="tag danger">精英</span>' : ''}${e.tplName ? ` <span class="tag tpl" title="习性模板：${(GameData.MONSTER_TEMPLATES.find(t => t.id === e.tpl) || {}).desc || ''}">${e.tplName}</span>` : ''}${(B.waveIds && B.waveIds.length > 1) ? ` <span class="tag warn">第 ${B.waveIdx + 1}/${B.waveIds.length} 波</span>` : ''}${B.intent && !B.over ? ` <span class="tag intent-tag" title="意图预演：据此选择防御、破招或遁走（预估为未计格挡/会心的基础区间）">下一手 · ${this.intentLabel(B.intent)}${this.intentEstimate(B.intent)}</span>` : ''}${!(B.ctx.spar || B.ctx.story || B.ctx.tourney) && (B.turn || 1) === 7 && !e._exhausted ? ' <span class="tag safe">力竭将现</span>' : ''}${(B.enemyFxIds || []).length ? ' ' + B.enemyFxIds.map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `<span class="tag danger" title="${d.desc}">◆${d.name}</span>` : ''; }).join('') : ''}${e.raged ? ' <span class="tag danger">狂暴</span>' : ''}${e._raged2 ? ' <span class="tag danger">血性</span>' : ''}${e._phase2 ? ' <span class="tag danger">狂乱</span>' : ''}${e.charging ? ' <span class="tag danger">蓄力杀招</span>' : ''}${StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze') ? ' <span class="tag">被缚</span>' : ''}</span><span class="bt-realm">${e.realmLabel} · 攻${this.enAtk(e)} 防${this.enDef(e)}</span></div>
         <div class="bt-figure enemy-fig" aria-hidden="true"></div>
         <div class="fx-tags">${StatusFx.tagsHtml(e.fx)}</div>
         <div class="bar"><div class="bar-fill hp${e.raged ? ' rage' : ''}" style="width:${ePct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-ehp" data-nv="${e.hp}">${e.hp}</span> / ${e.hpMax}</span></div>
       </div>
       <div class="bt-vs">—— ✦ ——</div>
       <div class="bt-side side-me">
-        <div class="bt-name-row"><span class="bt-name me">${Utils.esc(p.name)}${B.combo >= 2 ? ` <span class="tag combo">连击×${B.combo}</span>` : ''}${B.auto ? ' <span class="tag safe">自动</span>' : ''}</span><span class="bt-realm">攻${this.myAtk(st)} 防${this.myDef(st)} · 暴击${this.myCrit(st).toFixed(0)}%</span></div>
+        <div class="bt-name-row"><span class="bt-name me">${Utils.esc(p.name)}${B.combo >= 2 ? ` <span class="tag combo">连击×${B.combo}</span>` : ''}${B.lastSkillTag != null ? ` <span class="tag combo" title="连携势——此刻身负「${B.lastSkillTag}」势：同势连放 +6%/层、异势互济 +10%、法诀后普攻势尽 +15%">势·${B.lastSkillTag}${(B.skillChain || 0) > 0 ? `×${B.skillChain}` : ''}</span>` : ''}${B.auto ? ' <span class="tag safe">自动</span>' : ''}</span><span class="bt-realm">攻${this.myAtk(st)} 防${this.myDef(st)} · 暴击${this.myCrit(st).toFixed(0)}%</span></div>   <!-- v32（C2）：连携势可视化 -->
         <div class="bt-figure me-fig" aria-hidden="true"></div>
         <div class="bar" title="气血 ${p.hp} / ${st.maxHp}"><div class="bar-fill hp${hpPct <= 30 ? ' low' : ''}" style="width:${hpPct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-hp" data-nv="${p.hp}">${p.hp}</span> / ${st.maxHp}</span></div>
         <div class="bar" title="灵力 ${p.mp} / ${st.maxMp}"><div class="bar-fill mp" style="width:${mpPct}%"></div><span class="bar-text${(p.mp || 0) <= 0 ? ' dim' : ''}"><span class="num-anim" data-nk="bt-mp" data-nv="${p.mp}">${p.mp}</span> / ${st.maxMp}</span></div>

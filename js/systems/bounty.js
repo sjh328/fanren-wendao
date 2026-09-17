@@ -1,7 +1,7 @@
 
 /* ======================================================================
- * §11.8 v13 悬赏任务板 BountySys（坊市每日刷新三张悬赏）
- * 类型：猎杀妖兽 / 上交材料 / 切磋获胜；未领的悬赏可存续两日。
+ * §11.8 v13 悬赏任务板 BountySys（坊市每三日刷新一批悬赏）
+ * 类型：猎杀妖兽 / 上交材料 / 切磋获胜；未领的悬赏可存续三日（v32 修瑕 E42：文案对齐实发）。
  * ====================================================================== */
 const BountySys = {
   freshBounties(p) {
@@ -36,7 +36,15 @@ const BountySys = {
   },
   rewards(p) {
     const realm = p.realmIdx;
-    return { stones: Math.round(60 * GameData.stoneEco(realm)), contrib: 25 + realm * 15 };
+    let stones = Math.round(60 * GameData.stoneEco(realm));
+    // v32（F3）宗门内乱次年回响：乱局佣兵生意好做——悬赏赏格 ×1.1
+    const w = p.world;
+    if (w && w.turmoilUntil) {
+      const y2 = Math.floor((p.day || 0) / 365) + 1;
+      if (y2 <= w.turmoilUntil) stones = Math.round(stones * 1.1);
+      else w.turmoilUntil = 0;
+    }
+    return { stones, contrib: 25 + realm * 15 };
   },
   submit(idx) {
     const p = Game.player;

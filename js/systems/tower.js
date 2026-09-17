@@ -174,6 +174,9 @@ const TowerSys = {
     const t = this.state(p);
     this.syncToday(p);
     if (this.leftToday(p) <= 0) { UI.toast('今日登天次数已尽——明日再来，或灵石加购'); return; }
+    // v32 修瑕（E10）：气血门槛原在 nextFloor 才查——enter 已 used++，血线边缘误点即白耗今日次数
+    const stT = Stat.compute(p);
+    if (p.hp <= Math.max(2, Math.round(stT.maxHp * 0.1))) { UI.toast('气血近乎枯竭——先疗伤，再叩塔门'); return; }
     t.today.used++;
     t.run = { floor: 1, buffs: [] };
     Log.add('你推开通天塔的厚重石门——塔内灵压如山，每层都有一头「守影」踞阶而踞。', 'story');
@@ -207,6 +210,7 @@ const TowerSys = {
     const stT = Stat.compute(p);
     if (p.hp <= Math.max(2, Math.round(stT.maxHp * 0.1))) { UI.toast('气血近乎枯竭——先疗伤，或收手离塔'); UI.renderAll(); return; }
     const foe = this.foeFor(p, run.floor);
+    if (run.riskAtk) foe.atk = Math.round(foe.atk * run.riskAtk);   // v32（C6）：跳层赌约代价——守影攻击 +25%（本次登塔内）
     Battle.start(null, {
       tower: true,
       enemy: foe,
@@ -262,6 +266,7 @@ const TowerSys = {
     if (floor % 5 === 0) steps.push('chest');
     if (floor % 7 === 0) steps.push('event');
     if (floor % 3 === 0) steps.push('bless');
+    let quitAll = false;
     if (!steps.length) { await Battle.wait(900); this.nextFloor(); }
     else {
       for (let i = 0; i < steps.length; i++) {
@@ -270,7 +275,23 @@ const TowerSys = {
         const quit = s === 'chest' ? await this.chestStep(p, run, mods, floor, advance)
           : s === 'event' ? await this.eventStep(p, run, mods, floor, advance)
           : await this.blessStep(p, run, floor, advance);
-        if (quit) break;
+        if (quit) { quitAll = true; break; }
+      }
+      // v32（C6）：跳层赌约——过关后偶发的风险自选：跳过下一层（弃其层奖）直上二层，
+      // 本次登塔内守影攻 +25%，塔绩 +1/次。roguelike 从「只拿祝福」变「每层的贪稳抉择」。
+      if (!quitAll && run && run.floor < 90 && Utils.chance(15)) {
+        const ok2 = await UI.popup({
+          title: '✦ 登天塔 · 跳层赌约',
+          html: `塔中忽起异风——下一层的守影气息暴涨。<br><span class="tip-line">· 赌约：跳过第 ${run.floor + 1} 层（放弃其层奖），直上第 ${run.floor + 2} 层；此后守影攻击 +25%（本次登塔内）。塔绩 +1。</span>`,
+          options: [{ text: '掷下赌约 · 直上二层', value: true, primary: true }, { text: '稳步登楼', value: false }],
+        });
+        if (ok2) {
+          run.floor += 1;   // 连同常规 +1 合计跳两层
+          run.risk = (run.risk || 0) + 1;
+          run.riskAtk = 1.25;
+          p.counters.towerWins = (p.counters.towerWins || 0) + 1;
+          Log.add('你应下赌约——塔风呼啸，石阶在脚下连退两层！（塔绩 +1，此后守影更凶）', 'event');
+        }
       }
     }
   },
@@ -284,6 +305,7 @@ const TowerSys = {
     // v31 修瑕（E8）：塔灵「赐福」从全池均匀抽取——可能塞给你诅咒祝福（琉璃贪匣），gift 池滤除 curse
     const giftPool = pool.filter(b => !b.curse);
     const gift = giftPool.length ? Utils.pick(giftPool) : null;
+    const stNow = Stat.compute(p);
     const v = await UI.popup({
       title: `✦ 登天塔 · 第 ${floor} 层 · 塔中奇遇`,
       html: `<div class="tip-line">这一层没有守影——只有一方石台、一个行脚商人，与一缕若有若无的塔灵。</div>`,
@@ -291,6 +313,7 @@ const TowerSys = {
         { text: `灵泉石台（回复六成气血）`, value: 'spring', primary: true },
         { text: `行脚商人（${Utils.fmtNum(price)} 灵石购【${GameData.ITEMS[vendorMat].name}】×3）`, value: 'vendor' },
         ...(gift ? [{ text: `塔灵赐福（随机获赠【${gift.name}】）`, value: 'gift' }] : []),
+        ...(p.hp > stNow.maxHp * 0.35 ? [{ text: '血祭塔灵（自损现血三成，换一道未持有的祝福）', value: 'blood' }] : []),   // v32（C6）：血祭塔灵——风险换稀有祝福
         { text: '径直登层', value: '__skip' },
       ],
     });
@@ -305,6 +328,18 @@ const TowerSys = {
       run.buffs.push(gift.id);
       Log.add(`塔灵低语一声——【<b>${gift.name}</b>】入体：${gift.desc}`, 'gain');
       UI.toast(`✦ 塔灵赐福：${gift.name}`);
+    } else if (v === 'blood') {
+      // v32（C6）：血祭塔灵——自损现血三成，优先换规则祝福（稀有档），次取任意未持有祝福
+      const cost = Math.max(1, Math.round(p.hp * 0.3));
+      p.hp = Math.max(1, p.hp - cost);
+      const unowned = this.BUFFS.filter(b2 => !run.buffs.includes(b2.id));
+      const pool2 = unowned.filter(b2 => b2.rule).length ? unowned.filter(b2 => b2.rule) : unowned;
+      const pick2 = pool2.length ? Utils.pick(pool2) : null;
+      if (pick2) {
+        run.buffs.push(pick2.id);
+        Log.add(`你割掌祭血（气血 -${cost}）——塔灵低啸一声，【<b>${pick2.name}</b>】入体：${pick2.desc}`, 'gain');
+        UI.toast(`✦ 血祭得福：${pick2.name}`);
+      } else Log.add('你割掌祭血（气血 -' + cost + '）——塔灵静默良久，似是福缘已尽。', 'warn');
     }
     if (advance) this.nextFloor();
     return false;

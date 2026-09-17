@@ -48,7 +48,7 @@ try {
     ? pass('TA7 遮罩已移入 #game-screen（P0 修根）+ more-sheet 元素在位') : fail('TA7 index.html 结构', '遮罩位置或 more-sheet 缺失');
   html.includes('<i class="mdb-i" aria-hidden="true">☰</i><span class="mdb-t">道途</span>') && html.includes('id="amb-density"')
     ? pass('TA8 抽屉钮图标化 + 界面密度设置项在位') : fail('TA8 index.html 控件', '');
-  html.includes('style.css?v=47') && html.includes('game.js?v=47')
+  /style\.css\?v=\d+/.test(html) && /game\.js\?v=\d+/.test(html)
     ? pass('TA9 缓存号升级 v=47') : fail('TA9 缓存号', 'index.html 未升到 v=47');
   js.includes('M_SHEET_TABS') && js.includes('renderMoreSheet()') && js.includes("'act-more'")
     ? pass('TA10 更多面板 JS：收拢表 / 渲染器 / 动作齐备') : fail('TA10 更多面板 JS', '');

@@ -98,7 +98,7 @@ const Stat = {
     const caveCult = (typeof CaveSys !== 'undefined' && CaveSys.cultBonus) ? CaveSys.cultBonus(p) : 0;
     const rootPct = p.rootDeep ? 20 : 0;    // §22 根基深厚：全属性 +20%
     const lossPct = Math.min(50, p.statLossPct || 0); // §20 斩三尸：全属性永久折损（上限50%）
-    const marks = p.reinc ? (p.reinc.marks || 0) : 0; // §26 轮回印记：每枚 +1% 全属性
+    const marks = p.reinc ? Math.min(30, p.reinc.marks || 0) : 0; // §26 轮回印记：每枚 +1% 全属性（v32 D1 封顶 30，与轮回镜口径一致）
     // v18 残玉共鸣 + 道心烙印
     const dx = (typeof DaoxinSys !== 'undefined' && DaoxinSys.bonusOf) ? DaoxinSys.bonusOf(p) : {};
     const jadePct = (typeof DaoxinSys !== 'undefined' && DaoxinSys.attunePct) ? DaoxinSys.attunePct(p) : 0;
@@ -187,8 +187,11 @@ const Stat = {
       { name: '道心烙印', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(dx, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(dx, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '个人线', v: key === 'crit' || key === 'dodge' || key === 'pillPct' ? pctOf(pl, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(pl, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '洞府（聚灵/藏宝/演武）', v: key === 'cultPct' ? ((p.cave && p.cave.lv) || 0) * 4 : key === 'stonePct' ? (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3) : key === 'atk' || key === 'def' ? (((p.cave && p.cave.builds && p.cave.builds.train) || 0) * 2) : 0 },
-      { name: '轮回印记/残玉共鸣/心魔凝练', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed' ? Math.round(base * (((p.reinc ? (p.reinc.marks || 0) * 0.01 : 0) + ((p.jade || 0) * 0.015) + ((p.flags && p.flags.xinmoCleared) || 0) * 0.01 + ((p.benming && p.benming.lv) || 0) * 0.01)) * 100) / 100 : 0 },
+      { name: '轮回印记/残玉共鸣/心魔凝练', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed' ? Math.round(base * (((p.reinc ? Math.min(30, p.reinc.marks || 0) * 0.01 : 0) + ((p.jade || 0) * 0.015) + (Math.min(20, (p.flags && p.flags.xinmoCleared) || 0)) * 0.01 + ((p.benming && p.benming.lv) || 0) * 0.01)) * 100) / 100 : 0 },   // v32 修瑕（E35）：心魔凝练按 +20% 封顶折算（与 XinmoSys.scale 同口径）
       { name: '仙门之外（残玉终响）', v: (p.flags && p.flags.beyondGate) && (key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed') ? Math.round(base * 0.03 * 100) / 100 : 0 },   // v25
+      { name: '仙阶（每层 +1.5% 全属性）', v: ['atk', 'def', 'maxHp', 'maxMp', 'speed'].includes(key) ? Math.round(base * ((typeof XianSys !== 'undefined' && XianSys.layersTotal) ? XianSys.layersTotal(p) : 0) * 0.015 * 100) / 100 : key === 'cultPct' ? ((typeof XianSys !== 'undefined' && XianSys.layersTotal) ? XianSys.layersTotal(p) : 0) * 2 : 0 },   // v32 修瑕（E35）：明细补仙阶来源（原 final 吃加成而明细不列，加总≠final）
+      { name: '洞天（每重修炼 +3%）', v: key === 'cultPct' ? ((p.cave && p.cave.dongtian) || 0) * 3 : 0 },   // v32 修瑕（E35）
+      { name: '图鉴大成（每类 +1% 全属性）', v: ['atk', 'def', 'maxHp', 'maxMp', 'speed'].includes(key) ? Math.round(base * (p.codexBonus || 0) * 0.01 * 100) / 100 : 0 },   // v32 修瑕（E35）
     ].filter(x => Math.abs(x.v) > 0.01);
     return { final: st[key], src };
   },

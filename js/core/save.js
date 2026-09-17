@@ -51,8 +51,11 @@ write(key, player) {
   },
   /** v30 滚动快照：进入游戏前把 auto 存档复制到 bak2（损坏/误删可回捞；每会话至多一次） */
   snapshotAuto() {
-    if (Game._snapDone) return;
-    Game._snapDone = true;
+    // v32 修瑕（G2）：滚动快照——原「每会话一次」使 bak2 恒停在会话开头，6 小时长会话崩溃
+    // 只能回捞 6 小时前。改为每 10 分钟滚动一次（会话首次照旧），安全网贴身跟上。
+    const now = Date.now();
+    if (Game._snapAt && now - Game._snapAt < 600000) return;
+    Game._snapAt = now;
     try {
       const cur = this.read('auto');
       if (!cur || !cur.player || !cur.meta || !cur.meta.ts) return;

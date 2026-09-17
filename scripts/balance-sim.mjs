@@ -111,7 +111,7 @@ const rows = await page.evaluate(() => {   // v20：返回 { out, combat, bonusR
     const bountyIn = Math.round(60 * eco);            // 悬赏一桩
     const dayIn = battleIn + bountyIn + Math.round(20 * eco);
     const sinkSeclude = Math.round(30 * eco);          // 闭关一轮
-    const sinkRush = Math.round(120 * Math.pow(3.8, Math.min(4, r)));   // 聚灵加速（封顶4境系数）
+    const sinkRush = Math.round(120 * GameData.stoneEco(r));   // 聚灵加速（v32 修瑕 E25：口径对齐 cave.rushCost=120×stoneEco(r) 全幅——原 min(4,r) 低估高境 sink）
     const sinkEnhance = Math.round((120 + 5 * 90) * (1 + 3 * 0.8) * Math.pow(2.4, r));   // 强化+5
     stoneRows.push({ realm: GameData.REALM_NAMES[r], dayIn, sinkSeclude, sinkRush, sinkEnhance });
   }

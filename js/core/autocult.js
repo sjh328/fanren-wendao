@@ -19,6 +19,7 @@ const AutoCult = {
             <option value="realm">修至指定境界</option>
             <option value="exp">攒够指定修为</option>
             <option value="time">运行指定时长（分钟）</option>
+            <option value="xian">攒够指定仙元（飞升后）</option>
           </select>
           <select id="auto-realm">${realmOpts}</select>
           <input id="auto-val" type="number" min="1" placeholder="数值" class="hidden">
@@ -53,7 +54,9 @@ const AutoCult = {
     } else {
       const val = Number(document.getElementById('auto-val').value);
       if (!isFinite(val) || val <= 0) { UI.toast('请填写目标数值'); return; }
-      target = kind === 'exp'
+      target = kind === 'xian'
+        ? { kind, need: Math.round(val), label: `攒够 ${Utils.fmtNum(Math.round(val))} 仙元` }   // v32（D4）：仙元挂机目标
+        : kind === 'exp'
         ? { kind, need: Math.round(val), label: `攒够 ${Utils.fmtNum(Math.round(val))} 修为` }
         : { kind, minutes: Utils.clamp(val, 1, 720), label: `运行 ${Utils.clamp(val, 1, 720)} 分钟` };
     }
@@ -91,6 +94,13 @@ const AutoCult = {
       this.rounds++;
       const need = GameData.layerNeed(p2.realmIdx, p2.layer);
       if (p2.layer === 3 && p2.exp >= need) {
+        // v32 修瑕（D4）：飞升圆满原「即停等飞升」——仙籍之身修为恒圆满，AutoCult 每轮即停，
+        // 仙元从此没有挂机路径。圆满后改为继续空转（溢流自动炼作仙元），只受目标达成控制。
+        if (p2.realmIdx >= 9 && p2.flags && p2.flags.ascended) {
+          if (this.reached(p2)) { this.finish('目标达成'); return; }
+          await Utils.sleep(280);
+          continue;
+        }
         this.pause(p2.realmIdx < 9 ? '修为已至圆满——请亲手冲击瓶颈' : '真仙圆满——仙门已开，请亲手飞升');
         return;
       }
@@ -109,6 +119,7 @@ const AutoCult = {
     if (!t) return true;
     if (t.kind === 'realm') return p.realmIdx >= t.realm;
     if (t.kind === 'exp') return Guide.totalExp(p) - this.startExp >= t.need;
+    if (t.kind === 'xian') return (p.counters.xianyuan || 0) >= t.need;   // v32（D4）
     return Date.now() - this.startReal >= t.minutes * 60000;
   },
   pause(reason) {

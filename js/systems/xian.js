@@ -12,10 +12,10 @@ const XianSys = {
   tiers() { return GameData.XIAN_TIERS; },
   cur(p) { return (p.xianjie && p.xianjie.idx) || 0; },
   layer(p) { return (p.xianjie && p.xianjie.layer) || 0; },
-  def(p) { return GameData.XIAN_TIERS[(this.cur(p) || 1) - 1] || null; },
+  def(p) { return this.cur(p) === 0 ? null : (GameData.XIAN_TIERS[this.cur(p) - 1] || null); },   // v32 修瑕（E28）：idx=0 原错回地仙定义——advanceLayer 的 enterFirst 分支成死代码（无籍也可「晋层」的语义陷阱）
   yuan(p) { return (p.counters && p.counters.xianyuan) || 0; },
-  /** 已晋层数（全属性/修炼效率消费） */
-  layersTotal(p) { return this.cur(p) === 0 ? 0 : (this.cur(p) - 1) * 3 + this.layer(p); },
+  /** 已晋层数（全属性/修炼效率消费）；v32 修瑕（E36）：未飞升而残留仙籍的脏档不再吃加成 */
+  layersTotal(p) { return (this.unlocked(p) && this.cur(p) > 0) ? (this.cur(p) - 1) * 3 + this.layer(p) : 0; },
   /** 下一层所需仙元（阶内补层）；阶满返回 0 */
   nextNeed(p) {
     const d = this.def(p);
@@ -37,7 +37,11 @@ const XianSys = {
       // 未入仙阶：初入地仙第一层（飞升后首次晋层）
       return this.enterFirst();
     }
-    if (this.layer(p) >= 3) { UI.toast(`${d.name}已圆满——引动仙劫方可晋入${(GameData.XIAN_TIERS[this.cur(p)] || {}).name || '下一阶'}`); return; }
+    if (this.layer(p) >= 3) {
+      // v32 修瑕（E29）：大罗圆满原仍提示「引动仙劫晋入下一阶」——其下再无阶，应指证道祖之境
+      UI.toast(this.cur(p) >= 4 ? '大罗已圆满——可证道祖之境' : `${d.name}已圆满——引动仙劫方可晋入${(GameData.XIAN_TIERS[this.cur(p)] || {}).name || '下一阶'}`);
+      return;
+    }
     const need = d.layerNeed;
     if (this.yuan(p) < need) { UI.toast(`仙元不足（需 ${Utils.fmtNum(need)}）`); return; }
     p.counters.xianyuan -= need;
@@ -134,8 +138,11 @@ const XianSys = {
     const ev = Utils.pick(GameData.XIAN_VISITORS);
     const got = ev.fn(p);
     if (!auto) Log.add(`【仙界访客】${ev.text}（${got}）`, 'event');
-    // 静默（离线）也留一条汇总级收益——访客五日不超一次的频次可接受，不刷屏
-    else Log.add(`【仙界访客】离线期间曾有仙客到访（${got}）。`, 'info');
+    else if (Game._offlineReplay) {
+      // v32 修瑕（E60）：离线访客原逐条刷（30 日约 9 条「曾有仙客到访」）——聚合进离线日报
+      const agg = Game._offlineAgg = Game._offlineAgg || {};
+      agg.xianVisit = (agg.xianVisit || 0) + 1;
+    }
   },
   /** 状态区块（Stat 明细与修炼页仙阶卡共用） */
   label(p) {

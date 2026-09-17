@@ -34,7 +34,8 @@ const Meta = {
   /** 导入外部文本码时还原某存档位的成就图鉴 */
   importTo(slot, ext) {
     if (!ext || typeof ext !== 'object') return;
-    const raw = JSON.stringify({ achv: ext.achv || {}, codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, ext.codex || {}), towerBest: ext.towerBest || 0 });
+    // v32 修瑕（E52）：透传 marksGiven 去重集——原导入丢此键，文本码跨设备迁移后印记类奖励可在新设备重刷
+    const raw = JSON.stringify({ achv: ext.achv || {}, codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, ext.codex || {}), towerBest: ext.towerBest || 0, marksGiven: ext.marksGiven || null });
     try { if (Save.storage.setItem) Save.storage.setItem(Save.KEY + this.key(slot), raw); else Save.mem[Save.KEY + this.key(slot)] = raw; } catch (e) { /* ignore */ }
     if (slot == null || slot === Game.slot) this.load();
   },

@@ -146,14 +146,15 @@ const DaoSys = {
       Log.add('你运转体修功法，只觉神识滞涩——高阶法诀与肉身之道相悖，无从修习。', 'warn');
       return false;
     }
-    if (def.daoLimit && p.dao !== def.daoLimit) {
-      const dname = (GameData.DAO_CLASSES.find(x => x.id === def.daoLimit) || {}).name || '特定大道';
-      UI.toast(`此乃${dname}秘传，道途不合，无从修习`);
-      return false;
-    }
+    // v32 修瑕（E43）：分支序修正——原「道途不合」先于「须先择定大道」，未择道者永远撞上前者
     if (def.daoLimit && !p.dao) {
       const dname = (GameData.DAO_CLASSES.find(x => x.id === def.daoLimit) || {}).name || '特定大道';
       UI.toast(`此乃${dname}秘传——须先择定大道`);
+      return false;
+    }
+    if (def.daoLimit && p.dao !== def.daoLimit) {
+      const dname = (GameData.DAO_CLASSES.find(x => x.id === def.daoLimit) || {}).name || '特定大道';
+      UI.toast(`此乃${dname}秘传，道途不合，无从修习`);
       return false;
     }
     return true;

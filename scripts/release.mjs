@@ -30,6 +30,31 @@ if (fs.existsSync(relDir)) {
   process.exit(1);
 }
 
+/* 0) 版本号单源注入（v32 G7/E58）：缓存号 ?v=N、SW 版本与预缓存、manifest 描述一次到位——
+ *    此前三处双轨（?v= / SW VERSION / manifest），发布只 bump 其一即半新半旧。
+ *    口径：缓存号 v<N> = 15 + N（v32 → 48）；SW fanren-wd-v<M> = N - 26（v32 → 6+1=7）。 */
+const cacheV = 16 + Number(ver);   // v31=47 → vN = N+16（v32 → 48，发布必须递增）
+const swV = Number(ver) - 26 + 1;
+const bump = (file, pairs) => {
+  const p = path.join(ROOT, file);
+  let s = fs.readFileSync(p, 'utf8');
+  for (const [re, to] of pairs) s = s.replace(re, to);
+  fs.writeFileSync(p, s);
+};
+bump('index.html', [
+  [/game\.js\?v=\d+/g, `game.js?v=${cacheV}`],
+  [/style\.css\?v=\d+/g, `style.css?v=${cacheV}`],
+]);
+bump('sw.js', [
+  [/const VERSION = 'fanren-wd-v\d+';/, `const VERSION = 'fanren-wd-v${swV}';`],
+  [/'\.\/game\.js\?v=\d+'/g, `'./game.js?v=${cacheV}'`],
+  [/'\.\/style\.css\?v=\d+'/g, `'./style.css?v=${cacheV}'`],
+]);
+bump('manifest.webmanifest', [
+  [/"description": "[^"]*"/, `"description": "网页版文字修仙放置游戏——凡人之躯，问道十章，白日飞升（v${ver}）。"`],
+]);
+console.log(`✓ 版本号单源注入：?v=${cacheV} · SW fanren-wd-v${swV} · manifest 描述`);
+
 /* 1) 可玩本体快照 */
 const FILES = ['index.html', 'game.js', 'style.css', 'sw.js', 'manifest.webmanifest', 'README.md'];
 fs.mkdirSync(relDir, { recursive: true });

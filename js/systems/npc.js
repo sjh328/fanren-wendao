@@ -340,10 +340,31 @@ const NpcSys = {
       s.alive = false;
       KarmaSys.addKarma(10, true);
       Log.add(`${d.name} 伤重不治，殒身当场——其血亲与你势不两立！（孽障 +20）`, 'loss');
+      // v32 修瑕（E45）：道侣/结拜殒命原无叙事收尾——p.partner 永挂、江湖页仍显「道侣」、共修静默失效
+      if (p.partner === id) {
+        p.partner = null;
+        Log.add(`曾与你结为道侣的 ${d.name} 殒命于你手——情分尽付尘土，自此江湖独行。（道侣之位已空）`, 'loss');
+        Story.chron(`道侣 ${d.name} 殒命于你手`);
+      }
+      if ((p.sworn || []).includes(id)) {
+        p.sworn = p.sworn.filter(x => x !== id);
+        Log.add(`义结金兰的 ${d.name} 就此长辞——结义之情，唯余一炷心香。`, 'loss');
+      }
     } else {
       const hostileLine = this.lineFor(p, id, 'hostile');
     Log.add(`${d.name} 重伤遁走，临行前留下一句${hostileLine ? hostileLine : '「此事没完」'}——恩怨愈结愈深。（孽障 +10）`, 'warn');
     }
+  },
+  /** v32 修瑕（E41）：宗门大战阵斩——此前胜后 rel/grudge/记忆全不变（「NPC 牵连」打完即忘） */
+  onWarKill(p, id) {
+    const s = this.state(p, id);
+    const d = this.def(id);
+    if (!s || !d || !s.alive) return;
+    s.rel = Utils.clamp(s.rel - 20, -100, 100);
+    s.grudge = true;
+    this.mem(p, id, 'war', '宗门战阵前兵刃相见');
+    KarmaSys.addKarma(3, true);
+    Log.add(`阵前被你击败的 ${d.name} 满身血污地退走——同坛论道之谊就此断绝，此仇他记下了。（孽障 +3）`, 'warn');
   },
   /** 一战了断：胜则恩怨两清（v20 雷台了断：另夺法宝彩头） */
   onConfrontWin(p, id, showdown = false) {
@@ -559,7 +580,7 @@ const NpcSys = {
     const likeCost = cost * 2;
     const tier = this.tierOf(Math.max(0, s.rel));
     const midautumn = typeof FestivalSys !== 'undefined' && FestivalSys.is(p, 'zhongqiu');
-    const gain0 = { known: Utils.rand(3, 6), friend: Utils.rand(2, 4), bosom: Utils.rand(1, 3), sworn: 1 }[tier.id] || 2;
+    const gain0 = { known: Utils.rand(3, 6), friend: Utils.rand(2, 4), bosom: Utils.rand(1, 3), sworn: 2 }[tier.id] || 2;   // v32 修瑕（E46）：sworn 档 +1→+2——终章需 rel≥90，原每礼 +1 使全通需数百次赠礼（与「续谈」即时性落差过大）
     const choice = await UI.popup({
       title: `赠礼 · ${d.name}`,
       html: `${this.dialogText(d.temper, 'greeting')}<br><span class="tip-line">TA 平素喜好：${catName || '随缘'}——投其所好，事半功倍。</span><br><span class="tip-line">关系愈深，礼愈难打动人——相交贵在知心。${midautumn ? '<b>今日中秋：情谊加倍！</b>' : ''}</span>`,
@@ -692,7 +713,8 @@ const NpcSys = {
     if (!s.met) { UI.toast('素未谋面，何谈论道'); return; }
     if (Battle.active) return;
     const tier = this.tierOf(Math.max(0, s.rel));
-    if (tier.id === 'known' || tier.id === 'cold' || tier.id === 'foe') {
+    if (s.rel < 0) { UI.toast('对方对你心怀芥蒂，无意与你论道'); return; }   // v32 修瑕（E44）：原 tierOf(Math.max(0,s.rel)) 恒 ≥known——cold/foe 分支永不触发（结怨者仍可论道）
+    if (tier.id === 'known') {
       UI.toast('交情尚浅，对方只肯泛泛而谈');
       return;
     }

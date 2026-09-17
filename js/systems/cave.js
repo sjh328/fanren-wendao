@@ -133,7 +133,8 @@ const CaveSys = {
     const ev = Utils.pick(events);
     ev.fn();
     if (!auto) Log.add(`【洞府访客】${ev.text}`, 'info');   // v30：离线回放静默（30 日离线曾灌 30 条日志）
-    if (!auto) Game.afterAction();
+    // v32 修瑕（E62）：回环 afterAction 拆除——visitorEvent 由 dailySettle 调用，而 dailySettle
+    // 在 afterAction 尾部，此处再调 afterAction 曾使整条收尾链（渲染/存档/成就/日更）双跑一遍
   },
   /** v20 聚灵加速：花灵石点燃聚灵阵，当日修炼效率 ×1.5（日限一次） */
   /** v24 聚灵加速定价单源化：随境界走 stoneEco 曲线（解除 v20 的 4 境封顶，高境灵石有了日常去路） */
@@ -288,10 +289,15 @@ const CaveSys = {
     if (over >= 20) qty = 1;
     if (plot.pested) qty = Math.max(0, qty - 1); // v18：虫害减产
     if (typeof Art !== 'undefined' && Art.seasonOf(p) === 2) qty += 1;   // v20 季秋丰收：产量 +1
-    Bag.addItem(plot.crop, qty);
-    Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}${typeof Art !== 'undefined' && Art.seasonOf(p) === 2 ? '（季秋丰收）' : ''}。`, 'gain');
     plots[idx] = null;
-    p.counters.harvests = (p.counters.harvests || 0) + 1;   // v20 成就计数
+    // v32 修瑕（E64）：qty=0 原仍 Bag.addItem(crop,0) 污染、harvests 照计数并播「收获 ×0」
+    if (qty > 0) {
+      Bag.addItem(plot.crop, qty);
+      p.counters.harvests = (p.counters.harvests || 0) + 1;   // v20 成就计数
+      Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}${typeof Art !== 'undefined' && Art.seasonOf(p) === 2 ? '（季秋丰收）' : ''}。`, 'gain');
+    } else {
+      Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】颗粒无收——虫害把收成啃了个精光。`, 'warn');
+    }
     Game.afterAction();
   },
   renderPlots(p) {

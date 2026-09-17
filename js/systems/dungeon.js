@@ -32,6 +32,7 @@ const DungeonSys = {
     const ticket = this.ticketOf(R);
     if (!Bag.spendStones(ticket)) { UI.toast(`入秘境需备开门灵石 ${Utils.fmtNum(ticket)} 枚`); return; }
     Meta.see('realm', R.id);   // v6 图鉴
+    if (R.rule) Log.add(`【地脉 · ${R.name}】${R.rule.txt}`, 'system');   // v32（F7）：入秘境先识地脉规则
     p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS, choices: [], gains: [], stuck: false };
     this.genRoute(p.dungeon);
     this.genChoices(p.dungeon);
@@ -77,6 +78,14 @@ const DungeonSys = {
     // v30 修瑕：精英基线改由 buildMonster 统一（原事后置 e.elite=true，吃词缀却吃不到 crit 基线）
     const wantElite = forceElite || Utils.chance(12 + depth * 3);
     const e = buildMonster(mid, Math.max(0, target - GameData.MONSTERS[mid].power), { elitePlus: wantElite });
+    // v32（F7）秘境个性：每秘境一道地脉规则，守敌随之变形——秘境不再是换皮刷怪
+    if (R.rule) {
+      if (R.rule.hp) e.hpMax = Math.round(e.hpMax * R.rule.hp);
+      if (R.rule.atk) e.atk = Math.round(e.atk * R.rule.atk);
+      if (R.rule.def) e.def = Math.round(e.def * R.rule.def);
+      if (R.rule.spd) e.spd = Math.round(e.spd * R.rule.spd);
+      e._realmRule = R.rule.txt;
+    }
     if (wantElite) {
       e.hpMax = Math.round(e.hpMax * 1.6);
       e.atk = Math.round(e.atk * 1.3);
@@ -105,21 +114,36 @@ const DungeonSys = {
     if (!type) return;
     const R = GameData.SECRET_REALMS[D.realm];
     const dm = this.dm(D.depth);
-    D.choices = [];
+    // v32 修瑕（A3）：战斗类节点原「先清 choices 再开战」——战斗中刷新/关页（或节庆年兽抢战被
+    // Battle.start 静默丢弃）后读档，本层节点凭空消失只剩撤离，深入进度与门票沉没。
+    // 改为：开战前置守卫 + 成功开战后才清空，失败回滚重掷本层。
     if (type === 'battle') {
+      if (Battle.active) { this.genChoices(D); Game.afterAction(); return; }
+      D.choices = [];
+      // v32 修瑕（E59）：秘境原全程不耗游戏日——探索 2 日/闭关 30 日而秘境九层连刷零耗时，
+      // 且不推进日结算/寿元/日限（宝箱节点灵石成无限刷管）。每节点计 1 日。
+      Time.add(1);
+      if (p.dead) { UI.toast('岁月不饶人——你在秘境深处走到了天年尽头'); return; }
       const e = this.makeEnemy(R, D.depth);
       Log.add(`你循着灵光拐过一道石廊——<b>${e.name}</b> 自阴影中扑来！`, 'event');
-      Game.afterAction();
       Battle.start(null, { enemy: e, dungeon: { realm: D.realm, depth: D.depth }, mapName: R.name });
+      Game.afterAction();   // v32（A3）：afterAction 挪到开战之后——dailySettle 的节庆检查见 Battle.active 自会挂起
       return;
     }
     if (type === 'boss') {
+      if (Battle.active) { this.genChoices(D); Game.afterAction(); return; }
+      D.choices = [];
+      Time.add(1);   // v32 修瑕（E59）：同上——每节点计 1 日
+      if (p.dead) { UI.toast('岁月不饶人——你在秘境深处走到了天年尽头'); return; }
       const e = this.makeEnemy(R, D.depth + 2, true);
       Log.add('雾气骤然退散——守关者自沉眠中睁开了眼睛！<b>此乃秘境最深处，胜则满载而归！</b>', 'system');
-      Game.afterAction();
       Battle.start(null, { enemy: e, dungeon: { realm: D.realm, depth: D.depth }, boss: true, mapName: R.name + ' · 最深处' });
+      Game.afterAction();
       return;
     }
+    D.choices = [];
+    Time.add(1);   // v32 修瑕（E59）：非战斗节点同样计 1 日
+    if (p.dead) { UI.toast('岁月不饶人——你在秘境深处走到了天年尽头'); return; }
     // v17 非战斗节点：处理 → 结算演出卡（图标 + 结果摘要 + 继续深入）
     let result = null;
     if (type === 'treasure') {

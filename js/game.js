@@ -126,6 +126,8 @@ const Game = {
     // v20 页签快捷键：Q 修炼 / W 问道 / E 洞府 / R 游历 / T 江湖 / A 坊市 / S 宗门 / D 功法
     document.addEventListener('keydown', (e) => {
       if (Story.active() || Battle.active || UI._popupResolve) return;
+      // v32 修瑕（E53）：dao/tribulation/tutorial 等静态弹层开着时同样不切页（原只在遮罩下暗切）
+      if (document.querySelector('.modal:not(.hidden)')) return;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
       const map = { q: 'cultivate', w: 'quest', e: 'cave', r: 'map', t: 'jianghu', a: 'shop', s: 'sect', d: 'gongfa' };
       const tab = map[e.key.toLowerCase()];
@@ -229,6 +231,8 @@ const Game = {
     //          误算成最长 30 日离线（语义模糊且可刷）；auto 每行动实时落盘，才是「上次游玩」的真时点
     const data = Save.read('auto') || (this.slot == null ? null : Save.read(this.slot));
     if (!data || !data.meta || !data.meta.ts) return;
+    // v32 复核：E57「手动档离线基准回退本档 ts」经复核撤销——v30 已有明确决策（离线时长恒按
+    // auto 档计，防「读陈旧手动档白拿 30 日离线」），手动档与 auto 的 ts 差本就是防刷语义的一部分。
     const elapsedMs = Date.now() - data.meta.ts;
     if (elapsedMs < 60000) return; // 少于 1 分钟不算离线
     // 按真实时间推算游戏天数（现实 1 分钟 ≈ 游戏 1 天，上限 30 天）
@@ -252,10 +256,16 @@ const Game = {
     // 时间照常流逝（逐日回放，跨年/寿元/世界线照常结算；寿元尽则照常坐化）
     // v27：逐日补结日更系统（auto 模式——节庆自动从简、灵泉只入账不刷屏）
     let springOn = !!(p.cave && p.cave.builds && p.cave.builds.spring);
+    // v32 修瑕（E60）：离线逐日回放标记 + 收益聚合——弟子历练/仙界访客等 auto 钩子原逐日刷屏
+    //（30 日离线 30~40 条），现聚合为一条「离线日报」
+    this._offlineAgg = {};
+    this._offlineReplay = true;
     for (let i = 0; i < realDays && !p.dead; i++) {
       Time.add(1);
       this.dailySettle(p, true);
     }
+    this._offlineReplay = false;
+    this.flushOfflineAgg();
     if (offlineCrops > 0) {
       Log.add(`你不在的${realDays}个时辰里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
     }
@@ -281,6 +291,16 @@ const Game = {
     try { if (typeof XianSys !== 'undefined' && XianSys.dailyCheck) XianSys.dailyCheck(p, auto); } catch (err) { console.error('仙界访客异常:', err); }   // v31：仙界访客（入仙籍后，离线静默入账）
   },
 
+  /** v32 修瑕（E60）：离线日报——auto 回放期间各系统聚合的收益在此收口成一条日志 */
+  flushOfflineAgg() {
+    const agg = this._offlineAgg || {};
+    const parts = [];
+    if (agg.disciple) parts.push(`门中弟子历练缴回灵石 ${Utils.fmtNum(agg.disciple)}${agg.discipleExtra ? '、捎回灵材若干' : ''}`);
+    if (agg.xianVisit) parts.push(`仙界访客到访 ${agg.xianVisit} 次`);
+    if (parts.length) Log.add(`【离线日报】${parts.join('；')}。`, 'info');
+    this._offlineAgg = null;
+  },
+
   enterGame() {
     Anim.reset();   // v4：换档后数字动画记忆清零
     this.subTab = {};   // v22：换档后子页签记忆一并复位
@@ -291,6 +311,11 @@ const Game = {
     this.computeOfflineProgress();  // v18：离线进度
     // v30 修瑕：离线逐日回放中寿元坐化时，不再闪一下游戏界面再弹回开始界面——坐化结算直接接住
     if (this.player && this.player.dead) { UI.renderStart(); return; }
+    // v32 修瑕（A3）：秘境「先清 choices 再开战」竞态残留自愈——战斗中刷新/关页后读档，
+    // 本层节点凭空消失只剩撤离（深入进度与门票沉没）。空 choices 且未卡死则重掷本层。
+    if (this.player && this.player.dungeon && !this.player.dungeon.stuck && !(this.player.dungeon.choices || []).length) {
+      DungeonSys.genChoices(this.player.dungeon);
+    }
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('game-screen').classList.remove('hidden');
     UI.renderAll();
@@ -323,7 +348,22 @@ const Game = {
     Save.autoSave();
     Achieve.check();   // v6：成就检查（解锁即发奖播报）
     try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
-    this.dailySettle(p);   // v27：日更系统统一收口（节庆/大比/共修/窥伺/登顶/洞府/图鉴）
+    // v32 修瑕（E27）：日更按日补结——原每行动只结一次 dailySettle：一次闭关 30 日只吃一次日更
+    // 收益，而离线逐日回放 30 次（挂机关页远优于在线闭关，放置激励倒挂）。此处按跨过的游戏日
+    // 虚拟逐日补结（auto 静默口径：不弹窗不刷屏，日界防重由各子项自带），与离线同源同量。
+    const settleToday = Math.floor(p.day || 0);
+    if (p._settleDay == null) p._settleDay = settleToday;
+    const crossed = Utils.clamp(settleToday - p._settleDay, 0, 30);
+    if (crossed > 0) {
+      const realDay = p.day;
+      for (let i = 1; i <= crossed; i++) {
+        p.day = settleToday - crossed + i;   // 虚拟逐日推进（不改真实时间轴）
+        try { this.dailySettle(p, true); } catch (err) { console.error('日更补结异常:', err); }
+      }
+      p.day = realDay;
+      p._settleDay = settleToday;
+    }
+    this.dailySettle(p);   // 当日例行（v27：日更系统统一收口：节庆/大比/共修/窥伺/登顶/洞府/图鉴）
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
     if (p.pendingDao && !p.dao && !p.dead && !Battle.active
       && (p.realmIdx >= 1 || p.reinc)) {
@@ -339,11 +379,13 @@ const Game = {
     Save.write('auto', p);   // 直接写盘：autoSave 会跳过已死亡角色，此处须落盘死亡标记
     Log.add('油尽灯枯，你的道途走到了尽头……', 'loss');
     // v29 天年：坐化不再是一堵墙——可兵解转世（寿满天年额外 +1 印记），就此终了亦可
-    const choice = await UI.popup({
+    // v32 修瑕（E49）：ESC/点遮罩关闭弹窗原回落 undefined → 走「就此终了」毁灭项——
+    //          寿满 +1 印记的转世机缘一次误触即没。关闭一律回落主选项「兵解转世」。
+    const choice = (await UI.popup({
       title: '✦ 坐 化 ✦',
       html: `寿元耗尽，天道无情。<br><br>${Utils.esc(p.name)}，${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}修士，享年 ${p.age} 岁。<br><br>肉身虽朽，神魂尚清——是散去修为、投胎再修一世，还是就此归于天地？<br><span class="tip-line">· 兵解转世：此世尽付东流，传承却得延续，且因<b>寿满天年</b>额外多得一枚轮回印记。</span>`,
       options: [{ text: '兵解转世', value: 'reinc', primary: true }, { text: '就此终了', value: 'end' }],
-    });
+    })) || 'reinc';
     if (choice === 'reinc') {
       const livesBefore = ReincarnationSys.readLegacy().lives || 0;
       p.dead = false;   // 暂解死亡封档，允许转世流程写盘
@@ -466,6 +508,7 @@ const Game = {
     'act-cultivate': () => Cultivate.normal(),
     'act-rest': () => Cultivate.rest(),
     'act-seclude': () => Cultivate.seclude(),
+    'act-wudao': () => Cultivate.wuDao(),   // v32（D5）：悟道——感悟的主动出口
     'act-breakthrough': () => Cultivate.breakthrough(),
     'act-ascend': () => Cultivate.ascend(),
     /* --- v31 仙界四阶 --- */
@@ -594,6 +637,7 @@ const Game = {
       if (B.auto && !B.busy) Battle.autoNext();
     },
     'bt-speed': () => { Battle.setSpeed(Battle.speed >= 3 ? 1 : Battle.speed + 1); },
+    'bt-ning': () => Battle.actNingshen(),   // v32（C7）：凝神——战意/真元互转与净化
     'bt-tame': () => { if (typeof BeastSys !== 'undefined' && BeastSys.tame) BeastSys.tame(); else UI.toast('此兽野性难驯'); },
     /* --- 大道 / 天劫 / 因果 / 百艺（增量扩展） --- */
     'act-dao-open': () => DaoSys.openModal(),
@@ -619,6 +663,8 @@ const Game = {
     'act-recast': (d) => ForgeSys.recast(d.slot),   // v30：器魂重铸
     'act-reroll': (d) => ForgeSys.reroll(d.slot),
     'act-forge': (d) => ForgeSys.forge(d.recipe),
+    'act-forge-frag': (d) => ForgeSys.forge(d.recipe, true),   // v32（E6）：器胚残片入炉
+    'act-set-refine': (d) => ForgeSys.refineSet(d.set),   // v32（E4）：套装炼化
     /* --- v13 洞府 / 灵兽 --- */
     'act-cave-up': () => CaveSys.upgrade(),
     'act-spirit-rush': () => CaveSys.spiritRush(),   // v20 聚灵加速
@@ -629,6 +675,7 @@ const Game = {
     'act-beast-active': (d) => BeastSys.setActive(Number(d.uid)),
     'act-beast-active2': (d) => BeastSys.setActive2(Number(d.uid)),
     'act-beast-pat': (d) => BeastSys.pat(Number(d.uid)),
+    'act-beast-tactic': (d) => BeastSys.cycleTactic(Number(d.uid)),   // v32（C4）：协战策略三选
     'act-beast-evolve': (d) => BeastSys.evolve(Number(d.uid)),
     'act-cave-build': (d) => CaveSys.upgradeBuild(d.b),
     'act-benming-feed': () => ForgeSys.feedBenming(),
@@ -672,6 +719,15 @@ const Game = {
     'act-event-skip': () => WorldSys.skipEvent(),
     /* --- v3 兵解转世 --- */
     'act-reincarnate': () => ReincarnationSys.open(),
+    // v32 修瑕（A6）：兵解之念可收回——原飞升弹窗误点「兵解」即无反悔口（仙阶卡被永久隐藏）
+    'act-reinc-dismiss': () => {
+      const p = Game.player;
+      if (!p || !p.canReincarnate) return;
+      p.canReincarnate = false;
+      Log.add('你收起兵解之念——此世道途未尽，仙阶之路仍在脚下。', 'system');
+      UI.toast('已收起兵解之念');
+      Game.afterAction();
+    },
     /* --- 弹窗 / 引导 --- */
     'pop-choice': (d) => UI.popupChoose(Number(d.i)),
     'tut-next': () => Tutorial.next(),

@@ -65,9 +65,9 @@ console.log('===== SA 源码静态组 =====');
   tower.includes('t.today.stones = 0;') ? pass('SA13 塔层奖额度换日清零（A8）') : fail('SA13 塔额度', '');
   sfx.includes("AUG_ENEMY: ['defdown', 'slow', 'weaken', 'vuln']") ? pass('SA14 破绽入敌方衰减表（A9）') : fail('SA14 vuln', '');
   tower.includes('Math.max(1, Math.round(1 + (mods.chest ? mods.chest - 1 : 0)))') ? pass('SA15 贪匣宝箱数取整（A10）') : fail('SA15 取整', '');
-  beast.includes('if (B.ctx && B.ctx.tower) { UI.toast(\'塔影乃气相所化') && battle.includes('!(B.ctx && B.ctx.tower) && typeof BeastSys') ? pass('SA16 塔影不可驯（A11）') : fail('SA16 塔驯服', '');
+  beast.includes('if (B.ctx && B.ctx.tower) { UI.toast(\'塔影乃气相所化') && battle.includes('B.ctx.tower || B.ctx.story || B.ctx.dungeon') ? pass('SA16 塔影/剧情/秘境皆不可驯（A11/v32 A2）') : fail('SA16 塔驯服', '');
   stat.includes('(eq.block || 0)') ? pass('SA17 格挡补读 eq.block（A12）') : fail('SA17 block', '');
-  forge.includes('if (d.score != null) return d.score;') && forge.includes('affixScore(part, id, grade = 0, ctx = null)') ? pass('SA18 后缀估值+品阶/面板折算（A13/A14/E42）') : fail('SA18 affixScore', '');
+  forge.includes('return d.score * starMul;') && forge.includes('affixScore(part, id, grade = 0, ctx = null, star = 0)') ? pass('SA18 后缀估值+品阶/面板/星折算（A13/A14/E42/v32 E3）') : fail('SA18 affixScore', '');
   gdata.includes("score: 20") ? pass('SA19 后缀 score+per 数据（A13）') : fail('SA19 后缀数据', '');
 
   /* ---- B 批修抽样 ---- */

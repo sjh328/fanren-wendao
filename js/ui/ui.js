@@ -53,7 +53,7 @@ const UI = {
           ${key === 'auto' ? `<button class="btn btn-sm btn-primary" data-action="st-load" data-slot="auto" ${canLoad ? '' : 'disabled'}>继 续</button>`
                            : `<button class="btn btn-sm" data-action="st-load" data-slot="${key}" ${canLoad ? '' : 'disabled'}>读 取</button>`}
           ${key !== 'auto' ? `<button class="btn btn-sm" data-action="st-newgame" data-slot="${key}">重 开</button>` : ''}
-          <button class="btn btn-sm btn-danger" data-action="st-delete" data-slot="${key}">删 除</button>`;
+          ${key !== 'auto' ? `<button class="btn btn-sm btn-danger" data-action="st-delete" data-slot="${key}">删 除</button>` : ''}`;   // v32 修瑕（E51）：auto 行隐藏删除钮（误删 auto 只剩 bak2 一层安全网；存档弹窗侧 v31 已隐藏）
       } else {
         meta = `<div class="slot-meta">尘缘未启，此地尚无一缕道痕。</div>`;
         btns = key === 'auto' ? '' : `<button class="btn btn-sm btn-primary" data-action="st-newgame" data-slot="${key}">开辟仙途</button>`;
@@ -70,6 +70,10 @@ const UI = {
         if (Save.storage.removeItem) Save.storage.removeItem(Save.KEY + 'lasterror'); else delete Save.mem['lasterror'];
       }
     } catch (e) { /* ignore */ }
+    // v32 修瑕（E48）：浏览器存储不可用警示——原静默降级内存档，关页即全失且无任何提示
+    if (!(Save.storage && Save.storage.getItem)) {
+      errTip += `<div class="tip-line" style="margin-top:6px;color:#a03a3a">⚠ 浏览器存储不可用（隐私模式或已禁用站点数据）——本次进度<b>不会被保存</b>，关闭页面即丢失。请更换浏览器或允许本站使用存储。</div>`;
+    }
     this.setHTML(this.el['start-slots'], slots + errTip);
   },
   renderCreate() {
@@ -91,7 +95,8 @@ const UI = {
     // v21：顶栏资源条——灵石三档 + 战力 + 主线章程，全局常驻一眼可读
     const stone = (nk, v) => `<span class="num-anim" data-nk="${nk}" data-fmt="fmt" data-nv="${v}">${Utils.fmtNum(v)}</span>`;
     // v28：中/上品在窄屏收起（乾坤袋家资行有全量），单行顶栏不再溢出裁切
-    const stoneChip = `<span class="res-chip res-stone" title="灵石 · 下品 / 中品 / 上品"><i class="rc-ico">◈</i>${stone('stones.low', p.stones.low)}`
+    const stoneTotal = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;   // v32（E8）：面额折算总额随手可见
+    const stoneChip = `<span class="res-chip res-stone" title="灵石 · 下品 / 中品 / 上品（折合下品 ${Utils.fmtNum(stoneTotal)}）"><i class="rc-ico">◈</i>${stone('stones.low', p.stones.low)}`
       + (p.stones.mid ? ` <i class="m-hide-inline">·</i> <span class="m-hide-inline">${stone('stones.mid', p.stones.mid)}</span>` : '')
       + (p.stones.high ? ` <i class="m-hide-inline">·</i> <span class="m-hide-inline">${stone('stones.high', p.stones.high)}</span>` : '') + `</span>`;
     const chIdx = QuestSys.currentChapterIdx(p);
@@ -179,13 +184,13 @@ const UI = {
         <span>根骨 <b>${p.attrs.gen}</b></span><span>悟性 <b>${p.attrs.comp}</b></span><span>福缘 <b>${p.attrs.luck}</b></span><span>体魄 <b>${p.attrs.body}</b></span>
       </div>
       <div class="stat-grid">
-        <div class="stat-line"><span>攻击</span><b class="stat-detail" data-stat="atk" title="点击查看构成" style="cursor:pointer">${st.atk} 🔍</b></div>
-        <div class="stat-line"><span>防御</span><b class="stat-detail" data-stat="def" title="点击查看构成" style="cursor:pointer">${st.def} 🔍</b></div>
-        <div class="stat-line"><span>身法</span><b class="stat-detail" data-stat="speed" title="点击查看构成" style="cursor:pointer">${st.speed} 🔍</b></div>
-        <div class="stat-line"><span>暴击</span><b class="stat-detail" data-stat="crit" title="点击查看构成" style="cursor:pointer">${st.crit.toFixed(0)}% 🔍</b></div>
-        <div class="stat-line"><span>闪避</span><b class="stat-detail" data-stat="dodge" title="点击查看构成" style="cursor:pointer">${st.dodge.toFixed(0)}% 🔍</b></div>
-        <div class="stat-line"><span>格挡</span><b class="stat-detail" data-stat="block" title="点击查看构成" style="cursor:pointer">${st.block.toFixed(0)}% 🔍</b></div>
-        <div class="stat-line"><span>气血构成</span><b class="stat-detail" data-stat="maxHp" title="点击查看构成" style="cursor:pointer">🔍 明细</b></div>
+        <div class="stat-line"><span>攻击</span><b class="stat-detail" data-action="stat-detail" data-stat="atk" title="点击查看构成" style="cursor:pointer">${st.atk} 🔍</b></div>
+        <div class="stat-line"><span>防御</span><b class="stat-detail" data-action="stat-detail" data-stat="def" title="点击查看构成" style="cursor:pointer">${st.def} 🔍</b></div>
+        <div class="stat-line"><span>身法</span><b class="stat-detail" data-action="stat-detail" data-stat="speed" title="点击查看构成" style="cursor:pointer">${st.speed} 🔍</b></div>
+        <div class="stat-line"><span>暴击</span><b class="stat-detail" data-action="stat-detail" data-stat="crit" title="点击查看构成" style="cursor:pointer">${st.crit.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>闪避</span><b class="stat-detail" data-action="stat-detail" data-stat="dodge" title="点击查看构成" style="cursor:pointer">${st.dodge.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>格挡</span><b class="stat-detail" data-action="stat-detail" data-stat="block" title="点击查看构成" style="cursor:pointer">${st.block.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>气血构成</span><b class="stat-detail" data-action="stat-detail" data-stat="maxHp" title="点击查看构成" style="cursor:pointer">🔍 明细</b></div>
         <div class="stat-line"><span>战力</span><b class="hl" title="综合战力：攻防血速暴闪格加权">武 ${Utils.fmtNum(Stat.power(p))}</b></div>
       </div>
       <div class="sec-title">道行状态</div>
@@ -353,11 +358,11 @@ const UI = {
       return `<button class="sheet-cell ${lock ? 'locked' : ''}" data-action="act-tab" data-tab="${c.t}" ${lock ? `data-lock="${lock}"` : ''}>
         <i class="tab-name">${c.name}</i>${lock ? '<i class="tab-lock" aria-hidden="true">🔒</i>' : ''}${dot ? '<span class="dot"></span>' : ''}</button>`;
     }).join('');
-    return `<div class="sheet-title">✦ 云游诸处</div>
+    return `<div class="sheet-title">✦ 云游诸处<button class="btn btn-sm sheet-close" data-action="act-more-close" aria-label="关闭面板" style="margin-left:auto">✕</button></div>
       <div class="sheet-mains">${mains}</div>
       <div class="sheet-sep"></div>
       <div class="sheet-quick">${quicks}</div>
-      <div class="sheet-tip">· 锁定之处随境界渐次开启</div>`;
+      <div class="sheet-tip">· 锁定之处随境界渐次开启</div>`;   // v32 修瑕（E54）：补显式关闭钮（act-more-close handler 原为零入口死代码）
   },
   /** v28：开合「更多」面板（与抽屉共用遮罩，互斥） */
   toggleMore(open) {
@@ -502,7 +507,9 @@ const UI = {
       </div>`;
     }
     // v31 仙界四阶：飞升之后开启——仙籍落名 → 三层以仙元晋 → 阶满引仙劫 → 大罗圆满证道祖
-    if (typeof XianSys !== 'undefined' && XianSys.unlocked(p) && !p.canReincarnate) {
+    // v32 修瑕（A6）：原 `&& !p.canReincarnate`——飞升庆功弹窗误点一次「兵解」，仙阶卡（v31 头号内容
+    // 的唯一入口）当世永久隐藏。仙阶卡与兵解卡自此并存，兵解卡另设「收起此念」复位按钮。
+    if (typeof XianSys !== 'undefined' && XianSys.unlocked(p)) {
       const xi = XianSys.cur(p);
       const layer = XianSys.layer(p);
       const yuan = XianSys.yuan(p);
@@ -539,7 +546,7 @@ const UI = {
         · 可保留<b>一件法宝</b>随身入轮回<br>
         · 得 1 枚<b>轮回印记</b>：永久 +1% 全属性上限，可叠加${marks ? `（已累计 ${marks} 枚）` : ''}<br>
         · 来世重择<b>出身与大道</b>；前世恩怨NPC将触发专属剧情</div>
-        <div class="action-row"><button class="btn btn-danger btn-glow" data-action="act-reincarnate">兵 解 转 世</button></div>
+        <div class="action-row"><button class="btn btn-danger btn-glow" data-action="act-reincarnate">兵 解 转 世</button><button class="btn" data-action="act-reinc-dismiss" title="收回兵解之念（不影响任何进度）">收起此念</button></div>
       </div>`;
     }
     // v21：仙途十境一览——来路与前程一图可读
@@ -591,6 +598,7 @@ const UI = {
           <div class="act-sub-row">
             <button class="btn" data-action="act-rest">打坐调息（1日）</button>
             <button class="btn" data-action="act-seclude">闭关（30日 · ${Utils.fmtNum(secludeCost)}灵石）</button>
+            <button class="btn" data-action="act-wudao" title="耗 20 点突破感悟炼作修为（飞升后炼作仙元），每日一次">悟 道（感悟 ${p.insight || 0}/100）</button>   <!-- v32（D5） -->
             ${(Bag.count('pill_liaoshang') || Bag.count('pill_huiling')) ? `<button class="btn" data-action="act-use-low-pills">一键服丹</button>` : ''}
             ${AutoCult.active
               ? `<button class="btn btn-danger" data-action="act-auto-stop">停止自动修炼（${AutoCult.rounds}轮）</button>`
@@ -633,7 +641,9 @@ const UI = {
     // v24 求签行内直签——无需再绕道游历·天下
     rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}` : '今日未求签', act: signed ? '' : 'act-sign', actText: '摇 签' });
     const rush = p.rushDay === today;
-    rows.push({ state: rush ? 'ok' : 'todo', label: '聚灵加速', stat: rush ? '已点燃 · 修炼 ×1.5' : '阵未点燃', go: p.cave ? 'cave:home' : '' });
+    // v32 修瑕（A10）：聚灵加速原在此只给「前往」跳转、洞府主楼卡又无点燃按钮——带确认弹窗的
+    // 正常交互流程（CaveSys.spiritRush）全工程不可达（与 v30 宗门死按钮同病灶）。改行内直燃。
+    rows.push({ state: rush ? 'ok' : 'todo', label: '聚灵加速', stat: rush ? '已点燃 · 修炼 ×1.5' : (p.cave ? `阵未点燃 · ${Utils.fmtNum(CaveSys.rushCost(p))} 灵石` : '洞府未辟'), act: (!rush && p.cave) ? 'act-spirit-rush' : '', actText: '点 燃' });
     const plots = (p.cave && p.cave.plots) || [];
     const ripe = plots.filter(pl => pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
     const growing = plots.filter(pl => pl && pl.seed).length;
@@ -677,6 +687,7 @@ const UI = {
     <div class="card">
       <div class="card-title">✦ 洞府 · ${lv} 层 ${maxed ? '<span class="tag safe">聚灵之极</span>' : ''}</div>
       <div class="card-desc">聚灵阵运转不息：修炼效率 <b class="hl">+${lv * 4}%</b> · 灵田 ${CaveSys.plotCount(p)}/8 块 · 兽栏 ${BeastSys.maxSlots(p)} 位。</div>
+      ${p.rushDay === Math.floor(p.day || 0) ? '' : `<div class="action-row"><button class="btn" data-action="act-spirit-rush" title="燃烧灵石为聚灵阵供能，今日修炼效率 ×1.5">⚡ 点燃聚灵阵（今日修炼 ×1.5 · ${Utils.fmtNum(CaveSys.rushCost(p))} 灵石）</button></div>`}
       ${maxed ? '' : `<div class="action-row"><button class="btn btn-primary" data-action="act-cave-up">扩建洞府（${Utils.fmtNum(c.stones)}灵石${matsTxt ? ' · ' + matsTxt : ''}）</button></div>`}
       ${CaveSys.dongtianRow ? CaveSys.dongtianRow(p) : ''}
     </div>`;
@@ -718,6 +729,7 @@ const UI = {
           ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
           <details class="fold npc-more"><summary>照管 ▾</summary><div class="gf-actions" style="margin-top:6px">
             <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
+            <button class="btn btn-sm" data-action="act-beast-tactic" data-uid="${b.uid}" title="切换协战策略：集火 / 控场 / 护主">策略·${BeastSys.TACTICS[b.tactic || 'focus']}</button>   <!-- v32（C4） -->
             ${!b.trip ? `<button class="btn btn-sm" data-action="act-beast-dispatch" data-uid="${b.uid}" title="外出寻宝，数日后带回灵材">派 遣</button>` : ''}
             <button class="btn btn-sm btn-danger" data-action="act-beast-free" data-uid="${b.uid}">放归</button>
           </div></details>
@@ -747,7 +759,7 @@ const UI = {
     const beastCard = `
     <div class="card">
       <div class="card-title">✦ 兽栏 <span class="tag">${beasts.length}/${BeastSys.maxSlots(p)} 位</span>
-        <button class="btn btn-sm" data-action="act-arena" style="margin-left:auto" title="押注观战，胜得 1.8 倍彩头">⚔ 斗兽场</button></div>
+        <button class="btn btn-sm" data-action="act-arena" style="margin-left:auto" title="押注观战，胜得 1.6 倍彩头">⚔ 斗兽场</button></div>   <!-- v32 修瑕（E63）：文案 1.8 倍与实发 1.6 倍不符 -->
       <div class="card-desc">战斗中将可驯妖兽打至<b>两成血以下</b>，可尝试驯服。出战灵兽每回合四成几率协助攻击，并给主人一项被动加成。喂食【妖兽内丹】可升阶；派遣外出可寻回灵材。</div>
       ${beastRows || '<div class="tip-line">兽栏空空——去荒野驯一头灵兽回来罢。</div>'}
     </div>`;
@@ -1201,18 +1213,23 @@ const UI = {
         </div>
         <div class="gf-actions"><button class="btn btn-sm btn-primary" data-action="act-draw">画符（${Utils.fmtNum(Math.round(CraftSys.drawCost(p) * (1 + Math.min(4, (p._drawCount || 0) * 0.75))))}灵石）</button></div>
       </div>` : '';
-    // v13 炼器坊
+    // v13 炼器坊（v32 修瑕 E19：按钮门槛与成器率显示与 ForgeSys.forge 同口径——原按全量材料
+    // disable（持 6 残片+半料时机制不可达）、成器率不含炼器室 +4%/阶，两头与实发不同步）
     const forgeRows = GameData.FORGE_RECIPES.map(r => {
       const out = GameData.ITEMS[r.out];
-      const mats = Object.entries(r.need).map(([id, n]) => `${GameData.ITEMS[id].name} ${Bag.count(id)}/${n}`).join('、');
-      const can = Object.entries(r.need).every(([id, n]) => Bag.count(id) >= n);
+      const useFrag = Bag.count('m_qipei') >= 6;
+      const needEff = useFrag ? Object.fromEntries(Object.entries(r.need).map(([id, n]) => [id, Math.max(1, Math.ceil(n / 2))])) : r.need;
+      const mats = Object.entries(needEff).map(([id, n]) => `${GameData.ITEMS[id].name} ${Bag.count(id)}/${n}`).join('、');
+      const can = Object.entries(needEff).every(([id, n]) => Bag.count(id) >= n);
+      const forgeLv = ((p.cave && p.cave.builds && p.cave.builds.forge) || 0);
+      const rateEff = Math.min(95, r.rate + forgeLv * 4);
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${this.gradeSpan(out.name, out.grade)}${out.set ? ' <span class="tag warn">套装件</span>' : ''}（成器率 ${r.rate}%）</div>
+          <div class="gf-name">${this.gradeSpan(out.name, out.grade)}${out.set ? ' <span class="tag warn">套装件</span>' : ''}（成器率 ${rateEff}%${forgeLv ? `，含炼器室 +${forgeLv * 4}%` : ''}${useFrag ? ' · 残片折半' : ''}）</div>
           <div class="gf-desc">${out.desc}<br>需 ${mats}</div>
         </div>
-        <div class="gf-actions"><button class="btn btn-sm" data-action="act-forge" data-recipe="${r.id}" ${can ? '' : 'disabled'}>锻 造</button></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-forge" data-recipe="${r.id}" ${can ? '' : 'disabled'}>锻 造</button>${Bag.count('m_qipei') >= 6 ? `<button class="btn btn-sm btn-primary" data-action="act-forge-frag" data-recipe="${r.id}" title="耗 6 片残片入炉（材料不减）：成器率 +10%，成器必带一条后缀">残片入炉</button>` : ''}</div>   <!-- v32（E6） -->
       </div>`;
     }).join('');
     const forgeSection = `
@@ -1272,8 +1289,23 @@ const UI = {
     }).join('');
     const affixSection = `
       <div class="shop-section-title">◈ 词缀洗练 / 器魂重铸 <span class="tag warn">器魂 ${p.qihun || 0}</span></div>
-      <div class="tip-line">· 重铸双缀同洗且保底不降；洗练可选锁定一侧（双倍价）。器魂由分解法宝所得。</div>
+      <div class="tip-line">· 重铸双缀同洗且保底不降（阶梯价 8→14→20）；洗练可选锁定一侧（双倍价）；洗出同词缀有 15% 概率升星（每星实值 +4%）。器魂由分解法宝所得。</div>
       ${affixSlots || '<div class="tip-line">先装备法宝，方能洗练词缀。</div>'}`;
+    // v32（E4）套装炼化：成套/两件套可升阶（每阶套效 +2%）；2+2 跨套另有小共鸣
+    const wornIds = Object.values(p.equipped).filter(Boolean).map(e => (typeof e === 'string' ? e : e.id));
+    const setForgeRows = Object.entries(GameData.SETS || {}).map(([sid, sdef]) => {
+      const n = sdef.pieces.filter(x => wornIds.includes(x)).length;
+      if (n < 2) return '';
+      const lv = ((p.setForge || {})[sid]) || 0;
+      return `<div class="shop-row">
+        <div class="gf-info"><div class="gf-name">${sdef.name} <span class="tag">${n}/${sdef.pieces.length} 件</span>${lv ? `<span class="tag warn">炼化 ${lv} 阶</span>` : ''}</div>
+        <div class="gf-desc">${sdef.text || sdef.desc || ''}${lv ? `（套效 +${lv * 2}%）` : ''}</div></div>
+        <div class="gf-actions"><button class="btn btn-sm" data-action="act-set-refine" data-set="${sid}" ${lv >= 3 ? 'disabled' : ''}>${lv >= 3 ? '三阶圆满' : '炼 化'}</button></div>
+      </div>`;
+    }).join('');
+    const setForgeSection = setForgeRows ? `
+      <div id="set-forge-sec"><div class="shop-section-title">◈ 套装炼化（两件即可炼化；每阶套效 +2%；两套各两件另有攻防 +3% 跨套共鸣）</div>
+      ${setForgeRows}</div>` : '';
     // v19 本命法宝喂养
     const benmingSection = ForgeSys.benmingOwn(p) ? `
       <div class="shop-section-title">◈ 本命法宝 · 喂养（每阶全属性 +1%，至十阶）</div>
@@ -1294,10 +1326,11 @@ const UI = {
       const oreBack = (def.grade || 0) + 1 + enh;
       const GRADE_FALLBACK = [300, 800, 2000, 6000, 16000, 40000];
       const baseVal = (def.price || 0) > 0 ? def.price : (GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500);
+      const qihunGain = 2 + (def.grade || 0) * 2 + enh;   // v32 修瑕（E21）：熔铸面板补器魂产出行（原只有弹窗有，无法就地比价）
       return `
       <div class="shop-row">
         <div class="gf-info"><div class="gf-name">${this.gradeSpan(def.name, def.grade)} <span style="color:var(--text-faint)">×${n}</span>${enh ? ` <span class="tag tpl">心得 +${enh}</span>` : ''}</div>
-        <div class="gf-desc">可回炉得玄铁矿 ×${oreBack}/件、灵石 ${Utils.fmtNum(Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2))))}/件${(def.price || 0) <= 0 ? '（稀有物按品阶兜底计价）' : ''}${enh ? '（含祭炼心得回炉）' : ''}。</div></div>
+        <div class="gf-desc">可回炉得玄铁矿 ×${oreBack}/件、灵石 ${Utils.fmtNum(Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2))))}/件、<b>器魂 ×${qihunGain}/件</b>${(def.price || 0) <= 0 ? '（稀有物按品阶兜底计价）' : ''}${enh ? '（含祭炼心得回炉）' : ''}。</div></div>
         <div class="gf-actions"><button class="btn btn-sm" data-action="act-salvage" data-item="${id}">分 解</button></div>
       </div>`;
     }).join('');
@@ -1308,6 +1341,7 @@ const UI = {
       <div class="shop-section-title">◈ 祭炼强化（+1~+15：平铺+10%/级 · 百分比+2%/级 · 功能+1%/级；+8 起失败积祝福值，满百必成）</div>
       ${enhSlots || '<div class="tip-line">先在乾坤袋中装备法宝，方可祭炼强化。</div>'}
       ${affixSection}
+      ${setForgeSection}
       ${benmingSection}
       ${salvageSection}`;
     return `
@@ -1325,14 +1359,21 @@ const UI = {
     const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
     // v27 联动：声望赏格已真实入账——展示值同步按 ×声望 ×连锁 预览
     const repTag = repBonus > 1 ? ` <span class="tag safe" title="声望加成：${Math.round((repBonus - 1) * 100)}%">声望赏格 ×${repBonus}</span>` : '';
+    // v32 修瑕（E39）：预览走实发同源口径——原用旧连锁公式 1+chain*0.6（连锁Ⅲ预览 ×2.8、实发 ×3）
+    // 且漏长老令演武 ×1.5 与收集悬赏兜底，v31 只修了实发半边
+    const CHAIN_MUL = [1, 1.6, 2.2, 3];
+    const drillOn = typeof SectSys !== 'undefined' && SectSys.commandActive && SectSys.commandActive(p, 'drill');
     const show = t => {
-      const chain = t && t.chain ? 1 + t.chain * 0.6 : 1;
-      return { stones: Math.round(Math.round(r.stones * repBonus) * chain), contrib: Math.round(Math.round(r.contrib * repBonus) * chain) };
+      const chain = t && t.chain ? (CHAIN_MUL[t.chain] || 1) : 1;
+      const drill = drillOn ? 1.5 : 1;
+      let base = r.stones;
+      if (t && t.type === 'collect') base = Math.max(base, Math.round(ShopSys.sellPrice(t.target) * t.need));   // 收集悬赏兜底与 claim 同式
+      return { stones: Math.round(Math.round(Math.round(base * repBonus) * drill) * chain), contrib: Math.round(Math.round(Math.round(r.contrib * repBonus) * drill) * chain) };
     };
     const bountyRows = B.list.map((t, i) => {
       if (!t) return `
       <div class="shop-row">
-        <div class="gf-info"><div class="gf-name">（此悬赏已交付）</div><div class="gf-desc">明日将有新悬赏贴出。</div></div>
+        <div class="gf-info"><div class="gf-name">（此悬赏已交付）</div><div class="gf-desc">悬赏板三日后换新，届时自有新榜。</div></div>
       </div>`;
       const done = t.progress >= t.need;
       const rv = show(t);
@@ -1353,12 +1394,12 @@ const UI = {
       </div>`;
     }).join('');
     const bountySection = `
-      <div class="shop-section-title">◈ 悬赏任务板 <span class="tag">第 ${B.day + 1} 日贴出 · 存续两日</span></div>
+      <div class="shop-section-title">◈ 悬赏任务板 <span class="tag">第 ${B.day + 1} 日贴出 · 存续三日</span></div>
       ${bountyRows}`;
     return `
       <div class="card">
         <div class="card-title">✦ 悬赏使命 <span style="font-size:12px;color:var(--text-dim)">接榜 · 践诺 · 领赏</span></div>
-        <div class="tip-line" style="margin:0 0 6px">· 悬赏两日一换，达成后记得及时领赏；猎杀类目标游历时自动计入。</div>
+        <div class="tip-line" style="margin:0 0 6px">· 悬赏三日一换，达成后记得及时领赏；猎杀类目标游历时自动计入。</div>
         ${bountySection}
       </div>`;
   },
@@ -1697,7 +1738,9 @@ const UI = {
       { id: 'artifact', name: '法宝' }, { id: 'material', name: '材料' },
       { id: 'talisman', name: '符箓' }, { id: 'all', name: '全部' },
     ];
-    const items = Object.keys(p.bag).filter(id => Game.bagTab === 'all' || GameData.ITEMS[id].type === Game.bagTab);
+    const items = Object.keys(p.bag).filter(id => GameData.ITEMS[id] && (Game.bagTab === 'all' || GameData.ITEMS[id].type === Game.bagTab));   // v32 修瑕（E23）：脏档残留已下架 id 判空跳过（原直接解引用 type 整页崩）
+    // v32（E56）：背包分类补「种子」档（type='seed' 原只能去「全部」翻找）
+    if (!types.some(t => t.id === 'seed')) types.splice(4, 0, { id: 'seed', name: '种子' });
     // v4：按品质降序；v20：排序选项（品质/类型/名字）
     const dI = id => GameData.ITEMS[id];
     if (Game.bagSort === 'type') items.sort((a, b) => dI(a).type.localeCompare(dI(b).type) || (dI(b).grade ?? dI(b).tier ?? 0) - (dI(a).grade ?? dI(a).tier ?? 0) || dI(a).name.localeCompare(dI(b).name));
@@ -2020,8 +2063,11 @@ const UI = {
   async exportSave() {
     if (!Game.player) { UI.toast('当前没有进行中的存档'); return; }
     const payload = { v: 1, player: Game.player, ext: Meta.data };
+    // v32（G4）导出信封升级：格式头 + 版本 + 创建时间 + 角色名 + 校验和——旧裸格式仍可导入（双格式兼容）
+    const body = JSON.stringify(payload);
+    const env = { fmt: 'FRWD2', v: 2, ts: Date.now(), who: Game.player.name || '', sum: Utils.hashStr(body), body };
     let code = '';
-    try { code = btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); } catch (e) { UI.toast('导出失败', true); return; }
+    try { code = btoa(unescape(encodeURIComponent(JSON.stringify(env)))); } catch (e) { UI.toast('导出失败', true); return; }
     // v30：同时提供文件下载（新设备/归档更省事），文本码通道保留
     try {
       const blob = new Blob([code], { type: 'text/plain' });
@@ -2059,6 +2105,13 @@ const UI = {
     try {
       data = JSON.parse(decodeURIComponent(escape(atob(raw))));
     } catch (e) { data = null; }
+    // v32（G4）：v2 信封——校验和不过即拒（复制不完整/被改动）；旧 v1 裸格式兼容导入
+    if (data && data.fmt === 'FRWD2' && data.v === 2) {
+      if (Utils.hashStr(data.body || '') !== data.sum) { UI.toast('文本码校验不符——复制不完整或已被改动', true); return; }
+      try { data = JSON.parse(data.body); } catch (e) { data = null; }
+    } else if (data && data.fmt) {
+      data = null;   // 未知格式头，拒绝盲读
+    }
     if (!data || data.v !== 1 || !data.player || !data.player.name) { UI.toast('文本码无法识别', true); return; }
     const p = PlayerFactory.migrate(data.player);
     const slots = [1, 2, 3].map(k => {

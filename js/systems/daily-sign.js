@@ -31,16 +31,26 @@ const DailySign = {
     // v28 联动：气运压低凶签比重（福缘深厚者，凶签渐远）——好事权重不变，只除凶签
     const gm = (typeof KarmaSys !== 'undefined' && KarmaSys.goodEventMult) ? KarmaSys.goodEventMult(p) : 1;
     const wOf = x => (x.id === 'mishap' ? x.w / gm : x.w);
-    const total = pools.reduce((s, x) => s + wOf(x), 0);
-    let r = Math.random() * total, item = pools[pools.length - 1];
-    for (const x of pools) { r -= wOf(x); if (r <= 0) { item = x; break; } }
+    // v32（F5）连签阶梯：连续求签每七日必得上上签，且当日额外气运 +3——黄历自开局仪式感变长线日常
+    p.signStreak = (p.signDay === today - 1) ? (p.signStreak || 0) + 1 : 1;
+    const streakDay = ((p.signStreak - 1) % 7) + 1;
+    let item;
+    if (streakDay === 7) {
+      item = pools.find(x => x.id === 'luck');
+      if (typeof KarmaSys !== 'undefined') KarmaSys.addFortune(3);
+    } else {
+      const total = pools.reduce((s, x) => s + wOf(x), 0);
+      let r = Math.random() * total;
+      item = pools[pools.length - 1];
+      for (const x of pools) { r -= wOf(x); if (r <= 0) { item = x; break; } }
+    }
     const effect = item.apply(p);
     p.signDay = today;
     p.counters.signs = (p.counters.signs || 0) + 1;   // v24 章助缘计数
     if (typeof SectSys !== 'undefined' && SectSys.onSign) SectSys.onSign();   // v30：宗门问签差事钩子
     p.signText = item.text;
     p.signDesc = item.desc;
-    Log.add(`【黄历】你诚心摇签，得一支<b>${item.text}</b>——${item.desc}（${effect}）`, item.id === 'mishap' ? 'warn' : 'gain');
+    Log.add(`【黄历${p.signStreak > 1 ? ` · 连签第 ${p.signStreak} 日${streakDay === 7 ? ' · 七日满签，气运 +3' : ''}` : ''}】你诚心摇签，得一支<b>${item.text}</b>——${item.desc}（${effect}）`, item.id === 'mishap' ? 'warn' : 'gain');
     Game.afterAction();
   },
 };

@@ -31,6 +31,9 @@ const Story = {
       modal.innerHTML = '<div class="story-box" id="story-box"></div>';
       document.getElementById('app').appendChild(modal);
     }
+    modal.setAttribute('role', 'dialog');   // v32（G5）：剧情弹层无障碍标注（与静态四弹层同批）
+    modal.setAttribute('aria-modal', 'true');
+    modal.setAttribute('aria-label', '剧情');
     modal.classList.remove('hidden');
     // v25 移动端沉浸化：剧情播放期间隐藏底部导航/顶栏（CSS body.story-playing），桌面无感
     if (typeof UI !== 'undefined' && UI.storyImmersive) UI.storyImmersive(true);
@@ -167,6 +170,26 @@ const Story = {
     }
     if (sc.bark) enemy._storyBark = sc.bark;
     this._battling = true;
+    // v32（F2）决战誓约：沈青崖（借剑）/姬冰颜（布阵）/老酒鬼（掌船）个人线终章的承诺，
+    // 在主线战斗中兑现——各 +12% 金光护体三回合，叙事承诺自此有机制回响
+    {
+      const pr = Game.player.personal || {};
+      const done = id => (pr[id] || 0) >= 3;
+      const vows = [];
+      if (done('n1')) vows.push('沈青崖以剑相托');
+      if (done('n17')) vows.push('姬冰颜星阵相护');
+      if (done('n23')) vows.push('老酒鬼掌船相渡');
+      if (vows.length) {
+        const shieldPct = 12 * vows.length;
+        setTimeout(() => {
+          if (Battle.active && !Battle.active.over) {
+            StatusFx.add(Battle.active.myFx, { kind: 'shield', pct: shieldPct, rounds: 3 });
+            Battle.log(`【决战誓约】${vows.join('、')}——故人未忘旧诺，此战你身负 ${shieldPct}% 金光护体（3 回合）。`, 'log-gain');
+            Battle.render();
+          }
+        }, 50);
+      }
+    }
     // v21：剧情暂隐让位战斗（战斗弹窗 z100 低于剧情 z135，不隐藏会盖住战斗操作）
     const sm = document.getElementById('story-modal');
     if (sm) sm.classList.add('hidden');

@@ -18,6 +18,10 @@ const FestivalSys = {
     p.flags = p.flags || {};
     const key = 'fest_' + f.id + '_' + year;
     if (p.flags[key]) return;
+    // v32 修瑕（E61/A3）：战斗或弹窗进行中挂起（不置旗标，收尾链下次 afterAction 再试）——
+    // 原 fire 可在任意行动后异步插入：节庆弹窗单例会强制释放玩家正在看的弹窗（按取消结算）、
+    // 年兽开战与秘境/世界事件开战互斥（Battle.start 对 active 静默丢弃，后到者连旗标带机缘一并蒸发）
+    if (!auto && (Battle.active || UI._popupResolve)) return;
     p.flags[key] = true;
     this.fire(p, f, auto);
   },

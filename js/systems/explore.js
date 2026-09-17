@@ -133,15 +133,23 @@ const Explore = {
     Game.afterAction();
   },
 
-  /** v23 连续探索：最多 times 次历练，遇战斗/剧情/弹窗/天下大事自动暂停（处置后可续点） */
+  /** v23 连续探索：最多 times 次历练，遇战斗/剧情/弹窗/天下大事自动暂停（处置后可续点）
+   *  v32 修瑕（E55）：模块级 in-flight 防重入——按钮级 _busy 随重渲染失效，循环 await 期间
+   *  再点连探可两轮交错执行 */
   async goMulti(mapId, times = 5) {
+    if (this._going) { UI.toast('上一轮历练尚未走完'); return; }
     const p = Game.player;
     if (!p || p.dead) return;
-    for (let i = 0; i < times; i++) {
-      if (Battle.active || p.dead) break;
-      if (p.world && p.world.pending) { UI.toast('天下大势正待抉择——先定乾坤，再行历练'); break; }
-      await this.go(mapId);
-      if (Battle.active || Story.active() || UI._popupResolve || p.dead) break;   // 战斗/剧情/弹窗即停
+    this._going = true;
+    try {
+      for (let i = 0; i < times; i++) {
+        if (Battle.active || p.dead) break;
+        if (p.world && p.world.pending) { UI.toast('天下大势正待抉择——先定乾坤，再行历练'); break; }
+        await this.go(mapId);
+        if (Battle.active || Story.active() || UI._popupResolve || p.dead) break;   // 战斗/剧情/弹窗即停
+      }
+    } finally {
+      this._going = false;
     }
     UI.renderAll();
     Save.autoSave();
@@ -154,10 +162,15 @@ const EventSys = {
     const p = Game.player;
     return map && map.id === 'ruins' && p.dao === 'array' ? 1.2 : 1;
   },
+  /** v32 修瑕（E65）：探索事件经济口径——原全按玩家境界 eco 计（真仙扫新手村零风险拿满额
+   *  宝箱/机缘，与「愈深愈险愈丰」的地图梯度相悖）。改 max(地图推荐境, 玩家-2)：
+   *  低图收入随图梯度封顶（仍保留两境内的余惠），matching 地图玩家不受影响。 */
+  ecoRealm(p, map) { return Math.max((map && map.recRealm) || 0, (p.realmIdx || 0) - 2); },
   treasure(map) {
     const p = Game.player;
     if (NpcSys.rivalSnatch(p)) return;   // v20 宿敌截胡
     const st = Stat.compute(p);
+    const er = this.ecoRealm(p, map);   // v32（E65）
     Log.add('你拨开蔓草，发现了一只落满尘土的储物箱！', 'event');
     Narrative.logScene('treasure');   // v5：道途语气
     if (Utils.chance(22)) {
@@ -166,13 +179,13 @@ const EventSys = {
       Log.add(`箱底暗藏毒针！你躲避不及，气血 -${dmg}。`, 'loss');
       return;
     }
-    const stones = Math.round(Utils.rand(12, 22) * GameData.stoneEco(p.realmIdx) * (1 + st.luck * 0.02) * this.arrMult(map));
+    const stones = Math.round(Utils.rand(12, 22) * GameData.stoneEco(er) * (1 + st.luck * 0.02) * this.arrMult(map));
     if (this.arrMult(map) > 1) Log.add('阵道造诣令你于遗迹中如鱼得水，所获更丰！', 'gain');
     Bag.addStones(stones);
     let text = `箱中有灵石 ${Utils.fmtNum(stones)} 枚`;
     if (Utils.chance(45 + st.luck * 2)) {
       const qty = Utils.chance(20) ? 2 : 1;
-      const mat = Utils.pick(GameData.matsByTier(Math.min(4, Math.floor(p.realmIdx / 2) + 1)));
+      const mat = Utils.pick(GameData.matsByTier(Math.min(4, Math.floor(er / 2) + 1)));
       Bag.addItem(mat, qty);
       text += `、${GameData.ITEMS[mat].name} ×${qty}`;
     }
@@ -191,9 +204,13 @@ const EventSys = {
       Log.add(`冥冥牵引之下，你寻到一处依稀熟悉的洞府——那是<b>前世</b>你埋藏机缘之地！修为 +${Utils.fmtNum(gain)}、上古法宝碎片 ×1、突破感悟 +8。`, 'gain');
       return;
     }
-    const eco = GameData.eco(p.realmIdx);
+    const er = this.ecoRealm(p, map);   // v32 修瑕（E65）：机缘经济随图梯度封顶（前世洞府机缘除外——那是轮回主题）
+    const eco = GameData.eco(er);
     const arr = this.arrMult(map);
-    const kind = Utils.pickWeighted({ lingmai: 30, wudao: 20, yifu: 20, lingru: 15, shenquan: 8, tiancai: 7 });
+    // v32（F6）事件池轻扩：兽潮期间「战场拾遗」——世界事件与探索互文（兽潮掉肉/皮，权重随兽潮现世）
+    const yr = Math.floor((p.day || 0) / 365) + 1;
+    const beastOn = p.world && (p.world.beastMaps || []).some(b2 => b2.until >= yr);
+    const kind = Utils.pickWeighted(Object.assign({ lingmai: 30, wudao: 20, yifu: 20, lingru: 15, shenquan: 8, tiancai: 7 }, beastOn ? { beastpick: 12 } : {}));
     switch (kind) {
       case 'lingmai': {
         const gain = Math.round(90 * eco);
@@ -209,11 +226,19 @@ const EventSys = {
         break;
       }
       case 'yifu': {
-        const stones = Math.round(25 * GameData.stoneEco(p.realmIdx) * arr);
+        const stones = Math.round(25 * GameData.stoneEco(er) * arr);
         Bag.addStones(stones);
-        const mat = Utils.pick(GameData.matsByTier(Math.min(4, Math.floor(p.realmIdx / 2) + 1)));
+        const mat = Utils.pick(GameData.matsByTier(Math.min(4, Math.floor(er / 2) + 1)));
         Bag.addItem(mat, 1);
         Log.add(`你寻得一处无名遗府，残存的储物袋中有灵石 ${Utils.fmtNum(stones)}、${GameData.ITEMS[mat].name} ×1。`, 'gain');
+        break;
+      }
+      case 'beastpick': {
+        const g2 = Math.round(40 * GameData.stoneEco(er));
+        Bag.addStones(g2);
+        const mat2 = Utils.pick(GameData.matsByTier(1));
+        Bag.addItem(mat2, 2);
+        Log.add(`兽潮过境的山道上遗落了不少猎获——你捡获灵石 ${Utils.fmtNum(g2)} 与【${GameData.ITEMS[mat2].name}】×2。`, 'gain');
         break;
       }
       case 'lingru': {
@@ -237,7 +262,7 @@ const EventSys = {
         break;
       }
       default: {
-        const tier = Math.min(4, Math.floor(p.realmIdx / 2) + 2);
+        const tier = Math.min(4, Math.floor(er / 2) + 2);   // v32 修瑕（E65）：随图梯度封顶
         const mat = Utils.pick(GameData.matsByTier(tier));
         Bag.addItem(mat, 2);
         Log.add(`你发现了一株罕见的天材地宝——${GameData.ITEMS[mat].name} ×2！`, 'gain');
@@ -258,7 +283,7 @@ const EventSys = {
   async dilemma() {
     const p = Game.player;
     p.counters.dilemmas = (p.counters.dilemmas || 0) + 1;   // v11 剧情计数
-    const eco = GameData.stoneEco(p.realmIdx);
+    const eco = GameData.stoneEco(this.ecoRealm(p, null));   // v32 修瑕（E65）：红尘劫收支同随图梯度封顶
     const sc = Utils.pick(GameData.DILEMMAS);
     Log.add(`【红尘劫】${sc.text}`, 'event');
     const choice = await UI.popup({

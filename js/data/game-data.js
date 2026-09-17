@@ -432,10 +432,10 @@ const GameData = {
     m_lingjiang: { name: '灵墟守将',     power: 37, hp: 1.4,  def: 1.4,  spd: 0.7, species: 'construct', skills: [{ name: '仙光壁垒', w: 30, kind: 'guard', def: 60, rounds: 2 }, { name: '镇墟锤', w: 25, kind: 'stun', rounds: 1 }] },
     m_leixiao:   { name: '雷霄独角兽',   power: 38, hp: 1.2,  atk: 1.3,  species: 'beast', skills: [{ name: '雷角冲撞', w: 30, kind: 'burn', pct: 5, rounds: 2 }, { name: '雷网缠身', w: 25, kind: 'stun', rounds: 1 }] },
     m_leimen:    { name: '九霄雷灵',     power: 40, hp: 1.15, atk: 1.35, spd: 1.35, dodge: 8, species: 'element', skills: [{ name: '紫霄雷落', w: 35, kind: 'burn', pct: 6, rounds: 3 }, { name: '雷劫临身', w: 25, kind: 'weaken', pct: 35, rounds: 2 }] },
-    m_tianlong:  { name: '应龙残魄',     power: 42, hp: 1.35, atk: 1.4,  elite: true, rareDrop: 'w_lingjie', species: 'snake', skills: [{ name: '龙息焚天', w: 30, kind: 'burn', pct: 6, rounds: 3 }, { name: '龙威震荡', w: 25, kind: 'stun', rounds: 1 }, { name: '逆鳞反噬', w: 20, kind: 'defdown', pct: 40, rounds: 2 }] },
+    m_tianlong:  { name: '应龙残魄',     power: 42, hp: 1.35, atk: 1.4,  elite: true, rareDrop: 'w_lingjie', rareDrop2: 's_xy_jian', species: 'snake', skills: [{ name: '龙息焚天', w: 30, kind: 'burn', pct: 6, rounds: 3 }, { name: '龙威震荡', w: 25, kind: 'stun', rounds: 1 }, { name: '逆鳞反噬', w: 20, kind: 'defdown', pct: 40, rounds: 2 }] },
     m_lingxue:   { name: '灵墟雪猿',     power: 39, hp: 1.3,  atk: 1.2,  species: 'beast', skills: [{ name: '寒冰拳', w: 30, kind: 'slow', pct: 35, rounds: 2 }, { name: '咆哮', w: 25, kind: 'roar', atk: 35, rounds: 2 }] },
     m_tianle:    { name: '九霄雷兽',     power: 41, hp: 1.25, atk: 1.35, species: 'beast', skills: [{ name: '雷牙撕裂', w: 30, kind: 'bleed', pct: 5, rounds: 2 }, { name: '雷暴', w: 25, kind: 'burn', pct: 5, rounds: 2 }] },
-    m_xianzun:   { name: '仙尊残念',     power: 44, hp: 1.3,  atk: 1.45, dodge: 6, elite: true, rareDrop: 'z_xianyao', species: 'ghost', skills: [{ name: '一念断生', w: 30, kind: 'weaken', pct: 40, rounds: 2 }, { name: '夺魄', w: 25, kind: 'drain', mult: 1.4, leech: 0.6 }] },
+    m_xianzun:   { name: '仙尊残念',     power: 44, hp: 1.3,  atk: 1.45, dodge: 6, elite: true, rareDrop: 'z_xianyao', rareDrop2: 's_xy_ling', species: 'ghost', skills: [{ name: '一念断生', w: 30, kind: 'weaken', pct: 40, rounds: 2 }, { name: '夺魄', w: 25, kind: 'drain', mult: 1.4, leech: 0.6 }] },
     m_leishen:   { name: '雷狱主宰',     power: 46, hp: 1.5,  atk: 1.5,  elite: true, rareDrop: 'gf_leishen', species: 'construct', skills: [{ name: '灭世雷罚', w: 30, kind: 'cursed', pct: 8, rounds: 3 }, { name: '雷狱封锁', w: 25, kind: 'stun', rounds: 1 }] },
     /* ---- v20 夜行妖兽（仅夜间出没） ---- */
     m_yexiao:    { name: '夜啼枭',       power: 4,  hp: 0.95, atk: 1.1,  spd: 1.2, dodge: 8, night: true, species: 'beast', skills: [{ name: '无声俯袭', w: 40, kind: 'slow', pct: 20, rounds: 2 }] },
@@ -702,12 +702,12 @@ const GameData = {
       { id: 'up3', name: '洪炉·炼狱', cost: 6, mult: 3.0, burn: { pct: 9, rounds: 3 }, desc: '身化洪炉，焚尽八荒（3.0×+重灼烧）' },
     ],
     talisman: [
-      { id: 'ut1', name: '符阵·雷狱', cost: 3, mult: 2.8, freeze: 25, desc: '雷符成狱，三成冻结（2.8×）' },
+      { id: 'ut1', name: '符阵·雷狱', cost: 3, mult: 2.8, freeze: 25, desc: '雷符成狱，25% 冻结（2.8×）' },   // v32 修瑕（E11）：文案「三成」与实发 25 不符
       { id: 'ut2', name: '双符·齐发', cost: 4, mult: 1.8, hits: 2, desc: '双符并出，两段连击（1.8××2）' },
       { id: 'ut3', name: '天笔·紫雷', cost: 6, mult: 4.2, desc: '一笔开天门，紫雷落九霄（4.2×）' },
     ],
     body: [
-      { id: 'ub1', name: '崩山·震', cost: 3, mult: 2.5, stun: 25, desc: '一崩山河震，三成震缚（2.5×）' },
+      { id: 'ub1', name: '崩山·震', cost: 3, mult: 2.5, stun: 25, desc: '一崩山河震，25% 震缚（2.5×）' },   // v32 修瑕（E11）：文案对齐实发
       { id: 'ub2', name: '金身·不坏', cost: 4, guard: 40, rounds: 3, desc: '金身罩体，减伤四成三回合' },
       { id: 'ub3', name: '般若·狮吼', cost: 6, mult: 3.5, stun: 40, desc: '狮吼破胆，四成震缚（3.5×）' },
     ],
@@ -968,16 +968,16 @@ const GameData = {
   DUNGEON_TOTAL_LAYERS: 9,
   DUNGEON_NODE_NAMES: { battle: '战斗', treasure: '宝箱', fortune: '奇遇', trap: '陷阱', npc: '遭遇', boss: '守关者' },
   SECRET_REALMS: [
-    { id: 'sr0', name: '落霞洞天', recRealm: 0, desc: '练气修士便可涉足的小型洞天，霞光深处别有洞天。', pool: ['m_yezhu', 'm_dushe', 'm_shanlang', 'm_zeiren'], weights: { battle: 40, treasure: 22, fortune: 16, trap: 10, npc: 12 } },
-    { id: 'sr1', name: '碧水寒潭', recRealm: 1, desc: '寒潭之下封着一座前朝水府，机关重重。', pool: ['m_qingbei', 'm_linghou', 'm_tiexia', 'm_luopo'], weights: { battle: 42, treasure: 20, fortune: 14, trap: 12, npc: 12 } },
-    { id: 'sr2', name: '万蛊密林', recRealm: 2, desc: '蛊虫遮天的密林，危机与造化同在。', pool: ['m_chilin', 'm_fuqun', 'm_duzhu', 'm_chiyan'], weights: { battle: 46, treasure: 18, fortune: 12, trap: 12, npc: 12 } },
-    { id: 'sr3', name: '上古剑冢', recRealm: 3, desc: '万剑朝冢，剑气冲霄，上古剑修埋骨之地。', pool: ['m_shikui', 'm_jianling', 'm_yinling', 'm_fengbao'], weights: { battle: 48, treasure: 18, fortune: 12, trap: 12, npc: 10 } },
-    { id: 'sr4', name: '星坠之地', recRealm: 4, desc: '一颗星辰坠落形成的深谷，陨铁遍地，异兽横行。', pool: ['m_xiongyuan', 'm_yaohu', 'm_yinling', 'm_jianling'], weights: { battle: 48, treasure: 18, fortune: 12, trap: 12, npc: 10 } },
-    { id: 'sr5', name: '太阴废城', recRealm: 5, desc: '太阴之气笼罩的死城，白骨为兵，阴灵为将。', pool: ['m_shigui', 'm_yuangu', 'm_yinjiao', 'm_moxiu'], weights: { battle: 50, treasure: 16, fortune: 12, trap: 12, npc: 10 } },
-    { id: 'sr6', name: '九幽冥河', recRealm: 6, desc: '冥河水黑，渡船人无名，河底沉睡着上古战魂。', pool: ['m_guizu', 'm_yuangu', 'm_xueshe', 'm_moxiu'], weights: { battle: 50, treasure: 16, fortune: 12, trap: 12, npc: 10 } },
-    { id: 'sr7', name: '混沌裂隙', recRealm: 7, desc: '天地初开时遗留的裂隙，混沌之气足以撕裂神魂。', pool: ['m_moxiu', 'm_xuling', 'm_tianchong'], weights: { battle: 52, treasure: 16, fortune: 12, trap: 12, npc: 8 } },
-    { id: 'sr8', name: '仙府遗墟', recRealm: 8, desc: '一位仙人陨落前的洞府残墟，仙机将现。', pool: ['m_moxiu', 'm_xinggui', 'm_jianling'], weights: { battle: 50, treasure: 18, fortune: 14, trap: 10, npc: 8 } },
-    { id: 'sr9', name: '登仙天梯', recRealm: 9, desc: '直上九霄的登天云梯，一步一重天，仙缘尽头是仙门。', pool: ['m_jianling', 'm_moxiu'], weights: { battle: 52, treasure: 16, fortune: 14, trap: 10, npc: 8 } },
+    { id: 'sr0', name: '落霞洞天', recRealm: 0, desc: '练气修士便可涉足的小型洞天，霞光深处别有洞天。', rule: { txt: '霞光温养——此地守敌偏弱', hp: 0.9, atk: 0.95 }, pool: ['m_yezhu', 'm_dushe', 'm_shanlang', 'm_zeiren'], weights: { battle: 40, treasure: 22, fortune: 16, trap: 10, npc: 12 } },
+    { id: 'sr1', name: '碧水寒潭', recRealm: 1, desc: '寒潭之下封着一座前朝水府，机关重重。', rule: { txt: '水汽迷蒙——守敌身法 +10%', spd: 1.1 }, pool: ['m_qingbei', 'm_linghou', 'm_tiexia', 'm_luopo'], weights: { battle: 42, treasure: 20, fortune: 14, trap: 12, npc: 12 } },
+    { id: 'sr2', name: '万蛊密林', recRealm: 2, desc: '蛊虫遮天的密林，危机与造化同在。', rule: { txt: '蛊毒弥漫——守敌气血 +12%', hp: 1.12 }, pool: ['m_chilin', 'm_fuqun', 'm_duzhu', 'm_chiyan'], weights: { battle: 46, treasure: 18, fortune: 12, trap: 12, npc: 12 } },
+    { id: 'sr3', name: '上古剑冢', recRealm: 3, desc: '万剑朝冢，剑气冲霄，上古剑修埋骨之地。', rule: { txt: '剑气禁制——守敌攻 +15%', atk: 1.15 }, pool: ['m_shikui', 'm_jianling', 'm_yinling', 'm_fengbao'], weights: { battle: 48, treasure: 18, fortune: 12, trap: 12, npc: 10 } },
+    { id: 'sr4', name: '星坠之地', recRealm: 4, desc: '一颗星辰坠落形成的深谷，陨铁遍地，异兽横行。', rule: { txt: '星压如山——守敌防 +20%', def: 1.2 }, pool: ['m_xiongyuan', 'm_yaohu', 'm_yinling', 'm_jianling'], weights: { battle: 48, treasure: 18, fortune: 12, trap: 12, npc: 10 } },
+    { id: 'sr5', name: '太阴废城', recRealm: 5, desc: '太阴之气笼罩的死城，白骨为兵，阴灵为将。', rule: { txt: '阴气蚀骨——守敌气血 +20%', hp: 1.2 }, pool: ['m_shigui', 'm_yuangu', 'm_yinjiao', 'm_moxiu'], weights: { battle: 50, treasure: 16, fortune: 12, trap: 12, npc: 10 } },
+    { id: 'sr6', name: '九幽冥河', recRealm: 6, desc: '冥河水黑，渡船人无名，河底沉睡着上古战魂。', rule: { txt: '冥水无声——守敌身法与防御各 +10%', spd: 1.1, def: 1.1 }, pool: ['m_guizu', 'm_yuangu', 'm_xueshe', 'm_moxiu'], weights: { battle: 50, treasure: 16, fortune: 12, trap: 12, npc: 10 } },
+    { id: 'sr7', name: '混沌裂隙', recRealm: 7, desc: '天地初开时遗留的裂隙，混沌之气足以撕裂神魂。', rule: { txt: '混沌乱流——守敌攻防各 +10%', atk: 1.1, def: 1.1 }, pool: ['m_moxiu', 'm_xuling', 'm_tianchong'], weights: { battle: 52, treasure: 16, fortune: 12, trap: 12, npc: 8 } },
+    { id: 'sr8', name: '仙府遗墟', recRealm: 8, desc: '一位仙人陨落前的洞府残墟，仙机将现。', rule: { txt: '仙机将现——守敌攻 +12%、气血 +8%', atk: 1.12, hp: 1.08 }, pool: ['m_moxiu', 'm_xinggui', 'm_jianling'], weights: { battle: 50, treasure: 18, fortune: 14, trap: 10, npc: 8 } },
+    { id: 'sr9', name: '登仙天梯', recRealm: 9, desc: '直上九霄的登天云梯，一步一重天，仙缘尽头是仙门。', rule: { txt: '天梯重压——守敌攻防各 +12%', atk: 1.12, def: 1.12 }, pool: ['m_jianling', 'm_moxiu'], weights: { battle: 52, treasure: 16, fortune: 14, trap: 10, npc: 8 } },
   ],
 
   /* ---------- §26 转世出身（兵解转世时重择） ---------- */
@@ -1231,6 +1231,26 @@ const GameData = {
     c_n15: { npc: 'n15', name: '唐三思', title: '万事通', color: '#8a7a4a', stance: '灰', role: '三条消息一条命',
       desc: '坊市包打听，三枚灵石能买你一条消息。他知道自己的死期——这是他买过的最贵的一条消息。',
       look: { robe: '#9a8a6a', hair: '#4a4038', item: 'fan', aura: '#8a7a4a' } },
+    /* ---- v32 修瑕（A7）：v30 六位新个人线角色原未注册——对话名牌显示原始引用串「@c_n8」、
+     *     立绘退化为「@」、六人永远进不了人物志 ---- */
+    c_n8:  { npc: 'n8',  name: '秦重楼', title: '重楼商君', color: '#8a7a3a', stance: '灰', role: '万宝大掌柜',
+      desc: '万宝商会大掌柜，灵石堆里修出来的金丹。商道修的是心账——秤上亏谁一分，秤砣就往心口沉一分。',
+      look: { robe: '#9a8a5a', hair: '#3a3226', item: 'seal', aura: '#8a7a3a' } },
+    c_n16: { npc: 'n16', name: '楚天阔', title: '裂山力士', color: '#7a5a3a', stance: '友', role: '磐岩大弟子',
+      desc: '磐岩谷大弟子，双臂之力可裂山岩，最恨阴诡之徒。力从何来？他用了二十年，把答案练进了骨头里。',
+      look: { robe: '#8a6a4a', hair: '#3a2e22', item: 'none', aura: '#7a5a3a' } },
+    c_n18: { npc: 'n18', name: '顾青书', title: '青衿剑生', color: '#4a6a7a', stance: '友', role: '书剑双修',
+      desc: '剑宗里的读书人，一手青萍剑法如行云流水。文理剑意两相通——他偏要证明读书人也能仗剑。',
+      look: { robe: '#6a8a9a', hair: '#3a4a5a', item: 'scroll', aura: '#4a6a7a' } },
+    c_n19: { npc: 'n19', name: '花千树', title: '金算盘', color: '#9a8a4a', stance: '灰', role: '商会管事',
+      desc: '商会里最会做买卖的管事，一双眼睛能看穿货物十成成色。她说人比货贵——看人不看走眼，账才做得平。',
+      look: { robe: '#aa9a5a', hair: '#4a4038', item: 'fan', aura: '#9a8a4a' } },
+    c_n20: { npc: 'n20', name: '石破天', title: '顽石真人', color: '#6a5a42', stance: '友', role: '磐岩长老',
+      desc: '磐岩谷长老，天生神力，认死理，认准的道九头牛拉不回。顽石点头——说的就是他开窍的那一天。',
+      look: { robe: '#7a6a52', hair: '#c8c2b2', item: 'none', aura: '#6a5a42' } },
+    c_n21: { npc: 'n21', name: '洛神秋', title: '观星老人', color: '#4a5a8a', stance: '灰', role: '周天阁主',
+      desc: '周天阁阁主，夜夜观星，据说能从星轨中算出人间气数。他算尽天下，唯独没算到自己会在哪一夜闭眼。',
+      look: { robe: '#5a6a9a', hair: '#e0e4ec', item: 'orb', aura: '#4a5a8a' } },
   },
   /* ---------- v19 NPC 专属台词矩阵（六类语境；greet 按关系档三档递进，未命中回落性情模板） ---------- */
   NPC_LINES: {
@@ -1382,7 +1402,16 @@ const GameData = {
 
   /** 剧情引擎 who 解析：'@id' → CHARACTERS */
   char(who) {
-    if (typeof who === 'string' && who[0] === '@') return this.CHARACTERS[who.slice(1)] || null;
+    if (typeof who === 'string' && who[0] === '@') {
+      const id = who.slice(1);
+      const chr = this.CHARACTERS[id];
+      if (chr) return chr;
+      // v32 修瑕（A7）兜底：新角色漏注册时回落 NPCS 名单——名牌/立绘不再退化为原始引用串
+      const nid = id.startsWith('c_n') ? id.slice(3) : null;
+      const npc = nid ? (this.NPCS || []).find(n => n.id === nid) : null;
+      if (npc) return { npc: nid, name: npc.name, title: npc.title, color: '#6a5a3e', stance: '灰', role: '', desc: npc.desc || '', look: { robe: '#8a7a6a', hair: '#3a3226', item: 'none', aura: '#6a5a3e' } };
+      return null;
+    }
     return null;
   },
   /** 江湖二十四修士的主线定位（人物志 + 剧情调度用） */
@@ -1914,6 +1943,9 @@ c6_end: { id: 'c6_end', title: '第六章 · 终 · 五碎片退敌', scenes: [
   } },
   { t: 'narr', text: '杀意暂时退去。\n你知道，分身只是开胃菜——本尊出关之日，才是真正的死局。而你要在那天之前，变得比死局更强。' },
   { t: 'narr', text: '夜色褪尽，东方既白。\n血河故道——本尊沉潜三百年之地。你把这个地名一笔一划，刻进了心里。\n想破那盘三百年前的死局，先得变强，还得找到能带你入水的人。\n路还长——但方向，已经有了。' },
+  { t: 'dialog', who: '@c_ling', reqChoice: { key: 'k5_past_accept', oneOf: ['accept'] }, title: '玉灵 · 因果认下', text: '……你认了那笔账……好……好啊……\n认账的人，才配讨债……前世他烧了你的路，今生你替他把灯点回来……这叫……两清之前的……利息……' },
+  { t: 'dialog', who: '@c_ling', reqChoice: { key: 'k5_past_accept', oneOf: ['sever'] }, title: '玉灵 · 两不相欠', text: '……你是你，他是他……说得好……硬气……\n玉里那三百年……也不全是你的……往后的债，你自己记……莫要……什么都往身上背……' },
+  { t: 'dialog', who: '@c_ling', reqChoice: { key: 'k5_past_accept', oneOf: ['leverage'] }, title: '玉灵 · 以执为刃', text: '……拿他的执念当刀……你比玉里那位……狠……也清醒……\n执念这东西……用一分少一分……用完了……记得给自己……也留一寸……' },
 ] },
 
 /* ============ 第七章 · 血河旧账 ============ */
@@ -2024,6 +2056,9 @@ c9_open: { id: 'c9_open', title: '第九章 · 天劫决战', scenes: [
   { t: 'dialog', who: '你', title: '雷海中央 · 长啸', text: '三百年前你打碎他的金身，三百年后你打我的算盘。\n宗主——你算计了一辈子，就没算到，我们两个，都想你死。' },
   { t: 'narr', req: ['k5_jade_truth'], text: '话音落处，你把残玉举向雷光。\n识海深处，另一半残玉的方位轰然亮起——就在他袖中。同源相引，两块古玉隔着雷海遥遥共鸣，鸣声如泣如诉。\n帝渊瞳孔骤缩：三百年来，他第一次在自己的猎物身上，看见了猎手的目光。' },
   { t: 'narr', text: '雷海之上，新旧两世，终须一战。' },
+  { t: 'narr', reqChoice: { key: 'k7_route', oneOf: ['open'] }, text: '白须掌门托人捎来最后一句话：当年他敢应帖赴会，今日也敢看你去赴雷台。\n堂堂之阵走出来的路，连仇家都挑不出错处——这一战，你身正影直。' },
+  { t: 'narr', reqChoice: { key: 'k7_route', oneOf: ['dark'] }, text: '黑玉令的来历，你早查到了根。如今雷台在前，那卷旧档在你袖中安安静静——\n暗处走过一遭的人，最知道光亮值多少。此战之后，你打算亲手把那盏灯，递到明处去。' },
+  { t: 'narr', reqChoice: { key: 'k7_route', oneOf: ['blade'] }, text: '借刀那局棋，你赢得不烫手，也不干净。名单上的仇家，如今自己烧自己的香。\n你摩挲着剑柄，想起柳含烟那句评点：「借刀的人，最后都得学会一件事——别被刀记住脸。」\n雷台之上，愿那把刀，认不出你。' },
 ] },
 
 c9_mid: { id: 'c9_mid', title: '第九章 · 血煞渐醒', scenes: [
@@ -2075,6 +2110,9 @@ c9_end: { id: 'c9_end', title: '终章 · 雷海了断', scenes: [
   { t: 'dialog', who: '@c_zhenling', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, title: '识海 · 烟散', text: '识海深处，前世真灵的声音淡得像一缕烟：「别学我。我独行了一世，把道走成了刀。\n我随劫火去了——往后的路你自己走。走慢些，替我把两世的风景，都看全。」' },
   { t: 'narr', noFlag: 'k8_together', reqChoice: { key: 'c9_end', oneOf: ['redeem', 'walk'] }, text: '你在长阶尽头站定，回身望了一眼雷台。\n天光落在空无一人的台上，像落在一张刚收完子的棋枰上——这局棋，两世为人，你终于下完了。' },
   { t: 'narr', text: '残玉化入你的眉心，化作一点朱砂。\n你回首人间，白衣胜雪——仙门之后，另有一番天地。\n\n【问道九终 · 门启】' },
+  { t: 'narr', reqChoice: { key: 'k4_dilemma_answer', oneOf: ['blade'] }, text: '江湖后来传颂雷台一战，总有人问起你当年在乱世里的那道选择题。\n说书人一拍醒木：「以杀止杀！那位修士说，乱世里，这是最诚实的公道。」\n你在人群外听了，把帽檐压低了一寸——公道诚不诚实，你比谁都清楚，那不过是你当时唯一拿得出手的答案。' },
+  { t: 'narr', reqChoice: { key: 'k4_dilemma_answer', oneOf: ['justice'] }, text: '江湖后来传颂雷台一战，总有人问起你当年那道选择题。\n把罪证公之于众、交由天下人审判的故事，被说书人讲成了新派的公案——「不私刑，不冤杀，白纸黑字，让天下人断。」\n残玉在你眉心轻轻一颤，像是一声：总算有人肯把火把举过头顶。' },
+  { t: 'narr', reqChoice: { key: 'k4_dilemma_answer', oneOf: ['mercy'] }, text: '江湖后来传颂雷台一战，总有人问起你当年那道选择题。\n「先问清因由——冤有头债有主，不杀无辜之人。」你说这话时雷海未平，如今风平浪静，当年那几个你放过的人，有的成了灯下旧友。\n说书人不爱讲这个版本——刀光剑影才有彩声。可你知道，雷台那夜你斩得下的东西，比刀锋多得多。' },
 ] },
 
   /* ============ v25 第十章 · 仙门之外（真仙终章） ============ */

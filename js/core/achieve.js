@@ -39,8 +39,8 @@ const Achieve = {
     { id: 'b5', cat: 'battle', name: '以武会友', desc: '与同道切磋一场', reward: { fortune: 2 }, test: p => (p.counters.spars || 0) >= 1 },
     { id: 'b6', cat: 'battle', name: '败而不馁', desc: '尝过败绩之后重夺三胜', reward: { fortune: 3 }, test: p => (p.counters.defeats || 0) >= 1 && (p.counters.wins || 0) >= 3 },
     /* ---- 奇遇 ---- */
-    { id: 'e1', cat: 'exp', name: '第一桶金', desc: '灵石积蓄逾千', reward: { fortune: 3 }, test: p => this.stonesTotal(p) >= 1000 },
-    { id: 'e2', cat: 'exp', name: '富甲一方', desc: '灵石积蓄逾十万', reward: { fortune: 8 }, test: p => this.stonesTotal(p) >= 100000 },
+    { id: 'e1', cat: 'exp', name: '第一桶金', desc: '灵石积蓄逾千', reward: { fortune: 3 }, test: p => Achieve.stonesTotal(p) >= 1000 },   // v32 修瑕（A11）：原 this 在顶层对象字面量里指向 window——调用必抛 TypeError 被 check 吞掉，成就永不解锁
+    { id: 'e2', cat: 'exp', name: '富甲一方', desc: '灵石积蓄逾十万', reward: { fortune: 8 }, test: p => Achieve.stonesTotal(p) >= 100000 },
     { id: 'e3', cat: 'exp', name: '因果随身', desc: '孽障五十，因果如影随形', reward: { stones: 800 }, prog: p => `${Math.min(50, p.karma || 0)}/50`, test: p => (p.karma || 0) >= 50 },
     { id: 'e4', cat: 'exp', name: '福缘深厚', desc: '气运五十，天眷其身', reward: { stones: 1000 }, prog: p => `${Math.min(50, p.fortune || 0)}/50`, test: p => (p.fortune || 0) >= 50 },
     { id: 'e5', cat: 'exp', name: '秘境凯旋', desc: '击败秘境最深处的守关者', reward: { fortune: 10 }, test: p => (p.counters.bossKills || 0) >= 1 },
@@ -96,7 +96,7 @@ const Achieve = {
     for (const d of this.DEFS) {
       if (got[d.id]) continue;
       let ok = false;
-      try { ok = d.test(p); } catch (e) { ok = false; }
+      try { ok = d.test(p); } catch (e) { ok = false; console.warn('成就判定异常:', d.id, e); }   // v32（A11）：静默吞异常曾掩盖「死成就」
       if (ok) unlocked.push(d);
     }
     if (!unlocked.length) return;
@@ -111,6 +111,7 @@ const Achieve = {
     Meta.save();
     // v31 修瑕（E30）：只刷顶栏与状态区——原全量 renderAll 在 afterAction 已渲染过一遍后二次整树重建
     UI.markDirty('top'); UI.markDirty('status');
+    UI.markDirty('bag');   // v32 修瑕（E50）：灵石奖励入账后乾坤袋家资行不重渲曾显示陈旧值
     try { UI.renderAll(); } catch (e) { /* ignore */ }
     Save.autoSave();
   },

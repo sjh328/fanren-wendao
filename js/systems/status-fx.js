@@ -35,6 +35,7 @@ const buildMonster = (id, delta = 0, opts = {}) => {
     stoneGain: Math.round(Utils.rand(10, 20) * GameData.stoneEco(realmIdx) * (d.stoneMul || 1) * (dataElite ? 2.5 : 1)),
     dropTier: Math.min(4, Math.floor(realmIdx / 2) + 1),
     rareDrop: d.rareDrop || null,
+    rareDrop2: d.rareDrop2 || null,   // v32（E7）：第二稀有掉落（仙缘套装补源）
     hp: 0,
   };
 };
@@ -73,11 +74,6 @@ const StatusFx = {
   decayDots(list) {
     const dots = ['poison', 'burn', 'bleed', 'cursed'];
     for (const x of list) if (dots.includes(x.kind)) x.rounds--;
-    return list.filter(x => x.rounds > 0);
-  },
-  /** 衰减指定类别状态（回合末的增减益） */
-  decayKinds(list, kinds) {
-    for (const x of list) if (kinds.includes(x.kind)) x.rounds--;
     return list.filter(x => x.rounds > 0);
   },
   /* v30 状态引擎：统一衰减时相——原衰减清单散落四路调用点各自维护，kind 易漏

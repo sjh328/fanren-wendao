@@ -57,7 +57,7 @@ const Utils = {
   rand(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; },
   randF(min, max) { return Math.random() * (max - min) + min; },
   chance(p) { return Math.random() * 100 < p; },
-  pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; },
+  pick(arr) { return (arr && arr.length) ? arr[Math.floor(Math.random() * arr.length)] : null; },   // v32（E66）：空数组防御（原返回 undefined 传播成脏数据）
   /** 从 [{..., weight}] 或 {key: weight} 中按权重随机取一项 */
   pickWeighted(list) {
     const entries = Array.isArray(list)

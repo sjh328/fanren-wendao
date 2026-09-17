@@ -28,6 +28,7 @@ const PlayerFactory = {
   create(name, attrs) {
     const p = {
       version: 1,
+      lifeUid: 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),   // v32（D7）：每世唯一指纹——兵解防重复发印记
       name,
       attrs: { ...attrs },
       realmIdx: 0, layer: 0, exp: 0,
@@ -250,6 +251,10 @@ const PlayerFactory = {
     // 基础：fresh 模板 + 展开合并
     const fresh = this.create(p.name || '无名散修', p.attrs || { gen: 5, comp: 5, luck: 5, body: 5 });
     const out = { ...fresh, ...p };
+    // v32（D7）：每世指纹——新档沿用 create 生成的 lifeUid；老档按内在稳定字段派生
+    // （同名+同四维+同转世数视为同一世），保证跨多次读档稳定，防手动槽旧档反复兵解刷印记
+    out.lifeUid = (p.lifeUid && typeof p.lifeUid === 'string') ? p.lifeUid
+      : 'L0|' + (p.name || '') + '|' + JSON.stringify(p.attrs || {}) + '|' + ((p.reinc && p.reinc.lives) || 0) + '|' + (p.origin || '');
     out.attrs = { ...fresh.attrs, ...(p.attrs || {}) };
     for (const k of Object.keys(out.attrs)) {
       const v = Math.round(Number(out.attrs[k]));
@@ -286,16 +291,19 @@ const PlayerFactory = {
     out.equipped = { ...fresh.equipped, ...(p.equipped || {}) };
     out.counters = { ...fresh.counters, ...(p.counters || {}) };
     out.flags = { ...fresh.flags, ...(p.flags || {}) };
-    // v31 仙阶：结构自愈——老档无 xianjie 归零为未入阶，超界值钳制
-    {
-      const xjSrc = (out.xianjie && typeof out.xianjie === 'object') ? out.xianjie : {};
-      out.xianjie = {
-        idx: Utils.clamp(Math.floor(Number(xjSrc.idx)) || 0, 0, GameData.XIAN_TIERS.length),
-        layer: Utils.clamp(Math.floor(Number(xjSrc.layer)) || 0, 0, 3),
-      };
-      if (out.xianjie.idx === 0) out.xianjie.layer = 0;
-      out._xianVisitDay = Number(out._xianVisitDay) || 0;
-    }
+      // v31 仙阶：结构自愈——老档无 xianjie 归零为未入阶，超界值钳制
+      {
+        const xjSrc = (out.xianjie && typeof out.xianjie === 'object') ? out.xianjie : {};
+        out.xianjie = {
+          idx: Utils.clamp(Math.floor(Number(xjSrc.idx)) || 0, 0, GameData.XIAN_TIERS.length),
+          layer: Utils.clamp(Math.floor(Number(xjSrc.layer)) || 0, 0, 3),
+        };
+        if (out.xianjie.idx === 0) out.xianjie.layer = 0;
+        // v32 修瑕（E36）：未飞升而残留仙籍的脏档重置——否则 layersTotal 照加属性（防御纵深已在
+        // XianSys.layersTotal 加 unlocked 校验，此处再清数据防 UI 侧漏）
+        if (out.xianjie.idx > 0 && !(out.flags && out.flags.ascended)) out.xianjie = { idx: 0, layer: 0 };
+        out._xianVisitDay = Number(out._xianVisitDay) || 0;
+      }
     // 逐级运行迁移步骤
     const startStep = out._migratedVersion || 0;
     for (let i = startStep; i < MIGRATE_STEPS.length; i++) {
@@ -316,6 +324,18 @@ const PlayerFactory = {
     if (out.layer === 3) out.exp = Math.min(out.exp, GameData.layerNeed(out.realmIdx, 3));
     out.fortune = Math.max(0, Math.floor(Number(out.fortune)) || 0);
     out.karma = Math.max(0, Math.floor(Number(out.karma)) || 0);
+    // v32 修瑕（E36）：脏档数值清洗补口——lifeCut/lifeGain 曾无 NaN 免疫（lifeCut NaN = 天年永不死）、
+    // counters（含仙元 xianyuan）同样无清洗
+    out.lifeCut = Math.max(0, Math.floor(Number(out.lifeCut)) || 0);
+    out.lifeGain = Math.max(0, Math.floor(Number(out.lifeGain)) || 0);
+    for (const [ck, cv] of Object.entries(out.counters || {})) {
+      if (typeof cv === 'number') { if (!isFinite(cv)) out.counters[ck] = 0; continue; }
+      if (cv && typeof cv === 'object') {
+        for (const [ck2, cv2] of Object.entries(cv)) {
+          if (typeof cv2 === 'number' && !isFinite(cv2)) cv[ck2] = 0;
+        }
+      }
+    }
     out.poison = Math.max(0, Number(out.poison) || 0);
     out.insight = Utils.clamp(Math.floor(Number(out.insight)) || 0, 0, 100);
     const dayN = Number(out.day);

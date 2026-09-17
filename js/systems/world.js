@@ -5,7 +5,7 @@
 const WorldSys = {
   freshWorld() {
     // v30 节奏重校：首次大事 10~14 年（v29 的 32~40 仍在多数周目之外——修为曲线重校后全程约 12~20 年）
-    return { nextEventYear: 10 + Utils.rand(0, 4), pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null };
+    return { nextEventYear: 10 + Utils.rand(0, 4), pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null, rebuildUntil: 0, turmoilUntil: 0 };   // v32（F3）：灵疫重建/内乱 turmoil 回响
   },
   year(p) { return Math.floor((p.day || 0) / 365) + 1; },
   isMagic(p, mapId) { const w = p.world; return !!(w && w.magicMaps && w.magicMaps.includes(mapId)); },
@@ -15,7 +15,17 @@ const WorldSys = {
   /** v20 灵潮 / 兽潮判定 */
   lingchaoActive(p) { const w = p.world; return !!(w && w.lingchaoUntil && this.year(p) <= w.lingchaoUntil); },
   beastWaveActive(p, mapId) { const w = p.world; return !!(w && w.beastMaps && w.beastMaps.some(b => b.map === mapId && this.year(p) <= b.until)); },
-  priceMul(p) { return this.warActive(p) ? 1.15 : 1; },
+  priceMul(p) {
+    let mul = this.warActive(p) ? 1.15 : 1;
+    // v32（F3）灵疫次年回响：瘟后重建，物料折价（市况 -10%）
+    const w = p.world;
+    if (w && w.rebuildUntil) {
+      const y2 = Math.floor((p.day || 0) / 365) + 1;
+      if (y2 <= w.rebuildUntil) mul *= 0.9;
+      else w.rebuildUntil = 0;
+    }
+    return mul;
+  },
   /* ---------- v5：坊市行情 ---------- */
   /** 每 30 游戏日换一茬市况种子；种子持久化，读档后行情不变 */
   marketState(p) {
@@ -88,6 +98,21 @@ const WorldSys = {
       text = `<b>兽潮</b>——妖王振臂，群兽出山！${map.name} 一带十五年<b>妖兽横行</b>：遇敌频密，猎杀所获亦厚。`;
     } else if (type === 'xianmen') {
       text = `<b>仙门收徒大会</b>——诸宗联席考较英才，通过者可获<b>宗门秘传</b>。`;
+    } else if (type === 'zhongbao') {
+      // v32 修瑕（A8）：v30 四类新事件原全走「陨星坠落」else——约 1/4 的天下大事公告自相矛盾；
+      // 重宝现世还因 fireEvent 从不写 mapId，夺宝战场恒兜底黑风寨
+      const candidates = GameData.MAPS.filter(m => m.id !== 'village');
+      const map = Utils.pick(candidates.length ? candidates : GameData.MAPS);
+      ev.mapId = map.id;
+      text = `<b>重宝现世</b>——一位散修偶得上古重宝，风声走漏，${map.name} 一带<b>修士云集争夺</b>！凶险与机缘并存。`;
+    } else if (type === 'neiluan') {
+      w.turmoilUntil = y + 1;   // v32（F3）次年回响：乱局佣兵生意好做——来年悬赏赏格 ×1.1
+      text = `<b>宗门内乱</b>——某宗因继承之争刀兵相向，门人四散。乱局之中，<b>可出手相助，亦可趁乱取利</b>。`;
+    } else if (type === 'qiren') {
+      text = `<b>奇人访世</b>——一位云游奇修路过此地，或指点迷津，或索一战之资，<b>缘法各安天命</b>。`;
+    } else if (type === 'lingyi') {
+      w.rebuildUntil = y + 1;   // v32（F3）次年回响：瘟后重建——来年坊市折价
+      text = `<b>灵疫蔓延</b>——一处坊市起了灵疫，<b>药价腾贵</b>。施药济人者积誉，囤药居奇者获利。`;
     } else {
       text = `<b>陨星坠落</b>——天外陨星坠入人间，星陨之处<b>天材地宝俯拾即是</b>。`;
     }

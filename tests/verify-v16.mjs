@@ -52,7 +52,7 @@ console.log('===== SA 源码静态组 =====');
   bag.includes('keepAffix') && bag.includes('restoreAffix') && bag.includes('affixKept') ? pass('SA21 词缀留档/还原（E14/D2）') : fail('SA21 词缀留档', '');
   bag.includes('qihun') ? pass('SA22 分解产器魂（D3）') : fail('SA22 器魂', '');
   const forge = R('systems/forge.js');
-  forge.includes('MAX_LV: 15') && forge.includes('addBless') ? pass('SA23 强化+15与祝福值（D5）') : fail('SA23 强化', '');
+  forge.includes('MAX_LV: (GameData.BALANCE.ENHANCE || {}).MAX_LV || 15') && forge.includes('addBless') ? pass('SA23 强化+15（费率接线集中配置 v32 E24）与祝福值（D5）') : fail('SA23 强化', '');
   forge.includes('recast(slot)') ? pass('SA24 器魂重铸（D3）') : fail('SA24 重铸', '');
   forge.includes('per[k] || 0) * g') || forge.includes('(per[k] || 0) * g') ? pass('SA25 词缀两段式（D1）') : fail('SA25 两段式', '');
   forge.includes('n === 2') && forge.includes('0.6') ? pass('SA26 套装两件阶梯（D4）') : fail('SA26 阶梯', '');
@@ -298,13 +298,13 @@ if (browser) {
       ReincarnationSys.writeLegacy(legacy1);
       if (typeof Meta !== 'undefined' && Meta.data.marksGiven) { delete Meta.data.marksGiven['v16_test_mark']; Meta.save(); }
       // 十层树名
-      out.tree = ReincarnationSys.TREE_NAMES.length === 10;
+      out.tree = ReincarnationSys.TREE_NAMES.length === 15;   // v32（D2）：传承树扩至 15 层
       // 门前影重战入口存在且境界拦截
       out.rebattle = typeof QuestSys.rebattleGateShadow === 'function';
       return out;
     });
     h1.grant && h1.dedup ? pass('RB25 印记发放+跨世去重（H）') : fail('RB25 印记', JSON.stringify(h1));
-    h1.tree ? pass('RB26 传承树十层可视化数据（H）') : fail('RB26 树', '');
+    h1.tree ? pass('RB26 传承树可视化数据（H/v32 扩十五层）') : fail('RB26 树', '');
     h1.rebattle ? pass('RB27 门前影重战入口（A6）') : fail('RB27 重战', '');
 
     /* ---- 行为组：存档 / 兜底 / 杂修 ---- */

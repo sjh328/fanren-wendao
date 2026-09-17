@@ -65,13 +65,50 @@ const Cultivate = {
     p.insight = Math.min(100, before + n);
     const spill = n - (p.insight - before);
     if (spill > 0) {
-      const exp = Math.round(spill * 80 * GameData.eco(p.realmIdx));
-      if (exp > 0) {
-        // v31 修瑕（E20）：不再 silent——大额感悟折算的修为曾可静默连跳小层（无日志/浮字/公告，出关对不上账）
-        this.addExp(p, exp);
-        Log.add(`感悟已臻圆融，余韵化作修为 <b>+${Utils.fmtNum(exp)}</b>。`, 'gain');
+      // v32 修瑕（E26）：r9 溢出原走 exp 链固定比 1 点感悟=1600 仙元（spill×80×eco(9) ÷ eco(9)×0.05）
+      // ——事件型感悟（仙界访客论道、心魔降伏）使仙元日入翻倍以上且入账被掩盖。改仙元定值 spill×50，
+      // 与纯修炼溢流速率（约 490/日）同量级。
+      if (p.realmIdx >= 9) {
+        const yuan = spill * 50;
+        p.counters.xianyuan = (p.counters.xianyuan || 0) + yuan;
+        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, yuan);
+        Log.add(`感悟已臻圆融，余韵炼作 <b>仙元 +${Utils.fmtNum(yuan)}</b>。`, 'gain');
+      } else {
+        const exp = Math.round(spill * 80 * GameData.eco(p.realmIdx));
+        if (exp > 0) {
+          // v31 修瑕（E20）：不再 silent——大额感悟折算的修为曾可静默连跳小层（无日志/浮字/公告，出关对不上账）
+          this.addExp(p, exp);
+          Log.add(`感悟已臻圆融，余韵化作修为 <b>+${Utils.fmtNum(exp)}</b>。`, 'gain');
+        }
       }
     }
+  },
+  /** v32（D5）：悟道——满溢感悟的主动出口：耗 20 点突破感悟炼作修为（飞升后炼作仙元 1000），每日一次。
+   *  感悟成算降权 0.5:1 后，囤积的感悟自此有第二条去路（飞升前后皆有用）。 */
+  async wuDao() {
+    const p = Game.player;
+    if (!p || p.dead) return;
+    const today = Math.floor(p.day || 0);
+    if (p._wuDaoDay === today) { UI.toast('今日已悟过一场——大道贵在日积月累'); return; }
+    if ((p.insight || 0) < 20) { UI.toast('突破感悟不足 20 点'); return; }
+    const ok = await UI.popup({
+      title: '悟 道',
+      html: `闭目吐纳，将满溢的感悟淬入道基（每日一次）。<br>· 耗突破感悟 20 点${p.realmIdx >= 9 ? '，炼作 <b>仙元 1000</b>' : `，炼作修为 <b>+${Utils.fmtNum(Math.round(20 * 80 * GameData.eco(p.realmIdx)))}</b>`}。`,
+      options: [{ text: '悟 道', value: true, primary: true }, { text: '再想想', value: false }],
+    });
+    if (!ok) return;
+    p._wuDaoDay = today;
+    p.insight = (p.insight || 0) - 20;
+    if (p.realmIdx >= 9) {
+      p.counters.xianyuan = (p.counters.xianyuan || 0) + 1000;
+      if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 1000);
+      Log.add('你于蒲团上进入忘我之境——二十点感悟在识海中炼作 <b>仙元 +1000</b>。', 'gain');
+    } else {
+      const exp = Math.round(20 * 80 * GameData.eco(p.realmIdx));
+      this.addExp(p, exp);
+      Log.add(`你于蒲团上进入忘我之境——二十点感悟淬入道基，修为 <b>+${Utils.fmtNum(exp)}</b>。`, 'gain');
+    }
+    Game.afterAction();
   },
   normal() {
     const p = Game.player;
@@ -269,6 +306,12 @@ const Cultivate = {
         rep.advanced++;
         Log.add('修为已然进阶，你推门而出，只觉天地一新——此番闭关，功成。', 'system');
         UI.toast('闭关有成 · 已至新的小境界');
+        break;
+      }
+      // v32 修瑕（E37）：真仙圆满后修为轴已顶——原循环无「无可再进」出口，顶满 120 轮（约 3600 日）
+      // 可一次刷出仙阶全线需求约 7 倍的仙元（节奏崩坏）。圆满态至多再闭六轮即请出关。
+      if (p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeed(9, 3) && rounds >= 6) {
+        Log.add('修为早已圆满，再往下只是水磨工夫——你收功出关，余韵自会炼作仙元。', 'system');
         break;
       }
       await Utils.sleep(120);   // 留出渲染与日志滚动的时间

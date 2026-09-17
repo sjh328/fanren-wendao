@@ -261,6 +261,7 @@ const Bag = {
     }
     // v30 修瑕：卸下时词缀一并留档——原实例丢弃即词缀重掷，洗练投入无声蒸发
     this.keepAffix(p, eq);
+    if (p._recastN) delete p._recastN[eq.id];   // v32（E1）：器魂重铸阶梯价随卸下回落
     Bag.addItem(eq.id, 1);
     Log.add(`你卸下了 ${GameData.ITEMS[eq.id].name}。`, 'info');
     p.equipped[slot] = null;
@@ -279,11 +280,12 @@ const Bag = {
     const stones = Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2)));
     const ok = await UI.popup({
       title: `分解 · ${def.name}`,
-      html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br>· <b>器魂 ×${2 + (def.grade || 0) * 2 + enh}</b>（祭炼堂重铸词缀之用）<br><span class="neg">分解之物与其祭炼心得、词缀将一并化去，无法找回。</span>`,
+      html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br>· <b>器魂 ×${2 + (def.grade || 0) * 2 + enh}</b>（祭炼堂重铸词缀之用）<br><span class="neg">分解之物与其祭炼心得、词缀留档将一并化去，无法找回${(p.equipped.weapon && Utils.eqId(p.equipped.weapon) === itemId) || (p.equipped.armor && Utils.eqId(p.equipped.armor) === itemId) || (p.equipped.accessory && Utils.eqId(p.equipped.accessory) === itemId) ? '（在穿实例的词缀与强化不受影响，仅清同 id 留档）' : ''}。</span>`,   // v32 修瑕（E22）：文案区分「同 id 留档」与「在穿实例」——原承诺过强
       options: [{ text: '分 解', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
     this.removeItem(itemId, 1);
+    if (p._recastN) delete p._recastN[itemId];   // v32（E1）：重铸阶梯随器毁清零
     if (enh) delete p.enhanced[itemId];
     if (p.enhBless && p.enhBless[itemId]) delete p.enhBless[itemId];   // v31 修瑕（E37）：祝福值同随分解化去（此前重购同 id 可白继承）
     // v30：分解同清词缀留档
@@ -297,6 +299,9 @@ const Bag = {
     Game.afterAction();
   },
   async drop(itemId) {
+    const p = Game.player;   // v32 修瑕（A4）：drop 原引用未定义的 p——乾坤袋每件物品的丢弃按钮
+    // 100% 抛 ReferenceError，且 removeItem 已先执行：物品已消失、强化/词缀留档/祝福三清全跳过、
+    // 日志与自动存档全跳过（v31 E37「丢弃清留档」修复整体失效，重购同 id 即复活）
     const def = GameData.ITEMS[itemId];
     const ok = await UI.popup({
       title: '丢弃物品',
@@ -310,13 +315,14 @@ const Bag = {
     if (p.enhanced && p.enhanced[itemId]) delete p.enhanced[itemId];
     if (p.affixKept && p.affixKept[itemId]) delete p.affixKept[itemId];
     if (p.enhBless && p.enhBless[itemId]) delete p.enhBless[itemId];
+    if (p._recastN) delete p._recastN[itemId];   // v32（E1）：同清重铸阶梯
     Log.add(`你丢弃了一件 ${def.name}。`, 'loss');
     Game.afterAction();
   },
   /** v13 批量丢弃：清空当前分类页签下的全部物品（已穿戴装备不在背包，不受影响） */
   async dropCategory(type) {
     const p = Game.player;
-    const ids = Object.keys(p.bag).filter(id => type !== 'all' ? GameData.ITEMS[id].type === type : true);
+    const ids = Object.keys(p.bag).filter(id => GameData.ITEMS[id] && (type !== 'all' ? GameData.ITEMS[id].type === type : true));   // v32（E23）：脏档残留已下架 id 判空跳过（原直接解引用 type 整页崩）
     if (!ids.length) { UI.toast('此类物品已空'); return; }
     const total = ids.reduce((s, id) => s + p.bag[id], 0);
     const names = ids.slice(0, 6).map(id => `${GameData.ITEMS[id].name} ×${p.bag[id]}`).join('、');
@@ -356,6 +362,17 @@ const Pill = {
     if (effect.mpPct) { p.mp = Math.min(st.maxMp, p.mp + Math.round(st.maxMp * effect.mpPct / 100)); effectText.push(`灵力 +${effect.mpPct}%`); }
     if (effect.curePoison) { p.poison = Math.max(0, p.poison - effect.curePoison); effectText.push(`丹毒 -${effect.curePoison}`); }
     if (effect.insight) { Cultivate.addInsight(p, effect.insight); effectText.push(`突破感悟 +${effect.insight}`); }   // v30 修瑕：走单源（溢出折修为，原直接写 insight 高位蒸发）
+    // v32 修瑕（E1）：清心丹 use.purge 原是死键——500 灵石的战斗解控丹毫无效果（安慰剂），服用日志甚至为空
+    if (effect.purge) {
+      if (inBattle && typeof Battle !== 'undefined' && Battle.active) {
+        const purged = ['poison', 'burn', 'bleed', 'cursed', 'defdown', 'slow', 'weaken', 'stun', 'freeze', 'vuln']
+          .filter(k => StatusFx.has(Battle.active.myFx, k));
+        Battle.active.myFx = StatusFx.purge(Battle.active.myFx);
+        effectText.push(purged.length ? `解除负面 ${purged.length} 项（${purged.map(k => (StatusFx.DEFS[k] || {}).name || k).join('、')}）` : '气机本自清明，药力散入四肢百骸');
+      } else {
+        effectText.push('体外无战气缠身，药力散入四肢百骸');
+      }
+    }
     // v29 天年：延寿丹（增益上限为该境基准五成）与渡劫丹（一丹一劫的识海印记）
     if (effect.life) {
       const base = GameData.LIFESPAN[p.realmIdx] || 120;

@@ -32,8 +32,19 @@ const AuctionSys = {
   mysteryBase(p) {
     const pool = this.mysteryPool(p);
     if (!pool.length) return 500;
+    // v32 修瑕（E20）：估值两处失真修复——①ecoPrice 物（符箓等时价之物）原按 base 记期望
+    //（r6 时 tal_huoshe 单项低估约 3000）；②0 价稀有物原按 500 记（gf_jianxin 宗门兑价 3 万贡献）
+    const GRADE_FALLBACK = [300, 800, 2000, 6000, 16000, 40000];
+    const valOf = (x) => {
+      const def = GameData.ITEMS[x.id];
+      if (!def) return 500;
+      let v = def.price || 0;
+      if (!v) v = GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500;
+      if (def.ecoPrice) v = Math.round(v * GameData.stoneEco(p.realmIdx || 0));
+      return v;
+    };
     const wsum = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2, 0);
-    const ev = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2 * ((GameData.ITEMS[x.id] && GameData.ITEMS[x.id].price) || 500), 0) / wsum;
+    const ev = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2 * valOf(x), 0) / wsum;
     return Math.max(200, Math.round(ev * 0.85));
   },
   state(p) {
@@ -51,9 +62,12 @@ const AuctionSys = {
         const pool2 = usable.length ? usable : this.LOT_POOL;
         const lot2 = pool2[Utils.hashStr('auction@' + day + '#' + seq) % pool2.length];
         const gate = Math.min(8, lot2.minRealm || 0);
-        // v30 复核：底价随境界但限三境溢阶——原 3.8^min(8,r) 全幅膨胀，r6+ 拍品性价比远逊坊市，无人竞拍
-        const mul = Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
-        p.auction = { item: lot2.item, seq, base: Math.round(lot2.base * mul), until: day + this.PERIOD };
+      // v30 复核：底价随境界但限三境溢阶——原 3.8^min(8,r) 全幅膨胀，r6+ 拍品性价比远逊坊市，无人竞拍
+      const mul = Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
+      // v32（E5）影子竞价·热度：拍品每被流拍/围观一轮，底价随关注热度上浮（封顶三成）——
+      // 「每个人都盯着的那件」不会便宜
+      const hot = 1 + Math.min(0.3, ((p.auction && p.auction.views) || 0) * 0.03);
+      p.auction = { item: lot2.item, seq, views: ((p.auction && p.auction.views) || 0) + 1, base: Math.round(lot2.base * mul * hot), until: day + this.PERIOD };
       }
     }
     return p.auction;
@@ -62,6 +76,8 @@ const AuctionSys = {
     const p = Game.player;
     const a = this.state(p);
     const isMystery = a.item === 'mystery';
+    // v32 修瑕（E20）：古匣日限一枚——原中奖即 until=0 同日可连环开匣（与塔雷晶核同款护栏）
+    if (isMystery && p.auction.boxDay === Math.floor(p.day || 0)) { UI.toast('古匣灵机未复——今日已开启过一回，明日再来'); return; }
     // v29：拍品境界门槛——低境不再能低价竞得远超自身境界的拍品
     if (!isMystery) {
       const lot = this.LOT_POOL.find(x => x.item === a.item);
@@ -113,12 +129,19 @@ const AuctionSys = {
         Story.chron(`拍卖行竞得「${def.name}」`);
       }
       p.auction.until = 0;   // 本期拍品易主，刷新下一件
+      if (isMystery) p.auction.boxDay = Math.floor(p.day || 0);   // v32 修瑕（E20）：古匣日限一枚
       p.auction.seq = (p.auction.seq || 0) + 1;   // v29：期号递进——同日不再掷出同一件拍品
       Ambience.sfx('auction');   // v19 落槌音
     } else {
       // v27 修瑕：退款走原额入账（不吃灵石获取加成）——此前退款被加成放大，落标反而净赚
       Bag.addStonesRaw(price);
-      Log.add(`竞价失利——有人以更高价截胡。灵石已原路退回。`, 'warn');
+      // v32（E5）影子竞价·截胡：激进出价失利后，两成五几率有神秘修士抬价——底价上浮一成
+      if (mode === 'bold' && Utils.chance(25)) {
+        p.auction.base = Math.round(a.base * 1.1);
+        Log.add('竞价失利——人群中另有神秘修士志在必得，底价被抬上一成！', 'warn');
+      } else {
+        Log.add(`竞价失利——有人以更高价截胡。灵石已原路退回。`, 'warn');
+      }
     }
     Game.afterAction();
   },

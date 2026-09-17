@@ -23,7 +23,7 @@ const GongfaSys = {
     const def = GameData.ITEMS[gfId];
     if (!g || !def) return;
     if (g.level >= this.maxLevel(def)) { UI.toast('此功法已修至大成'); return; }
-    let gain = 18 + p.attrs.comp * 4 + Utils.rand(0, 12);
+    let gain = 18 + Stat.compOf(p) * 4 + Utils.rand(0, 12);   // v32 修瑕（E38）：改用有效悟性（转世传承/讲道加成），与全游戏悟性口径统一
     if (p.realmIdx >= 7) gain *= 2;   // v10 境界特性 · 万法归宗（大乘）：参悟所得翻倍
     if (p.cave && p.cave.builds && p.cave.builds.lib) gain *= 1 + p.cave.builds.lib * 0.2;   // v19 藏经室
     g.exp += gain;

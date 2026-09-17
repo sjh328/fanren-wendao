@@ -65,16 +65,25 @@ const Tribulation = {
     document.getElementById('tribulation-modal').classList.remove('hidden');
     this.render();
   },
-  /** v30 借天运：渡劫前燃 20 气运换三策各 +5 成算（每劫限一次）——气运自此有了正经消费端 */
+  /** v30 借天运：渡劫前燃 20 气运换三策各 +5 成算（每劫限一次）——气运自此有了正经消费端
+   *  v32（D6）：仙劫改燃仙元 50——仙籍之身气运已淡，天外之劫以仙元借力 */
   borrow() {
     const S = this.state;
     const p = Game.player;
     if (!S || S.busy || S._borrowed) return;
-    if ((p.fortune || 0) < 20) { UI.toast('气运不足 20，天时不予'); return; }
-    p.fortune -= 20;
-    S._borrowed = true;
-    S.base += 5;
-    this.log('你燃二十年气运，向天借得一线时来运转——三策成算各 +5。', 'log-system');
+    if (S.xian) {
+      if ((p.counters.xianyuan || 0) < 50) { UI.toast('仙元不足 50，天时不予'); return; }
+      p.counters.xianyuan -= 50;
+      S._borrowed = true;
+      S.base += 5;
+      this.log('你燃五十仙元，向天外借得一线时来运转——三策成算各 +5。', 'log-system');
+    } else {
+      if ((p.fortune || 0) < 20) { UI.toast('气运不足 20，天时不予'); return; }
+      p.fortune -= 20;
+      S._borrowed = true;
+      S.base += 5;
+      this.log('你燃二十年气运，向天借得一线时来运转——三策成算各 +5。', 'log-system');
+    }
     this.render();
   },
   log(html, cls = 'log-warn') {
@@ -105,10 +114,10 @@ const Tribulation = {
           <span class="trib-chance">成算 ${c.endure.toFixed(0)}%</span>
           <span class="trib-note">成功率最低 · 成则雷火淬体，得永久厚赐【根基深厚】：全属性 +20%，此后历劫难度皆降一成</span>
         </button>
-        <button class="btn trib-opt" data-action="trib-borrow" ${(S.busy || S._borrowed || (Game.player.fortune || 0) < 20) ? 'disabled' : ''} title="燃 20 点气运，三策成算各 +5（每次渡劫限一次）">
+        <button class="btn trib-opt" data-action="trib-borrow" ${(S.busy || S._borrowed || (S.xian ? (p.counters.xianyuan || 0) < 50 : (Game.player.fortune || 0) < 20)) ? 'disabled' : ''} title="${S.xian ? '燃 50 仙元' : '燃 20 点气运'}，三策成算各 +5（每劫限一次）">
           <span class="trib-name">燃运借力${S._borrowed ? ' · 已借' : ''}</span>
-          <span class="trib-chance">${S._borrowed ? '已成' : '气运 -20'}</span>
-          <span class="trib-note">以气运借天时——三策成算各 +5。天道姻缘，用一分少一分。</span>
+          <span class="trib-chance">${S._borrowed ? '已成' : (S.xian ? '仙元 -50' : '气运 -20')}</span>
+          <span class="trib-note">${S.xian ? '以仙元借天外之时——三策成算各 +5。' : '以气运借天时——三策成算各 +5。天道姻缘，用一分少一分。'}</span>
         </button>
         <button class="btn trib-opt" data-action="trib-strategy" data-strategy="artifact" ${S.busy || !art ? 'disabled' : ''}>
           <span class="trib-name">法宝挡劫</span>
@@ -181,9 +190,12 @@ const Tribulation = {
       // v31 仙劫：成败各走仙阶口径——晋仙阶、仙体回满，不落 realmIdx
       if (S.xian) {
         p.breakStreak = 0;
+        // v32 修瑕（E31）：仙劫成功分支补齐天劫同款副作用——无伤成就判定 + 全屏异象（opts.xian 此前未复用全量）
+        if (p.hp >= Stat.compute(p).maxHp * 0.999) { p.flags = p.flags || {}; p.flags.tribFullHp = true; }
         const st2 = Stat.compute(p);
         p.hp = st2.maxHp; p.mp = st2.maxMp;
         this.log('仙劫散去，霞光满身——你于云端之上缓缓睁眼——成了！', 'log-realm');
+        UI.realmShow((GameData.XIAN_TIERS[S.xianTo - 1] || {}).ascendText || '仙劫散去，仙骨自成。', GameData.REALM_AURA[9] || '#e8e8e8');
         if (typeof XianSys !== 'undefined') XianSys.tribSuccess(p, S.xianTo, strategy);
         UI.toast(`仙劫功成！晋 ${GameData.XIAN_TIERS[S.xianTo - 1].name}`);
         await Utils.sleep(900);

@@ -28,12 +28,13 @@ const ShopSys = {
     let base = def.price || 0;
     // 符箓为时价之物：随境界经济浮动
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
-    let v = Math.max(1, Math.floor(base * 0.4));
+    let v = Math.max(1, Math.floor(base * 0.45));   // v32（E16）：卖价基数 0.4→0.45 微补偿——获取加成自此不吃卖价（斩断倒卖套利）
     // 丹道：出售丹药价格提升两成五
     if (p.dao === 'pill' && def.type === 'pill') v = Math.round(v * 1.25);
     if (p.dao === 'pill' && def.type === 'pill' && DaoSys.tierLevel(p) >= 2) v = Math.round(v * 1.15);   // v10 丹道六境·药理境
-    // v29 修瑕：卖价同吃坊市行情——此前丹道卖价 0.75 倍固定不吃行情/声望，买价最低 0.61 倍，
-    // 「批量买入+立即全售」构成稳赚 23% 的倒卖印钞机；两侧乘数同源后即时倒卖必亏，跨行情低买高卖成为正经营生
+    // v29 修瑕：卖价同吃坊市行情——两侧乘数同源后即时倒卖必亏，跨行情低买高卖成为正经营生
+    // v32 修瑕（E16）：成交款走原额入账——原经 Bag.addStones 再叠道心/个人线/stonePct 获取链
+    // （成型档实测卖侧 ≈0.856×base vs 买侧 ≈0.78×base，买→立即卖 +9.7%/循环零耗时无限刷）
     return Math.max(1, Math.round(v * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId)));
   },
   buy(itemId) {
@@ -79,7 +80,7 @@ const ShopSys = {
       if (!ok) return;
     }
     Bag.removeItem(itemId, qty);
-    Bag.addStones(gain);
+    Bag.addStonesRaw(gain);   // v32 修瑕（E16）：出售款原额入账，不吃灵石获取加成（「获取加成」语义收窄为战斗/事件掉落）
     Log.add(`你售出 ${def.name} ×${qty}，得 ${Utils.fmtNum(gain)} 下品灵石。`, 'gain');
     Game.afterAction();
   },
@@ -128,7 +129,7 @@ const ShopSys = {
     if (!ok) return;
     let gain = 0;
     for (const r of rows) { Bag.removeItem(r.id, r.qty); gain += r.sum; }
-    Bag.addStones(gain);
+    Bag.addStonesRaw(gain);   // v32 修瑕（E16）：同坊市出售——原额入账
     Log.add(`你将凡品杂物打包售予坊市（${count} 件），得 <b>${Utils.fmtNum(gain)}</b> 下品灵石。`, 'gain');
     Game.afterAction();
   },
