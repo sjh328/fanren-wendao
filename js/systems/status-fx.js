@@ -79,7 +79,9 @@ const StatusFx = {
   /* v30 状态引擎：统一衰减时相——原衰减清单散落四路调用点各自维护，kind 易漏
    *（金光盾/敌方虚弱曾双双漏衰减）。所有回合末衰减统一走 tick(list, phase)。 */
   AUG_MINE: ['defdown', 'slow', 'weaken', 'atkup', 'defup', 'agiup', 'critup', 'shield', 'ward'],
-  AUG_ENEMY: ['defdown', 'slow', 'weaken', 'vuln'],   // v31 修瑕：破绽漏入衰减表——一张破阵符曾=敌方永久 +30% 被会心
+  // v33（E68）修瑕：补 atkup/agiup/critup——「偷梁换柱」把玩家增益转嫁敌方后原永不衰减（不在任何
+  // 衰减表内），被偷一次狂暴丹＝敌方整场永久 +攻/身法/暴击，长战越偷越强
+  AUG_ENEMY: ['defdown', 'slow', 'weaken', 'vuln', 'atkup', 'agiup', 'critup'],   // v31 修瑕：破绽漏入衰减表——一张破阵符曾=敌方永久 +30% 被会心
   tick(list, phase) {
     const kinds = phase === 'enemyEnd' ? this.AUG_ENEMY : this.AUG_MINE;
     for (const x of list) if (kinds.includes(x.kind)) x.rounds--;

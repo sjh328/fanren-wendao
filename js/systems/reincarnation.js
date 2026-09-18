@@ -27,7 +27,11 @@ const ReincarnationSys = {
     // 传承树层数与永久属性。自此 marksEarned（累计获得，只增）决定树层 1~10 与属性基数；
     // marks（余额）专供消费端（来世预约/传承树 11~15）。老档 marksEarned 缺失时以当前余额
     // 起算（保守，不追溯历史铸造）。
-    if (cur.marksEarned == null) cur.marksEarned = cur.marks || 0;
+    // v33（A1）修瑕：回填条件原为 `== null`——但 cur 可能由 fresh（marksEarned:0）起底
+    // （全局键不存在、仅旧分键 legacy_auto/1/2/3 存在的 v29 前老档），0 恒非 null 致回填
+    // 永不命中：这批档读档即树层归零、属性归零而余额照在。改真值判定（分账后 earned 只增
+    // 且初始=marks，earned=0 而 marks>0 必为老档，回填无副作用）。
+    if (!cur.marksEarned) cur.marksEarned = cur.marks || 0;
     if (cur.treeExtra == null) cur.treeExtra = 0;
     return cur;
   },
@@ -133,6 +137,7 @@ const ReincarnationSys = {
     if (res === '__buyTree') {
       // v32（D2）：传承树 11~15 层解锁（扣余额，不影响累计获得与属性）
       const lg = this.readLegacy();
+      if ((lg.marks || 0) < this.TREE_EXTRA_COST) return this.mirror();   // v33（E83）：购买口二次余额校验（弹窗生成时校验与扣费之间存在任何异步消费即可能透支）
       lg.marks = (lg.marks || 0) - this.TREE_EXTRA_COST;
       lg.treeExtra = (lg.treeExtra || 0) + 1;
       this.writeLegacy(lg);
@@ -166,22 +171,27 @@ const ReincarnationSys = {
       { id: 'comp',   cost: 2, name: '宿慧一点', desc: '来世悟性 +1（上限十）' },
     ];
     const curPlan = legacy.plan || null;
+    const curPlanCost = curPlan ? ((PLANS.find(x => x.id === curPlan) || {}).cost || 0) : 0;
     const pickPlan = await UI.popup({
       title: '来世预约',
-      html: `轮回镜前，你可以此生的印记，为来世预约一份底气（现印记 <b>${legacy.marks || 0}</b>）。<br><span class="tip-line">· 预约即时生效、仅此一次；再下一次兵解前可重新预约。</span>`,
+      html: `轮回镜前，你可以此生的印记，为来世预约一份底气（现印记 <b>${legacy.marks || 0}</b>）。<br><span class="tip-line">· 预约即时生效、仅此一次；换约自动退掉旧约印记、补扣差额。</span>`,
       options: PLANS.map(pl => {
         const owned = curPlan === pl.id;
-        const afford = (legacy.marks || 0) >= pl.cost;
-        return { text: `${owned ? '✓ 已预约 · ' : ''}${pl.name}（${pl.cost} 印记）——${pl.desc}${!owned && !afford ? '（印记不足）' : ''}`, value: owned ? null : pl.id };
+        const net = pl.cost - (owned ? 0 : curPlanCost);   // v33（E84）：换约退差价——原换约不退旧价（6 枚旧约换 2 枚新约实付 8 枚）
+        const afford = (legacy.marks || 0) >= Math.max(0, net);
+        return { text: `${owned ? '✓ 已预约 · ' : ''}${pl.name}（${owned ? '已约' : `${net >= 0 ? pl.cost : `退 ${curPlanCost} 补 ${pl.cost}`}`} 印记）——${pl.desc}${!owned && !afford ? '（印记不足）' : ''}`, value: owned ? null : pl.id };
       }).concat([{ text: curPlan ? '维持现有预约' : '不作预约', value: null }]),
     });
     if (pickPlan) {
       const pl = PLANS.find(x => x.id === pickPlan);
-      if (pl && curPlan !== pl.id && (legacy.marks || 0) >= pl.cost) {
-        legacy.marks -= pl.cost;
-        legacy.plan = pl.id;
-        this.writeLegacy(legacy);
-        Log.add(`轮回镜中光华一闪——你以 ${pl.cost} 枚印记预约了来世的【${pl.name}】。（印记余 ${legacy.marks}）`, 'realm');
+      if (pl && curPlan !== pl.id) {
+        const net = pl.cost - curPlanCost;
+        if ((legacy.marks || 0) >= Math.max(0, net)) {
+          legacy.marks = (legacy.marks || 0) - net;   // v33（E84）：净差额结算
+          legacy.plan = pl.id;
+          this.writeLegacy(legacy);
+          Log.add(`轮回镜中光华一闪——${curPlan ? '旧约印记已退、' : ''}你以净 ${net >= 0 ? net : 0} 枚印记（付 ${pl.cost}${curPlanCost ? ` 退 ${curPlanCost}` : ''}）预约了来世的【${pl.name}】。（印记余 ${legacy.marks}）`, 'realm');
+        } else UI.toast('印记不足（换约需补差额）');
       }
     }
     // 择法宝入轮回
@@ -210,12 +220,14 @@ const ReincarnationSys = {
   async execute(oldP, legacy, kept, origin, extraMarks = 0) {
     // 前世仇怨：只带走此生尚存的心结（已化解者不入轮回）
     const grudges = Object.keys(oldP.npcs || {}).filter(id => oldP.npcs[id].grudge && oldP.npcs[id].alive);
-    // v32（D7）：兵解防重护栏——同一世（同 lifeUid/同出身指纹）重复 execute 不再发印记与世数，
+    // v32（D7）：兵解防重护栏——同一世（同 lifeUid）重复 execute 不再发印记与世数，
     // 堵「手动槽留旧档反复兵解刷印记/世数」的漏网（去重集只挡一次性来源，挡不住每世基础 +1）
-    const fp = oldP.lifeUid || `${oldP.name}|${JSON.stringify(oldP.attrs || {})}|${oldP.origin || ''}`;
+    // v33（E88）：指纹单源化——migrate 自 v32 起必派生 lifeUid，execute 侧兜底公式删除
+    //（双轨并存是漂移温床）；极老档缺 lifeUid 时跳过护栏（退回 v31 前行为，不误伤）
+    const fp = oldP.lifeUid;
     legacy.executed = legacy.executed || {};
-    const reExecuted = !!legacy.executed[fp];
-    if (!reExecuted) {
+    const reExecuted = fp ? !!legacy.executed[fp] : false;
+    if (fp && !reExecuted) {
       legacy.executed[fp] = 1;
       const exKeys = Object.keys(legacy.executed);
       if (exKeys.length > 40) delete legacy.executed[exKeys[0]];   // 防无界增长

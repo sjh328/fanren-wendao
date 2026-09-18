@@ -70,7 +70,7 @@ console.log('===== SA 源码静态组 =====');
   festival.includes('Battle.active || UI._popupResolve') ? pass('SA7 节庆战斗/弹窗挂起门（A3/E61）') : fail('SA7 节庆门', '');
   bag.includes('const p = Game.player;   // v32 修瑕（A4）') ? pass('SA8 drop 补 p 声明（A4）') : fail('SA8 drop', '');
   reinc.includes('marksEarned') && reinc.includes('baseTier(legacy)') && reinc.includes('TREE_EXTRA_COST') ? pass('SA9 印记分账三件套（A5/D1）') : fail('SA9 分账', '');
-  reinc.includes('cur.marksEarned == null') && reinc.includes('cur.marksEarned = cur.marks || 0') ? pass('SA10 老档 marksEarned 迁移（A5）') : fail('SA10 迁移', '');
+  reinc.includes('!cur.marksEarned') && reinc.includes('cur.marksEarned = cur.marks || 0') ? pass('SA10 老档 marksEarned 迁移（A5/v33 A1 真值回填）') : fail('SA10 迁移', '');
   !ui.includes('XianSys.unlocked(p) && !p.canReincarnate') ? pass('SA11 仙阶卡不再被兵解锁死（A6）') : fail('SA11 仙阶卡', '');
   ui.includes('act-reinc-dismiss') && gamejs.includes("'act-reinc-dismiss'") ? pass('SA12 兵解之念可收回（A6）') : fail('SA12 收回', '');
   gdata.includes('c_n8:') && gdata.includes('c_n16:') && gdata.includes('c_n18:') && gdata.includes('c_n19:') && gdata.includes('c_n20:') && gdata.includes('c_n21:') ? pass('SA13 六位新角色注册 CHARACTERS（A7）') : fail('SA13 CHARACTERS', '');
@@ -150,7 +150,7 @@ console.log('===== SA 源码静态组 =====');
 
   /* ---- B6 洞府日常抽样 ---- */
   dungeon.includes('每节点计 1 日') ? pass('SA77 秘境计日（E59）') : fail('SA77 计日', '');
-  sect.includes('Game._offlineReplay') && gamejs.includes('flushOfflineAgg') ? pass('SA78 离线日报聚合（E60）') : fail('SA78 日报', '');
+  sect.includes('聚合条件放宽为 auto') && gamejs.includes('flushOfflineAgg') ? pass('SA78 日报聚合（E60/v33 E82 在线同聚合）') : fail('SA78 日报', '');
   cave.includes('回环 afterAction 拆除') ? pass('SA79 访客回环拆除（E62）') : fail('SA79 回环', '');
   ui.includes('胜得 1.6 倍彩头') ? pass('SA80 斗兽文案（E63）') : fail('SA80 斗兽', '');
   cave.includes('颗粒无收') && cave.includes('if (qty > 0)') ? pass('SA81 零收成不计数（E64）') : fail('SA81 零收成', '');
@@ -172,7 +172,7 @@ console.log('===== SA 源码静态组 =====');
   trib.includes('p.counters.xianyuan -= 50') ? pass('SA93 仙劫借天运燃仙元（D6）') : fail('SA93 借天运', '');
   reinc.includes('TREE_EFFECTS.filter((t2, i2) => treeTier >= i2 + 1)') ? pass('SA94 树 11~15 效果接入（D2）') : fail('SA94 树层', '');
   pfac.includes('lifeUid') ? pass('SA95 每世指纹（D7）') : fail('SA95 指纹', '');
-  reinc.includes('const reExecuted = !!legacy.executed[fp];') ? pass('SA96 兵解防重护栏（D7）') : fail('SA96 防重', '');
+  reinc.includes('const reExecuted = fp ? !!legacy.executed[fp] : false;') ? pass('SA96 兵解防重护栏（D7/v33 E88 指纹单源）') : fail('SA96 防重', '');
 
   /* ---- E 装备经济纵深 ---- */
   forge.includes('_recastN') && forge.includes('[8, 14, 20]') ? pass('SA97 重铸阶梯价（E1）') : fail('SA97 阶梯价', '');
@@ -376,10 +376,10 @@ try {
     const chBak = Utils.chance; Utils.chance = () => true;
     UI.popup = async () => true;
     await stubAA(() => AuctionSys.bid('steady'));
-    out.boxDay1 = p.auction.boxDay === Math.floor(p.day);
+    out.boxDay1 = p._boxDay === Math.floor(p.day);   // v33（E73）：日限迁 p 本体
     p.auction.until = 0; p.auction.seq++;
     await stubAA(() => AuctionSys.bid('steady'));
-    out.boxLimited = p.auction.boxDay === Math.floor(p.day);   // 第二次被门禁挡下，boxDay 不变
+    out.boxLimited = p._boxDay === Math.floor(p.day);   // 第二次被门禁挡下，日限不变（v33 E73）
     Utils.chance = chBak;
     // E26：r9 感悟溢出=50 仙元/点
     const r9 = p.realmIdx; p.realmIdx = 9;

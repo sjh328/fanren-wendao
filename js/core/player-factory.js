@@ -289,6 +289,13 @@ const PlayerFactory = {
     }
     out.gongfa = gf;
     out.equipped = { ...fresh.equipped, ...(p.equipped || {}) };
+    // v33（E96）：equipped 三槽同洗脏档——背包已剔下架 id（E23），此处原不校验：
+    // 脏档残留已下架 id 时状态栏显示「无」、槽位却被占，act-equip 装新件才自愈
+    for (const slot of ['weapon', 'armor', 'accessory']) {
+      const eq = out.equipped[slot];
+      const eqId = eq && typeof eq === 'object' ? eq.id : eq;
+      if (eqId && !GameData.ITEMS[eqId]) out.equipped[slot] = null;
+    }
     out.counters = { ...fresh.counters, ...(p.counters || {}) };
     out.flags = { ...fresh.flags, ...(p.flags || {}) };
       // v31 仙阶：结构自愈——老档无 xianjie 归零为未入阶，超界值钳制

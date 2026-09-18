@@ -675,13 +675,17 @@ const QuestSys = {
     // v19 NPC 绑定：结案增进交情、写入记忆与年表
     if (sd.npc) {
       const s = NpcSys.state(p, sd.npc);
-      if (s) {
+      // v33（E90）修瑕：原对已殒身 NPC 照加交情播「刮目相看」——死者改走悼亡口径
+      if (s && s.alive) {
         s.met = true;
         s.rel = Utils.clamp(s.rel + 8, -100, 100);
         NpcSys.mem(p, sd.npc, 'story', `支线·${sd.title}`);
+        const nd = NpcSys.def(sd.npc);
+        if (nd) Log.add(`${nd.name} 对你刮目相看——此事之后，你们的关系更进了一步。（交情 +8）`, 'gain');
+      } else {
+        const nd = NpcSys.def(sd.npc);
+        if (nd) Log.add(`只是——${nd.name} 已不在人世，这份了结，再无人当面道谢。（望空一祭）`, 'info');
       }
-      const nd = NpcSys.def(sd.npc);
-      if (nd) Log.add(`${nd.name} 对你刮目相看——此事之后，你们的关系更进了一步。（交情 +8）`, 'gain');
     }
     Story.chron(`支线「${sd.title}」结案`);
     UI.renderAll();
@@ -836,7 +840,8 @@ const QuestSys = {
       + groupBlock(`未启（${groups.locked.length}）· 随境界与前置解锁`, groups.locked);
   },
 
-  /** v20 问道录 · 百科词条（LORE 词条化，随剧情推进解锁） */
+  /** v20 问道录 · 百科词条（LORE 词条化，随剧情推进解锁）
+   *  v33（D7）：补 v31/v32 新系统三词条——仙阶四境/仙劫异象/秘境地脉（原先有机制无词条） */
   LORE_KEYS: [
     { id: 'intro', need: null, title: '血河之殇' },
     { id: 'bloodRiver', need: 'c1_end', title: '血河宗' },
@@ -848,6 +853,9 @@ const QuestSys = {
     { id: 'ferryman', need: 'c7_open', title: '渡船人' },
     { id: 'timeline', need: 'c5_open', title: '大事时间线' },
     { id: 'factions', need: 'c7_end', title: '六大势力立场' },
+    { id: 'xianjie', need: 'c9_end', title: '仙门四阶' },
+    { id: 'xianVision', need: 'c9_end', title: '仙劫异象' },
+    { id: 'dungeonRule', need: 'c5_end', title: '秘境地脉' },
   ],
   openLore() {
     const p = Game.player;
@@ -986,6 +994,9 @@ const QuestSys = {
       body += `<div class="chron-line"><span class="chron-day">第${this.CN9[i]}章</span><span>${label ? `⚖ ${label}` : '<span style="color:var(--text-faint)">尚未抉择</span>'}</span></div>`;
     }
     body += '<div class="tip-line" style="margin-top:6px">· 每一次章末抉择都已化作道心烙印，并悄然改写着此后的因果。</div>';
+    // v33（D1）：抉择回响计数——旗标键（k*）已随回响网络逐章点亮，玩家可见「回响已至几处」
+    const echoCount = Object.keys(choices).filter(k => /^k\d+_/.test(k)).length;
+    if (echoCount > 0) body += `<div class="tip-line">· 已响起的因果回响：<b>${echoCount}</b> 处——回声散落在往后的章节里，重读旧章时自会遇见。</div>`;
     return body;
   },
   /** 重读某段剧情（只读模式，✕ 可关闭） */

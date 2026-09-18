@@ -135,6 +135,10 @@ const Story = {
       lines = sc.pick ? await sc.pick(opt.value) : null;
     }
     this.recordChoice(c.id, opt.value);
+    // v33（A2）修瑕：回响场景的 reqChoice.key 用旗标名（k5_past_accept/k7_route/k4_dilemma_answer），
+    // 而此处只按脚本 id 记录——choiceOf(旗标名) 恒 null，v32 三面章末回响 9 个场景从未可见。
+    // 按旗标名同步记录抉择值（与 setFlag 布尔并存；未来旗标分支一律受益）。
+    if (opt.flag) this.recordChoice(opt.flag, opt.value);
     if (opt.flag) this.setFlag(opt.flag);
     // 抉择后插入结果旁白
     c.scenes.splice(c.idx + 1, 0, { t: 'narr', text: (lines || ['冥冥之中，因果已种。']).join('\n') });
@@ -181,6 +185,7 @@ const Story = {
       if (done('n23')) vows.push('老酒鬼掌船相渡');
       if (vows.length) {
         const shieldPct = 12 * vows.length;
+        if (typeof this.chron === 'function') this.chron(`决战誓约：${vows.join('、')}`);   // v33（E92）：人生大事入年表
         setTimeout(() => {
           if (Battle.active && !Battle.active.over) {
             StatusFx.add(Battle.active.myFx, { kind: 'shield', pct: shieldPct, rounds: 3 });

@@ -51,7 +51,8 @@ const AuctionSys = {
     const day = Math.floor(p.day || 0);
     if (!p.auction || p.auction.until < day) {
       // v29 修瑕：拍品种子带期号 seq——此前同日中标后 hash('auction@'+day) 恒重新掷出同一件，可无限复购
-      const seq = (p.auction && p.auction.seq) || 0;
+      const prev = p.auction;
+      const seq = (prev && prev.seq) || 0;
       const mystery = Utils.chance(10);
       if (mystery) {
         p.auction = { item: 'mystery', seq, base: this.mysteryBase(p), until: day + this.PERIOD };
@@ -65,9 +66,13 @@ const AuctionSys = {
       // v30 复核：底价随境界但限三境溢阶——原 3.8^min(8,r) 全幅膨胀，r6+ 拍品性价比远逊坊市，无人竞拍
       const mul = Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
       // v32（E5）影子竞价·热度：拍品每被流拍/围观一轮，底价随关注热度上浮（封顶三成）——
-      // 「每个人都盯着的那件」不会便宜
-      const hot = 1 + Math.min(0.3, ((p.auction && p.auction.views) || 0) * 0.03);
-      p.auction = { item: lot2.item, seq, views: ((p.auction && p.auction.views) || 0) + 1, base: Math.round(lot2.base * mul * hot), until: day + this.PERIOD };
+      // 「每个人都盯着的那件」不会便宜。
+      // v33（E77）修瑕：热度原是永久棘轮——views 只增不随拍品重置（约十期后一切拍品永久 +30%），
+      // 且古匣期不带 views 整体清零。现按拍品语义：同一件拍品连任才累计围观，换品即归一。
+      const sameLot = prev && prev.item === lot2.item && prev.seq === seq;
+      const views = sameLot ? ((prev.views || 0) + 1) : 1;
+      const hot = 1 + Math.min(0.3, (views - 1) * 0.03);
+      p.auction = { item: lot2.item, seq, views, base: Math.round(lot2.base * mul * hot), until: day + this.PERIOD };
       }
     }
     return p.auction;
@@ -77,13 +82,16 @@ const AuctionSys = {
     const a = this.state(p);
     const isMystery = a.item === 'mystery';
     // v32 修瑕（E20）：古匣日限一枚——原中奖即 until=0 同日可连环开匣（与塔雷晶核同款护栏）
-    if (isMystery && p.auction.boxDay === Math.floor(p.day || 0)) { UI.toast('古匣灵机未复——今日已开启过一回，明日再来'); return; }
+    // v33（E73）修瑕：日限原记在 p.auction.boxDay——bid 中标后 until=0，下次渲染 state() 即整体替换
+    // 该对象、boxDay 随之蒸发（切个页签就能再开）。改挂 p 本体走日结总线，日限自此跨轮换存续。
+    // v33 补：判定不做真值 coercion（`|| -1` 在第 0 日恒失配——开局首日可连开两匣）
+    if (isMystery && p._boxDay === Math.floor(p.day || 0)) { UI.toast('古匣灵机未复——今日已开启过一回，明日再来'); return; }
     // v29：拍品境界门槛——低境不再能低价竞得远超自身境界的拍品
     if (!isMystery) {
       const lot = this.LOT_POOL.find(x => x.item === a.item);
       if (lot && (p.realmIdx || 0) < lot.minRealm) { UI.toast(`此拍品非当前境界可用之物（需${GameData.REALM_NAMES[lot.minRealm]}期以上）`); return; }
     }
-    const def = isMystery ? { name: '未鉴定·蒙尘古匣', desc: '匣上封皮剥落，看不出内里乾坤——可能是废纸，也可能是仙家至宝。' } : GameData.ITEMS[a.item];
+    const def = isMystery ? { name: '未鉴定·蒙尘古匣', desc: '匣上封皮剥落，看不出内里乾坤——可能是废纸，也可能是仙家至宝。' } : (GameData.ITEMS[a.item] || { name: a.item, desc: '' });   // v33（E80）：脏档残留已下架 id 时不再 TypeError
     // 三档：稳健 ×1.15 必成九成五 / 激进 ×0.9 六成 / 天价 ×1.6 必成
     const opts = {
       steady: { mul: 1.15, rate: 95, label: '稳健出价' },
@@ -129,7 +137,7 @@ const AuctionSys = {
         Story.chron(`拍卖行竞得「${def.name}」`);
       }
       p.auction.until = 0;   // 本期拍品易主，刷新下一件
-      if (isMystery) p.auction.boxDay = Math.floor(p.day || 0);   // v32 修瑕（E20）：古匣日限一枚
+      if (isMystery) Daily.resetIfNew(p, '_boxDay');   // v32 修瑕（E20）+ v33（E73）：古匣日限一枚（迁 p 本体日结总线，防 state() 轮换清账）
       p.auction.seq = (p.auction.seq || 0) + 1;   // v29：期号递进——同日不再掷出同一件拍品
       Ambience.sfx('auction');   // v19 落槌音
     } else {

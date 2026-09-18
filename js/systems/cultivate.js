@@ -20,6 +20,10 @@ const Cultivate = {
   gainMult() {
     return (1 + Stat.compute(Game.player).cultPct / 100) * Utils.randF(0.9, 1.15);
   },
+  /** v33（E87）：闭关预估用期望中值 1.025——原预估混入同一随机数种子外的独立一掷，展示值必与实发对不上 */
+  gainMultExp() {
+    return (1 + Stat.compute(Game.player).cultPct / 100) * 1.025;
+  },
   /** 增加修为并处理境界内进层；返回是否发生过进层 */
   addExp(p, amount, silent = false) {
     let leveled = false;
@@ -208,7 +212,7 @@ const Cultivate = {
     const ok = await UI.popup({
       title: '闭关修炼',
       html: `闭关三十日，心无旁骛，修行效率远胜平日。<br>
-        预计可得修为 <span class="hl">≈${Utils.fmtNum(Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult()))}</span>（视悟性与诸般加成略有浮动）。<br>
+        预计可得修为 <span class="hl">≈${Utils.fmtNum(Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMultExp()))}</span>（视悟性与诸般加成略有浮动）。<br>
         需支付洞府灵石开销 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石／轮。<br>
         <span class="neg">若修为已至圆满，闭关中会自行冲关。</span>
         <label class="opt-line"><input type="checkbox" id="seclude-until-level">

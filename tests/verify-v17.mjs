@@ -63,7 +63,7 @@ console.log('===== SA 源码静态组 =====');
   sfx.includes('const dataElite = !!d.elite;') && sfx.includes('const e = dataElite || !!opts.elitePlus;') ? pass('SA11 elitePlus 入对象构造（A7）') : fail('SA11 elitePlus', '');
   sfx.includes('hpMax: m(Math.round((55 + Math.pow(rp, 1.6) * 5) * (d.hp || 1) * (dataElite ? 1.7 : 1)), \'hp\')') ? pass('SA12 elitePlus 不叠倍率（A7）') : fail('SA12 倍率', '');
   tower.includes('t.today.stones = 0;') ? pass('SA13 塔层奖额度换日清零（A8）') : fail('SA13 塔额度', '');
-  sfx.includes("AUG_ENEMY: ['defdown', 'slow', 'weaken', 'vuln']") ? pass('SA14 破绽入敌方衰减表（A9）') : fail('SA14 vuln', '');
+  sfx.includes("AUG_ENEMY: ['defdown', 'slow', 'weaken', 'vuln', 'atkup', 'agiup', 'critup']") ? pass('SA14 破绽+偷益入敌方衰减表（A9/v33 E68）') : fail('SA14 vuln', '');
   tower.includes('Math.max(1, Math.round(1 + (mods.chest ? mods.chest - 1 : 0)))') ? pass('SA15 贪匣宝箱数取整（A10）') : fail('SA15 取整', '');
   beast.includes('if (B.ctx && B.ctx.tower) { UI.toast(\'塔影乃气相所化') && battle.includes('B.ctx.tower || B.ctx.story || B.ctx.dungeon') ? pass('SA16 塔影/剧情/秘境皆不可驯（A11/v32 A2）') : fail('SA16 塔驯服', '');
   stat.includes('(eq.block || 0)') ? pass('SA17 格挡补读 eq.block（A12）') : fail('SA17 block', '');
@@ -351,6 +351,7 @@ if (browser) {
       // D7：炼器残片折半——f1 需玄铁 3，持 6 片时折为 2
       p.bag['m_xuantie'] = 10;
       p.bag['m_qipei'] = 6;
+      p.stones.low += 5000;   // v33：炼器开炉收工费（f1=450），测试补给
       const oreBefore = Bag.count('m_xuantie');
       const fragBefore = Bag.count('m_qipei');
       let forgeErr = null;

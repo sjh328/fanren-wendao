@@ -136,8 +136,9 @@ const XianSys = {
     const ev = Utils.pick(GameData.XIAN_VISITORS);
     const got = ev.fn(p);
     if (!auto) Log.add(`【仙界访客】${ev.text}（${got}）`, 'event');
-    else if (Game._offlineReplay) {
-      // v32 修瑕（E60）：离线访客原逐条刷（30 日约 9 条「曾有仙客到访」）——聚合进离线日报
+    else {
+      // v32 修瑕（E60）：离线访客原逐条刷（30 日约 9 条「曾有仙客到访」）——聚合进日报
+      // v33（E82）：聚合条件放宽为 auto——在线按日补结（E27）原静默入账零感知，同进日报
       const agg = Game._offlineAgg = Game._offlineAgg || {};
       agg.xianVisit = (agg.xianVisit || 0) + 1;
     }

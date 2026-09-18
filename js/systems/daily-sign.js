@@ -21,6 +21,12 @@ const DailySign = {
         return `气血 -${Math.round(hpLoss)}、灵石 -${Utils.fmtNum(sLoss)}`;
       } },
   ],
+  /** v33（C2/D2）：连签进度——「距七日满签还差几日」单源（黄历卡与今日修行卡共用） */
+  progress(p) {
+    const streak = p.signStreak || 0;
+    const day = streak > 0 ? ((streak - 1) % 7) + 1 : 0;
+    return { streak, day, left: day > 0 ? 7 - day : 7 };
+  },
   draw() {
     const p = Game.player;
     if (!p || p.dead) return;
@@ -32,7 +38,10 @@ const DailySign = {
     const gm = (typeof KarmaSys !== 'undefined' && KarmaSys.goodEventMult) ? KarmaSys.goodEventMult(p) : 1;
     const wOf = x => (x.id === 'mishap' ? x.w / gm : x.w);
     // v32（F5）连签阶梯：连续求签每七日必得上上签，且当日额外气运 +3——黄历自开局仪式感变长线日常
-    p.signStreak = (p.signDay === today - 1) ? (p.signStreak || 0) + 1 : 1;
+    // v33（C2）重构：原要求「逐游戏日」续签，而探索+2 日/修炼+3 日/闭关+30 日随手断签——正常
+    // 节奏下七日连签几乎不可达成。改三日内（gap≤3）皆视为延续；超过三日或首次求签则重新计程。
+    const gap = p.signDay == null ? Infinity : today - p.signDay;
+    p.signStreak = (gap >= 1 && gap <= 3) ? (p.signStreak || 0) + 1 : 1;
     const streakDay = ((p.signStreak - 1) % 7) + 1;
     let item;
     if (streakDay === 7) {

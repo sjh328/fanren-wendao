@@ -174,7 +174,7 @@ const DungeonSys = {
       const gain = Math.round(Utils.rand(70, 120) * GameData.eco(R.recRealm) * dm);
       Cultivate.addExp(p, gain);
       const insGain = Utils.rand(3, 7);
-      p.insight = Math.min(100, p.insight + insGain);
+      Cultivate.addInsight(p, insGain);   // v33（E106）：走统一入口——原直写 min(100,·)，感悟满百时奇遇感悟静默蒸发
       const parts = [`修为 +${Utils.fmtNum(gain)}`, `突破感悟 +${insGain}`];
       let extra = '';
       if (D.depth >= 4 && Utils.chance(14)) {
@@ -259,7 +259,7 @@ const DungeonSys = {
     } else if (kind === 'senior') {
       const gain = Math.round(Utils.rand(60, 100) * GameData.eco(R.recRealm) * dm);
       Cultivate.addExp(p, gain);
-      p.insight = Math.min(100, p.insight + 5);
+      Cultivate.addInsight(p, 5);   // v33（E106）：走统一入口（原直写满值静默蒸发）
       const parts = [`修为 +${Utils.fmtNum(gain)}`, '突破感悟 +5'];
       let extra = '';
       if (D.depth >= 3 && Utils.chance(10)) {

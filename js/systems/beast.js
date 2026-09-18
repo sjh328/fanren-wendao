@@ -193,7 +193,7 @@ const BeastSys = {
         if (B.stats) { B.stats.out += extra; if (B.stats.src) B.stats.src.beast += extra; }
         skillNote += `【${sk.name}·蚀魂 +${extra}】`;
       } else if (sk.kind === 'guard') {
-        StatusFx.add(B.myFx, { kind: 'shield', pct: tac === 'guard' ? 30 : 20, rounds: 2 });   // v32（C4）：护主策略下金光更厚
+        Battle.gainBuff({ kind: 'shield', pct: tac === 'guard' ? 30 : 20, rounds: 2 });   // v32（C4）：护主策略下金光更厚；v33（E72）：走统一增益入口——原直加绕过镜像词缀（v32 E11 口径：一切增益均触发镜像）
         skillNote += `【${sk.name}·护主金光】`;
       } else if (sk.kind === 'heal') {
         const heal = Math.max(1, Math.round(mySt.maxHp * (tac === 'guard' ? 0.12 : 0.08)));   // v32（C4）：护主策略下回哺更沛

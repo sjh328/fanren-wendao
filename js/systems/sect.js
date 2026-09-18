@@ -155,7 +155,7 @@ const SectSys = {
     Bag.addStones(r.stones);
     // v27 联动：门派差事践诺立信——声望 +1（声望体系新产出端）
     if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 1, '门派差事践诺');
-    Log.add(`任务完成！获得 <b>贡献 ${r.contrib}</b> 点、灵石 ${Utils.fmtNum(r.stones)}。${streakBonus ? `（连勤有赏 · 贡献 +${streakBonus}）` : ''}`, 'gain');
+    Log.add(`任务完成！获得 <b>贡献 ${r.contrib}</b> 点、灵石 ${Utils.fmtNum(r.stones)}。${streakBonus ? `（勤勉有赏 · 每三桩差事贡献 +${streakBonus}）` : ''}`, 'gain');   // v33（E111）：「连勤」实为终身累计每三桩，文案对齐语义
     p.sect.tasks[taskIdx] = this.newTask(p);
     Game.afterAction();
   },
@@ -305,12 +305,13 @@ const SectSys = {
       Bag.addItem(mat, 1);
       extra = `，还捎回一份【${GameData.ITEMS[mat].name}】`;
     }
-    // v32 修瑕（E60）：离线回放原逐日刷 30 条日志——聚合进离线日报（Game.flushOfflineAgg 收口）
-    if (auto && Game._offlineReplay) {
+    // v32 修瑕（E60）：离线回放原逐日刷 30 条日志——聚合进日报（Game.flushOfflineAgg 收口）
+    // v33（E82）：聚合条件放宽为 auto——在线按日补结（E27）原静默入账零感知，同进日报
+    if (auto) {
       const agg = Game._offlineAgg = Game._offlineAgg || {};
       agg.disciple = (agg.disciple || 0) + stones;
       if (extra) agg.discipleExtra = (agg.discipleExtra || 0) + 1;
-    } else if (!auto) {
+    } else {
       Log.add(`【门中弟子历练】亲传在身，门中后辈代师行走江湖——缴回灵石 ${Utils.fmtNum(stones)}${extra}。`, 'gain');
     }
   },

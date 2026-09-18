@@ -423,6 +423,29 @@ const Battle = {
     const p = Game.player;
     return p.dao ? (GameData.BATTLE_SKILLS[p.dao] || []) : [];
   },
+  /** v33（E67）：束缚/冰封对一切主动手段一视同仁——原控制只在 act()（普攻/法诀/防御/道具）入口被
+   *  消耗，必杀/本命战技可照常出手且控制永不消耗（被控玩家连点必杀即可无视禁锢，敌控技形同虚设）。
+   *  返回 true 表示本回合被控制吃掉（完整走完被控流程），调用方直接 return。 */
+  async controlledConsume(st) {
+    const B = this.active;
+    if (!B) return false;
+    if (!StatusFx.has(B.myFx, 'stun') && !StatusFx.has(B.myFx, 'freeze')) return false;
+    B.busy = true;
+    const frozen = StatusFx.has(B.myFx, 'freeze');
+    this.log(`你身形被【${frozen ? '冰封' : '束缚'}】禁锢，纵有杀招在手亦难施展——这一回合无法动弹！`, 'log-warn');
+    B.myFx = StatusFx.removeKinds(B.myFx, ['stun', 'freeze']);
+    this.render();
+    await this.wait(500);
+    await this.enemyTurn();
+    if (!this.active) return true;
+    // v31 修瑕：缺敌方死亡判定——敌方若在己方回合殒命（如反伤/DOT），尸身会悬在场上、战斗永不收束
+    if (B.enemy.hp <= 0) { await this.victory(); return true; }
+    if (await this.afterEnemyPhase(st)) return true;
+    B.busy = false;
+    this.render();
+    this.autoNext();
+    return true;
+  },
   async actUlt(id) {
     const B = this.active;
     const p = Game.player;
@@ -431,6 +454,7 @@ const Battle = {
     const sk = this.ultList().find(x => x.id === id);
     if (!sk) return;
     if ((B.zhenyuan || 0) < sk.cost) { UI.toast('真元不足'); return; }
+    if (await this.controlledConsume(st)) return;   // v33（E67）：被控不可施必杀
     B.busy = true;
     B.zhenyuan -= sk.cost;
     B.menu = null;
@@ -507,6 +531,7 @@ const Battle = {
     const bmLv = (p.benming && p.benming.lv) || 0;
     const need = { guard3: 3, strike6: 6, strike9: 9 }[k] || 0;
     if (bmLv < need) { UI.toast('本命法宝阶数不足'); return; }
+    if (await this.controlledConsume(st)) return;   // v33（E67）：被控不可发本命战技
     B.busy = true;
     B.menu = null;
     try {
@@ -570,9 +595,9 @@ const Battle = {
     const negs = (B.myFx || []).filter(x => ['poison', 'burn', 'bleed', 'cursed', 'defdown', 'slow', 'weaken', 'stun', 'freeze', 'vuln'].includes(x.kind) && x.rounds > 0);
     const v = await UI.popup({
       title: '⚡ 凝 神',
-      html: `敛息凝神，战意与真元互换一息（<b>不耗行动回合</b>，每回合一次）。<br>当前战意 <b>${B.morale || 0}</b> · 真元 <b>${B.zhenyuan || 0}/${B.zmax || 6}</b>。`,
+      html: `敛息凝神，战意与真元互换一息（<b>不耗行动回合</b>，每回合一次）。<br>当前战意 <b>${B.morale || 0}</b> · 真元 <b>${B.zhenyuan || 0}/${B.zmax || 6}</b>${(B.zhenyuan || 0) >= (B.zmax || 6) ? '（真元已满，换气无益）' : ''}。`,
       options: [
-        { text: '20 战意 → 1 真元', value: 'zy' },
+        ...((B.zhenyuan || 0) < (B.zmax || 6) ? [{ text: '20 战意 → 1 真元', value: 'zy' }] : []),   // v33（E70）：真元满不再提供换气项——原满元照扣 20 战意白费
         ...(negs.length ? [{ text: `15 战意 → 净化【${(StatusFx.DEFS[negs[0].kind] || {}).name || '负面'}】`, value: 'purge' }] : []),
         { text: '收 势', value: null },
       ],
@@ -585,7 +610,6 @@ const Battle = {
       B._ningUsed = true;
     } else if (v === 'purge') {
       if ((B.morale || 0) < 15) { UI.toast('战意不足 15'); return; }
-      if (!(B.morale || 0)) return;
       B.morale -= 15;
       const target = negs[0];
       B.myFx = StatusFx.removeKinds(B.myFx, [target.kind]);
@@ -691,23 +715,8 @@ const Battle = {
     B.lastAct = kind;
     this.render();
     try {
-    // v13 束缚/冰封：本次行动被跳过，控制状态随即消耗
-    if (StatusFx.has(B.myFx, 'stun') || StatusFx.has(B.myFx, 'freeze')) {
-      const frozen = StatusFx.has(B.myFx, 'freeze');
-      this.log(`你身形被【${frozen ? '冰封' : '束缚'}】禁锢，这一回合无法动弹！`, 'log-warn');
-      B.myFx = StatusFx.removeKinds(B.myFx, ['stun', 'freeze']);
-      this.render();
-      await this.wait(500);
-      await this.enemyTurn();
-      if (!this.active) return;
-      // v31 修瑕：缺敌方死亡判定——敌方若在己方回合殒命（如反伤/DOT），尸身会悬在场上、战斗永不收束
-      if (B.enemy.hp <= 0) { await this.victory(); return; }
-      if (await this.afterEnemyPhase(st)) return;
-      B.busy = false;
-      this.render();
-      this.autoNext();
-      return;
-    }
+    // v13 束缚/冰封：本次行动被跳过，控制状态随即消耗（v33（E67）：流程单源化为 controlledConsume，必杀/本命同守此门）
+    if (await this.controlledConsume(st)) return;
     // v13 灵兽协助：出战灵兽有四成几率抢先扑击
     if (typeof BeastSys !== 'undefined' && await BeastSys.assist(st)) { await this.victory(); return; }
     switch (kind) {
@@ -986,6 +995,7 @@ const Battle = {
           Pill.apply(p, def, true);
           this.log(`你服下 <b>${def.name}</b>！`, 'log-gain');
         }
+        B.lastSkillTag = null; B.skillChain = 0; B.skillSeq = 0;   // v33（E69）：道具断势——v32 注释宣称「普攻/防御/道具断势」，道具分支漏网（符箓成不断势的免费填充物）
         break;
       }
       case 'defend': {
@@ -1606,8 +1616,10 @@ const Battle = {
         drops.push(`【${rd.name}】`);
       }
     }
-    // v32 修瑕（E7）：仙缘套装断头路补源——灵墟/雷狱精英第二稀有掉落（仙缘剑/铃，一成几率）
-    if (e.rareDrop2 && Utils.chance(10 + KarmaSys.rareDropBonus(p))) {
+    // v32 修瑕（E7）：仙缘套装断头路补源——灵墟/雷狱精英第二稀有掉落（仙缘剑/铃）
+    // v33（E78）修瑕：气运加成原全额叠加（10+45=55%），与「一成几率」文案差五倍——
+    // 第二稀有单独压系数（封顶约二成），大福缘仍占便宜但不至于刷穿断头路
+    if (e.rareDrop2 && Utils.chance(10 + Math.round(KarmaSys.rareDropBonus(p) * 0.25))) {
       const rd2 = GameData.ITEMS[e.rareDrop2];
       if (rd2) { Bag.addItem(e.rareDrop2, 1); drops.push(`【${rd2.name}】`); }
     }
@@ -1966,17 +1978,19 @@ const Battle = {
 
     // v19 必杀按钮行
     const ults = this.ultList();
+    const bound = !!(B.myFx && (StatusFx.has(B.myFx, 'stun') || StatusFx.has(B.myFx, 'freeze')));   // v33（E67）：被控时必杀/本命按钮同步置灰
+    const boundTip = bound ? '（身被禁锢，无法施展）' : '';
     const ultBtns = ults.length ? ults.map(sk =>
-      `<button class="btn btn-sm ult-btn" data-action="bt-ult" data-ult="${sk.id}" ${(B.busy || (B.zhenyuan || 0) < sk.cost) ? 'disabled' : ''} title="${sk.desc}">${sk.name}<span style="color:var(--text-faint)">（真元${sk.cost}）</span></button>`).join('') : '';
+      `<button class="btn btn-sm ult-btn" data-action="bt-ult" data-ult="${sk.id}" ${(B.busy || bound || (B.zhenyuan || 0) < sk.cost) ? 'disabled' : ''} title="${sk.desc}${boundTip}">${sk.name}<span style="color:var(--text-faint)">（真元${sk.cost}）</span></button>`).join('') : '';
     const ultRow = ultBtns ? `<div class="bt-sub ult-row">${ultBtns}</div>` : '';
     // v20 本命法宝觉醒战技（喂养 3/6/9 阶各解锁一式，每战各限一次）
     const bmLv = (p.benming && p.benming.lv) || 0;
     const bmOwn = (typeof ForgeSys !== 'undefined' && ForgeSys.benmingOwn) ? ForgeSys.benmingOwn(p) : false;
     B.bmUsed = B.bmUsed || {};
     const bmBtns = [];
-    if (bmOwn && bmLv >= 3 && !B.bmUsed.guard3) bmBtns.push(`<button class="btn btn-sm" data-action="bt-benming" data-k="guard3" ${B.busy ? 'disabled' : ''} title="金光罩体：两回合减伤三成">◍ 护主金光</button>`);
-    if (bmOwn && bmLv >= 6 && !B.bmUsed.strike6) bmBtns.push(`<button class="btn btn-sm" data-action="bt-benming" data-k="strike6" ${B.busy ? 'disabled' : ''} title="2.5× 伤害并破防三成">◈ 锁魂一击</button>`);
-    if (bmOwn && bmLv >= 9 && !B.bmUsed.strike9) bmBtns.push(`<button class="btn btn-sm btn-primary" data-action="bt-benming" data-k="strike9" ${B.busy ? 'disabled' : ''} title="4.0× 伤害并回复一成五气血">✦ 两世归一斩</button>`);
+    if (bmOwn && bmLv >= 3 && !B.bmUsed.guard3) bmBtns.push(`<button class="btn btn-sm" data-action="bt-benming" data-k="guard3" ${(B.busy || bound) ? 'disabled' : ''} title="金光罩体：两回合减伤三成${boundTip}">◍ 护主金光</button>`);
+    if (bmOwn && bmLv >= 6 && !B.bmUsed.strike6) bmBtns.push(`<button class="btn btn-sm" data-action="bt-benming" data-k="strike6" ${(B.busy || bound) ? 'disabled' : ''} title="2.5× 伤害并破防三成${boundTip}">◈ 锁魂一击</button>`);
+    if (bmOwn && bmLv >= 9 && !B.bmUsed.strike9) bmBtns.push(`<button class="btn btn-sm btn-primary" data-action="bt-benming" data-k="strike9" ${(B.busy || bound) ? 'disabled' : ''} title="4.0× 伤害并回复一成五气血${boundTip}">✦ 两世归一斩</button>`);
     const bmRow = bmBtns.length ? `<div class="bt-sub">${bmBtns.join('')}</div>` : '';
     const speedLabels = { 1: '×1', 2: '×2', 3: '极速' };
     const btns = [
@@ -1994,6 +2008,7 @@ const Battle = {
       `<button class="btn btn-sm" data-action="bt-ning" ${B.over ? 'disabled' : ''} title="凝神：20战意换1真元，或15战意净化一项负面（不耗行动，每回合一次）">⚡凝神</button>`,   // v32（C7）
     ].join('');
     const canTame = !!(B.enemy.id && !B.enemy.elite && !(B.ctx && (B.ctx.tower || B.ctx.story || B.ctx.dungeon || B.ctx.weType || B.ctx.sectDanger != null)) && typeof BeastSys !== 'undefined' && BeastSys.TAMEABLE.includes(B.enemy.species)
+      && !(B.ctx && B.ctx.waveIds && B.ctx.waveIds.length > 1)   // v33（E71）：多波妖群驯服首怪＝白捡半场经验跳过剩余波次
       && B.enemy.hp > 0 && B.enemy.hp <= B.enemy.hpMax * 0.2 && !B.over);   // v30：按 TAMEABLE 表判定；v31：塔影不可驯；v32（A2）：剧情/秘境/生死状/世界事件之敌非无主野兽，不可驯（驯服曾绕过全部结算分发，第一章可被驯服卡死）
     // v30 灵兽合击：亲昵 ≥60 的出战灵兽解锁人兽合击；v31（D2）：首用免费，此后 3 战意 2 真元充能
     const comboReady = typeof BeastSys !== 'undefined' && BeastSys.comboReady(p) && !B.over
@@ -2011,7 +2026,7 @@ const Battle = {
     document.getElementById('battle-box').innerHTML = `
       <div class="battle-head">— 修 罗 场 —</div>
       <div class="bt-side side-enemy ${e.raged ? 'raged' : ''}" data-species="${e.species || 'beast'}">
-        <div class="bt-name-row"><span class="bt-name enemy"><button class="bt-info-btn" data-action="bt-info" title="查看情报">🔍</button>${e.name}${e.elite ? ' <span class="tag danger">精英</span>' : ''}${e.tplName ? ` <span class="tag tpl" title="习性模板：${(GameData.MONSTER_TEMPLATES.find(t => t.id === e.tpl) || {}).desc || ''}">${e.tplName}</span>` : ''}${(B.waveIds && B.waveIds.length > 1) ? ` <span class="tag warn">第 ${B.waveIdx + 1}/${B.waveIds.length} 波</span>` : ''}${B.intent && !B.over ? ` <span class="tag intent-tag" title="意图预演：据此选择防御、破招或遁走（预估为未计格挡/会心的基础区间）">下一手 · ${this.intentLabel(B.intent)}${this.intentEstimate(B.intent)}</span>` : ''}${!(B.ctx.spar || B.ctx.story || B.ctx.tourney) && (B.turn || 1) === 7 && !e._exhausted ? ' <span class="tag safe">力竭将现</span>' : ''}${(B.enemyFxIds || []).length ? ' ' + B.enemyFxIds.map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `<span class="tag danger" title="${d.desc}">◆${d.name}</span>` : ''; }).join('') : ''}${e.raged ? ' <span class="tag danger">狂暴</span>' : ''}${e._raged2 ? ' <span class="tag danger">血性</span>' : ''}${e._phase2 ? ' <span class="tag danger">狂乱</span>' : ''}${e.charging ? ' <span class="tag danger">蓄力杀招</span>' : ''}${StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze') ? ' <span class="tag">被缚</span>' : ''}</span><span class="bt-realm">${e.realmLabel} · 攻${this.enAtk(e)} 防${this.enDef(e)}</span></div>
+        <div class="bt-name-row"><span class="bt-name enemy"><button class="bt-info-btn" data-action="bt-info" title="查看情报">🔍</button>${e.name}${e.elite ? ' <span class="tag danger">精英</span>' : ''}${e.tplName ? ` <span class="tag tpl" title="习性模板：${(GameData.MONSTER_TEMPLATES.find(t => t.id === e.tpl) || {}).desc || ''}">${e.tplName}</span>` : ''}${e._realmRule ? ` <span class="tag tpl" title="地脉规则：此秘境守敌受地脉加成（入秘时已公示）">${e._realmRule}</span>` : ''}${(B.waveIds && B.waveIds.length > 1) ? ` <span class="tag warn">第 ${B.waveIdx + 1}/${B.waveIds.length} 波</span>` : ''}${B.intent && !B.over ? ` <span class="tag intent-tag" title="意图预演：据此选择防御、破招或遁走（预估为未计格挡/会心的基础区间）">下一手 · ${this.intentLabel(B.intent)}${this.intentEstimate(B.intent)}</span>` : ''}${!(B.ctx.spar || B.ctx.story || B.ctx.tourney) && (B.turn || 1) === 7 && !e._exhausted ? ' <span class="tag safe">力竭将现</span>' : ''}${(B.enemyFxIds || []).length ? ' ' + B.enemyFxIds.map(fid => { const d = (GameData.ELITE_AFFIXES || []).find(x => x.id === fid); return d ? `<span class="tag danger" title="${d.desc}">◆${d.name}</span>` : ''; }).join('') : ''}${e.raged ? ' <span class="tag danger">狂暴</span>' : ''}${e._raged2 ? ' <span class="tag danger">血性</span>' : ''}${e._phase2 ? ' <span class="tag danger">狂乱</span>' : ''}${e.charging ? ' <span class="tag danger">蓄力杀招</span>' : ''}${StatusFx.has(e.fx, 'stun') || StatusFx.has(e.fx, 'freeze') ? ' <span class="tag">被缚</span>' : ''}${StatusFx.has(B.myFx, 'stun') || StatusFx.has(B.myFx, 'freeze') ? ' <span class="tag danger" title="你被禁锢——普攻/法诀/必杀/本命皆不可出，本回合行动将被跳过">身被禁锢</span>' : ''}</span><span class="bt-realm">${e.realmLabel} · 攻${this.enAtk(e)} 防${this.enDef(e)}</span></div>
         <div class="bt-figure enemy-fig" aria-hidden="true"></div>
         <div class="fx-tags">${StatusFx.tagsHtml(e.fx)}</div>
         <div class="bar"><div class="bar-fill hp${e.raged ? ' rage' : ''}" style="width:${ePct}%"></div><span class="bar-text"><span class="num-anim" data-nk="bt-ehp" data-nv="${e.hp}">${e.hp}</span> / ${e.hpMax}</span></div>

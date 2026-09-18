@@ -5,7 +5,8 @@
 const WorldSys = {
   freshWorld() {
     // v30 节奏重校：首次大事 10~14 年（v29 的 32~40 仍在多数周目之外——修为曲线重校后全程约 12~20 年）
-    return { nextEventYear: 10 + Utils.rand(0, 4), pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], priceMul: 1, market: null, rebuildUntil: 0, turmoilUntil: 0 };   // v32（F3）：灵疫重建/内乱 turmoil 回响
+    // v33（E91）：补 lingyiUntil（灵疫当年药价腾贵）；priceMul 死字段删除（priceMul() 由 warActive/rebuildUntil 实时重算，字段从未被读）
+    return { nextEventYear: 10 + Utils.rand(0, 4), pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], market: null, rebuildUntil: 0, turmoilUntil: 0, lingyiUntil: 0 };
   },
   year(p) { return Math.floor((p.day || 0) / 365) + 1; },
   isMagic(p, mapId) { const w = p.world; return !!(w && w.magicMaps && w.magicMaps.includes(mapId)); },
@@ -15,6 +16,16 @@ const WorldSys = {
   /** v20 灵潮 / 兽潮判定 */
   lingchaoActive(p) { const w = p.world; return !!(w && w.lingchaoUntil && this.year(p) <= w.lingchaoUntil); },
   beastWaveActive(p, mapId) { const w = p.world; return !!(w && w.beastMaps && w.beastMaps.some(b => b.map === mapId && this.year(p) <= b.until)); },
+  /** v33（E91）：灵疫当年「药价腾贵」落地——事件原只写文案，当年药价纹丝不动。
+   *  丹药与灵药材市价 ×1.15，买卖两侧同乘（ratio 不变，无倒卖套利口；次年转瘟后重建折价不变） */
+  HERBS: ['m_lingcao', 'm_lingzhi', 'm_xuelian', 'm_xuecan'],
+  isHerb(id) { return this.HERBS.includes(id); },
+  herbMul(p) {
+    const w = p.world;
+    if (!w || !w.lingyiUntil) return 1;
+    if (this.year(p) > w.lingyiUntil) { w.lingyiUntil = 0; return 1; }   // 过期自清
+    return 1.15;
+  },
   priceMul(p) {
     let mul = this.warActive(p) ? 1.15 : 1;
     // v32（F3）灵疫次年回响：瘟后重建，物料折价（市况 -10%）
@@ -56,7 +67,7 @@ const WorldSys = {
     NpcSys.yearTick(p, y);
     if (w.preachUntil && y > w.preachUntil) { w.preachUntil = 0; Log.add('圣地讲道落幕，道音散入天地之间。', 'system'); }
     if (w.ruinsUntil && y > w.ruinsUntil) { w.ruinsUntil = 0; Log.add('上古秘境重归虚妄，机缘之门缓缓关闭。', 'system'); }
-    if (w.warUntil && y > w.warUntil) { w.warUntil = 0; w.priceMul = 1; Log.add('宗门大战落幕，各方罢兵言和，物价渐归平常。', 'system'); }
+    if (w.warUntil && y > w.warUntil) { w.warUntil = 0; Log.add('宗门大战落幕，各方罢兵言和，物价渐归平常。', 'system'); }   // v33：priceMul 死字段写入删除（E91 同批——priceMul() 实时重算）
     if (w.lingchaoUntil && y > w.lingchaoUntil) { w.lingchaoUntil = 0; Log.add('灵潮渐渐退去，天地灵气复归平常。', 'system'); }
     if (w.beastMaps && w.beastMaps.length) {
       const rest = w.beastMaps.filter(b => y <= b.until);
@@ -84,8 +95,7 @@ const WorldSys = {
       text = `<b>上古秘境现世</b>——此后二十年秘宝频现，历练中的<b>宝箱与机缘遍地</b>。`;
     } else if (type === 'war') {
       w.warUntil = y + 30;
-      w.priceMul = 1.15;
-      text = `<b>宗门大战</b>——此后三十年宗门悬赏暴涨，坊市<b>物价腾贵</b>。`;
+      text = `<b>宗门大战</b>——此后三十年宗门悬赏暴涨，坊市<b>物价腾贵</b>。`;   // v33：priceMul 死字段写入删除（由 warActive 实时重算）
     } else if (type === 'lingchao') {
       w.lingchaoUntil = y + 10;
       text = `<b>灵潮涌动</b>——地脉灵潮奔涌，此后十年<b>修炼效率 +20%</b>。`;
@@ -112,6 +122,7 @@ const WorldSys = {
       text = `<b>奇人访世</b>——一位云游奇修路过此地，或指点迷津，或索一战之资，<b>缘法各安天命</b>。`;
     } else if (type === 'lingyi') {
       w.rebuildUntil = y + 1;   // v32（F3）次年回响：瘟后重建——来年坊市折价
+      w.lingyiUntil = y;   // v33（E91）：当年药价腾贵落地（herbMul ×1.15）——原只有文案没有机制
       text = `<b>灵疫蔓延</b>——一处坊市起了灵疫，<b>药价腾贵</b>。施药济人者积誉，囤药居奇者获利。`;
     } else {
       text = `<b>陨星坠落</b>——天外陨星坠入人间，星陨之处<b>天材地宝俯拾即是</b>。`;
@@ -122,6 +133,7 @@ const WorldSys = {
     const def = GameData.WORLD_EVENTS.find(e => e.id === type);
     Log.add(`【天下大事 · 第${y}年】${text}`, 'system');
     Log.add(`${def ? def.name : ''}之卡已现于「游历」页——参与或观望，一念自决。`, 'event');
+    if (typeof Story !== 'undefined' && Story.chron) Story.chron(`第${y}年 · 天下大事「${def ? def.name : type}」`);   // v33（E92）：天下大事入年表（原只入 8 条轮换的 history 且 UI 无展示入口）
   },
   /** 参与大事件：各得其赏 */
   async joinEvent() {

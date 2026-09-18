@@ -131,8 +131,7 @@ const Game = {
       if (/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '')) return;
       const map = { q: 'cultivate', w: 'quest', e: 'cave', r: 'map', t: 'jianghu', a: 'shop', s: 'sect', d: 'gongfa' };
       const tab = map[e.key.toLowerCase()];
-      if (tab && !Game.actions['act-tab']) return;
-      if (tab) { const lock = Guide.tabLocked(tab); if (!lock) { Game.actions['act-tab']({ tab }); } }
+      if (tab) { const lock = Guide.tabLocked(tab); if (!lock) { Game.actions['act-tab']({ tab }); } }   // v33（E100）：原「!Game.actions['act-tab']」恒假死守卫删除
     });
     // 关页前自动存档
     document.addEventListener('visibilitychange', () => {
@@ -265,6 +264,7 @@ const Game = {
       this.dailySettle(p, true);
     }
     this._offlineReplay = false;
+    p._settleDay = Math.floor(p.day || 0);   // v33（E81）：回放已逐日补结——原不同步 _settleDay，读档后首次行动再补结一轮（至多 30 次冗余日结，全靠各钩子日界防重兜底）
     this.flushOfflineAgg();
     if (offlineCrops > 0) {
       Log.add(`你不在的${realDays}个时辰里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
@@ -291,13 +291,14 @@ const Game = {
     try { if (typeof XianSys !== 'undefined' && XianSys.dailyCheck) XianSys.dailyCheck(p, auto); } catch (err) { console.error('仙界访客异常:', err); }   // v31：仙界访客（入仙籍后，离线静默入账）
   },
 
-  /** v32 修瑕（E60）：离线日报——auto 回放期间各系统聚合的收益在此收口成一条日志 */
-  flushOfflineAgg() {
+  /** v32 修瑕（E60）：离线日报——auto 回放期间各系统聚合的收益在此收口成一条日志
+   *  v33（E82）：在线按日补结（E27）的静默入账同走此口（标题区分），不再无声蒸发 */
+  flushOfflineAgg(title = '【离线日报】') {
     const agg = this._offlineAgg || {};
     const parts = [];
     if (agg.disciple) parts.push(`门中弟子历练缴回灵石 ${Utils.fmtNum(agg.disciple)}${agg.discipleExtra ? '、捎回灵材若干' : ''}`);
     if (agg.xianVisit) parts.push(`仙界访客到访 ${agg.xianVisit} 次`);
-    if (parts.length) Log.add(`【离线日报】${parts.join('；')}。`, 'info');
+    if (parts.length) Log.add(`${title}${parts.join('；')}。`, 'info');
     this._offlineAgg = null;
   },
 
@@ -356,12 +357,14 @@ const Game = {
     const crossed = Utils.clamp(settleToday - p._settleDay, 0, 30);
     if (crossed > 0) {
       const realDay = p.day;
+      this._offlineAgg = {};
       for (let i = 1; i <= crossed; i++) {
         p.day = settleToday - crossed + i;   // 虚拟逐日推进（不改真实时间轴）
         try { this.dailySettle(p, true); } catch (err) { console.error('日更补结异常:', err); }
       }
       p.day = realDay;
       p._settleDay = settleToday;
+      this.flushOfflineAgg(`【${crossed} 日总账】`);   // v33（E82）：补结收益不再静默入账
     }
     this.dailySettle(p);   // 当日例行（v27：日更系统统一收口：节庆/大比/共修/窥伺/登顶/洞府/图鉴）
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后

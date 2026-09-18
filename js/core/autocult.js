@@ -19,7 +19,7 @@ const AutoCult = {
             <option value="realm">修至指定境界</option>
             <option value="exp">攒够指定修为</option>
             <option value="time">运行指定时长（分钟）</option>
-            <option value="xian">攒够指定仙元（飞升后）</option>
+            <option value="xian" ${p.flags && p.flags.ascended ? '' : 'disabled'} title="${p.flags && p.flags.ascended ? '' : '白日飞升后方可选此目标'}">攒够指定仙元（飞升后）</option>
           </select>
           <select id="auto-realm">${realmOpts}</select>
           <input id="auto-val" type="number" min="1" placeholder="数值" class="hidden">

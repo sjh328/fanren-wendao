@@ -13,7 +13,7 @@ const CaveSys = {
     { id: 'lib',   name: '藏经室', icon: '📖', desc: '藏经参悟：功法参悟所得 +20%/阶。' },
     /* ---- v20 营造扩容 ---- */
     { id: 'forge',    name: '炼器室', icon: '⚒', desc: '炉火纯青：炼器成器率 +4%/阶。' },
-    { id: 'spring',   name: '灵泉',   icon: '⛲', desc: '每日涌出灵石：80 × 阶 × 境界系数，自动入账。' },
+    { id: 'spring',   name: '灵泉',   icon: '⛲', desc: '每日涌出灵石：80 × 阶 × 境界系数（六境封顶），自动入账。' },   // v33（E108）：描述补齐封顶口径（实现为 min(6, realm)，防「后期灵泉失灵」误解）
     { id: 'treasury', name: '藏宝阁', icon: '💎', desc: '聚财有道：灵石获取 +3%/阶。' },
   ],
   BUILD_KEYS: ['beast', 'train', 'lib', 'forge', 'spring', 'treasury'],

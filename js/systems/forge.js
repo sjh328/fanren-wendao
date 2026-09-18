@@ -167,6 +167,18 @@ const ForgeSys = {
     Log.add(`连祭炼收炉——本轮共祭炼 ${done} 次。`, 'system');
     Game.afterAction();
   },
+  /** v33（E74）：炼器工费——低阶成品「买料→炼器→卖坊市」曾是正期望循环（f1: 300 料 EV 607、
+   *  f4: 700 料 EV 1890，5 日/炉收益仍数倍于同期探索，低境印钞）。工费按成品估值阶梯比例收取：
+   *  grade≤2 收 25%、3~4 收 15%、5+/套装收 10%——低阶断套利，高阶添 sink。
+   *  估值基价：成品价；套装件 price:0 时按品阶 Fallback（与古匣估值同族）。 */
+  FEE_FALLBACK: [300, 800, 2000, 6000, 16000, 40000],
+  feeOf(r) {
+    const out = GameData.ITEMS[r.out];
+    if (!out) return 0;
+    const base = out.price || this.FEE_FALLBACK[Utils.clamp(out.grade || 0, 0, 5)] || 1000;
+    const pct = (out.grade || 0) <= 2 ? 0.25 : (out.grade || 0) <= 4 ? 0.15 : 0.10;
+    return Math.max(1, Math.round(base * pct));
+  },
   /** 执行炼器（v31 D7：炸炉产器胚残片；持 6 片材料折半——大额炼器赌博补上保底）
    *  v32（E6）：残片入炉——耗 6 片不减材料：成器率 +10%，且成功品自带「保底一条后缀」旗标 */
   forge(recipeId, fragBoost = false) {
@@ -180,6 +192,8 @@ const ForgeSys = {
     for (const [id, n] of Object.entries(r.need)) needEff[id] = useFrag ? Math.max(1, Math.ceil(n / 2)) : n;
     const okMats = Object.entries(needEff).every(([id, n]) => Bag.count(id) >= n);
     if (!okMats) { UI.toast('材料不足'); return; }
+    const fee = this.feeOf(r);   // v33（E74）：工费先行（不足不开炉）
+    if (!Bag.spendStones(fee)) { UI.toast(`开炉需工费 ${Utils.fmtNum(fee)} 灵石，灵石不足`); return; }
     for (const [id, n] of Object.entries(needEff)) Bag.removeItem(id, n);
     if (useFrag) { Bag.removeItem('m_qipei', 6); Log.add('六片器胚残片入炉垫底——材料折半。', 'info'); }
     if (fragBoost) { Bag.removeItem('m_qipei', 6); Log.add('六片器胚残片重入炉膛，火候再进一重——成器率 +10%，成器必带后缀。', 'info'); }
@@ -191,9 +205,9 @@ const ForgeSys = {
     const out = GameData.ITEMS[r.out];
     if (Utils.chance(rate)) {
       Bag.addItem(r.out, 1);
-      if (fragBoost) p._embryoSuffix = true;   // v32（E6）：残片入炉成功品——首次落缀时保底一条后缀
+      if (fragBoost) p._embryoSuffixFor = r.out;   // v32（E6）：残片入炉成功品——首次落缀时保底一条后缀；v33（E76）：旗标挂物品 id（原挂玩家本体，可错付给后穿的无关装备）
       Ambience.sfx('forge');
-      Log.add(`锤起锤落，火星四溅——<b class="grade-${out.grade}">${out.name}</b> 铸成出世！${fragBoost ? '（器胚余韵未散——装备落缀时必带一条后缀）' : ''}`, 'gain');
+      Log.add(`锤起锤落，火星四溅——<b class="grade-${out.grade}">${out.name}</b> 铸成出世！（工费 ${Utils.fmtNum(fee)} 灵石）${fragBoost ? '（器胚余韵未散——装备落缀时必带一条后缀）' : ''}`, 'gain');
       if ((out.grade || 0) >= 4 || out.set) UI.announce(`✦ 炼器大成 · ${out.name}`, 'gold');
     } else {
       const frag = Utils.rand(1, 2);
@@ -241,9 +255,14 @@ const ForgeSys = {
     if (!def) return {};
     if (!inst.affixes) {
       // v32（E6）：器胚入炉保底——首次落缀时若带器胚旗标则必出一条后缀（随即消耗）
-      const guaranteed = !!(p && p._embryoSuffix);
+      // v33（E76）修瑕：旗标原挂玩家本体布尔（p._embryoSuffix），入炉成功品未及穿戴而先穿出
+      // 另一件新装时会被错付。改挂物品 id（p._embryoSuffixFor），只对同 id 成器兑现；旧布尔档兼容读取。
+      const guaranteed = !!(p && (p._embryoSuffixFor === id || (!p._embryoSuffixFor && p._embryoSuffix)));
       inst.affixes = this.rollAffixes(def, { forceSuffix: guaranteed });
-      if (guaranteed && inst.affixes.suffix && p) p._embryoSuffix = false;
+      if (guaranteed && inst.affixes.suffix && p) {
+        if (p._embryoSuffixFor === id) p._embryoSuffixFor = null;
+        else p._embryoSuffix = false;
+      }
     }
     return inst.affixes;
   },

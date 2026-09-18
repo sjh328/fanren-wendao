@@ -20,7 +20,9 @@ const ShopSys = {
     }
     // v24 声望接线：名望高者坊市给面子（买价九折/九二折，劣迹昭彰者吃溢价）；卖价不受声望影响
     const repMul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
-    return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId) * repMul));
+    // v33（E91）：灵疫当年药价腾贵（丹药与灵药材 ×1.15；卖价同乘，ratio 不变无套利口）
+    const drug = (def.type === 'pill' || WorldSys.isHerb(itemId)) ? WorldSys.herbMul(p) : 1;
+    return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId) * repMul * drug));
   },
   sellPrice(itemId) {
     const p = Game.player;
@@ -35,7 +37,8 @@ const ShopSys = {
     // v29 修瑕：卖价同吃坊市行情——两侧乘数同源后即时倒卖必亏，跨行情低买高卖成为正经营生
     // v32 修瑕（E16）：成交款走原额入账——原经 Bag.addStones 再叠道心/个人线/stonePct 获取链
     // （成型档实测卖侧 ≈0.856×base vs 买侧 ≈0.78×base，买→立即卖 +9.7%/循环零耗时无限刷）
-    return Math.max(1, Math.round(v * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId)));
+    const drug = (def.type === 'pill' || WorldSys.isHerb(itemId)) ? WorldSys.herbMul(p) : 1;   // v33（E91）：药价腾贵两侧同乘
+    return Math.max(1, Math.round(v * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId) * drug));
   },
   buy(itemId) {
     const p = Game.player;

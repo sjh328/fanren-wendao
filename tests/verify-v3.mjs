@@ -352,7 +352,7 @@ try {
     }
     (p.npcs.n3.rel >= 8 && p.npcs.n3.met) ? pass('V3 结交苏白：交情上升') : fail('V3 结交', JSON.stringify(p.npcs.n3));
     // 切磋（v24 起切磋收进「恩怨与机缘」折叠，先展开）
-    await page.evaluate(() => { const f = [...document.querySelectorAll('.npc-more > summary')].find(x => x.closest('.shop-row').textContent.includes('苏白')); if (f) f.click(); });
+    await page.evaluate(() => { const f = [...document.querySelectorAll('.npc-more > summary')].find(x => x.closest('.shop-row').textContent.includes('苏白')); if (f && !f.parentElement.open) f.click(); });   // v33（E94）折叠有记忆：已展开（跨重渲染保持）则勿再点（会收起）
     await sleep(150);
     await clickSel(page, '[data-action="npc-spar"][data-npc="n3"]');
     await sleep(800);
@@ -365,7 +365,7 @@ try {
     // 背刺
     if (p.npcs.n3.rel >= 15 && p.npcs.n3.alive) {
       const relBefore = p.npcs.n3.rel;
-      await page.evaluate(() => { const f = [...document.querySelectorAll('.npc-more > summary')].find(x => x.closest('.shop-row').textContent.includes('苏白')); if (f) f.click(); });
+      await page.evaluate(() => { const f = [...document.querySelectorAll('.npc-more > summary')].find(x => x.closest('.shop-row').textContent.includes('苏白')); if (f && !f.parentElement.open) f.click(); });   // v33（E94）折叠有记忆：已展开（跨重渲染保持）则勿再点（会收起）
       await sleep(150);
       await clickSel(page, '[data-action="npc-betray"][data-npc="n3"]');
       await sleep(300);

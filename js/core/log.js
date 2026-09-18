@@ -49,8 +49,9 @@ const Log = {
     this.applyFilterTo(div, type);
     this.el.appendChild(div);
     this.entries.push(text);
-    if (this.entries.length > 200) this.entries.splice(0, this.entries.length - 200);   // 限长：防长时游玩内存缓慢膨胀
-    if (this.el.children.length > 160) this.el.removeChild(this.el.firstChild);
+    const MAX_LOG = 160;   // v33（E98）：entries 与 DOM 上限统一——原 entries 200/DOM 160 双轨，多出的 40 条是永不回放的死数据
+    if (this.entries.length > MAX_LOG) this.entries.splice(0, this.entries.length - MAX_LOG);
+    if (this.el.children.length > MAX_LOG) this.el.removeChild(this.el.firstChild);
     if (!this.paused && !document.hidden) this.el.scrollTop = this.el.scrollHeight;   // v4：暂停时不再强制吸底   // v30：后台页签不强制吸底（挂机高频重排消减）
     // v4：金色重要日志（突破/系统大事）置顶高亮 3 秒再混入普通日志
     if (type === 'realm' || type === 'system') this.showPin(text);

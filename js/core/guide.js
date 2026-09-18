@@ -89,6 +89,19 @@ LOCKS: {
       const left = Math.max(0, lot.until - Math.floor(p.day || 0));
       if (left <= 10) t.push({ text: `拍卖行本期拍品将止（余 ${left} 日）——稳健/激进/天价，各凭眼光`, go: 'shop:odd' });
     }
+    // v33（D9/E103）：升档新知——v32/v33 新系统对老档零感知路径，补三条条件化引导
+    if (!(p.flags && p.flags.tut_v33sign) && (p.counters.signs || 0) > 0 && (p.signStreak || 0) < 7) {
+      t.push({ text: '<b>新知</b>：黄历<b>连签</b>三日内不断即延续——满七日必得上上签、气运 +3', go: 'map:world' });
+      p.flags = p.flags || {}; p.flags.tut_v33sign = true;
+    }
+    if (!(p.flags && p.flags.tut_v33rule) && (p.counters.maxDepth || 0) > 0) {
+      t.push({ text: '<b>新知</b>：十座秘境各有<b>地脉规则</b>——入秘先识规则，守敌随之变形；战中亦可见', go: 'map:realm' });
+      p.flags = p.flags || {}; p.flags.tut_v33rule = true;
+    }
+    if (!(p.flags && p.flags.tut_v33fee) && (p.counters.forges || 0) > 0) {
+      t.push({ text: '<b>新知</b>：炼器坊开炉今起收取<b>工费</b>——配方行已标价；善用残片入炉可省材料', go: 'shop:craft' });
+      p.flags = p.flags || {}; p.flags.tut_v33fee = true;
+    }
     // v22 首遇新知：情境化提示，随条件自解——新系统第一时间被看见（置于紧急事项之后，不挤占优先位）
     if (Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'artifact')
       && !Object.values(p.equipped || {}).every(e => e)) {

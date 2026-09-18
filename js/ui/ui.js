@@ -638,8 +638,9 @@ const UI = {
     const today = Math.floor(p.day || 0);
     const rows = [];
     const signed = p.signDay === today;
-    // v24 求签行内直签——无需再绕道游历·天下
-    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}` : '今日未求签', act: signed ? '' : 'act-sign', actText: '摇 签' });
+    // v24 求签行内直签——无需再绕道游历·天下；v33（C2）：行内附连签计程，进度随手可见
+    const signProg = DailySign.progress(p);
+    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}（连签 ${signProg.day}/7）` : (signProg.streak > 0 ? `今日未求签 · 连签 ${signProg.day}/7${signProg.left > 0 ? `，差 ${signProg.left} 日满签` : '，今日满签！'}` : '今日未求签'), act: signed ? '' : 'act-sign', actText: '摇 签' });
     const rush = p.rushDay === today;
     // v32 修瑕（A10）：聚灵加速原在此只给「前往」跳转、洞府主楼卡又无点燃按钮——带确认弹窗的
     // 正常交互流程（CaveSys.spiritRush）全工程不可达（与 v30 宗门死按钮同病灶）。改行内直燃。
@@ -727,7 +728,7 @@ const UI = {
           <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
           <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${(Bag.count('m_neidan') && b.level < 10) ? '' : 'disabled'}>${b.level >= 10 ? '十阶圆满' : `喂内丹（${Bag.count('m_neidan')}）`}</button>
           ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
-          <details class="fold npc-more"><summary>照管 ▾</summary><div class="gf-actions" style="margin-top:6px">
+          <details class="fold npc-more" data-fold="beast-care-${b.uid}" ${Game.foldState[`beast-care-${b.uid}`] ? 'open' : ''}><summary>照管 ▾</summary><div class="gf-actions" style="margin-top:6px">   <!-- v33（E94）：补折叠记忆——原行动后重渲染即收回 -->
             <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
             <button class="btn btn-sm" data-action="act-beast-tactic" data-uid="${b.uid}" title="切换协战策略：集火 / 控场 / 护主">策略·${BeastSys.TACTICS[b.tactic || 'focus']}</button>   <!-- v32（C4） -->
             ${!b.trip ? `<button class="btn btn-sm" data-action="act-beast-dispatch" data-uid="${b.uid}" title="外出寻宝，数日后带回灵材">派 遣</button>` : ''}
@@ -916,12 +917,17 @@ const UI = {
     const today = Math.floor(p.day);
     const drawn = p.signDay === today;
     const fest = (typeof FestivalSys !== 'undefined') ? FestivalSys.today(p) : null;
+    // v33（C2）：连签进度可见化——原 streak 只在日志文本里出现过，玩家无从知晓断没断、还差几日
+    const prog = DailySign.progress(p);
+    const progTxt = prog.streak > 0
+      ? `<span class="tag ${prog.left === 0 ? '' : 'warn'}" title="三日内再来求签即延续连签；超过三日重新计程">连签第 ${prog.day}/7 日${prog.left > 0 ? ` · 距七日满签还差 ${prog.left} 日` : ' · 今日七日满签！'}</span>`
+      : '<span class="tag">尚未开始连签</span>';
     return `
     <div class="card sign-card">
-      <div class="card-title">✦ 黄历 · 每日一签 <span class="tag">${Time.labelLong(p)}</span>${fest ? ` <span class="tag warn" title="${Utils.esc(fest.desc)}">✦ 今日 ${fest.name}</span>` : ''}</div>
+      <div class="card-title">✦ 黄历 · 每日一签 <span class="tag">${Time.labelLong(p)}</span>${fest ? ` <span class="tag warn" title="${Utils.esc(fest.desc)}">✦ 今日 ${fest.name}</span>` : ''} ${progTxt}</div>
       <div class="card-desc">${drawn
         ? `今日签文：<b class="hl">${p.signText}</b>——${p.signDesc}`
-        : '一炷清香，诚心摇签。每日一支，问今日道途吉凶。'}</div>
+        : '一炷清香，诚心摇签。每日一支，问今日道途吉凶。<span class="tip-line" style="display:inline">· 连签七日必得上上签，气运 +3。</span>'}</div>
       <div class="action-row">${drawn ? '<span class="tip-line" style="margin:0">· 已求签，明日请早。</span>' : '<button class="btn btn-primary" data-action="act-sign">摇 签</button>'}</div>
     </div>`;
   },
@@ -1023,7 +1029,7 @@ const UI = {
           NpcSys.canShowdown(p, d.id) ? `<button class="btn btn-sm btn-danger" data-action="npc-showdown" data-npc="${d.id}" title="约战雷台，胜者夺其法宝，恩怨两清">⚡ 雷台了断</button>` : '',
         ].filter(Boolean);
         btns = main.join('')
-          + (moreBtns.length ? ` <details class="fold npc-more"><summary>恩怨与机缘 ▾</summary><div class="gf-actions" style="margin-top:6px">${moreBtns.join('')}</div></details>` : '');
+          + (moreBtns.length ? ` <details class="fold npc-more" data-fold="npc-more-${d.id}" ${Game.foldState[`npc-more-${d.id}`] ? 'open' : ''}><summary>恩怨与机缘 ▾</summary><div class="gf-actions" style="margin-top:6px">${moreBtns.join('')}</div></details>` : '');   // v33（E94）：补折叠记忆（原行动后重渲染即收回）
       } else {
         btns = '<span class="tag danger">已身故</span>';
       }
@@ -1220,13 +1226,14 @@ const UI = {
       const useFrag = Bag.count('m_qipei') >= 6;
       const needEff = useFrag ? Object.fromEntries(Object.entries(r.need).map(([id, n]) => [id, Math.max(1, Math.ceil(n / 2))])) : r.need;
       const mats = Object.entries(needEff).map(([id, n]) => `${GameData.ITEMS[id].name} ${Bag.count(id)}/${n}`).join('、');
-      const can = Object.entries(needEff).every(([id, n]) => Bag.count(id) >= n);
+      const fee = ForgeSys.feeOf(r);   // v33（E74）：工费显示与实收同源
+      const can = Object.entries(needEff).every(([id, n]) => Bag.count(id) >= n) && (p.stones.low + p.stones.mid * 100 + p.stones.high * 10000) >= fee;
       const forgeLv = ((p.cave && p.cave.builds && p.cave.builds.forge) || 0);
       const rateEff = Math.min(95, r.rate + forgeLv * 4);
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${this.gradeSpan(out.name, out.grade)}${out.set ? ' <span class="tag warn">套装件</span>' : ''}（成器率 ${rateEff}%${forgeLv ? `，含炼器室 +${forgeLv * 4}%` : ''}${useFrag ? ' · 残片折半' : ''}）</div>
+          <div class="gf-name">${this.gradeSpan(out.name, out.grade)}${out.set ? ' <span class="tag warn">套装件</span>' : ''}（成器率 ${rateEff}%${forgeLv ? `，含炼器室 +${forgeLv * 4}%` : ''}${useFrag ? ' · 残片折半' : ''} · <span title="v33 起开炉收工费：低阶断套利、高阶添沉淀">工费 ${Utils.fmtNum(fee)} 灵石</span>）</div>
           <div class="gf-desc">${out.desc}<br>需 ${mats}</div>
         </div>
         <div class="gf-actions"><button class="btn btn-sm" data-action="act-forge" data-recipe="${r.id}" ${can ? '' : 'disabled'}>锻 造</button>${Bag.count('m_qipei') >= 6 ? `<button class="btn btn-sm btn-primary" data-action="act-forge-frag" data-recipe="${r.id}" title="耗 6 片残片入炉（材料不减）：成器率 +10%，成器必带一条后缀">残片入炉</button>` : ''}</div>   <!-- v32（E6） -->
@@ -1436,18 +1443,20 @@ const UI = {
     // v19 拍卖行
     const lot = AuctionSys.state(p);
     const isMystery = lot.item === 'mystery';
-    const lotDef = isMystery ? { name: '未鉴定·蒙尘古匣', grade: 2, desc: '匣上封皮剥落，看不出内里乾坤——可能是废纸，也可能是仙家至宝（一成几率出现，鉴定期待）。' } : GameData.ITEMS[lot.item];
+    const lotDef = isMystery ? { name: '未鉴定·蒙尘古匣', grade: 2, desc: '匣上封皮剥落，看不出内里乾坤——可能是废纸，也可能是仙家至宝（一成几率出现，鉴定期待）。' } : (GameData.ITEMS[lot.item] || { name: lot.item, grade: 0, desc: '（此物来历不明——或已从坊市下架。）' });   // v33（E80）：脏档残留已下架 id 防崩
+    const boxUsed = isMystery && p._boxDay === Math.floor(p.day || 0);   // v33（E73）：古匣日限可见化（不做真值 coercion，第 0 日同判）
+    const hotPct = Math.min(30, Math.max(0, ((lot.views || 0) - 1)) * 3);   // v33（D4）：围观热度可见化——底价已含上浮，此处只做明示
     const auctionSection = `
       <div class="shop-section-title">◈ 拍卖行（每六十日一件稀有拍品${isMystery ? ' · 本期为<span class="neg">神秘古匣</span>' : ''}）<span class="tag warn">拍期余 ${lot.until - Math.floor(p.day)} 日</span></div>
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${this.gradeSpan(lotDef.name, lotDef.grade)} <span class="tag">底价 ${Utils.fmtNum(lot.base)} 灵石</span></div>
+          <div class="gf-name">${this.gradeSpan(lotDef.name, lotDef.grade)} <span class="tag">底价 ${Utils.fmtNum(lot.base)} 灵石</span>${hotPct > 0 ? `<span class="tag warn">围观 ×${lot.views} · 底价上浮 ${hotPct}%</span>` : ''}${boxUsed ? '<span class="tag danger">今日古匣已开启</span>' : ''}</div>
           <div class="gf-desc">${lotDef.desc}</div>
         </div>
         <div class="gf-actions">
-          <button class="btn btn-sm" data-action="act-bid" data-mode="steady">稳健 ×1.15</button>
-          <button class="btn btn-sm" data-action="act-bid" data-mode="bold">激进 ×0.9</button>
-          <button class="btn btn-sm btn-primary" data-action="act-bid" data-mode="dump">天价 ×1.6</button>
+          <button class="btn btn-sm" data-action="act-bid" data-mode="steady" ${boxUsed ? 'disabled' : ''}>稳健 ×1.15</button>
+          <button class="btn btn-sm" data-action="act-bid" data-mode="bold" ${boxUsed ? 'disabled' : ''}>激进 ×0.9</button>
+          <button class="btn btn-sm btn-primary" data-action="act-bid" data-mode="dump" ${boxUsed ? 'disabled' : ''}>天价 ×1.6</button>
         </div>
       </div>`;
     // v19 布施
@@ -1698,10 +1707,14 @@ const UI = {
     const NAMES = { atk: '攻击', def: '防御', maxHp: '气血上限', maxMp: '灵力上限', speed: '身法', crit: '暴击', dodge: '闪避', block: '格挡', cultPct: '修炼效率', stonePct: '灵石获取' };
     const bd = Stat.breakdown(p, statKey);
     const rows = bd.src.map(x => `<div class="stat-line"><span>${x.name}</span><b>${x.v > 0 && !['atk', 'def', 'maxHp', 'maxMp', 'speed'].includes(statKey) ? '+' : ''}${Math.round(x.v * 10) / 10}</b></div>`).join('');
+    // v33（D6）：仙绩可见化——仙劫异象三词缀（v32 D6）原只在明细来源里露半行，入手后无任何查看处
+    const VISION_NAMES = { visionLeichi: '雷池淬体 · 仙元溢流 +10%', visionGuangli: '仙官观礼 · 分解器魂 +1', visionXinzhang: '仙障心魔试炼 · 突破成算永久 +2' };
+    const visions = Object.entries(VISION_NAMES).filter(([k]) => p.flags && p.flags[k]).map(([, v]) => `「${v}」`);
+    const visionHtml = visions.length ? `<div class="tip-line" style="margin-top:6px">✦ 仙绩铭骨：${visions.join('、')}</div>` : '';
     UI.popup({
       title: `构成 · ${NAMES[statKey] || statKey}`,
       html: `${rows || '<div class="tip-line">暂无加成来源。</div>'}
-        <div class="stat-line est-final" style="margin-top:6px"><span>当前合计</span><b class="hl">${['crit', 'dodge', 'block'].includes(statKey) ? bd.final.toFixed(1) + '%' : Utils.fmtNum(bd.final)}</b></div>
+        <div class="stat-line est-final" style="margin-top:6px"><span>当前合计</span><b class="hl">${['crit', 'dodge', 'block'].includes(statKey) ? bd.final.toFixed(1) + '%' : Utils.fmtNum(bd.final)}</b></div>${visionHtml}
         <div class="tip-line">· 综合战力：⚔ ${Utils.fmtNum(Stat.power(p))}（攻防血速暴闪格加权）</div>`,
       options: [{ text: '收 起', value: true, primary: true }],
     });

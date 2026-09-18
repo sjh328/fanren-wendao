@@ -36,9 +36,12 @@ write(key, player) {
           this.storage.setItem(this.KEY + key, raw);
           this.storage.removeItem(verifyKey);
         } else {
-          console.warn('存档校验失败，重试写入');
-          this.storage.setItem(this.KEY + key, raw);
-          this.storage.removeItem(verifyKey);   // v30 修瑕：校验失败分支曾残留 _v 临时键
+          // v33（E97）修瑕：校验失败原「重试」只是原样重写同一 raw——若存储层坏读，第二次大概率
+          // 同样不符且无二次校验（自欺）。失败改落内存档并明示，本会话进度至少不丢。
+          console.warn('存档校验失败，本条改落内存档');
+          this.mem[key] = raw;
+          try { this.storage.removeItem(verifyKey); } catch (e2) { /* ignore */ }
+          UI.toast('浏览器存储读写异常——本次进度暂存内存，可能不会保留', true);
         }
       } else {
         this.mem[key] = raw;

@@ -200,9 +200,10 @@ const Tribulation = {
         const vision = (GameData.XIAN_VISIONS || []).find(v2 => v2.strategy === strategy);
         if (vision) {
           p.flags = p.flags || {};
+          const already = !!p.flags[vision.flag];   // v33（E85）：词缀幂等但原重复播报「铭入仙骨」——已是永绩不再复播
           p.flags[vision.flag] = true;
           this.log(`【异象 · ${vision.name}】${vision.desc}`, 'log-gain');
-          Log.add(`仙劫异象铭入仙骨——【${vision.name}】成永绩。`, 'realm');
+          if (!already) Log.add(`仙劫异象铭入仙骨——【${vision.name}】成永绩。`, 'realm');
         }
         if (typeof XianSys !== 'undefined') XianSys.tribSuccess(p, S.xianTo, strategy);
         UI.toast(`仙劫功成！晋 ${GameData.XIAN_TIERS[S.xianTo - 1].name}`);

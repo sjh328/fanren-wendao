@@ -89,7 +89,7 @@ const NpcSys = {
     }
     return this.TIERS[0];
   },
-  MEM_TYPE: { story: '剧情', spar: '切磋', gift: '赠礼', chat: '论道', save: '相救', betray: '背刺', kill: '杀戮', peace: '化解', line: '个人线' },
+  MEM_TYPE: { story: '剧情', spar: '切磋', gift: '赠礼', chat: '论道', save: '相救', betray: '背刺', kill: '杀戮', peace: '化解', line: '个人线', war: '战阵' },   // v33（E89）：补 war——v32 宗门大战结怨原未注册，人物志退化为「旧事」
   /** v19 记忆：共同经历写入记忆条目（上限 8 条，同类同文去重） */
   mem(p, id, type, txt) {
     const s = this.state(p, id);
@@ -114,6 +114,7 @@ const NpcSys = {
       peace: '「旧事已了，今日只叙旧情。」',
       story: '「那一日的光景，我至今记得。」',
       line: '「你我之间，已不必多说了。」',
+      war: '「战阵之上刀剑无眼——今日相逢，倒要看看你还有几分锐气。」',
     };
     return tpl[m.t] || null;
   },
@@ -491,6 +492,7 @@ const NpcSys = {
     s.rel = Utils.clamp(s.rel + 8, -100, 100);
     this.mem(p, id, 'story', '义结金兰');   // v19 记忆
     Log.add(`你与 <b>${d.name}</b> 撮土为香，结为异姓道侣兄妹！此生共进退。`, 'system');
+    if (typeof Story !== 'undefined') Story.chron(`与 ${d.name} 义结金兰`);   // v33（E92）：人生大事入年表
     Game.afterAction();
   },
   async becomeDao(id) {
@@ -510,6 +512,7 @@ const NpcSys = {
     s.rel = 100;
     this.mem(p, id, 'story', '结为道侣');   // v19 记忆
     Log.add(`红烛映照，道音为证——你与 <b>${d.name}</b> 正式结为道侣！仙途多一知己，死劫多一臂之助。`, 'system');
+    if (typeof Story !== 'undefined') Story.chron(`与 ${d.name} 结为道侣`);   // v33（E92）：人生大事入年表
     Game.afterAction();
   },
   /** 化解仇怨（前世恩怨触发专属剧情） */

@@ -32,7 +32,8 @@ if (fs.existsSync(relDir)) {
 
 /* 0) 版本号单源注入（v32 G7/E58）：缓存号 ?v=N、SW 版本与预缓存、manifest 描述一次到位——
  *    此前三处双轨（?v= / SW VERSION / manifest），发布只 bump 其一即半新半旧。
- *    口径：缓存号 v<N> = 15 + N（v32 → 48）；SW fanren-wd-v<M> = N - 26（v32 → 6+1=7）。 */
+ *    口径（v33（E99）修瑕：注释算式与代码漂移，照旧注释推版会错一档——以代码为准）：
+ *    缓存号 v<N> = 16 + N（v32 → 48）；SW fanren-wd-v<M> = N - 26 + 1（v32 → 7）。 */
 const cacheV = 16 + Number(ver);   // v31=47 → vN = N+16（v32 → 48，发布必须递增）
 const swV = Number(ver) - 26 + 1;
 const bump = (file, pairs) => {

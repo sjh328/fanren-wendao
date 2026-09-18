@@ -325,6 +325,7 @@ try {
   const e2 = await page.evaluate(() => {
     const p = Game.player;
     p.bag.m_xuantie = 10;
+    p.stones.low += 50000;   // v33：炼器开炉收工费（f1=450/炉），测试补给
     const before = Bag.count('w_tulong');
     ForgeSys.forge('f1');   // 屠龙刀 75%
     // 循环至成功（材料给足）

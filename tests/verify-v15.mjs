@@ -40,8 +40,8 @@ try {
     ? pass('TA3 神秘古匣按境界分层、底价随期望') : fail('TA3 古匣', '');
   js.includes('oppLevel') && js.includes('cost * 1.6')
     ? pass('TA4 斗兽场胜率校准 + 赔率 1.6') : fail('TA4 斗兽场', '');
-  js.includes('WorldSys.marketMul(p, itemId))') && js.includes('v * 1.15);   // v10 丹道六境·药理境')
-    ? pass('TA5 丹道卖价同吃行情（倒卖堵截）') : fail('TA5 丹道卖价', '');
+  js.includes('WorldSys.marketMul(p, itemId) * drug)') && js.includes('v * 1.15);   // v10 丹道六境·药理境')
+    ? pass('TA5 丹道卖价同吃行情（倒卖堵截；v33 E91 药价腾贵乘区随行）') : fail('TA5 丹道卖价', '');
   js.includes('ticketOf(R)') && js.includes('bossFortuneDay')
     ? pass('TA6 秘境门票 + Boss 气运日限') : fail('TA6 秘境', '');
   js.includes('FORTUNE_CAP: 150') && js.includes('Math.min(this.FORTUNE_CAP')

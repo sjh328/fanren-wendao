@@ -23,7 +23,15 @@ const FestivalSys = {
     // 年兽开战与秘境/世界事件开战互斥（Battle.start 对 active 静默丢弃，后到者连旗标带机缘一并蒸发）
     if (!auto && (Battle.active || UI._popupResolve)) return;
     p.flags[key] = true;
-    this.fire(p, f, auto);
+    // v33（E107）修瑕：fire 中途抛错（异步 rejection 不入 dailySettle 的 try/catch）时旗标已落、
+    // 整年节庆静默蒸发——现失败回滚旗标，收尾链下次 afterAction 重试（置位保持在前，防重入环）。
+    try {
+      const r = this.fire(p, f, auto);
+      if (r && typeof r.catch === 'function') r.catch(() => { delete p.flags[key]; });
+    } catch (err) {
+      delete p.flags[key];
+      throw err;
+    }
   },
   /** 当日是否某节庆（供玩法钩子查询，如中秋赠礼加倍） */
   is(p, id) { const f = this.today(p); return !!(f && f.id === id); },

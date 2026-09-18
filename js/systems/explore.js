@@ -85,7 +85,7 @@ const Explore = {
         Log.add(Utils.pick(GameData.FLAVOR.nothing), 'info');
         // v8：空手而归的小安慰——归途偶有拾获，不再两手空空
         if (Utils.chance(50)) {
-          const stones = Math.round(Utils.rand(3, 8) * GameData.stoneEco(p.realmIdx));
+          const stones = Math.round(Utils.rand(3, 8) * GameData.stoneEco(EventSys.ecoRealm(p, map)));   // v33（E104）：随图梯度封顶（原按玩家境界，真仙扫新手村仍满额）
           Bag.addStones(stones);
           Log.add(`归途中你顺手采了些灵草杂物，卖给坊市换得灵石 ${stones} 枚，不算空手而归。`, 'gain');
         }
@@ -208,8 +208,9 @@ const EventSys = {
     const eco = GameData.eco(er);
     const arr = this.arrMult(map);
     // v32（F6）事件池轻扩：兽潮期间「战场拾遗」——世界事件与探索互文（兽潮掉肉/皮，权重随兽潮现世）
-    const yr = Math.floor((p.day || 0) / 365) + 1;
-    const beastOn = p.world && (p.world.beastMaps || []).some(b2 => b2.until >= yr);
+    // v33（E105）修瑕：触发门原判「任意地图有兽潮」（some until>=yr）——无兽潮的图也能拾遗，
+    // 与战斗侧逐图判定口径不一。改与掉落加成同源的逐图判定。
+    const beastOn = WorldSys.beastWaveActive(p, map.id);
     const kind = Utils.pickWeighted(Object.assign({ lingmai: 30, wudao: 20, yifu: 20, lingru: 15, shenquan: 8, tiancai: 7 }, beastOn ? { beastpick: 12 } : {}));
     switch (kind) {
       case 'lingmai': {
@@ -230,7 +231,8 @@ const EventSys = {
         Bag.addStones(stones);
         const mat = Utils.pick(GameData.matsByTier(Math.min(4, Math.floor(er / 2) + 1)));
         Bag.addItem(mat, 1);
-        Log.add(`你寻得一处无名遗府，残存的储物袋中有灵石 ${Utils.fmtNum(stones)}、${GameData.ITEMS[mat].name} ×1。`, 'gain');
+        const fog = Art.weatherOf(p, map.id).sky === 'fog';   // v33（E110）：雾日权重↑有了可见的叙事对应——天时联动不再只是暗改数值
+        Log.add(`${fog ? '雾漫深谷，湿雾尽头竟藏着一座遗府的残影——' : ''}你寻得一处无名遗府，残存的储物袋中有灵石 ${Utils.fmtNum(stones)}、${GameData.ITEMS[mat].name} ×1。`, 'gain');
         break;
       }
       case 'beastpick': {
@@ -265,7 +267,8 @@ const EventSys = {
         const tier = Math.min(4, Math.floor(er / 2) + 2);   // v32 修瑕（E65）：随图梯度封顶
         const mat = Utils.pick(GameData.matsByTier(tier));
         Bag.addItem(mat, 2);
-        Log.add(`你发现了一株罕见的天材地宝——${GameData.ITEMS[mat].name} ×2！`, 'gain');
+        const autumn = Art.seasonOf(p) === 3;   // v33（E110）：季秋草木摇落，灵果独盛——季节联动可见化
+        Log.add(`${autumn ? '秋气肃杀，草木摇落之处灵光独盛——' : ''}你发现了一株罕见的天材地宝——${GameData.ITEMS[mat].name} ×2！`, 'gain');
       }
     }
   },
@@ -367,7 +370,7 @@ const EventSys = {
         options: [{ text: '聆听传功', value: 'teach' }, { text: '接受考较', value: 'test' }, { text: '婉言告辞', value: 'leave' }],
       });
       if (choice === 'teach') {
-        const gain = Math.round(150 * GameData.eco(p.realmIdx));
+        const gain = Math.round(150 * GameData.eco(this.ecoRealm(p, map)));   // v33（E104）：随图梯度封顶
         Cultivate.addExp(p, gain);
         Log.add(`老者一缕真传入体，你如醍醐灌顶！修为 +${Utils.fmtNum(gain)}。`, 'gain');
       } else if (choice === 'test') {
@@ -379,12 +382,12 @@ const EventSys = {
         });
         const correct = (right && ans === 'a') || (!right && ans === 'b');
         if (correct) {
-          const gain = Math.round(120 * GameData.eco(p.realmIdx));
+          const gain = Math.round(120 * GameData.eco(this.ecoRealm(p, map)));   // v33（E104）
           Cultivate.addExp(p, gain);
           p.insight = Math.min(100, p.insight + 5);
           Log.add(`「善。」老者抚须而笑。修为 +${Utils.fmtNum(gain)}，突破感悟 +5。`, 'gain');
         } else {
-          const gain = Math.round(40 * GameData.eco(p.realmIdx));
+          const gain = Math.round(40 * GameData.eco(this.ecoRealm(p, map)));   // v33（E104）
           Cultivate.addExp(p, gain);
           Log.add(`「差强人意。」老者摇头离去，你略有感触。修为 +${Utils.fmtNum(gain)}。`, 'info');
         }
@@ -405,19 +408,19 @@ const EventSys = {
       });
       if (choice === 'pill') {
         Bag.removeItem('pill_liaoshang', 1);
-        const stones = Math.round(40 * GameData.stoneEco(p.realmIdx));
+        const stones = Math.round(40 * GameData.stoneEco(this.ecoRealm(p, map)));   // v33（E104）：随图梯度封顶
         Bag.addStones(stones);
         Log.add(`你递上疗伤丹，散修服下后面色好转，掏出一袋灵石相赠：灵石 ${Utils.fmtNum(stones)}。`, 'gain');
       } else if (choice === 'qi') {
         p.hp = Math.max(1, p.hp - Math.round(Stat.compute(p).maxHp * 0.1));
-        const gain = Math.round(70 * GameData.eco(p.realmIdx));
+        const gain = Math.round(70 * GameData.eco(this.ecoRealm(p, map)));   // v33（E104）
         Cultivate.addExp(p, gain);
         Log.add(`你度入一缕真元，救他一命。他无以为报，将毕生感悟倾囊相授：修为 +${Utils.fmtNum(gain)}。`, 'gain');
       } else {
         Log.add('你终究没有停下脚步。修仙之路，本就是独行之路。', 'info');
       }
     } else {
-      const cost = Math.round(8 * GameData.stoneEco(p.realmIdx));
+      const cost = Math.round(8 * GameData.stoneEco(this.ecoRealm(p, map)));   // v33（E104）：随图梯度封顶
       const free = Stat.compute(p).luck >= 7 && Utils.chance(30);   // v28 联动：装备福缘亦算数
       Log.add('一位背药篓的妙手郎中坐在道旁，正在整理草药。', 'event');
       if (free) {

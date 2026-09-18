@@ -27,6 +27,9 @@ const defined = new Set();
 for (const f of files) {
   const src = fs.readFileSync(f, 'utf8');
   for (const m of src.matchAll(/data-action="([a-z0-9-]+)"/g)) used.add(m[1]);
+  // v33（E93）：动态拼接入口 `act: 'act-xxx'`（模板字面量 data-action="${r.act}" 逃逸静态对账——
+  // A10 类死按钮的盲区）。引用值必须是 actions 表中的键。
+  for (const m of src.matchAll(/\bact:\s*'([a-z0-9-]+)'/g)) used.add(m[1]);
   // actions 表键：仅认「'key': (…)」形态（js/game.js 与构建产物 game.js 各扫一遍无妨，Set 去重）
   const at = src.indexOf('actions: {');
   if (at >= 0) {

@@ -204,6 +204,7 @@ const Bag = {
         if (p.enhanced && p.enhanced[curId]) delete p.enhanced[curId];
         // v30：旧装词缀随炉而化，留档一并清除
         if (p.affixKept && p.affixKept[curId]) delete p.affixKept[curId];
+        if (p._recastN) delete p._recastN[curId];   // v33（E75）：器毁阶梯清零（与 salvage 口径一致，此路漏网）
         p.equipped[slot] = { id: itemId, enhance: carried };
         this.restoreAffix(p, itemId, p.equipped[slot]);
         Log.add(`炉火重燃——你将【${curDef.name}】化入【<b>${def.name}</b>】的器胚，强化承其 <b>${carried}</b> 级。`, 'gain');
@@ -338,6 +339,7 @@ const Bag = {
       if (p.enhanced && p.enhanced[id]) delete p.enhanced[id];
       if (p.affixKept && p.affixKept[id]) delete p.affixKept[id];
       if (p.enhBless && p.enhBless[id]) delete p.enhBless[id];
+      if (p._recastN) delete p._recastN[id];   // v33（E75）：同清重铸阶梯（单件丢弃/分解/卸下三路已清，此路漏网——重购首铸原吃 14/20 档价）
     }
     Log.add(`你挥手间清空了一类杂物（${total} 件），乾坤袋清爽了许多。`, 'loss');
     Game.afterAction();
