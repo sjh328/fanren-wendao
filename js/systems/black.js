@@ -110,15 +110,11 @@ const BlackSys = {
     const luck = Stat.compute(p).luck + Math.floor((p.fortune || 0) / 20);   // v28 联动：装备福缘亦护身
     const roll = Math.random() * 100;
     if (roll < 25 + luck * 4) {
-      Bag.addItem(mat, matQty * 2);
-      // v30 堵漏：碎片彩头只发低境——原固定送 m_gupian（面值 6000），r0~r2 赌袋恒正期望
-      if (p.realmIdx < 3) {
-        Bag.addItem('m_gupian', 1);
-        Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×${matQty * 2}，夹层里还藏着一枚上古法宝碎片——今日的运气，值了。`, 'gain');
-      } else {
-        Bag.addItem(mat, Math.ceil(matQty * 0.5));
-        Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×${Math.ceil(matQty * 2.5)}——今日的运气，值了。`, 'gain');
-      }
+      // v34（D2）：中奖统一「材料 ×2.5」——原 r<3 彩头另送 m_gupian（面值 6000）：v30 堵漏把彩头
+      // 「只发低境」，恰好把正期望锁死在低境（200 灵石博 6000 面值碎片，20 日白拿本命法宝）。
+      // 碎片自赌袋除名；低福缘微负、高福缘微正，捡漏感保留。
+      Bag.addItem(mat, matQty * 2 + Math.ceil(matQty * 0.5));
+      Log.add(`你赌对了！袋中竟是${GameData.ITEMS[mat].name} ×${matQty * 2 + Math.ceil(matQty * 0.5)}——今日的运气，值了。`, 'gain');
       Ambience.sfx('rare');
     } else if (roll < 60) {
       Bag.addItem(mat, matQty);

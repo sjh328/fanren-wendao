@@ -78,6 +78,12 @@ const PlayerFactory = {
       xinmo: 0,     // v19 心魔值（v20 显式入模板，杜绝 undefined 参与钳制前的运算）
       battleDeck: [], // v20 出战技能盘（最多四招；空盘=全部法诀可用）
       ultLv: {},    // v20 必杀熟练度 { 式id: 使用次数 }，每 8 次升一重（至三重）
+      // v34（E127）：新档即当前版本——此前 create 不带迁移版本号，新档首次读档会全量跑旧档
+      // 迁移链，v19-2 步骤把洞府 builds 重建成三键、v20 步骤只能从被剥对象补 0——
+      // 玩家新档筑起的【锻造坊/灵泉/宝库】在第一次刷新页面后集体归零（存量 bug，本版实测实锤）
+      _migratedVersion: Number.MAX_SAFE_INTEGER,   // v34（E127）：新档生于一切迁移之后——此前 create 不带迁移版本号，
+      // 新档首次读档会全量跑旧档迁移链，v19-2 步骤把洞府 builds 重建成三键、v20 步骤只能从被剥对象补 0，
+      // 玩家新档筑起的【锻造坊/灵泉/宝库】在第一次刷新页面后集体归零（存量 bug，本版实测实锤）
     };
     const st = Stat.compute(p);
     p.hp = st.maxHp; p.mp = st.maxMp;
@@ -87,6 +93,7 @@ const PlayerFactory = {
   migrate(p) {
     // v18 版本链：逐级迁移，每步只处理新增/变更的字段
     const MIGRATE_STEPS = [
+
       // v3: 世界 / NPC / 秘境 / 转世
       (out) => {
         out.world = Object.assign(WorldSys.freshWorld(), out.world || {});
@@ -251,6 +258,9 @@ const PlayerFactory = {
     // 基础：fresh 模板 + 展开合并
     const fresh = this.create(p.name || '无名散修', p.attrs || { gen: 5, comp: 5, luck: 5, body: 5 });
     const out = { ...fresh, ...p };
+    // v34（E127）：迁移起点以「被读档」为准——fresh 模板的 MAX_SAFE_INTEGER（新档生于一切迁移后）
+    // 不得盖掉旧档的真实进度（无版本号老档=0，须从第 0 步全量跑）
+    out._migratedVersion = Number.isFinite(Number(p._migratedVersion)) ? Number(p._migratedVersion) : 0;
     // v32（D7）：每世指纹——新档沿用 create 生成的 lifeUid；老档按内在稳定字段派生
     // （同名+同四维+同转世数视为同一世），保证跨多次读档稳定，防手动槽旧档反复兵解刷印记
     out.lifeUid = (p.lifeUid && typeof p.lifeUid === 'string') ? p.lifeUid

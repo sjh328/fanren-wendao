@@ -398,18 +398,23 @@ const ForgeSys = {
     const oldId = inst.affixes[part];
     const oldScore = this.affixScore(part, oldId, g, ctx, inst.stars[part] || 0);
     const cand = this.pickAffix(pool, def.grade || 0);
+    const candId = cand.id || cand;
+    const sameId = candId === oldId;
     // v30：洗练保底不降——新词缀估值更低时保留原词缀（灵石玄铁照付，求变不亏底）；v31：纳入品阶与面板折算
-    if (oldScore > 0 && this.affixScore(part, cand.id || cand, g, ctx, 0) < oldScore) {
+    // v34（E116）：保底比较只对「换词缀」生效——oldScore 含星乘数，★≥1 时同 id 候补在 0 星口径下
+    // 恒判低、恒走保底 return，v32 升星分支自此不可达（★1 以上永难升星，双倍锁洗等于白烧钱）。
+    // 同 id 候补改为跳过保底、直进升星掷骰（未升则原词缀原星保留，稳赚不亏）。
+    if (!sameId && oldScore > 0 && this.affixScore(part, candId, g, ctx, 0) < oldScore) {
       const d0 = this.affixDef(part, oldId);
       Log.add(`你以玄铁重淬【${def.name}】——新火候不如旧纹，【<b>${d0.name}</b>】${inst.stars[part] ? `（★${inst.stars[part]}）` : ''}保留不动。`, 'warn');
       Ambience.sfx('forge');
       Game.afterAction();
       return;
     }
-    inst.affixes[part] = cand.id || cand;
+    inst.affixes[part] = candId;
     // v32（E3）词缀升星：洗出同词缀时 15% 概率升一星（0~3 星，每星实值 +4%）——
     // 「保底不降」自此保星不保条：确定性付费升级找回了方差，保底仍在
-    if ((cand.id || cand) === oldId) {
+    if (sameId) {
       if ((inst.stars[part] || 0) < 3 && Utils.chance(15)) {
         inst.stars[part] = (inst.stars[part] || 0) + 1;
         Log.add(`星辉一闪——【${def.name}】的【${(this.affixDef(part, oldId) || {}).name}】淬出第 ${inst.stars[part]} 星！（词缀实值 +4%/星）`, 'gain');

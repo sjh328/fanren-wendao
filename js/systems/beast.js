@@ -65,15 +65,18 @@ const BeastSys = {
       }
       B.enemy.hp = 0;
       p.counters.tames = (p.counters.tames || 0) + 1;   // v24 章助缘计数
-      Battle.log(`${e.name} 驯服功成！`, 'log-gain');   // v31 修瑕：原 B.log 调不存在的方法必抛异常——驯服成功即软锁（victoryTame 永不执行）
+      Battle.log(`${e.name} 驯服功成！`, 'log-gain');   // v31 修瑕：原 B.log 调不存在的方法必抛异常
       await Battle.wait(500);
-      Battle.victoryTame();
+      // v34（E113）：P0——v31 修瑕只把 B.log 换成了 Battle.log，结算调用仍是并不存在的
+      // Battle.victoryTame（真身在本对象上）——驯服成功/走脱各路径在 wait 后必抛 TypeError，
+      // B.busy 恒真、B.over 不置位，战斗永久卡死。改调 BeastSys.victoryTame。
+      this.victoryTame();
       return;
     }
     Log.add(`${e.name} 灵智倔强，猛然挣脱你的神识，带着一身伤痕遁走了——此战算你胜，却少了战利品。`, 'warn');
     B.enemy.hp = 0;
     await Battle.wait(400);
-    Battle.victoryTame(true);
+    this.victoryTame(true);   // v34（E113）：同上——Battle.victoryTame 不存在
   },
   /** 驯服结算的轻量胜利（战利品减半/无） */
   victoryTame(fled = false) {
@@ -249,8 +252,11 @@ const BeastSys = {
       if (up) {
         let extra = '';
         // v19 五阶习得物种天生技，九阶精进
-        if (b.level === 5 && (!b.skills || !b.skills.length) && this.SPECIES_SKILLS[b.species]) {
-          b.skills = [{ ...this.SPECIES_SKILLS[b.species] }];
+        // v34（E122）：原死条件 `!b.skills.length` 把「带继承技驯来」的灵兽（驯服即 slice 一条技能）
+        // 永远挡在第一物种技门外——同物种两种养成结果且无任何说明。改为按物种 id 判重补插。
+        if (b.level === 5 && this.SPECIES_SKILLS[b.species] && !(b.skills || []).some(s => s && s.name === this.SPECIES_SKILLS[b.species].name)) {
+          b.skills = b.skills || [];
+          b.skills.unshift({ ...this.SPECIES_SKILLS[b.species] });
           extra = `，并领悟天生技【${b.skills[0].name}】`;
         } else if (b.level === 9 && b.skills && b.skills.length && b.skills[0].pct) {
           b.skills[0].pct = Math.round(b.skills[0].pct * 1.5 * 10) / 10;

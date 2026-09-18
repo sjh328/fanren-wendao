@@ -689,6 +689,7 @@ const UI = {
       <div class="card-title">✦ 洞府 · ${lv} 层 ${maxed ? '<span class="tag safe">聚灵之极</span>' : ''}</div>
       <div class="card-desc">聚灵阵运转不息：修炼效率 <b class="hl">+${lv * 4}%</b> · 灵田 ${CaveSys.plotCount(p)}/8 块 · 兽栏 ${BeastSys.maxSlots(p)} 位。</div>
       ${p.rushDay === Math.floor(p.day || 0) ? '' : `<div class="action-row"><button class="btn" data-action="act-spirit-rush" title="燃烧灵石为聚灵阵供能，今日修炼效率 ×1.5">⚡ 点燃聚灵阵（今日修炼 ×1.5 · ${Utils.fmtNum(CaveSys.rushCost(p))} 灵石）</button></div>`}
+      <div class="action-row"><button class="btn" data-action="act-cave-care" title="全田浇水 · 全兽抚摸 · 补求签——一日仪式一键完成">👐 一键照料（浇水 / 抚兽 / 求签）</button></div>
       ${maxed ? '' : `<div class="action-row"><button class="btn btn-primary" data-action="act-cave-up">扩建洞府（${Utils.fmtNum(c.stones)}灵石${matsTxt ? ' · ' + matsTxt : ''}）</button></div>`}
       ${CaveSys.dongtianRow ? CaveSys.dongtianRow(p) : ''}
     </div>`;
@@ -1447,7 +1448,7 @@ const UI = {
     const boxUsed = isMystery && p._boxDay === Math.floor(p.day || 0);   // v33（E73）：古匣日限可见化（不做真值 coercion，第 0 日同判）
     const hotPct = Math.min(30, Math.max(0, ((lot.views || 0) - 1)) * 3);   // v33（D4）：围观热度可见化——底价已含上浮，此处只做明示
     const auctionSection = `
-      <div class="shop-section-title">◈ 拍卖行（每六十日一件稀有拍品${isMystery ? ' · 本期为<span class="neg">神秘古匣</span>' : ''}）<span class="tag warn">拍期余 ${lot.until - Math.floor(p.day)} 日</span></div>
+      <div class="shop-section-title">◈ 拍卖行（每六十日一件稀有拍品${isMystery ? ' · 本期为<span class="neg">神秘古匣</span>' : ''}）<span class="tag ${lot.until - Math.floor(p.day) <= 3 ? 'danger' : 'warn'}">拍期余 ${lot.until - Math.floor(p.day)} 日${lot.until - Math.floor(p.day) <= 1 ? ' · 明日易主' : ''}</span></div>
       <div class="shop-row">
         <div class="gf-info">
           <div class="gf-name">${this.gradeSpan(lotDef.name, lotDef.grade)} <span class="tag">底价 ${Utils.fmtNum(lot.base)} 灵石</span>${hotPct > 0 ? `<span class="tag warn">围观 ×${lot.views} · 底价上浮 ${hotPct}%</span>` : ''}${boxUsed ? '<span class="tag danger">今日古匣已开启</span>' : ''}</div>
@@ -2005,6 +2006,7 @@ const UI = {
   helpModal() {
     const folds = `
       <details class="fold" open><summary>✦ 三分钟上手</summary>
+        <div class="tip-line">· 界面字号、战斗速度、音效开关等偏好都在右上角 <b>⚙ 设置</b> 面板里。</div>
         <div class="tip-line">· <b>修炼</b>攒修为，圆满后冲关；练气→筑基无天劫，金丹起有硬抗/法宝/借地三策博弈。</div>
         <div class="tip-line">· <b>游历</b>探地图搏机缘，遇敌注意敌方「下一手」意图——<b>蓄力时防御可破招反击</b>。</div>
         <div class="tip-line">· <b>坊市</b>买丹药法宝；丹毒是服丹的代价——丹毒上限见左栏，超过七成五会提示停口，解毒丹可压。</div>
@@ -2244,7 +2246,7 @@ const UI = {
     flash.classList.add('go');
     show.classList.add('go');
     if (tierCls) { flash.classList.add(tierCls); show.classList.add(tierCls); }
-    if (tier >= 4) Ambience.sfx('breakthrough');
+    Ambience.sfx('breakthrough');   // v34（E2）：进境即有声光——原 tier≥4 才响，前期突破（最高频仪式时刻）静默得像坏掉
     clearTimeout(this._realmTimer);
     const dur = tier >= 7 ? 4600 : tier >= 4 ? 4000 : 3500;
     this._realmTimer = setTimeout(() => { flash.classList.remove('go', 'rs-t1', 'rs-t2', 'rs-t3'); show.classList.remove('go', 'rs-t1', 'rs-t2', 'rs-t3'); }, dur);

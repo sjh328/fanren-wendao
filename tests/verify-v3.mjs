@@ -448,7 +448,7 @@ try {
   }
   // 讲道参与
   {
-    await patchSave({ world: { pending: { type: 'preach', year: 3 }, nextEventYear: 99999 } });
+    await patchSave({ world: { pending: { type: 'preach', year: 3 }, nextEventYear: 99999, _evResched34: true } });   // v34（A3）：免遭旧档重掷拉回 2~4 年窗
     await reloadSlot3();
     const p0 = await player(page);
     const exp0 = p0.exp;
@@ -543,7 +543,7 @@ try {
   {
     // 种子：大乘圆满 + 孽障300（天劫威力700，成算≈3%必败）+ 与n3有宿怨
     await seedAndLoad({
-      name: '转世道人', realmIdx: 7, layer: 3, exp: 63750000,
+      name: '转世道人', realmIdx: 7, layer: 3, exp: 55000000,
       karma: 300, insight: 0, dao: 'sword', sect: null, canReincarnate: false, reinc: null,
       bag: { w_zhuxian: 1, pill_liaoshang: 3 },
       npcs: { n3: { realmIdx: 1, layer: 0, exp: 0, rel: -50, alive: true, map: 'village', met: true, grudge: true, pastLife: false } },
@@ -563,7 +563,7 @@ try {
       if (p.realmIdx >= 8) { // 3% 天幸成功 → 重试一次
         console.log('  - V6 天劫意外成功，重试');
         // v30 消抖：重试种子补齐断言前置态（携宝诛仙剑影 + n3 前世恩怨），否则重试后下游断言必挂
-        await seedAndLoad({ name: '转世道人', realmIdx: 7, layer: 3, exp: 63750000, karma: 300, insight: 0, dao: 'sword', sect: null, canReincarnate: false, reinc: null, bag: { w_zhuxian: 1, pill_liaoshang: 3 } });
+        await seedAndLoad({ name: '转世道人', realmIdx: 7, layer: 3, exp: 55000000, karma: 300, insight: 0, dao: 'sword', sect: null, canReincarnate: false, reinc: null, bag: { w_zhuxian: 1, pill_liaoshang: 3 } });
         await page.evaluate(() => {
           NpcSys.tribAmbush = () => null;
           const pl = Game.player;
@@ -622,7 +622,7 @@ try {
 
   /* ================= V7 NPC成长 ================= */
   console.log('--- V7 NPC成长 ---');
-  await seedAndLoad({ day: 365 * 3 - 1, world: { nextEventYear: 99999, pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, priceMul: 1 } });
+  await seedAndLoad({ day: 365 * 3 - 1, world: { nextEventYear: 99999, _evResched34: true, pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, priceMul: 1 } });   // v34（A3）：同上免重掷
   {
     await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
     await sleep(300);

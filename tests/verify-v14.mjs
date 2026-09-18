@@ -336,14 +336,19 @@ try {
     const rowTxt = document.querySelector('#tab-content')?.textContent || '';
     if (!btn) return { has: false };
     const before = p.sect.contrib;
+    const dayBefore = Math.floor(p.day || 0);
+    p.listenDay = -99;
     btn.click();
     await new Promise(r => setTimeout(r, 450));
     const after = p.sect.contrib;
-    const btnAfter = document.querySelector('#tab-content [data-action="act-sect-listen"]');
-    return { has: true, rowTxt: rowTxt.includes('听讲一日'), spent: after === before - 300, disabled: btnAfter ? btnAfter.disabled : null };
+    return { has: true, rowTxt: rowTxt.includes('听讲一日'), spent: after === before - 300,
+      dayAdvanced: Math.floor(p.day || 0) === dayBefore + 1,
+      listenDayMarked: p.listenDay === dayBefore };
   });
-  (tg.has && tg.rowTxt && tg.spent && tg.disabled)
-    ? pass('TG1 宗门「听讲一日」：300 贡献兑感悟，日限一次（按钮转灰）') : fail('TG1 听讲', JSON.stringify(tg));
+  // v34（A2）：听讲实耗一日——日限标记照记（listenDay=听讲当日），但时间已推进到次日，
+  // 按钮不再转灰（贡献允许可连日听讲），以「标记日 + 推进一日」为断言
+  (tg.has && tg.rowTxt && tg.spent && tg.dayAdvanced && tg.listenDayMarked)
+    ? pass('TG1 宗门「听讲一日」：300 贡献兑感悟，实耗一日且日限标记（v34）') : fail('TG1 听讲', JSON.stringify(tg));
 
   /* ================= 收尾 ================= */
   await sleep(400);

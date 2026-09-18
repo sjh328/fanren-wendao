@@ -229,17 +229,26 @@ const Story = {
     this.stopAuto();
     if (this.cur) this.render();
   },
-  /** v29：自动播放——每 2.4s 自动翻页，遇抉择/战斗/章末自停 */
+  /** v29：自动播放——每 2.4s 自动翻页，遇抉择/战斗/章末自停。
+   *  v34（E8）：间隔按当页字数自适应——打字机每帧 3 字，千字长页原文未打完即被翻走（自动播放
+   *  反而毁掉逐字演出）；2400+字数×12ms 封顶 8s，短页节奏不变。 */
   toggleAuto() {
     if (this._auto) { this.stopAuto(); this.render(); return; }
-    this._auto = setInterval(() => {
+    const interval = () => {
+      const c = this.cur;
+      const sc = c && c.scenes[c.idx];
+      const len = sc ? ((sc.who ? sc.who.length : 0) + (sc.text || sc.say || sc.note || '')).length : 0;
+      return Math.min(8000, 2400 + len * 12);
+    };
+    const tick = () => {
       const c = this.cur;
       if (!c || c.readonly) return this.stopAuto();
       const sc = c.scenes[c.idx];
       if (sc && (sc.t === 'choice' || sc.t === 'battle' || sc.t === 'investigate')) { this.stopAuto(); this.render(); return; }
       this.next();
-      if (!this.cur) this.stopAuto();
-    }, 2400);
+      if (!this.cur) this.stopAuto(); else { clearInterval(this._auto); this._auto = setInterval(tick, interval()); }
+    };
+    this._auto = setInterval(tick, 2400);
     this.next();
     if (!this.cur) this.stopAuto(); else this.render();
   },

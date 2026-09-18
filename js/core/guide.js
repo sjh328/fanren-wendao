@@ -47,9 +47,19 @@ LOCKS: {
     const need = GameData.layerNeed(p.realmIdx, p.layer);
     const cap = Stat.poisonCap(p);   // v20：上限单源化（v22 提前：新知丹毒提示亦用）
     const full = p.layer === 3 && p.exp >= need;
-    if (full && p.realmIdx < 9) t.push({ text: `修为已至圆满，可冲击 <b>${GameData.REALM_NAMES[p.realmIdx + 1]}</b> 期瓶颈（预估成算 ${Cultivate.breakthroughChance(p, p.realmIdx + 1 < GameData.TRIB_START ? 15 : 0).toFixed(0)}%）`, go: 'cultivate' });
-    else if (full && p.realmIdx === 9 && !p.flags.ascended) t.push({ text: '真仙圆满，仙门已开——可白日飞升', go: 'cultivate' });
-    if (p.realmIdx >= 1 && !p.dao) t.push({ text: '大道未定，如无舵之舟——宜叩问大道', go: 'cultivate' });
+    // v34（E5）：与 renderFocus 同一条首命中链——focus 主/副卡只显示链上第一条，
+    // 建议区只对「正被 focus 显示的那一条」去重，其余同域建议（斩三尸/丹毒等）照常保留
+    const fa =
+      (full && p.realmIdx < 9) ? 'realm' :
+      (full && p.realmIdx === 9 && !p.flags.ascended) ? 'ascend' :
+      (p.realmIdx >= 1 && !p.dao) ? 'dao' :
+      ((p.counters.gupianGot || 0) >= 9 && !p.benming) ? 'gupian' :
+      ((p.karma || 0) >= 100) ? 'karma' :
+      (p.poison > cap * 0.75) ? 'poison' :
+      (p.hp < st.maxHp * 0.3) ? 'hp' : null;
+    if (full && p.realmIdx < 9 && fa !== 'realm') t.push({ text: `修为已至圆满，可冲击 <b>${GameData.REALM_NAMES[p.realmIdx + 1]}</b> 期瓶颈（预估成算 ${Cultivate.breakthroughChance(p, p.realmIdx + 1 < GameData.TRIB_START ? 15 : 0).toFixed(0)}%）`, go: 'cultivate' });
+    else if (full && p.realmIdx === 9 && !p.flags.ascended && fa !== 'ascend') t.push({ text: '真仙圆满，仙门已开——可白日飞升', go: 'cultivate' });
+    if (p.realmIdx >= 1 && !p.dao && fa !== 'dao') t.push({ text: '大道未定，如无舵之舟——宜叩问大道', go: 'cultivate' });
     // v11 主线目标提示（置顶）
     const qc = QuestSys.CHAPTERS[QuestSys.currentChapterIdx(p)];
     if (qc) {
@@ -57,10 +67,10 @@ LOCKS: {
       if (undone) t.splice(Math.min(1, t.length), 0, { text: `<b>主线·${qc.title}</b>：${undone.desc}`, go: 'quest' });
     }
     if (AutoCult.active) t.push({ text: `自动修炼中（${AutoCult.rounds} 轮，修为 +${Utils.fmtNum(Math.max(0, this.totalExp(p) - AutoCult.startExp))}），可随时停止`, go: 'cultivate' });
-    if ((p.karma || 0) >= 100) t.push({ text: '孽障缠身，可于修炼页<b>斩三尸</b>', go: 'cultivate' });
+    if ((p.karma || 0) >= 100 && fa !== 'karma') t.push({ text: '孽障缠身，可于修炼页<b>斩三尸</b>', go: 'cultivate' });
     else if ((p.karma || 0) >= 60) t.push({ text: '孽障渐高，仇家窥伺于后——宜谨言慎行' });
-    if (p.poison > cap * 0.75) t.push({ text: '丹毒将满，宜服解毒丹或停药休养', go: 'cultivate' });
-    if (p.hp < st.maxHp * 0.3) t.push({ text: '气血衰微，宜打坐调息或服丹补满', go: 'cultivate' });
+    if (p.poison > cap * 0.75 && fa !== 'poison') t.push({ text: '丹毒将满，宜服解毒丹或停药休养', go: 'cultivate' });
+    if (p.hp < st.maxHp * 0.3 && fa !== 'hp') t.push({ text: '气血衰微，宜打坐调息或服丹补满', go: 'cultivate' });
     if (p.canReincarnate) t.push({ text: '兵解转世之机已现——或可重开一世', go: 'cultivate' });
     if (p.world && p.world.pending) t.push({ text: '天下大势正待抉择，可于游历页参与', go: 'map:world' });
     if (NpcSys.grudgeCount(p) > 0) t.push({ text: '有宿敌伺机报复——宜化解仇怨或早做备战', go: 'jianghu' });
@@ -76,7 +86,7 @@ LOCKS: {
     if ((p.beasts && p.beasts.list || []).some(b => b.trip && Math.floor(p.day || 0) >= b.trip.until)) {
       t.push({ text: '<b>新知</b>：灵兽寻宝已归——洞府·灵兽可点「归来」收取灵材', go: 'cave:beast' });
     }
-    if ((p.counters.gupianGot || 0) >= 9 && !p.benming) {
+    if ((p.counters.gupianGot || 0) >= 9 && !p.benming && fa !== 'gupian') {
       t.push({ text: '<b>新知</b>：上古碎片已足九枚——秘境页可合成本命法宝', go: 'map:realm' });
     }
     if (Object.values(p.gongfa || {}).some(g => g.level >= 2) && !(typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length)) {

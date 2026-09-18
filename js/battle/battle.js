@@ -12,10 +12,13 @@ const Battle = {
     if (p.hp <= 0) p.hp = 1;
     const enemy = ctx.enemy || buildMonster(monsterId);
     // v20 首战保底：敌方整体削弱（ctx.mercy < 1）
+    let mercyTxt = '';
     if (ctx.mercy && ctx.mercy < 1) {
       enemy.hpMax = Math.round(enemy.hpMax * ctx.mercy);
       enemy.atk = Math.round(enemy.atk * ctx.mercy);
-      this.log('【初入江湖】对方见你面生，未出全力——这是一场善意的较量。', 'log-system');
+      // v34（C7）：日志挪到 active 建档之后——原在 this.log 时刻 B.logs 容器尚不存在，
+      // 渲染只回放 B.logs，这条开局削弱提示从未显示过
+      mercyTxt = '【初入江湖】对方见你面生，未出全力——这是一场善意的较量。';
     }
     // §23 魔域狂化：气血/攻击/收益同步放大
     if (ctx.worldMul) {
@@ -52,6 +55,7 @@ const Battle = {
     };
     // v13：战斗速度偏好（1 / 2 / 极速），存偏好
     this.speed = this.speed || this.loadSpeed();
+    if (mercyTxt) this.log(mercyTxt, 'log-system');   // v34（C7）：建档后再入日志（原在建档前调用即被渲染抹掉）
     p.counters.battles++;
     document.getElementById('battle-modal').classList.remove('hidden');
     if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 公告让位
@@ -184,7 +188,7 @@ const Battle = {
   /** v8：战意增减（0~100）与伤害倍率（每点战意 +0.4%，满值 +40%） */
   addMorale(n) {
     const B = this.active;
-    if (B) B.morale = Utils.clamp((B.morale || 0) + n, 0, 100);
+    if (B) B.morale = Utils.clamp((B.morale || 0) + n, 0, GameData.BALANCE.COMBAT.MORALE_MAX);   // v34（C9）：上限接线集中配置
   },
   moraleMul() {
     const B = this.active;
@@ -248,13 +252,16 @@ const Battle = {
     const B = this.active;
     return st.crit + (B ? StatusFx.pctOf(B.myFx, 'critup') : 0);
   },
-  /** v13：敌方有效攻防（计入狂暴/铁壁/玩家施加的破防迟滞/虚弱） */
+  /** v13：敌方有效攻防（计入狂暴/铁壁/玩家施加的破防迟滞/虚弱）
+   *  v34（C3）：补读被「偷梁换柱」转嫁到己身的玩家增益（atkup/agiup/critup）——
+   *  原写入后无任何读取端，偷来的增益只渲染 tag 零生效，实际效果单向白偷 */
   enAtk(e) {
     let atk = e.atk * (e.raged ? 1.3 : 1);
     if (e._phase2) atk *= 1.25;   // v19 Boss 二阶段：血线过半，杀意暴涨
     if (e._raged2) atk *= 1.3;    // v19 精英词缀·血性（二度狂暴）
     // v30 修瑕：虚弱生效——玩家侧写入方（邪修必杀/灵兽慑心之嚎）早已存在，读取方一直缺失
     atk *= 1 - StatusFx.pctOf(e.fx, 'weaken') / 100;
+    atk *= 1 + StatusFx.pctOf(e.fx, 'atkup') / 100;   // v34（C3）：偷来的狂暴真实生效
     return Math.max(1, Math.round(atk));
   },
   enDef(e) {
@@ -266,10 +273,29 @@ const Battle = {
   enSpd(e) {
     let spd = e.spd * (1 - StatusFx.pctOf(e.fx, 'slow') / 100);
     if (e._fxSwift) spd *= 1.2;   // v19 精英词缀·迅影
+    spd *= 1 + StatusFx.pctOf(e.fx, 'agiup') / 100;   // v34（C3）：偷来的轻身真实生效
     return Math.max(1, Math.round(spd));
   },
   /** v19 敌方精英词缀判定 */
   eFx(B, id) { return !!(B.enemyFxIds && B.enemyFxIds.includes(id)); },
+  /** v34（C1/C2）：敌方受击统一响应——精英词缀「魔棘」反伤与「不灭」复活原先只在普攻路径接线，
+   *  必杀/本命/法诀/符箓/人兽合击打上去零反弹、一发带走直接跳过复活（同一词缀时灵时不灵）。
+   *  dmg>0 时结算反伤；随后无论 dmg 都复查不灭。伤害路径在扣除敌方气血后统一调用。 */
+  onEnemyHit(B, st, dmg) {
+    const p = Game.player;
+    if (dmg > 0 && this.eFx(B, 'e_thorns') && p.hp > 0) {
+      const back = Math.max(1, Math.round(dmg * 0.15));
+      p.hp = Math.max(0, p.hp - back);
+      this.pushFloat('me', `-${back}`, 'dmg');
+      this.log(`【魔棘】${B.enemy.name} 周身魔刺反卷——你受 <b>${back}</b> 点伤害！`, 'log-warn');
+    }
+    if (B.enemy.hp <= 0 && this.eFx(B, 'e_reborn') && !B.enemy._rebornUsed) {
+      B.enemy._rebornUsed = true;
+      B.enemy.hp = Math.round(B.enemy.hpMax * 0.3);
+      this.log(`【不灭】${B.enemy.name} 气息骤然暴涨——它以三成气血自死境爬了回来！`, 'log-warn');
+      UI.toast(`${B.enemy.name} 触发【不灭】！`, true);
+    }
+  },
   /* ---------- v19 敌方情报卡 ---------- */
   infoCard() {
     const B = this.active;
@@ -484,6 +510,7 @@ const Battle = {
       B.hitShake = true;
       this.addMorale(10);
       this.gainZyOnCrit(p, crit);   // v32 修瑕（E8）：必杀多段会心同样回真元（聚气归元）
+      this.onEnemyHit(B, st, dmg);   // v34（C1/C2）：魔棘反伤/不灭复活全路径接线
       if (sk.leech && p.hp < st.maxHp) {
         const heal = Math.max(1, Math.round(dmg * sk.leech));
         p.hp = Math.min(st.maxHp, p.hp + heal);
@@ -551,6 +578,7 @@ const Battle = {
       StatusFx.add(B.enemy.fx, { kind: 'defdown', pct: 30, rounds: 3 });
       this.pushFloat('enemy', `-${dmg}`, 'crit');
       B.hitShake = true;
+      this.onEnemyHit(B, st, dmg);   // v34（C1/C2）：魔棘反伤/不灭复活全路径接线
       this.log(`造成 <b>${dmg}</b> 点伤害，敌方防御大破！`, 'log-crit');
     } else if (k === 'strike9') {
       B.bmUsed.strike9 = true;
@@ -566,6 +594,7 @@ const Battle = {
       this.pushFloat('enemy', `-${dmg}`, 'crit');
       this.pushFloat('me', `+${heal}`, 'heal');
       B.hitShake = true;
+      this.onEnemyHit(B, st, dmg);   // v34（C1/C2）：魔棘反伤/不灭复活全路径接线
       this.log(`造成 <b>${dmg}</b> 点伤害，并借器反哺回复 <b>${heal}</b> 点气血！`, 'log-crit');
     }
     this.render();
@@ -587,12 +616,15 @@ const Battle = {
   },
 
   /** v32（C7）：凝神——战意与真元的主动互转通道（不耗行动回合，每回合一次）：
-   *  20 战意换 1 真元，或 15 战意净化一项自身负面。给防御/控制抗压局一个主动解法。 */
+   *  20 战意换 1 真元，或 15 战意净化一项自身负面。给防御/控制抗压局一个主动解法。
+   *  v34（C4）：被束缚/冰封时同样禁用（E67 漏网的不耗行动入口），且净化列表不再包含控制本身——
+   *  原被控点凝神 → 15 战意洗掉束缚且不耗行动，敌方控制技退化成「替玩家扣 15 战意」。 */
   async actNingshen() {
     const B = this.active;
     if (!B || B.busy || B.over) return;
     if (B._ningUsed) { UI.toast('凝神一转——本回合已用过（敌方回合后可再用）'); return; }
-    const negs = (B.myFx || []).filter(x => ['poison', 'burn', 'bleed', 'cursed', 'defdown', 'slow', 'weaken', 'stun', 'freeze', 'vuln'].includes(x.kind) && x.rounds > 0);
+    if (StatusFx.has(B.myFx, 'stun') || StatusFx.has(B.myFx, 'freeze')) { UI.toast('身被禁锢，心神难凝——先设法脱困'); return; }
+    const negs = (B.myFx || []).filter(x => ['poison', 'burn', 'bleed', 'cursed', 'defdown', 'slow', 'weaken', 'vuln'].includes(x.kind) && x.rounds > 0);
     const v = await UI.popup({
       title: '⚡ 凝 神',
       html: `敛息凝神，战意与真元互换一息（<b>不耗行动回合</b>，每回合一次）。<br>当前战意 <b>${B.morale || 0}</b> · 真元 <b>${B.zhenyuan || 0}/${B.zmax || 6}</b>${(B.zhenyuan || 0) >= (B.zmax || 6) ? '（真元已满，换气无益）' : ''}。`,
@@ -602,6 +634,8 @@ const Battle = {
         { text: '收 势', value: null },
       ],
     });
+    // v34（C4）：popup 等待期间快速双开可双份结算——resolve 后复查再扣
+    if (v && (B._ningUsed || B.over)) { UI.toast('凝神一转——本回合已用过'); return; }
     if (v === 'zy') {
       if ((B.morale || 0) < 20) { UI.toast('战意不足 20'); return; }
       B.morale -= 20;
@@ -724,7 +758,7 @@ const Battle = {
         const daoTier = DaoSys.tierLevel(p);
         const enSpd = this.enSpd(B.enemy);
         // v10 剑心六境·剑仙境：普攻必中
-        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)) + (B.fogDodge || 0) + (B.enemy.dodge || 0), 2, 40);   // v29：敌方闪避自此生效（原死属性）
+        const miss = (p.dao === 'sword' && daoTier >= 6) ? 0 : Utils.clamp(3 + (enSpd - this.mySpd(st)) + (B.fogDodge || 0) + (B.enemy.dodge || 0), 2, GameData.BALANCE.COMBAT.PLAYER_MISS_MAX);   // v29：敌方闪避生效；v34（C9）：失手上限接线集中配置
         if (Utils.chance(miss)) {
           this.log(`你奋力一击，却被 ${B.enemy.name} 敏捷地避开了！`);
           this.pushFloat('enemy', '闪避', 'miss');
@@ -794,8 +828,9 @@ const Battle = {
             this.log(`剑气余韵追至！再对 ${B.enemy.name} 造成 <b>${echo}</b> 点伤害。`, 'log-crit');
           }
           // v10 境界特性 · 法相（合体起）：两成几率引动法相，追加五成攻击的一击
+          // v34（C5）：走战斗内攻防口径——原用面板原始 atk，狂暴/虚弱/敌方防御全不生效（对堆防敌零减免）
           if (p.realmIdx >= 6 && B.enemy.hp > 0 && Utils.chance(20)) {
-            const extra = Math.max(1, Math.round(st.atk * 0.5));
+            const extra = Math.max(1, Math.round(Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy))));
             B.enemy.hp = Math.max(0, B.enemy.hp - extra);
             if (B.stats) { B.stats.out += extra; if (B.stats.src) B.stats.src.attack += extra; }
             this.log(`【法相】天地法相随行，一掌拍落！追加 <b>${extra}</b> 点伤害！`, 'log-crit');
@@ -818,20 +853,8 @@ const Battle = {
             p.hp = Math.min(st.maxHp, p.hp + heal3);
             this.log(`【词缀·吸血】血气倒流——回复 <b>${heal3}</b> 点气血。`, 'log-gain');
           }
-          // v19 精英词缀·魔棘：敌受击反弹一成五
-          if (this.eFx(B, 'e_thorns') && p.hp > 0) {
-            const back = Math.max(1, Math.round(dmg * 0.15));
-            p.hp = Math.max(0, p.hp - back);
-            this.pushFloat('me', `-${back}`, 'dmg');
-            this.log(`【魔棘】${B.enemy.name} 周身魔刺反卷——你受 <b>${back}</b> 点伤害！`, 'log-warn');
-          }
-          // v19 精英词缀·不灭：濒死复活一次
-          if (B.enemy.hp <= 0 && this.eFx(B, 'e_reborn') && !B.enemy._rebornUsed) {
-            B.enemy._rebornUsed = true;
-            B.enemy.hp = Math.round(B.enemy.hpMax * 0.3);
-            this.log(`【不灭】${B.enemy.name} 气息骤然暴涨——它以三成气血自死境爬了回来！`, 'log-warn');
-            UI.toast(`${B.enemy.name} 触发【不灭】！`, true);
-          }
+          // v19 精英词缀·魔棘/不灭 → v34（C1/C2）：抽 onEnemyHit 单源，必杀/本命/法诀/符箓/合击同享
+          this.onEnemyHit(B, st, dmg);
         }
         break;
       }
@@ -878,7 +901,8 @@ const Battle = {
         // v20 雨天：雷系法诀 +20%
         if (B.ctx && B.ctx.wx && B.ctx.wx.sky === 'rain' && /雷/.test(def.name)) power *= 1.2;
         if (sk.kind === 'damage') {
-          const miss = Utils.clamp(3 + (this.enSpd(B.enemy) - this.mySpd(st)) + (B.enemy.dodge || 0), 2, 35);   // v29：敌方闪避生效
+          // v34（C6）：雾战闪避对法诀生效——开场文案「双方身形皆难捉摸」，原只有普攻侧吃到 B.fogDodge
+          const miss = Utils.clamp(3 + (this.enSpd(B.enemy) - this.mySpd(st)) + (B.fogDodge || 0) + (B.enemy.dodge || 0), 2, GameData.BALANCE.COMBAT.SKILL_MISS_MAX);   // v29：敌方闪避生效；v34（C9）：法诀失手与普攻分档接线
           if (Utils.chance(miss)) {
             this.log(`你施展【${sk.name}】，却被对方堪堪避过！`);
             this.pushFloat('enemy', '闪避', 'miss');
@@ -894,6 +918,7 @@ const Battle = {
             B.hitShake = true;
             this.addMorale(10);
             Battle.fxShow('sword');
+            this.onEnemyHit(B, st, dmg);   // v34（C1/C2）：魔棘反伤/不灭复活全路径接线
             this.log(`你施展 <b>${sk.name}</b>！${crit ? '会心一击！' : ''}造成 <b>${dmg}</b> 点伤害！`, 'log-crit');
           }
         } else if (sk.kind === 'heal') {
@@ -932,6 +957,7 @@ const Battle = {
             if (B.stats) { B.stats.out += dmg; if (B.stats.src) B.stats.src.skill += dmg; }
             B.hitShake = true;
             this.addMorale(8);
+            this.onEnemyHit(B, st, dmg);   // v34（C1/C2）：魔棘反伤/不灭复活全路径接线
             Battle.fxShow(fk === 'damage' && (def.power || 0) >= 3 ? 'lightning' : 'fire');
             this.log(`${freeCast ? '【言出法随】指尖符光自生，此符未耗！' : `你祭出 <b>${def.name}</b>！`}符光如电，轰然炸裂——对 ${B.enemy.name} 造成 <b>${dmg}</b> 点伤害！`, 'log-crit');
             if (def.debuff) {
@@ -945,6 +971,7 @@ const Battle = {
               const thunder = Math.max(1, Math.round(this.myAtk(st) * 0.2));
               B.enemy.hp = Math.max(0, B.enemy.hp - thunder);
               if (B.stats) { B.stats.out += thunder; if (B.stats.src) B.stats.src.skill += thunder; }   // v31 修瑕（E5）：追雷不入统计
+              this.onEnemyHit(B, st, 0);   // v34（C1）：追雷补不灭复查（反伤不重复结算，传 0）
               this.log(`一道追雷随符而落！再对 ${B.enemy.name} 造成 <b>${thunder}</b> 点伤害！`, 'log-crit');
             }
           } else if (fk === 'shield') {
@@ -1037,6 +1064,7 @@ const Battle = {
         if (B.stats) { B.stats.out += cdmg; if (B.stats.src) { B.stats.src.beast += Math.round(cdmg / 2); B.stats.src.attack += cdmg - Math.round(cdmg / 2); } }
         this.addMorale(12);
         if (B.enemy.hp > 0) this.applyEnemyFx(B.enemy, { kind: spFx[0], pct: spFx[1], rounds: spFx[2] });
+        this.onEnemyHit(B, st, cdmg);   // v34（C1/C2）：魔棘反伤/不灭复活全路径接线
         this.log(`人兽合力，一击贯穿——<b>${cdmg}</b> 点伤害，${(StatusFx.DEFS[spFx[0]] || {}).name || ''}随之而落！`, 'log-crit');
         break;
       }
@@ -1127,7 +1155,9 @@ const Battle = {
     }
     // v19 词缀·回灵/凝气：每回合回复灵力
     const turnFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p) : {};
-    if (turnFx.mpRegen > 0 && p.mp > 0 && p.mp < st.maxMp) {
+    // v34（C8）：去掉 p.mp>0 死条件——被摄灵/裂魂抽干（mp=0）后回灵词缀原永久失效，
+    // 恰在玩家最需要回灵的时刻罢工，与「每回合回复灵力」描述矛盾
+    if (turnFx.mpRegen > 0 && p.mp < st.maxMp) {
       const mpReg = Math.max(1, Math.round(st.maxMp * turnFx.mpRegen * 0.01));
       p.mp = Math.min(st.maxMp, p.mp + mpReg);
       this.log(`法宝温养灵台——灵力回涌 ${mpReg} 点。`, 'log-gain');
@@ -1442,10 +1472,10 @@ const Battle = {
         this.enemyStrike(st, 0.6, false);
       },
       guard: () => {
-        e.guardPower = sk.def || 40;
+        e.guardPower = sk.def || GameData.BALANCE.COMBAT.GUARD_DEF_BASE;   // v34（C9）：接线集中配置
         e.guardRounds = sk.rounds || 2;
         this.pushFloat('enemy', '铁壁', 'heal');
-        this.log(`【${sk.name}】${e.name} 硬甲铿锵——防御大增（+${sk.def || 40}%），持续 ${sk.rounds || 2} 回合！`, 'log-warn');
+        this.log(`【${sk.name}】${e.name} 硬甲铿锵——防御大增（+${sk.def || GameData.BALANCE.COMBAT.GUARD_DEF_BASE}%），持续 ${sk.rounds || 2} 回合！`, 'log-warn');
       },
       roar: () => {
         e._roared = true;   // v29：每场限一次
@@ -1488,7 +1518,7 @@ const Battle = {
     const B = this.active;
     const p = Game.player;
     const e = B.enemy;
-    const dodgeChance = Utils.clamp(3 + (this.mySpd(st) - this.enSpd(e)) * 1.1 + st.dodge + (B.buffs.dodgeRounds > 0 ? B.buffs.dodgeBonus : 0) + (B.fogDodge || 0), 0, 70);
+    const dodgeChance = Utils.clamp(3 + (this.mySpd(st) - this.enSpd(e)) * 1.1 + st.dodge + (B.buffs.dodgeRounds > 0 ? B.buffs.dodgeBonus : 0) + (B.fogDodge || 0), 0, GameData.BALANCE.COMBAT.ENEMY_DODGE_MAX);
     if (Utils.chance(dodgeChance)) {
       this.log(`${e.name} ${tagText || (heavy ? '杀招当头' : '扑击而来')}，却被你身形一晃，堪堪避过！`);
       this.pushFloat('me', '闪避', 'miss');
@@ -1500,7 +1530,8 @@ const Battle = {
     const speciesRel = GameData.speciesRelation(e.species, 'human');
     if (speciesRel > 0) dmg *= 1.15;
     else if (speciesRel < 0) dmg *= 0.85;
-    const crit = Utils.chance(e.crit);
+    // v34（C3）：会心计入被偷走的「明目」增益（偷梁换柱 critup 此前零读取）
+    const crit = Utils.chance(e.crit + StatusFx.pctOf(e.fx, 'critup'));
     if (crit) dmg *= 1.6;
     const preMit = dmg;   // v29：总减伤封顶锚点（攻防/克制/暴击之后）
     const blocked = Utils.chance(st.block);

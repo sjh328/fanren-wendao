@@ -81,7 +81,7 @@ const Log = {
       gain: ['gain', 'realm'],
       loss: ['loss', 'warn'],
       story: ['story', 'event'],
-      system: ['system', 'info'],
+      system: ['system'],   // v34（E6）：见闻(info)不再混入「系统」——玩家找突破/大事记录时满屏见闻，语义错位
     };
     div.style.display = (groups[this.filter] || [this.filter]).includes(type) ? '' : 'none';
   },

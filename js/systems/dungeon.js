@@ -336,7 +336,8 @@ const DungeonSys = {
       p.counters.clearedRealms = p.counters.clearedRealms || {};
       p.counters.clearedRealms[R.id] = 1;
       p.counters.dungeonClears = Object.keys(p.counters.clearedRealms).length;
-      Log.add(`<b>${R.name}</b> 最深处的宝库向你敞开！${gf ? `失传功法【${gf}】、` : '上古法宝碎片 ×2、'}上古法宝碎片 ×3、${stones > 0 ? `灵石 ${Utils.fmtNum(stones)}` : '宝库灵石今日已被你取过（不再进益）'}——你满载而归！${fortuneTxt}`, 'gain');
+      // v34（E121）：播报对齐实发——无功法分支原写「碎片 ×2、碎片 ×3」共 5 枚，实际只发 3 枚（Bag.addItem 3）
+      Log.add(`<b>${R.name}</b> 最深处的宝库向你敞开！${gf ? `失传功法【${gf}】、` : ''}上古法宝碎片 ×3、${stones > 0 ? `灵石 ${Utils.fmtNum(stones)}` : '宝库灵石今日已被你取过（不再进益）'}——你满载而归！${fortuneTxt}`, 'gain');
       p.dungeon = null;
       Log.add('你退出秘境，回望雾中洞口，只觉造化玄奇。', 'system');
       return;

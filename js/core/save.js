@@ -12,6 +12,15 @@ const Save = {
       return raw ? JSON.parse(raw) : null;
     } catch (e) { return null; }
   },
+  /** v34（E123）：原始串单源写入——storage 可用走 localStorage，否则落内存档（键名与 read 严格对称）。
+   *  Meta 此前自拼 `Save.KEY + key` 直写 mem（mem['fanren_wd_meta_1']），而 read('meta_1') 读的是
+   *  mem['meta_1']——隐私模式/禁存储下成就图鉴每会话清零。 */
+  writeRaw(key, raw) {
+    try {
+      if (this.storage.setItem) this.storage.setItem(this.KEY + key, raw);
+      else this.mem[key] = raw;
+    } catch (e) { this.mem[key] = raw; }   // v34（E124）：配额满/写入异常同样镜像内存档，进度不丢
+  },
 write(key, player) {
     const realmText = GameData.REALM_NAMES[player.realmIdx] + GameData.LAYER_NAMES[player.layer];
     const dao = player.dao ? GameData.DAO_CLASSES.find(d => d.id === player.dao) : null;
@@ -48,6 +57,7 @@ write(key, player) {
       }
     } catch (e) {
       console.warn('存档失败', e);
+      this.mem[key] = raw;   // v34（E124）：QuotaExceeded 等写入异常也镜像内存档——原只 toast，本条进度直接丢弃
       UI.toast('存档写入异常，请检查存储空间', true);
     }
     UI.saveFlash();

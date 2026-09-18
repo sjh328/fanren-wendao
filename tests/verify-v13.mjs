@@ -82,7 +82,7 @@ try {
     p.realmIdx = 5; p.layer = 2;
     p.sect = { id: 'panyan', contrib: 8000, faction: null };   // 长老：hpPct 10 / defPct 10 / atkPct 10
     const stElder = Stat.compute(p);
-    p.sect.contrib = 0;   // 外门：无职位百分比
+    p.sect.contrib = 0; p.sect.peakContrib = 0;   // 外门：无职位百分比（v34 E115：职位按峰值——显式清峰值才回落）
     const stOuter = Stat.compute(p);
     const hpRatio = stElder.maxHp / stOuter.maxHp;
     const defRatio = stElder.def / stOuter.def;

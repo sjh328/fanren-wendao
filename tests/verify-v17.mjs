@@ -106,7 +106,7 @@ console.log('===== SA 源码静态组 =====');
   bag.includes('与「丢弃之物无法找回」承诺矛盾') && bag.includes('p.enhBless[itemId]') ? pass('SA53 丢弃/分解清留档（E37）') : fail('SA53 留档清理', '');
   craft.includes('const costMult = 1 + Math.min(4, (p._drawCount || 0) * 0.75);') && craft.includes('扣款成功后才计数') ? pass('SA54 画符失败不烧次数（E38）') : fail('SA54 画符', '');
   forge.includes('前缀必出一条') || forge.includes('空手保底') ? pass('SA55 重铸空手保底（E39）') : fail('SA55 保底', '');
-  auction.includes('const usable = this.LOT_POOL.filter(x => (x.minRealm || 0) <= (p.realmIdx || 0));') ? pass('SA56 拍卖按境界过滤（E41）') : fail('SA56 拍卖', '');
+  auction.includes('已修习/道途不合的功法不再掷出') && auction.includes('此诀你已修习，重拍无用') ? pass('SA56 拍卖按境界过滤+功法双闸（E41；v34 D1 扩充）') : fail('SA56 拍卖', '');
   gdata.includes('两件另享仙器散件共鸣') ? pass('SA57 套装文案补共鸣（E43）') : fail('SA57 套装', '');
   black.includes("id: 'm_leijing', w: 5 }") && black.includes("id: 'm_xiancui', w: 6 }") ? pass('SA58 黑市补雷晶核/仙灵翠（E45）') : fail('SA58 黑市', '');
   gdata.includes("{ item: 'seed_xianling', minRealm: 6 }") ? pass('SA59 仙灵种下调 r6（E45）') : fail('SA59 仙灵种', '');
@@ -155,7 +155,7 @@ console.log('===== SA 源码静态组 =====');
   achieveMarks2(R('core/achieve.js')) ? pass('SA98 轮回镜 dedup 无 marksGiven 依赖（A4）') : fail('SA98 dedup', '');
 
   function MONSTERS_DODGE(s) { return (s.match(/dodge: \d+, species/g) || []).length >= 10; }
-  function achieveMarks(d, a) { return a.includes('UI.markDirty(\'top\')') && a.includes("name: '斗兽常客'"); }
+  function achieveMarks(d, a) { return a.includes('check 唯一调用点在 afterAction') && a.includes("name: '斗兽常客'"); }   // v34（E126）：局部渲染演进为「检查先行、统一渲染」
   function achieveMarks2(a) { return a.includes('Meta.data.marksGiven') === false; }
   function achieveFileN(a) { return (a.match(/id: '/g) || []).length >= 62; }
 }

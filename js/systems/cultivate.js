@@ -48,11 +48,13 @@ const Cultivate = {
         const over = p.exp - need;
         p.exp = need;
         if (p.realmIdx >= 9) {
-          // v30 仙途续航：真仙圆满之后修为溢流炼作「仙元」（道境资粮）——修为轴有终点，道境没有
+          // v30 仙途续航：真仙圆满之后修为溢流炼作「仙元」——修为轴有终点，道境没有。
+          // v34（E117）：拆除双喂——道境经验声明口径是「职业行为积累、不随修为境界绑定」，
+          // 溢流一轮闭关动辄数千道境经验，把剑仙境等行为轴秒满；自此仙元独享溢流。
           const daoGain = Math.max(1, Math.round(over / (GameData.eco(9) * 0.05) * ((p.flags && p.flags.visionLeichi) ? 1.1 : 1)));   // v32（D6）：雷池淬体——仙元溢流 +10%
           p.counters.xianyuan = (p.counters.xianyuan || 0) + daoGain;
-          DaoSys.gain(p, daoGain);
-          if (p.counters.xianyuan % 50 < daoGain) Log.add(`修为满溢，尽数炼作 <b>仙元</b>（道境资粮 +${daoGain} · 累计 ${p.counters.xianyuan}）——修为轴有终点，道境没有。`, 'gain');
+          // v34：播报节流——原 xianyuan%50<daoGain 在 daoGain>50 时恒真，长闭关每轮刷一条
+          if (daoGain >= 500 || p.counters.xianyuan % 500 < daoGain) Log.add(`修为满溢，尽数炼作 <b>仙元</b>（道境资粮 +${daoGain} · 累计 ${p.counters.xianyuan}）——修为轴有终点，道境没有。`, 'gain');
         } else {
           // v18：溢出修为保留，突破后自动计入
           p.expOverflow = (p.expOverflow || 0) + over;
@@ -61,24 +63,24 @@ const Cultivate = {
     }
     return leveled;
   },
-  /** v28 联动：感悟单源入口——满百后溢出不再蒸发，按境界经济折算修为（感悟圆融，化作修为）。
-   *  大额感悟源（讲道/心魔劫/个人线/前世机缘/上签等）统一走此口，小处直写不受影响。 */
+  /** v28 联动：感悟单源入口——满百后溢出不再蒸发，按修炼口径折算修为（感悟圆融，化作修为）。
+   *  大额感悟源（讲道/心魔劫/个人线/前世机缘/上签等）统一走此口，小处直写不受影响。
+   *  v34（A2）：r<9 折算汇率 80×eco（≈219 倍单日修炼产出）改为 baseGain×0.125/点——与悟道同汇率
+   *  （2.75×eco/点），自随乘数缩放，感悟溢出永远是「小份额炼化」而非旁路成长曲线的第二台印钞机。 */
   addInsight(p, n) {
     if (!n) return;
     const before = p.insight || 0;
     p.insight = Math.min(100, before + n);
     const spill = n - (p.insight - before);
     if (spill > 0) {
-      // v32 修瑕（E26）：r9 溢出原走 exp 链固定比 1 点感悟=1600 仙元（spill×80×eco(9) ÷ eco(9)×0.05）
-      // ——事件型感悟（仙界访客论道、心魔降伏）使仙元日入翻倍以上且入账被掩盖。改仙元定值 spill×50，
-      // 与纯修炼溢流速率（约 490/日）同量级。
+      // v32 修瑕（E26）：r9 溢出走仙元定值 spill×50（与悟道 1000/20 同汇率）。
+      // v34（E117）：不再双喂 DaoSys（口径同 addExp 溢流）。
       if (p.realmIdx >= 9) {
         const yuan = spill * 50;
         p.counters.xianyuan = (p.counters.xianyuan || 0) + yuan;
-        if (typeof DaoSys !== 'undefined') DaoSys.gain(p, yuan);
         Log.add(`感悟已臻圆融，余韵炼作 <b>仙元 +${Utils.fmtNum(yuan)}</b>。`, 'gain');
       } else {
-        const exp = Math.round(spill * 80 * GameData.eco(p.realmIdx));
+        const exp = Math.round(spill * this.baseGain(p) * 0.125);
         if (exp > 0) {
           // v31 修瑕（E20）：不再 silent——大额感悟折算的修为曾可静默连跳小层（无日志/浮字/公告，出关对不上账）
           this.addExp(p, exp);
@@ -88,16 +90,20 @@ const Cultivate = {
     }
   },
   /** v32（D5）：悟道——满溢感悟的主动出口：耗 20 点突破感悟炼作修为（飞升后炼作仙元 1000），每日一次。
-   *  感悟成算降权 0.5:1 后，囤积的感悟自此有第二条去路（飞升前后皆有用）。 */
+   *  感悟成算降权 0.5:1 后，囤积的感悟自此有第二条去路（飞升前后皆有用）。
+   *  v34（A2）：r<9 收益 20×80×eco（≈219 倍单日修炼，听讲环路整条旁路 ×5.4 曲线）改为
+   *  baseGain×2.5（≈7.5 天修炼量/次）——自随乘数缩放，悟道始终是「主动加餐」而非第二主粮；
+   *  r9 仙元 1000 与修炼折算口径自洽，维持；不再双喂 DaoSys。 */
   async wuDao() {
     const p = Game.player;
     if (!p || p.dead) return;
     const today = Math.floor(p.day || 0);
     if (p._wuDaoDay === today) { UI.toast('今日已悟过一场——大道贵在日积月累'); return; }
     if ((p.insight || 0) < 20) { UI.toast('突破感悟不足 20 点'); return; }
+    const expGain = Math.round(this.baseGain(p) * 2.5);
     const ok = await UI.popup({
       title: '悟 道',
-      html: `闭目吐纳，将满溢的感悟淬入道基（每日一次）。<br>· 耗突破感悟 20 点${p.realmIdx >= 9 ? '，炼作 <b>仙元 1000</b>' : `，炼作修为 <b>+${Utils.fmtNum(Math.round(20 * 80 * GameData.eco(p.realmIdx)))}</b>`}。`,
+      html: `闭目吐纳，将满溢的感悟淬入道基（每日一次）。<br>· 耗突破感悟 20 点${p.realmIdx >= 9 ? '，炼作 <b>仙元 1000</b>' : `，炼作修为 <b>+${Utils.fmtNum(expGain)}</b>`}。`,
       options: [{ text: '悟 道', value: true, primary: true }, { text: '再想想', value: false }],
     });
     if (!ok) return;
@@ -105,12 +111,10 @@ const Cultivate = {
     p.insight = (p.insight || 0) - 20;
     if (p.realmIdx >= 9) {
       p.counters.xianyuan = (p.counters.xianyuan || 0) + 1000;
-      if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 1000);
       Log.add('你于蒲团上进入忘我之境——二十点感悟在识海中炼作 <b>仙元 +1000</b>。', 'gain');
     } else {
-      const exp = Math.round(20 * 80 * GameData.eco(p.realmIdx));
-      this.addExp(p, exp);
-      Log.add(`你于蒲团上进入忘我之境——二十点感悟淬入道基，修为 <b>+${Utils.fmtNum(exp)}</b>。`, 'gain');
+      this.addExp(p, expGain);
+      Log.add(`你于蒲团上进入忘我之境——二十点感悟淬入道基，修为 <b>+${Utils.fmtNum(expGain)}</b>。`, 'gain');
     }
     Game.afterAction();
   },
@@ -202,7 +206,13 @@ const Cultivate = {
     Time.add(1);
     if (p.dead) return;
     if (p.dao === 'body') DaoSys.gain(p, 10);   // v16 体魄：吐纳炼体
-    Log.add(`你寻一处灵气充裕之地打坐调息，气血灵力恢复大半${detox ? `，气机流转间化解了 ${detox} 点丹毒` : ''}。`, 'gain');
+    // v34（F3）：调息 +2 感悟（每游戏日限一次）——修炼自回血、闭关回更多，调息原是三枚死按钮之一；
+    // 打坐凝神偶有顿悟，赋予其独有收益后成为「回血顺便赚感悟」的低耗决策点
+    p._restDay = p._restDay || -1;
+    const dayNow = Math.floor(p.day || 0);
+    const gotIns = p._restDay !== dayNow;
+    if (gotIns) { p._restDay = dayNow; p.insight = Math.min(100, (p.insight || 0) + 2); }
+    Log.add(`你寻一处灵气充裕之地打坐调息，气血灵力恢复大半${detox ? `，气机流转间化解了 ${detox} 点丹毒` : ''}${gotIns ? '，凝神之际偶有所悟（突破感悟 +2）' : ''}。`, 'gain');
     Game.afterAction();
   },
   secludeCost(p) { return Math.round(30 * GameData.stoneEco(p.realmIdx)); },

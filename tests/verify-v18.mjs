@@ -111,7 +111,7 @@ console.log('===== SA 源码静态组 =====');
   balsim.includes('120 * GameData.stoneEco(r)') ? pass('SA44 balance-sim 聚灵口径（E25）') : fail('SA44 balance-sim', '');
 
   /* ---- B3 修炼轮回抽样 ---- */
-  cult.includes('改仙元定值 spill×50') && cult.includes('const yuan = spill * 50;') ? pass('SA45 r9 感悟定值化（E26）') : fail('SA45 感悟定值', '');
+  cult.includes('const yuan = spill * 50;') && cult.includes('spill * this.baseGain(p) * 0.125') ? pass('SA45 感悟定值化+汇率重构（E26；v34 A2 精修）') : fail('SA45 感悟定值', '');
   gamejs.includes('p._settleDay') && gamejs.includes('虚拟逐日推进') ? pass('SA46 日更按日补结（E27）') : fail('SA46 日更', '');
   xian.includes("return this.cur(p) === 0 ? null : (GameData.XIAN_TIERS[this.cur(p) - 1] || null);") ? pass('SA47 def idx=0 归 null（E28）') : fail('SA47 def', '');
   xian.includes('大罗已圆满——可证道祖之境') ? pass('SA48 大罗提示修正（E29）') : fail('SA48 大罗提示', '');
@@ -139,7 +139,7 @@ console.log('===== SA 源码静态组 =====');
   swjs.includes("'./game.js?v=") && swjs.includes("'./style.css?v=") ? pass('SA66 SW 预缓存主资源（E47）') : fail('SA66 SW', '');
   ui.includes('本次进度<b>不会被保存</b>') ? pass('SA67 存储不可用警示（E48）') : fail('SA67 警示', '');
   gamejs.includes("})) || 'reinc';") ? pass('SA68 坐化 ESC 回落主选项（E49）') : fail('SA68 坐化', '');
-  achieve.includes("UI.markDirty('bag');") ? pass('SA69 成就后刷乾坤袋（E50）') : fail('SA69 bag', '');
+  (() => { const aa = gamejs.indexOf('afterAction() {'); return achieve.includes('check 唯一调用点在 afterAction') && aa >= 0 && gamejs.indexOf('Achieve.check();', aa) < gamejs.indexOf('Save.autoSave();', aa); })() ? pass('SA69 成就后刷乾坤袋（E50；v34 E126 检查先行统一渲染）') : fail('SA69 bag', '');
   ui.includes("key !== 'auto' ? `<button class=\"btn btn-sm btn-danger\" data-action=\"st-delete\"") ? pass('SA70 开始界面 auto 隐删除（E51）') : fail('SA70 auto', '');
   meta.includes('marksGiven: ext.marksGiven || null') ? pass('SA71 导入透传去重集（E52）') : fail('SA71 导入', '');
   gamejs.includes("document.querySelector('.modal:not(.hidden)')") ? pass('SA72 快捷键弹层门（E53）') : fail('SA72 快捷键', '');

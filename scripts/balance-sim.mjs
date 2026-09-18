@@ -112,7 +112,10 @@ const rows = await page.evaluate(() => {   // v20：返回 { out, combat, bonusR
     const dayIn = battleIn + bountyIn + Math.round(20 * eco);
     const sinkSeclude = Math.round(30 * eco);          // 闭关一轮
     const sinkRush = Math.round(120 * GameData.stoneEco(r));   // 聚灵加速（v32 修瑕 E25：口径对齐 cave.rushCost=120×stoneEco(r) 全幅——原 min(4,r) 低估高境 sink）
-    const sinkEnhance = Math.round((120 + 5 * 90) * (1 + 3 * 0.8) * Math.pow(2.4, r));   // 强化+5
+    // v34（D5）：强化 sink 口径与 ForgeSys.stonesCost 逐项对齐（grade3 装备 +5）——
+    // 原手写 `×2.4^r` 与实现 `×3^min(cap,r)/2.4` 在 r9 差约 5 倍，sink 列因此长期失真
+    const sinkEnhance = Math.round((GameData.BALANCE.ENHANCE.BASE_COST + 5 * GameData.BALANCE.ENHANCE.COST_PER_LV)
+      * (1 + 3 * GameData.BALANCE.ENHANCE.COST_GRADE_FACTOR) * GameData.sinkCurve(r) / GameData.BALANCE.ENHANCE.COST_REALM_FACTOR);   // 强化+5
     stoneRows.push({ realm: GameData.REALM_NAMES[r], dayIn, sinkSeclude, sinkRush, sinkEnhance });
   }
 

@@ -109,10 +109,7 @@ const Achieve = {
       UI.toast(`成就达成：${d.name}`);
     }
     Meta.save();
-    // v31 修瑕（E30）：只刷顶栏与状态区——原全量 renderAll 在 afterAction 已渲染过一遍后二次整树重建
-    UI.markDirty('top'); UI.markDirty('status');
-    UI.markDirty('bag');   // v32 修瑕（E50）：灵石奖励入账后乾坤袋家资行不重渲曾显示陈旧值
-    try { UI.renderAll(); } catch (e) { /* ignore */ }
-    Save.autoSave();
+    // v34（E126）：check 唯一调用点在 afterAction 内且已先于其渲染/存档（v34 调序）——
+    // 此处不再自渲染自存档（原 markDirty×3 + renderAll + autoSave 在同一次行动里全为重复功）
   },
 };

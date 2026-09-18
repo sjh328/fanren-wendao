@@ -183,6 +183,7 @@ try {
   // VD2 旧档 migrate 保留强化（原清零 bug）
   const vd2 = await page.evaluate(() => {
     const old = PlayerFactory.create('考古断档', { gen: 5, comp: 5, luck: 5, body: 5 });
+    delete old._migratedVersion;   // v34（E127）：create 自带「生于一切迁移后」标记——模拟真老档须显式剥掉
     old.enhanced = { w_tiejian: 7 };
     old.equipped.weapon = 'w_tiejian';   // v18 之前的字符串形态
     const out = PlayerFactory.migrate(JSON.parse(JSON.stringify(old)));

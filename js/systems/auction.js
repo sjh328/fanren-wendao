@@ -10,7 +10,10 @@ const AuctionSys = {
     { item: 'm_danfang', base: 4000, minRealm: 1 },
     { item: 'gf_zhoutian', base: 6000, minRealm: 2 }, { item: 'gf_leishen', base: 9000, minRealm: 2 },
     { item: 'gf_hunyuan', base: 9000, minRealm: 3 }, { item: 'gf_niepan', base: 9000, minRealm: 3 },
-    { item: 'w_sanqing', base: 12000, minRealm: 3 }, { item: 'pill_zaohua', base: 15000, minRealm: 4 },
+    { item: 'w_sanqing', base: 12000, minRealm: 3 }, { item: 'pill_zaohua', base: 160000, minRealm: 6 },
+    // v34（D1）：造化仙丹底价 15000/minRealm4 → 160000/6——原与坊市价 350000（转卖 157500）脱钩 23 倍、
+    // 门槛还低两境：r4 落槌 17250 转手 157500，60 日一轮零风险套利。现稳健出价已高于转卖价，倒挂归负。
+
     { item: 'gf_dayan', base: 12000, minRealm: 3 }, { item: 'm_gupian', base: 10000, minRealm: 3 },
     { item: 'gf_wangchen', base: 15000, minRealm: 4 }, { item: 'gf_feixian', base: 15000, minRealm: 4 },
     { item: 'fruit_tianji', base: 22000, minRealm: 4 },   // v20 天机果（先天破桎）
@@ -59,7 +62,15 @@ const AuctionSys = {
       } else {
         // v31 修瑕（E41）：先按当前境界过滤可竞拍拍品再取模——原可在 60 日锁期内掷出整期不可竞拍的拍品，
         // 低境玩家整期只能看着一件「不可用之物」
-        const usable = this.LOT_POOL.filter(x => (x.minRealm || 0) <= (p.realmIdx || 0));
+        // v34（D1）：已修习/道途不合的功法不再掷出——坊市买功法有判重与 canLearnGongfa 双闸，
+        // 拍卖行此前两闸全绕（已修习者重复拍下=白烧钱无提示）
+        const usable = this.LOT_POOL.filter(x => {
+          if ((x.minRealm || 0) > (p.realmIdx || 0)) return false;
+          const d2 = GameData.ITEMS[x.item];
+          if (d2 && d2.type === 'gongfa' && (p.gongfa && p.gongfa[x.item])) return false;
+          if (d2 && d2.type === 'gongfa' && typeof DaoSys !== 'undefined' && DaoSys.canLearnGongfa && !DaoSys.canLearnGongfa(p, d2, true)) return false;
+          return true;
+        });
         const pool2 = usable.length ? usable : this.LOT_POOL;
         const lot2 = pool2[Utils.hashStr('auction@' + day + '#' + seq) % pool2.length];
         const gate = Math.min(8, lot2.minRealm || 0);
@@ -90,6 +101,12 @@ const AuctionSys = {
     if (!isMystery) {
       const lot = this.LOT_POOL.find(x => x.item === a.item);
       if (lot && (p.realmIdx || 0) < lot.minRealm) { UI.toast(`此拍品非当前境界可用之物（需${GameData.REALM_NAMES[lot.minRealm]}期以上）`); return; }
+      // v34（D1）：功法拍品出价前双闸（掷品已过滤，此处兜底旧档已掷出的在期拍品）
+      const gd = GameData.ITEMS[a.item];
+      if (gd && gd.type === 'gongfa') {
+        if (p.gongfa && p.gongfa[a.item]) { UI.toast('此诀你已修习，重拍无用'); return; }
+        if (typeof DaoSys !== 'undefined' && !DaoSys.canLearnGongfa(p, gd)) return;
+      }
     }
     const def = isMystery ? { name: '未鉴定·蒙尘古匣', desc: '匣上封皮剥落，看不出内里乾坤——可能是废纸，也可能是仙家至宝。' } : (GameData.ITEMS[a.item] || { name: a.item, desc: '' });   // v33（E80）：脏档残留已下架 id 时不再 TypeError
     // 三档：稳健 ×1.15 必成九成五 / 激进 ×0.9 六成 / 天价 ×1.6 必成

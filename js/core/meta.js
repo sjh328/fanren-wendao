@@ -21,7 +21,7 @@ const Meta = {
   },
   save() {
     const raw = JSON.stringify(this.data);
-    try { if (Save.storage.setItem) Save.storage.setItem(Save.KEY + this.key(), raw); else Save.mem[Save.KEY + this.key()] = raw; } catch (e) { /* ignore */ }
+    Save.writeRaw(this.key(), raw);   // v34（E123）：走 Save 单源读写——原自拼键名直写 mem 与 read 路径错位（隐私模式下成就图鉴每会话清零）
   },
   /** 图鉴收录：首次遇见某条目时登记并提示 */
   see(cat, id) {
@@ -36,7 +36,7 @@ const Meta = {
     if (!ext || typeof ext !== 'object') return;
     // v32 修瑕（E52）：透传 marksGiven 去重集——原导入丢此键，文本码跨设备迁移后印记类奖励可在新设备重刷
     const raw = JSON.stringify({ achv: ext.achv || {}, codex: Object.assign({ gongfa: {}, artifact: {}, monster: {}, npc: {}, realm: {} }, ext.codex || {}), towerBest: ext.towerBest || 0, marksGiven: ext.marksGiven || null });
-    try { if (Save.storage.setItem) Save.storage.setItem(Save.KEY + this.key(slot), raw); else Save.mem[Save.KEY + this.key(slot)] = raw; } catch (e) { /* ignore */ }
+    Save.writeRaw(this.key(slot), raw);   // v34（E123）：同 save()——单源读写入口
     if (slot == null || slot === Game.slot) this.load();
   },
 };

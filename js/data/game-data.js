@@ -54,7 +54,7 @@ const GameData = {
    *  目标境界越高，劫威与成算折损越高——天劫难度随修为水涨船高。 */
   TRIB_START: 2,
   /** 每个大境界第 1 层所需修为（后续层数乘以 LAYER_MULT） */
-  EXP_BASE: [70, 430, 2700, 16800, 105000, 660000, 4100000, 25500000, 160000000, 1000000000],   // v30 节奏重校：每境 ×6.2（原 ×4.57 与 eco 同步 → 每境恒 30~50 日、全程约 1 游戏年，寿元/世界大事两轴形同死内容）
+  EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 3540000, 22000000, 137000000, 850000000],   // v34 节奏再校：每境 ×6.2→×5.4（v30 实算漏计闭关 1.6×与多源入账，实玩一周目仅 5~6 年——r8+r9 白占 49% 时长且无新机制；×5.4 后实玩 ≈3 年至飞升、后期占比降至 34%，配合世界大事重定时激活世界活性轴）
   LAYER_MULT: [1, 1.5, 2, 2.5],
   /** 各境界寿元上限（岁） */
   LIFESPAN: [120, 240, 500, 1000, 2000, 4000, 8000, 16000, 32000, 99999],
@@ -72,7 +72,7 @@ const GameData = {
   stoneEco(r) { return Math.pow(3.8, r); },
   /** v30 消费端曲线族单源：大额灵石 sink 统一挂 3^min(8,r)——原 2.2^r 家族在 r9 相对收入只剩 0.8%，
    *  「钱多到没处花」的剪刀差由本函数一次抹平（各消费端以原曲线为锚换算，前期体感不变） */
-  sinkCurve(r) { return Math.pow(3, Math.min(8, Math.max(0, Math.floor(r) || 0))); },
+  sinkCurve(r) { return Math.pow(3, Math.min(10, Math.max(0, Math.floor(r) || 0))); },   // v34（D3）：封顶 8→10——cap=8 时 r9 收入(3.8^9)仍在涨而全部 sink 停摆，登仙境灵石相对坍缩至收入的 4%；r≤8 数值不变
   layerNeed(realmIdx, layer) {
     return Math.round(this.EXP_BASE[realmIdx] * this.LAYER_MULT[layer]);
   },
@@ -101,16 +101,16 @@ const GameData = {
       DMG_RAND_MAX: 1.15,         // 伤害随机上限
       CRIT_MULT: 1.7,             // 暴击倍率
       ENEMY_CRIT_MULT: 1.6,       // 敌方暴击倍率
-      HIT_CHANCE_CLAMP: [2, 35],  // 命中率钳制
-      PLAYER_MISS_MAX: 35,        // 玩家失手上限
-      ENEMY_DODGE_MAX: 65,        // 敌方闪避上限
+      PLAYER_MISS_MAX: 40,        // 玩家普攻失手上限（法诀 35：SKILL_MISS_MAX——两档差异 v34 起有数据出处）
+      SKILL_MISS_MAX: 35,         // 玩家法诀失手上限
+      ENEMY_DODGE_MAX: 70,        // 敌方闪避上限（玩家侧攻击命中钳制 2~40/35，此处封敌方闪避收益）
       BLOCK_REDUCTION: 0.45,      // 格挡后伤害系数
       DEFEND_REDUCTION: 0.4,      // 防御姿态伤害系数
       MORALE_PER_POINT: 0.004,    // 每点战意伤害加成
       MORALE_MAX: 100,            // 战意上限
       COMBO_PER_LAYER: 0.04,      // 每层连击伤害加成
       COMBO_MAX: 5,               // 连击上限
-      GUARD_DEF_BASE: 40,         // 铁壁基础防御加成%
+      GUARD_DEF_BASE: 40,         // 铁壁基础防御加成%（敌方招式未带 def 时）
       FLEE_BASE: 45,              // 遁走基础成功率
     },
     // 突破

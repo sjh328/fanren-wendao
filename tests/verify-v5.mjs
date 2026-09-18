@@ -209,6 +209,11 @@ try {
   const panelVis = await page.$eval('#amb-panel', el => !el.className.includes('hidden'));
   panelVis ? pass('A1 音控按钮弹出设置面板') : fail('A1 面板', '未弹出');
   await shot(page, 'amb_panel');
+  // v34（E2）：音效默认开——首次点击应为「关」，再点回「开」（开关双向生效）
+  await page.click('#amb-sfx');
+  await sleep(200);
+  const sfxDefault = await page.evaluate(() => ({ on: Ambience.sfxOn }));
+  !sfxDefault.on ? pass('A1 音效默认开·首点可关（v34 E2）') : fail('A1 默认开', JSON.stringify(sfxDefault));
   await page.click('#amb-sfx');
   await sleep(200);
   const sfxState = await page.evaluate(() => ({

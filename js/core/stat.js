@@ -14,7 +14,7 @@ const Stat = {
       }
     }
     // v19 道韵协同：特定功法组合双修至三层以上，共鸣生韵（v20 扩池合并消费）
-    for (const dy of (GameData.DAO_YUN || []).concat(GameData.DAO_YUN_EXTRA || [])) {
+    for (const dy of this.daoYunAll()) {
       if (!dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3)) continue;
       for (const [k, v] of Object.entries(dy.fx)) total[k] = (total[k] || 0) + v;
     }
@@ -29,9 +29,16 @@ const Stat = {
     }
     return total;
   },
+  /** v34（G6）：道韵池合并缓存——原 compute/activeDaoYun 每次调用都新建 concat 数组，
+   *  挂机热路径一轮修炼 4~6 次 compute 即 8~12 次无谓分配 */
+  _daoYunCache: null,
+  daoYunAll() {
+    if (!this._daoYunCache) this._daoYunCache = (GameData.DAO_YUN || []).concat(GameData.DAO_YUN_EXTRA || []);
+    return this._daoYunCache;
+  },
   /** v19 已激活的道韵列表（功法页展示；v20 扩池合并） */
   activeDaoYun(p) {
-    return (GameData.DAO_YUN || []).concat(GameData.DAO_YUN_EXTRA || [])
+    return this.daoYunAll()
       .filter(dy => dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3));
   },
   /** 汇总已穿戴法宝的加成（v13：数值属性受强化等级 +10%/级 加成；套装加成并入） */

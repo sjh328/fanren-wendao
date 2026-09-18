@@ -4,9 +4,10 @@
  * ====================================================================== */
 const Tutorial = {
   steps: [
-    { icon: '☯', title: '欢迎踏入仙途', text: `这里是弱肉强食的修真界。你将以凡人之躯，一步步修炼至飞升成仙。<br>${window.innerWidth <= 860 ? '面板都收在顶栏与底部页签里，随用随开' : '境界面板、行动操作、背包菜单都在眼前'}——且听我一一道来。`, target: null },
+    // v34（E9）：横竖屏文案不再在模块载入时定死——改用 _dev() 惰性求值，render 时按当前窗口宽窄出词
+    { icon: '☯', title: '欢迎踏入仙途', text: () => `这里是弱肉强食的修真界。你将以凡人之躯，一步步修炼至飞升成仙。<br>${window.innerWidth <= 860 ? '面板都收在顶栏与底部页签里，随用随开' : '境界面板、行动操作、背包菜单都在眼前'}——且听我一一道来。`, target: null },
     { icon: '📜', title: '道途面板 · 你的根骨', text: '这里随时可查<b>境界修为</b>、气血灵力、先天四维（根骨 / 悟性 / 福缘 / 体魄）与战斗属性。<br>修为攒满即可突破，寿元耗尽则道消身殒。<br><span style="color:var(--text-faint)">手机上它收进了顶栏「☰ 道途」，点开即见。</span>', target: '#panel-left' },
-    { icon: '⚔', title: '中央 · 行动与游历', text: '<b>修炼</b>积攒修为，<b>游历</b>历练搏杀，<b>坊市</b>置办丹药法宝，筑基后可拜入<b>宗门</b>。<br>大页签内还有<b>子页签</b>分栏：坊市分万宝阁/炼制坊/祭炼堂/悬赏板/奇市，洞府分洞府/灵田/灵兽，游历分舆图/秘境/天下。<br><span style="color:var(--text-faint)">手机上页签在屏幕底部，一指可达。</span>', target: '#panel-center' },
+    { icon: '⚔', title: '中央 · 行动与游历', text: '<b>修炼</b>积攒修为，<b>游历</b>历练搏杀，<b>坊市</b>置办丹药法宝，筑基后可拜入<b>宗门</b>。<br>大页签内还有<b>子页签</b>分栏：坊市分万宝阁/炼制坊/祭炼堂/悬赏板/奇市，洞府分洞府/灵田/灵兽，游历分舆图/秘境/天下。<br><b>问道</b>页是主线全程的总览——十章进度、目标直达，迷路时去那里。<br><span style="color:var(--text-faint)">手机上页签在屏幕底部，一指可达。</span>', target: '#panel-center' },
     { icon: '🎒', title: '乾坤袋 · 存档与行囊', text: '丹药、功法、法宝、材料分类收纳。法宝可装备，功法可参悟升级。<br>菜单中可随时存读档（共三档 + 自动存档）。<br><span style="color:var(--text-faint)">手机上它收进了顶栏「🎒 乾坤」。</span>', target: '#panel-right' },
     { icon: '🕳', title: '最后一句忠告', text: '丹药虽好，丹毒伤身；地图凶险，量力而行。<br>境界不足莫闯险地，否则……重伤事小，道消事大。<br>卡住了就点左栏「当前建议」——它会告诉你下一步，还能一键直达。<br><b>祝道友早日飞升！</b>', target: null },
   ],
@@ -21,8 +22,9 @@ const Tutorial = {
   },
   render() {
     const s = this.steps[this.idx];
+    const text = typeof s.text === 'function' ? s.text() : s.text;   // v34（E9）：转屏后重看引导，文案随当前布局
     document.getElementById('tutorial-step').innerHTML = `
-      <div class="t-icon">${s.icon}</div><h3>${s.title}</h3><div>${s.text}</div>`;
+      <div class="t-icon">${s.icon}</div><h3>${s.title}</h3><div>${text}</div>`;
     document.getElementById('tutorial-dots').innerHTML =
       this.steps.map((_, i) => `<span class="${i === this.idx ? 'on' : ''}"></span>`).join('');
     const next = document.querySelector('[data-action="tut-next"]');

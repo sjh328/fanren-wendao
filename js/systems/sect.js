@@ -10,9 +10,17 @@ const SectSys = {
     { id: 'core', name: '亲传弟子', contribNeed: 2000, bonus: { cult: 10, atkPct: 5, defPct: 5 } },
     { id: 'elder', name: '长老', contribNeed: 8000, bonus: { cult: 15, atkPct: 10, defPct: 10, hpPct: 10 } },
   ],
+  /** v34（E115）：历史峰值贡献——职位一旦凭贡献挣得，不因花贡献兑换而回落。
+   *  原按「当前贡献」判定：攒够 8000 当长老，换两件法宝即跌回内门、长老令资格随之蒸发——
+   *  贡献既是货币又是职位门槛，两个用途共用一个值等于「花钱惩罚地位」。兑换照旧扣当前贡献。 */
+  peakContrib(p) {
+    if (!p.sect) return 0;
+    p.sect.peakContrib = Math.max(p.sect.peakContrib || 0, p.sect.contrib || 0);
+    return p.sect.peakContrib;
+  },
   rank(p) {
     if (!p.sect) return null;
-    const contrib = p.sect.contrib || 0;
+    const contrib = this.peakContrib(p);
     for (let i = this.RANKS.length - 1; i >= 0; i--) {
       if (contrib >= this.RANKS[i].contribNeed) return this.RANKS[i];
     }
@@ -21,7 +29,7 @@ const SectSys = {
   /** v29：下一职位（宗门页晋升进度条用） */
   rankNext(p) {
     if (!p.sect) return null;
-    const c = p.sect.contrib || 0;
+    const c = this.peakContrib(p);
     return this.RANKS.find(r => r.contribNeed > c) || null;
   },
   taskMonsters(rp) {

@@ -68,7 +68,7 @@ console.log('===== SA 源码静态组 =====');
   const cave = R('systems/cave.js');
   cave.includes('upgradeDongtian') && cave.includes('sinkCurve') ? pass('SA33 洞天营造+曲线统一（E）') : fail('SA33 洞天', '');
   const gdata = R('data/game-data.js');
-  gdata.includes('sinkCurve(r) { return Math.pow(3, Math.min(8') ? pass('SA34 sinkCurve 单源（E）') : fail('SA34 sinkCurve', '');
+  gdata.includes('sinkCurve(r) { return Math.pow(3, Math.min(10') ? pass('SA34 sinkCurve 单源（E；v34 封顶 8→10）') : fail('SA34 sinkCurve', '');
   gdata.includes("id: 'f19'") && gdata.includes("id: 'f22'") ? pass('SA35 毕业装炼器配方（D6）') : fail('SA35 配方', '');
   gdata.includes('codex_tier_') ? pass('SA36 图鉴分档奖励（G6）') : fail('SA36 图鉴分档', '');
   gdata.includes('SECT_QUEST_FLAVOR') ? pass('SA37 宗门特色差事（G4）') : fail('SA37 差事', '');
@@ -85,7 +85,7 @@ console.log('===== SA 源码静态组 =====');
   npc.includes('companionOuting') ? pass('SA45 道侣出游（G3）') : fail('SA45 出游', '');
   npc.includes('aidRot') ? pass('SA46 结义轮换相助（E49）') : fail('SA46 轮换', '');
   const world = R('systems/world.js');
-  world.includes('10 + Utils.rand(0, 4)') ? pass('SA47 世界大事首现 10~14 年（F2）') : fail('SA47 节奏', '');
+  world.includes('2 + Utils.rand(0, 2)') ? pass('SA47 世界大事首现 2~4 年（F2；v34 与实玩节奏同校）') : fail('SA47 节奏', '');
   const autocult = R('core/autocult.js');
   autocult.includes("catch (err)") && autocult.includes('异常自愈') ? pass('SA48 自动修炼异常自愈（I4）') : fail('SA48 自愈', '');
   const savejs = R('core/save.js');
@@ -170,7 +170,7 @@ if (browser) {
         lifespan: g.LIFESPAN.slice(),
       };
     });
-    d1.ratio > 6 && d1.ratio < 6.5 ? pass(`RB1 EXP 曲线每境 ×${d1.ratio.toFixed(2)}（F1）`) : fail('RB1 EXP 曲线', String(d1.ratio));
+    d1.ratio > 5.2 && d1.ratio < 5.6 ? pass(`RB1 EXP 曲线每境 ×${d1.ratio.toFixed(2)}（F1；v34 ×5.4）`) : fail('RB1 EXP 曲线', String(d1.ratio));
     d1.xianzunInLeiyu ? pass('RB2 仙尊残念入雷狱妖池（A5）') : fail('RB2 仙尊', '');
     d1.towerBuffs >= 25 && d1.cursed >= 4 ? pass(`RB3 塔祝福池 ${d1.towerBuffs}（诅咒 ×${d1.cursed}）（C4）`) : fail('RB3 塔祝福', JSON.stringify({ n: d1.towerBuffs, c: d1.cursed }));
     d1.newTal ? pass('RB4 新符箓入库（C1）') : fail('RB4 新符', '');
@@ -180,7 +180,7 @@ if (browser) {
     d1.personalN === 24 ? pass('RB8 个人线 24 位（G1）') : fail('RB8 个人线', String(d1.personalN));
     d1.worldN >= 12 ? pass('RB9 世界大事 ' + d1.worldN + ' 种（G5）') : fail('RB9 大事', String(d1.worldN));
     d1.festN >= 7 ? pass('RB10 节庆 ' + d1.festN + ' 个（G5）') : fail('RB10 节庆', String(d1.festN));
-    d1.sink6 === 729 && d1.sink0 === 1 && d1.sink8 === 6561 ? pass('RB11 sinkCurve 数值（E）') : fail('RB11 sinkCurve', JSON.stringify([d1.sink6, d1.sink0, d1.sink8]));
+    d1.sink6 === 729 && d1.sink0 === 1 && d1.sink8 === 19683 ? pass('RB11 sinkCurve 数值（E；v34 r9=3^9）') : fail('RB11 sinkCurve', JSON.stringify([d1.sink6, d1.sink0, d1.sink8]));
 
     /* ---- 行为组：状态引擎 / 连招 / 套装 / 词缀 ---- */
     const b1 = await page.evaluate(() => {
@@ -391,7 +391,7 @@ if (browser) {
       SectSys.discipleDaily(p, true);
       const st1 = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
       out.disciple = st1 > st0;
-      p.sect.contrib = 100;   // 降回外门
+      p.sect.contrib = 100; p.sect.peakContrib = 0;   // 降回外门（v34 E115：职位按峰值——显式清峰值才回落）
       p.sect._discipleDay = -1;
       const st2 = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
       SectSys.discipleDaily(p, true);

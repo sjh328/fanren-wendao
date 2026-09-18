@@ -45,12 +45,47 @@ const report = await page.evaluate(() => {
     if (r.black != null && r.grade >= 3 && r.black < r.sell * 3) problems.push(`[黑市利润薄] ${r.id}(${r.name}) 黑市${r.black} < 回收${r.sell}×3`);
   }
   const zeroPrice = rows.filter(r => r.base === 0).map(r => `${r.id}(${r.grade}阶)`);
-  return { rows: rows.length, zeroPrice, problems };
+  // v34（D4）：拍卖池倒挂检测——底价×1.15（稳健出价）若仍低于转卖价 0.45×price，
+  // 即为「零风险低买高卖」套利口（v34 前 pill_zaohua 倒挂 23 倍即漏网于此）
+  const auctionProblems = [];
+  for (const lot of AuctionSys.LOT_POOL) {
+    const d = G.ITEMS[lot.item];
+    if (!d || !d.price) continue;   // 无坊市价之物（装备/功法）无转卖套利面
+    const resale = Math.floor(d.price * 0.45);
+    const steadyCost = Math.round(lot.base * 1.15);
+    if (resale > steadyCost * 1.05) {
+      auctionProblems.push(`[拍卖倒挂] ${lot.item}(${d.name}) 底价${lot.base} 稳健出价${steadyCost} < 转卖${resale}（minRealm=${lot.minRealm}）`);
+    }
+  }
+  // v34（D4）：黑市赌袋期望——低福缘(luck0)应微负、高福缘(luck10)不得显著正；碎片不得再入彩头
+  const betProblems = [];
+  for (let r = 0; r <= 6; r++) {
+    const cost = Math.round(200 * G.stoneEco(r));
+    const tier = Math.min(4, Math.floor(r / 2) + 1);
+    const mats = G.matsByTier(tier);
+    if (!mats.length) continue;
+    for (const luck of [0, 10]) {
+      let evSum = 0;
+      for (const m of mats) {
+        const mp = G.ITEMS[m].price || 1;
+        const qty = Math.min(999, Math.max(2, Math.round(cost * 0.6 / mp)));
+        const win = qty * 2 + Math.ceil(qty * 0.5);
+        const winRate = (25 + luck * 4) / 100, midRate = 0.35, loseRate = 1 - winRate - midRate;
+        if (loseRate < 0) continue;
+        evSum += winRate * (win * mp) + midRate * (qty * mp) - loseRate * Math.round(100 * G.stoneEco(r)) - cost;
+      }
+      const ev = evSum / mats.length;
+      if (ev > cost * 0.6) betProblems.push(`[赌袋正期望] r${r} luck${luck} 期望 +${Math.round(ev)}（成本 ${cost}）`);
+    }
+  }
+  return { rows: rows.length, zeroPrice, problems, auctionProblems, betProblems };
 });
 
 await browser.close();
 let md = `# v20 经济审计报告（scripts/price-audit.mjs 自动生成）\n\n采样画像：realm3、行情中位。\n\n- 物品总数：${report.rows}\n- 定价为 0 的稀有物（无坊市渠道，按品阶折算黑市价）：${report.zeroPrice.join('、') || '无'}\n\n## 问题清单（${report.problems.length}）\n`;
 md += report.problems.length ? report.problems.map(p => `- ${p}`).join('\n') + '\n' : '- 无套利路径与定价倒挂。\n';
+md += `\n## v34 扩容检测\n\n- 拍卖池倒挂（${report.auctionProblems.length}）：\n` + (report.auctionProblems.length ? report.auctionProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
+md += `- 黑市赌袋期望越界（${report.betProblems.length}）：\n` + (report.betProblems.length ? report.betProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
 console.log(md);
 fs.mkdirSync('docs', { recursive: true });
 fs.writeFileSync('docs/price-audit.md', md);

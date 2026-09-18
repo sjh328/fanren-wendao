@@ -80,8 +80,9 @@ const CaveSys = {
       options: [{ text: '营 造', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
-    if (!Bag.spendStones(c.stones)) { UI.toast('灵石不足'); return; }
+    // v34（E114）：先验材料再扣灵石——原顺序矿不足时灵石已扣、洞天未成（白扣不退），对齐 upgrade() 口径
     if (Bag.count('m_xuantie') < c.ore) { UI.toast('玄铁矿不足'); return; }
+    if (!Bag.spendStones(c.stones)) { UI.toast('灵石不足'); return; }
     Bag.removeItem('m_xuantie', c.ore);
     p.cave.dongtian = (p.cave.dongtian || 0) + 1;
     Log.add(`洞天已成——【<b>${this.DONGTIAN_NAMES[p.cave.dongtian]}</b>】虚境张开，灵潮自天外来投（修炼效率 +3%）。`, 'realm');
@@ -165,7 +166,50 @@ const CaveSys = {
     p.cave._springDay = today;
     const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(6, p.realmIdx)));   // v29：封顶 4→6，后期灵泉不再是摆设
     Bag.addStones(gain);
+    if (auto && typeof Game !== 'undefined' && Game._offlineAgg) Game._offlineAgg.spring = (Game._offlineAgg.spring || 0) + gain;   // v34（E1）：灵泉离线入账并入日报——原只报「照常涌出」不给数额，玩家对不上账
     if (!auto) Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。`, 'gain');
+  },
+  /** v34（F1）：一键照料——全田浇水 + 全兽抚摸 + 未求签则求签，一纸小账。
+   *  满配洞府每日「浇水×8 + 摸兽×N + 求签」十二余次纯仪式点击，放置游戏被手点绑架；
+   *  收益规则逐项与单次操作完全一致，只是合并结算。 */
+  careAll() {
+    const p = Game.player;
+    if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
+    const today = Math.floor(p.day || 0);
+    let watered = 0, patted = 0, signed = false;
+    // 全田浇水（逻辑与 water() 一致：剩余生长期 ×0.9）
+    const plots = this.plotsOf(p);
+    for (let i = 0; i < plots.length; i++) {
+      const plot = plots[i];
+      if (!plot || !plot.seed || plot.wateredDay === today) continue;
+      plot.wateredDay = today;
+      const grown = Math.max(0, Math.floor(p.day || 0) - (plot.plantedDay || 0));
+      const remaining = Math.max(0, (plot.days || 0) - grown);
+      plot.days = grown + (remaining > 0 ? Math.max(1, Math.round(remaining * 0.9)) : 0);
+      watered++;
+    }
+    // 全兽抚摸（与 BeastSys.pat 一致：+4~8 亲昵，触发第三技检查）
+    if (typeof BeastSys !== 'undefined') {
+      for (const b of (p.beasts && p.beasts.list || [])) {
+        if (b.patDay === today) continue;
+        b.patDay = today;
+        b.bond = Math.min(100, (b.bond || 0) + Utils.rand(4, 8));
+        if (BeastSys.checkThirdSkill) BeastSys.checkThirdSkill(b);
+        patted++;
+      }
+    }
+    // 求签（未签时补一签）
+    if (typeof DailySign !== 'undefined' && p.signDay !== today) {
+      DailySign.draw();
+      signed = p.signDay === today;
+    }
+    if (!watered && !patted && !signed) { UI.toast('今日的照料都已做过了'); return; }
+    const parts = [];
+    if (watered) parts.push(`灵田浇水 ${watered} 块`);
+    if (patted) parts.push(`灵兽抚摸 ${patted} 只`);
+    if (signed) parts.push('黄历求签一卦');
+    Log.add(`【一键照料】${parts.join('、')}——洞府诸事俱毕，灵气氤氲。`, 'gain');
+    Game.afterAction();
   },
   async water(idx) {
     const p = Game.player;

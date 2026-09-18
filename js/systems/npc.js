@@ -396,7 +396,6 @@ const NpcSys = {
     const d = this.def(id);
     const s = this.state(p, id);
     if (!d || !s || !s.alive) return;
-    Meta.see('npc', id);   // v6 图鉴
     const cost = this.befriendCost(p, id);
     const ok = await UI.popup({
       title: `结交 · ${d.name}`,
@@ -405,6 +404,8 @@ const NpcSys = {
     });
     if (!ok) return;
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    s.met = true;
+    Meta.see('npc', id);   // v6 图鉴；v34（E120）：挪到确认成交后——原弹确认框前即解锁，「作罢」/灵石不足也录了图鉴（萍水未谋面却已入册，图鉴完成度虚增）
     s.met = true;
     // v28 联动：声望先于人先——名望高者结交更受欢迎，恶名远扬者见面先减三分
     const rep = p.reputation || 0;
@@ -491,6 +492,10 @@ const NpcSys = {
     p.sworn.push(id);
     s.rel = Utils.clamp(s.rel + 8, -100, 100);
     this.mem(p, id, 'story', '义结金兰');   // v19 记忆
+    // v34（E3）：义结金兰是人生峰值事件，配得上一次全屏仪式（复用 realmShow/announce/sfx 现成轮子）
+    UI.realmShow('义结金兰 · 祸福与共 · 此生共进退', '#e8c56a');
+    UI.announce(`✦ 义 结 金 兰 · ${d.name} ✦`, 'gold');
+    Ambience.sfx('rare');
     Log.add(`你与 <b>${d.name}</b> 撮土为香，结为异姓道侣兄妹！此生共进退。`, 'system');
     if (typeof Story !== 'undefined') Story.chron(`与 ${d.name} 义结金兰`);   // v33（E92）：人生大事入年表
     Game.afterAction();
@@ -511,6 +516,10 @@ const NpcSys = {
     p.partner = id;
     s.rel = 100;
     this.mem(p, id, 'story', '结为道侣');   // v19 记忆
+    // v34（E3）：结发大典——全屏异象 + 公告 + 音效，情感线的峰值时刻不再只是一行日志
+    UI.realmShow('红烛映照 · 道音为证 · 愿以此心共证长生', '#e88aa0');
+    UI.announce(`✦ 结 发 道 侣 · ${d.name} ✦`, 'gold');
+    Ambience.sfx('rare');
     Log.add(`红烛映照，道音为证——你与 <b>${d.name}</b> 正式结为道侣！仙途多一知己，死劫多一臂之助。`, 'system');
     if (typeof Story !== 'undefined') Story.chron(`与 ${d.name} 结为道侣`);   // v33（E92）：人生大事入年表
     Game.afterAction();

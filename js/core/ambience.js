@@ -1,12 +1,14 @@
 
 /* ======================================================================
  * §1.8 增量扩展（v5）：氛围音效 Ambience（Web Audio 合成，零外部资源）
- * 事件音效默认关；古琴背景乐单独开关、基础音量 20%；总音量滑条统一调节。
+ * v34（E2）：事件音效默认开——原默认关且开关藏在顶栏齿轮里，多数玩家从未听到过任何声音，
+ * 整个氛围系统事实不存在；首次点击（开屏任意交互）即可 resume AudioContext，无自动播放阻碍。
+ * 古琴背景乐仍默认关；总音量滑条统一调节。
  * ====================================================================== */
 const Ambience = {
   mood: 'calm',   // v19 情境配乐
   ctx: null, master: null, musicBus: null,
-  sfxOn: false, musicOn: false, vol: 0.8,
+  sfxOn: true, musicOn: false, vol: 0.8,   // v34（E2）：默认开
   MUSIC_BASE: 0.2,
   musicTimer: null, musicStep: 0,
   PENTA: [261.63, 293.66, 329.63, 392.0, 440.0, 523.25, 587.33, 659.25],  // 五声音阶（宫商角徵羽，两个八度）
@@ -14,7 +16,8 @@ const Ambience = {
 
   init() {
     const pref = Save.read('amb') || {};
-    if (pref.sfx) this.sfxOn = true;
+    // v34（E2）：默认值翻转为开——显式存过偏好（含明确关闭）则尊重；无记录的档默认有声
+    this.sfxOn = pref.sfx !== undefined ? !!pref.sfx : true;
     if (pref.music) this.musicOn = true;
     if (typeof pref.vol === 'number') this.vol = Utils.clamp(pref.vol, 0, 1);
     const sfx = document.getElementById('amb-sfx');

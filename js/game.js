@@ -146,6 +146,18 @@ const Game = {
     window.addEventListener('beforeunload', () => {
       if (Game.player && !Game.player.dead) Save.autoSave(true);
     });
+    // v34（G1）：多页签并发写提示——两页签各持独立内存态交替覆写同一 auto 键，后写者全量覆盖先写者，
+    // 用户此前毫无感知。他页改动时提示一次（不做强夺锁，保留自由）。
+    try {
+      window.addEventListener('storage', (e) => {
+        if (e.key === Save.KEY + 'auto' && e.newValue && Game.player && !Game.player.dead) {
+          if (!Game._extWriteWarned) {
+            Game._extWriteWarned = true;
+            UI.toast('检测到本存档已在另一个窗口被打开改动——为免进度互覆，请只保留一个窗口游玩', true);
+          }
+        }
+      });
+    } catch (err) { /* ignore */ }
     // v18：全局错误捕获
     // v30 兜底升级：异常时立即强制存档一次并记录 lastError——开始界面可见「上次异常退出，已自动存档」
     window.addEventListener('error', (e) => {
@@ -171,6 +183,7 @@ const Game = {
   newGame(slot, name, attrs) {
     this.slot = slot;
     this.player = PlayerFactory.create(name, attrs);
+    this._skipOfflineOnce = true;   // v34（G3）：新档不读旧角色残留的 auto 档做离线结算（显式守卫，不再只依赖 day===0 的隐式巧合）
     this.enterGame();
     Log.clear();
     Log.add(`天地灵气复苏之年，凡俗少年 <b>${Utils.esc(name)}</b> 得了一册残缺功法，自此踏上仙途。`, 'system');
@@ -224,7 +237,7 @@ const Game = {
    *  此前这些钩子只挂在行动收尾，离线 30 天分文不进。 */
   computeOfflineProgress() {
     const p = this.player;
-    if (!p || p.dead || p.day === 0) return;
+    if (!p || p.dead || p.day === 0 || this._skipOfflineOnce) { this._skipOfflineOnce = false; return; }
     // 读取上次存档的 meta.ts（在 Save.write 中写入）
     // v30 修瑕：离线时长恒按 auto 档时间戳计——原按所读档位 ts，读陈旧手动档会把「重读旧档」
     //          误算成最长 30 日离线（语义模糊且可刷）；auto 每行动实时落盘，才是「上次游玩」的真时点
@@ -234,13 +247,15 @@ const Game = {
     // auto 档计，防「读陈旧手动档白拿 30 日离线」），手动档与 auto 的 ts 差本就是防刷语义的一部分。
     const elapsedMs = Date.now() - data.meta.ts;
     if (elapsedMs < 60000) return; // 少于 1 分钟不算离线
-    // 按真实时间推算游戏天数（现实 1 分钟 ≈ 游戏 1 天，上限 30 天）
-    const realDays = Math.min(30, Math.floor(elapsedMs / 60000));
+    // 按真实时间推算游戏天数（现实 1 分钟 ≈ 游戏 1 天，v34（A4）上限 30→120 日）
+    const realDays = Math.min(120, Math.floor(elapsedMs / 60000));
     // v27 修瑕：不再回拨熟期——作物按真实日数自然生长与过熟（原 Math.max 回拨让
     // 「过熟廿日减半」的规则在长离线下永远无法成立）
     const offlineCrops = (p.cave && p.cave.plots || []).filter(pl => pl && pl.seed).length;
-    // v24 离线修行：放置游戏名实相符——离线期间行功不辍，修为按四成效率折算（不冲关、不积丹毒）
+    // v24 离线修行：放置游戏名实相符——离线期间行功不辍，修为按折算效率入账（不冲关、不积丹毒）
     // v30 修瑕：折算剔除聚灵加速（rushDay 只是在线单日增益，曾把整段离线一并放大五成）
+    // v34（A4）：效率 0.4→0.6——在线挂机每 0.28s 推 3 日，旧参数下挂夜 8 小时只得 12 有效日，
+    // 「回家礼物」薄得近乎羞辱；0.6×120 日后长离线有实感，仍显著低于在线效率，无刷点
     let offlineExp = 0;
     if (p.realmIdx >= 0 && !p.dead) {
       try {
@@ -248,7 +263,7 @@ const Game = {
         const rushDayBak = p.rushDay; p.rushDay = null;
         const perRound = Cultivate.baseGain(p) * (1 + st.cultPct / 100);
         p.rushDay = rushDayBak;
-        offlineExp = Math.round(perRound / 3 * 0.4 * realDays);
+        offlineExp = Math.round(perRound / 3 * 0.6 * realDays);
         if (offlineExp > 0) Cultivate.addExp(p, offlineExp);
       } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; }
     }
@@ -265,13 +280,31 @@ const Game = {
     }
     this._offlineReplay = false;
     p._settleDay = Math.floor(p.day || 0);   // v33（E81）：回放已逐日补结——原不同步 _settleDay，读档后首次行动再补结一轮（至多 30 次冗余日结，全靠各钩子日界防重兜底）
+    const aggSnap = Object.assign({}, this._offlineAgg);   // v34（E1）：快照聚合（flush 会清空）
     this.flushOfflineAgg();
+    // v34（E125）：文案笔误——「个时辰」实为日、「裡」为繁体混入
     if (offlineCrops > 0) {
-      Log.add(`你不在的${realDays}个时辰里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
+      Log.add(`你不在的${realDays}日里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
     }
     if (springOn && !p.dead) Log.add('【灵泉】离线的日子里，洞府灵泉照常日日涌出灵石，皆已收入储物袋。', 'gain');
     if (offlineExp > 0) {
-      Log.add(`离山的日子裡你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（离线修行按四成效率折算，共 ${realDays} 日）。`, 'gain');
+      Log.add(`离山的日子你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（离线修行按六成效率折算，共 ${realDays} 日）。`, 'gain');
+    }
+    // v34（E1）：离线小结——回家一份四行账的「仪式」，收益不再藏在默认折叠的日志红点后
+    if (!p.dead && realDays >= 1 && (offlineExp > 0 || aggSnap.spring || aggSnap.disciple || aggSnap.xianVisit)) {
+      const rows = [
+        [`离线时长`, `${realDays} 日`],
+        ...(offlineExp > 0 ? [[`修行精进`, `<b class="hl">+${Utils.fmtNum(offlineExp)}</b> 修为`]] : []),
+        ...(aggSnap.spring ? [[`灵泉涌出`, `<b class="hl">${Utils.fmtNum(aggSnap.spring)}</b> 灵石`]] : []),
+        ...(aggSnap.disciple ? [[`弟子历练`, `缴回灵石 ${Utils.fmtNum(aggSnap.disciple)}`]] : []),
+        ...(aggSnap.xianVisit ? [[`仙界访客`, `到访 ${aggSnap.xianVisit} 次`]] : []),
+      ];
+      UI.popup({
+        title: '云 归 · 离 线 小 结',
+        html: `<div class="seclude-report">${rows.map(([k, v]) => `<div class="sr-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+          <div class="tip-line" style="text-align:center">· 归来尘满衣，袖中天地宽。</div>`,
+        options: [{ text: '返 府', value: true, primary: true }],
+      }).catch(() => {});
     }
   },
 
@@ -344,11 +377,13 @@ const Game = {
     p.hp = Utils.clamp(p.hp, 0, st.maxHp);
     p.mp = Utils.clamp(p.mp, 0, st.maxMp);
     if (p.hp <= 0) p.hp = Math.max(1, Math.round(st.maxHp * 0.1));
+    // v34（E126）：成就/剧情检查先行——原渲染+存档之后再 check，解锁时又来一轮 markDirty+renderAll
+    // +autoSave（一次行动双份整树渲染、双份全量序列化）。检查只改数据不发渲染，先跑后统一渲染落盘。
+    Achieve.check();   // v6：成就检查（解锁即发奖播报）
+    try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
     UI.markDirty('all');
     try { UI.renderAll(); } catch (err) { console.error('渲染异常（不影响存档）:', err); }
     Save.autoSave();
-    Achieve.check();   // v6：成就检查（解锁即发奖播报）
-    try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
     // v32 修瑕（E27）：日更按日补结——原每行动只结一次 dailySettle：一次闭关 30 日只吃一次日更
     // 收益，而离线逐日回放 30 次（挂机关页远优于在线闭关，放置激励倒挂）。此处按跨过的游戏日
     // 虚拟逐日补结（auto 静默口径：不弹窗不刷屏，日界防重由各子项自带），与离线同源同量。
@@ -543,7 +578,8 @@ const Game = {
     'act-task-claim': (d) => SectSys.claim(Number(d.i)),
     'act-task-submit': (d) => SectSys.submit(Number(d.i)),
     'act-exchange': (d) => SectSys.exchange(Number(d.i)),
-    /** v28 联动：宗门听讲一日——贡献 300 兑感悟 +8（日限一次；感悟满溢自动化作修为） */
+    /** v28 联动：宗门听讲一日——贡献 300 兑感悟 +8（日限一次；感悟满溢自动化作修为）
+     *  v34（A2）：补 Time.add(1)——文案「听讲一日」此前却零时耗，白占同一天的修炼产出 */
     'act-sect-listen': () => {
       const p = Game.player;
       if (!p.sect) return;
@@ -555,6 +591,8 @@ const Game = {
       const before = p.insight || 0;
       Cultivate.addInsight(p, 8);
       Log.add(`你随长老听讲经义一日${before >= 100 ? '，感悟圆融，余韵化作修为。' : '，顿悟处不少。（突破感悟 +8）'}`, 'gain');
+      Time.add(1);
+      if (p.dead) return;
       Game.afterAction();
     },
     /* --- 功法 --- */
@@ -674,6 +712,7 @@ const Game = {
     'act-cave-plant': (d) => CaveSys.plant(Number(d.i)),
     'act-cave-harvest': (d) => CaveSys.harvest(Number(d.i)),
     'act-cave-water': (d) => CaveSys.water(Number(d.i)),
+    'act-cave-care': () => CaveSys.careAll(),   // v34（F1）：一键照料
     'act-cave-pest': (d) => CaveSys.removePest(Number(d.i)),
     'act-beast-active': (d) => BeastSys.setActive(Number(d.uid)),
     'act-beast-active2': (d) => BeastSys.setActive2(Number(d.uid)),

@@ -298,6 +298,7 @@ try {
     p.benming = { lv: 6 }; p.bag['z_benming'] = 1;
     const en = buildMonster('m_yezhu');
     en.hpMax = 999999; en.hp = 999999; en.atk = 1; en.crit = 0; en.fx = []; en.charging = false;
+    en.tpl = 'plain';   // v34 消抖：坚韧/铁壁型敌方回合 25% 运功逼毒会洗掉本测断言的破防（偶发抖腿）
     Battle.active = { enemy: en, ctx: {}, myFx: [], buffs: { defRounds: 0, dodgeRounds: 0 }, over: false, busy: false, enemyFxIds: [], stats: { out: 0, in: 0, maxCombo: 0, src: { attack: 0, skill: 0, ult: 0, beast: 0, dot: 0, thorns: 0, counter: 0 } }, floats: [], morale: 0, combo: 0, zhenyuan: 0, zmax: 6, bmUsed: {}, logs: [] };
     Battle.speed = 3;
     await Battle.actBenming('strike6');

@@ -89,6 +89,9 @@ const AutoCult = {
         continue;
       }
       Cultivate.normal();   // 一轮普通修炼（自带日志 / 时间 / 收尾渲染）
+      // v34（G2）：abort（读档/返回开始界面）后当轮成果无人落盘——settle 已 force 存过、
+      // 循环下轮即退，本轮 normal 的修为随关页蒸发。检测到已停即补一次落盘再退。
+      if (!this.active) { if (typeof Save !== 'undefined') Save.autoSave(true); return; }
       const p2 = Game.player;
       if (!p2 || p2.dead) { this.finish('寿元将尽，自动修炼停止'); return; }
       this.rounds++;

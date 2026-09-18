@@ -139,22 +139,29 @@ const DaoSys = {
       this.openModal();
     }
   },
-  /** 体修不可修习玄级及以上法诀；v13 大道专属功法道途不合者不可修 */
-  canLearnGongfa(p, def) {
+  /** 体修不可修习玄级及以上法诀；v13 大道专属功法道途不合者不可修
+   *  v34（D1）：silent 参数——拍卖行掷拍品时也需此判定（静默过滤），原一律弹 toast 会在渲染期刷屏 */
+  canLearnGongfa(p, def, silent = false) {
     if (p.dao === 'body' && def.grade >= 2) {
-      UI.toast('体修之躯，难悟玄级及以上法诀');
-      Log.add('你运转体修功法，只觉神识滞涩——高阶法诀与肉身之道相悖，无从修习。', 'warn');
+      if (!silent) {
+        UI.toast('体修之躯，难悟玄级及以上法诀');
+        Log.add('你运转体修功法，只觉神识滞涩——高阶法诀与肉身之道相悖，无从修习。', 'warn');
+      }
       return false;
     }
     // v32 修瑕（E43）：分支序修正——原「道途不合」先于「须先择定大道」，未择道者永远撞上前者
     if (def.daoLimit && !p.dao) {
-      const dname = (GameData.DAO_CLASSES.find(x => x.id === def.daoLimit) || {}).name || '特定大道';
-      UI.toast(`此乃${dname}秘传——须先择定大道`);
+      if (!silent) {
+        const dname = (GameData.DAO_CLASSES.find(x => x.id === def.daoLimit) || {}).name || '特定大道';
+        UI.toast(`此乃${dname}秘传——须先择定大道`);
+      }
       return false;
     }
     if (def.daoLimit && p.dao !== def.daoLimit) {
-      const dname = (GameData.DAO_CLASSES.find(x => x.id === def.daoLimit) || {}).name || '特定大道';
-      UI.toast(`此乃${dname}秘传，道途不合，无从修习`);
+      if (!silent) {
+        const dname = (GameData.DAO_CLASSES.find(x => x.id === def.daoLimit) || {}).name || '特定大道';
+        UI.toast(`此乃${dname}秘传，道途不合，无从修习`);
+      }
       return false;
     }
     return true;

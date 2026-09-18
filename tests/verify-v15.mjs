@@ -179,7 +179,7 @@ try {
   eco.ticket > 0 ? pass(`TC6 秘境门票实装（首座 ${eco.ticket} 灵石）`) : fail('TC6 门票', '');
   eco.fortuneCapped ? pass('TC7 气运软上限生效') : fail('TC7 气运', '');
   eco.bountyFloor ? pass('TC8 悬赏材料赏格 ≥ 卖店两倍') : fail('TC8 悬赏', '');
-  eco.eventYear <= 14 && eco.eventYear >= 10 ? pass(`TC9 世界大事首次 ${eco.eventYear} 年（v30 与修为曲线同校）`) : fail('TC9 大事年份', String(eco.eventYear));
+  eco.eventYear <= 4 && eco.eventYear >= 2 ? pass(`TC9 世界大事首次 ${eco.eventYear} 年（v34 与实玩节奏同校）`) : fail('TC9 大事年份', String(eco.eventYear));
   eco.farmRatio >= 2 && eco.farmRatio <= 2.5 ? pass(`TC10 灵田期望 ≈ 种子×2.2（灵芝 ×${eco.farmRatio}）`) : fail('TC10 灵田', String(eco.farmRatio));
 
 

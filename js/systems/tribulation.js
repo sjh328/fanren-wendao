@@ -38,12 +38,16 @@ const Tribulation = {
     // v30 护栏：天劫进行中拒绝重入——闭关循环曾可在劫弹窗未决时反复调 run（连环吞渡劫丹/覆写回溯备份）
     if (this.state) return;
     Save.write('bak', Game.player);   // v6：冲关之前，自动备份至临时槽位，失利可回溯
-    // v29 天年：渡劫丹——药力应劫而化，成算 +5（一丹一劫；回溯因果时随 bak 一并复原，连败的持续代价以孽障计）
+    // v34（E118）：本次渡劫燃耗台账——原回溯把渡劫丹/借运/法宝一并从 bak 还原，SL 零成本
+    //（唯一代价 +8 孽障 ≈ 劫威 +20 ≈ 成算 −3%，理性玩家必然败了就回）。台账在回溯后重扣，损耗不归。
+    this._attemptSpend = { dan: false, borrow: null, artifact: null };
+    // v29 天年：渡劫丹——药力应劫而化，成算 +5（一丹一劫）
     p.flags = p.flags || {};
     let dujieBonus = 0;
     if ((p.flags.dujieDan || 0) > 0) {
       p.flags.dujieDan--;
       dujieBonus = 5;
+      this._attemptSpend.dan = true;
       Log.add('识海中渡劫丹的药力轰然化开，道基如蒙金光（成算 +5）。', 'gain');
     }
     // v31 仙劫：opts.xian——XianSys 阶满引动，成算沿用同一张三策表，成败分支各走仙阶口径
@@ -76,12 +80,14 @@ const Tribulation = {
       p.counters.xianyuan -= 50;
       S._borrowed = true;
       S.base += 5;
+      if (this._attemptSpend) this._attemptSpend.borrow = { xian: true, amt: 50 };
       this.log('你燃五十仙元，向天外借得一线时来运转——三策成算各 +5。', 'log-system');
     } else {
       if ((p.fortune || 0) < 20) { UI.toast('气运不足 20，天时不予'); return; }
       p.fortune -= 20;
       S._borrowed = true;
       S.base += 5;
+      if (this._attemptSpend) this._attemptSpend.borrow = { xian: false, amt: 20 };
       this.log('你燃二十年气运，向天借得一线时来运转——三策成算各 +5。', 'log-system');
     }
     this.render();
@@ -156,6 +162,7 @@ const Tribulation = {
       const art = GameData.ITEMS[S.artifact.id];
       if (S.artifact.from === 'bag') Bag.removeItem(S.artifact.id, 1);
       else p.equipped.armor = null;
+      if (this._attemptSpend) this._attemptSpend.artifact = { ...S.artifact };
       Log.add(`你祭出 <b>${art.name}</b>，宝光冲霄，替你硬撼天雷！`, 'info');
     }
     const names = { endure: '以肉身硬抗天劫', artifact: '以法宝抵挡天劫', hide: '遁入地脉借地躲劫' };
@@ -287,13 +294,32 @@ const Tribulation = {
       // v6：渡劫失利，可选择回溯到引动天劫之前
       const rollback = await UI.popup({
         title: '渡劫失利 · 回溯因果',
-        html: `天劫未过，折损已定。<br>是否回溯因果，回到<b>引动天劫之前</b>的那一刻？<br><span class="neg">回溯后：本次渡劫的机缘与损耗尽数抹去，天劫重新酝酿。</span>`,
+        html: `天劫未过，折损已定。<br>是否回溯因果，回到<b>引动天劫之前</b>的那一刻？<br><span class="neg">回溯后：修为境界尽数复原、天劫重新酝酿；但本次燃耗的渡劫丹、气运／仙元与护身法宝不归——天道无情，因果有价（孽障 +12）。</span>`,
         options: [{ text: '回溯因果', value: true, primary: true }, { text: '继续前行', value: false }],
       });
       if (rollback && Game.rollbackBackup()) {
         // v18：回溯因果须付出代价——孽障+8，防止无限SL
+        // v34（E118）：本次渡劫燃耗不随 bak 复原——渡劫丹/借运/法宝回溯后重扣（台账重放），
+        // 孽障代价 8→12；原回溯连消耗一并还原，败了就回溯成了零成本读档
         const p = Game.player;
-        if (p) { p.karma = Math.min(100, (p.karma || 0) + 8); Log.add('因果逆转，孽障缠身（孽障 +8）。', 'loss'); }
+        if (p) {
+          p.karma = Math.min(100, (p.karma || 0) + 12);
+          const spend = this._attemptSpend || {};
+          const back = [];
+          if (spend.dan && (p.flags.dujieDan || 0) > 0) { p.flags.dujieDan--; back.push('渡劫丹药力复又化去'); }
+          if (spend.borrow) {
+            if (spend.borrow.xian) p.counters.xianyuan = Math.max(0, (p.counters.xianyuan || 0) - spend.borrow.amt);
+            else p.fortune = Math.max(0, (p.fortune || 0) - spend.borrow.amt);
+            back.push(spend.borrow.xian ? '借来的仙元焚尽' : '借来的气运焚尽');
+          }
+          if (spend.artifact) {
+            if (spend.artifact.from === 'bag') Bag.removeItem(spend.artifact.id, 1);
+            else if (Utils.eqId(p.equipped.armor || {}) === spend.artifact.id) p.equipped.armor = null;
+            back.push(`挡劫的${(GameData.ITEMS[spend.artifact.id] || {}).name || '法宝'}已随劫灰消散`);
+          }
+          Log.add(`因果逆转，孽障缠身（孽障 +12）。${back.length ? `——${back.join('、')}，燃耗不归。` : ''}`, 'loss');
+        }
+        this._attemptSpend = null;
         document.getElementById('tribulation-modal').classList.add('hidden');
         this.state = null;
         return;

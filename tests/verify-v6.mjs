@@ -160,13 +160,14 @@ try {
   /* ================= G2 当前建议 ================= */
   const tip1 = await page.evaluate(() => document.querySelector('.guide-box').innerText);
   tip1.includes('当前建议') ? pass('G2 侧边「当前建议」模块常驻') : fail('G2 模块', tip1);
+  // v34（E5）：建议去重后，圆满指引由 focus 主卡承载——断言面扩为 建议区+聚焦条 合盘
   const tip2 = await page.evaluate(() => {
     const p = Game.player;
     p.layer = 3; p.exp = GameData.layerNeed(p.realmIdx, 3);
     UI.renderAll();
-    return document.querySelector('.guide-box').innerText;
+    return document.querySelector('.guide-box').innerText + '\n' + (document.getElementById('focus-strip') || { innerText: '' }).innerText;
   });
-  tip2.includes('圆满') && tip2.includes('冲击') ? pass('G2 修为圆满 → 建议突破') : fail('G2 突破指引', tip2);
+  tip2.includes('圆满') && tip2.includes('冲击') ? pass('G2 修为圆满 → 建议突破（v34 起由 focus 主卡承载）') : fail('G2 突破指引', tip2);
   const tip3 = await page.evaluate(() => {
     const p = Game.player;
     p.karma = 120;
@@ -181,10 +182,10 @@ try {
     p.dao = null; p.insight = 0; p.layer = 0; p.exp = 0;
     p.realmIdx = 1;
     UI.renderAll();
-    const t = document.querySelector('.guide-box').innerText;
+    const t = document.querySelector('.guide-box').innerText + '\n' + (document.getElementById('focus-strip') || { innerText: '' }).innerText;
     return t;
   });
-  tip4.includes('大道') ? pass('G2 入筑基未择道 → 提示叩问大道') : fail('G2 大道指引', tip4);
+  tip4.includes('大道') ? pass('G2 入筑基未择道 → 提示叩问大道（v34 起由 focus 副卡承载）') : fail('G2 大道指引', tip4);
   await page.evaluate(() => { Game.player.dao = 'sword'; UI.renderAll(); });
 
   /* ================= A1 成就系统 ================= */
@@ -312,7 +313,7 @@ try {
     const bak = Save.read('bak');
     return { hasBak: !!(bak && bak.player), bakExp: bak ? bak.player.exp : -1 };
   });
-  s1.hasBak && s1.bakExp === 1075 ? pass('S1 引动天劫前自动备份（临时槽位 bak）') : fail('S1 备份', JSON.stringify(s1));   // v30：筑基圆满新需求 430×2.5=1075
+  s1.hasBak && s1.bakExp === 950 ? pass('S1 引动天劫前自动备份（临时槽位 bak）') : fail('S1 备份', JSON.stringify(s1));   // v34：×5.4 曲线筑基圆满需求 380×2.5=950（v30 为 430×2.5=1075）
   // 选硬抗（71% 成算，循环至多 5 次凑一次失败以验证回退；若始终成功则接受）
   let rolled = false;
   for (let i = 0; i < 5 && !rolled; i++) {
@@ -326,7 +327,7 @@ try {
     if (!tribVis) {
       await page.evaluate(() => {
         const p = Game.player;
-        p.realmIdx = 1; p.layer = 3; p.exp = 1075; p.insight = 100;   // v30：新曲线筑基圆满需求
+        p.realmIdx = 1; p.layer = 3; p.exp = 950; p.insight = 100;   // v34：新曲线筑基圆满需求
         Save.write('bak', p);
         UI.renderAll();
       });
@@ -350,7 +351,7 @@ try {
         await sleep(600);
         const s2 = await page.evaluate(() => {
           const p = Game.player;
-          return { realm: p.realmIdx, exp: p.exp, back: p.realmIdx === 1 && p.exp === 1075 };   // v30：新曲线
+          return { realm: p.realmIdx, exp: p.exp, back: p.realmIdx === 1 && p.exp === 950 };   // v34：新曲线
         });
         s2.back ? pass('S2 渡劫失利选择回溯 → 恢复至冲关前') : fail('S2 回溯', JSON.stringify(s2));
         rolled = true;

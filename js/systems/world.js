@@ -1,12 +1,14 @@
 
 /* ======================================================================
- * §23 世界大事件 WorldSys（v30：首现 10~14 年、此后 18~30 年一遇——与修为曲线同校，正常周目可见）
+ * §23 世界大事件 WorldSys（v34：首现 2~4 年、此后 1~3 年一遇——与实玩节奏同校）
+ *  v30 曾按「12~20 年周目」钉首现 10~14 年，但实算漏计闭关 1.6×与多源入账，实玩一周目仅 5~6 年
+ *  → 十二类大事对正常玩家整周目零触发，世界活性整根支柱事实死亡。v34 随 ×5.4 曲线重定时。
  * ====================================================================== */
 const WorldSys = {
   freshWorld() {
-    // v30 节奏重校：首次大事 10~14 年（v29 的 32~40 仍在多数周目之外——修为曲线重校后全程约 12~20 年）
+    // v34（A3）：首次大事 2~4 年（r3~r5 段），此后 1~3 年一遇——一周目 2~4 场，多周目/仙界长岁持续供应
     // v33（E91）：补 lingyiUntil（灵疫当年药价腾贵）；priceMul 死字段删除（priceMul() 由 warActive/rebuildUntil 实时重算，字段从未被读）
-    return { nextEventYear: 10 + Utils.rand(0, 4), pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], market: null, rebuildUntil: 0, turmoilUntil: 0, lingyiUntil: 0 };
+    return { nextEventYear: 2 + Utils.rand(0, 2), _evResched34: true, pending: null, history: [], magicMaps: [], preachUntil: 0, ruinsUntil: 0, warUntil: 0, lingchaoUntil: 0, beastMaps: [], market: null, rebuildUntil: 0, turmoilUntil: 0, lingyiUntil: 0 };
   },
   year(p) { return Math.floor((p.day || 0) / 365) + 1; },
   isMagic(p, mapId) { const w = p.world; return !!(w && w.magicMaps && w.magicMaps.includes(mapId)); },
@@ -62,8 +64,8 @@ const WorldSys = {
   onYear(p, y) {
     const w = p.world;
     if (!w) return;
-    // v29：旧档一次性迁移——百年周期改短后，从未触发过大事的旧档重掷首次年份
-    if (w.nextEventYear > 14 && !(w.history && w.history.length)) w.nextEventYear = Math.min(w.nextEventYear, 10 + Utils.rand(0, 4));   // v30：旧档一次性重掷至十数年
+    // v29/v30/v34：旧档一次性迁移——大事周期改短后，从未触发过大事的旧档重掷首次年份（_evResched34 防重复执行）
+    if (!w._evResched34 && !(w.history && w.history.length)) { w.nextEventYear = 2 + Utils.rand(0, 2); w._evResched34 = true; }   // v34：重掷至 2~4 年新窗
     NpcSys.yearTick(p, y);
     if (w.preachUntil && y > w.preachUntil) { w.preachUntil = 0; Log.add('圣地讲道落幕，道音散入天地之间。', 'system'); }
     if (w.ruinsUntil && y > w.ruinsUntil) { w.ruinsUntil = 0; Log.add('上古秘境重归虚妄，机缘之门缓缓关闭。', 'system'); }
@@ -73,7 +75,7 @@ const WorldSys = {
       const rest = w.beastMaps.filter(b => y <= b.until);
       if (rest.length !== w.beastMaps.length) { w.beastMaps = rest; if (!rest.length) Log.add('兽潮退去，出山的群兽重归深山。', 'system'); }
     }
-    if (y >= w.nextEventYear) { w.nextEventYear = y + 18 + Utils.rand(0, 12); this.fireEvent(p, y); }   // v30：此后 18~30 年一遇（原 50~70）
+    if (y >= w.nextEventYear) { w.nextEventYear = y + 1 + Utils.rand(0, 2); this.fireEvent(p, y); }   // v34（A3）：此后 1~3 年一遇（v30 的 18~30 对实玩周目仍是从不可及）
   },
   fireEvent(p, y) {
     const w = p.world;
@@ -169,7 +171,9 @@ const WorldSys = {
       Time.add(10);
       Log.add(`你于现世秘境中寻得上古法宝碎片 ×2、灵石 ${Utils.fmtNum(stones)}。`, 'gain');
     } else if (ev.type === 'war') {
-      const ids = Object.keys(p.npcs).filter(id => p.npcs[id].alive && p.partner !== id && !(p.sworn || []).includes(id));
+      // v34（E119）：不绑挚友——原从全部存活 NPC 随机抽敌（仅避道侣/结拜），rel≥70 的莫逆之交
+      // 也可能被拖入死战、胜即结怨，社交资产遭无预警惩罚。现只从中立/敌对（rel<30）中抽。
+      const ids = Object.keys(p.npcs).filter(id => p.npcs[id].alive && p.partner !== id && !(p.sworn || []).includes(id) && (p.npcs[id].rel || 0) < 30);
       const nid = ids.length ? Utils.pick(ids) : null;
       if (nid) {
         Log.add('你投入宗门战团，与敌对修士战作一团！', 'event');

@@ -260,7 +260,7 @@ try {
     // v20 加固：改读内存 Log.entries（#log 折叠态下 innerText 偶发取空）并纳入多波『击溃』关键词
     // v20 加固：败北时主日志无结算关键词——并入战斗回顾留档（Battle.lastLogs）一并断言
     const logTxt = await page.evaluate(() => (Log.entries || []).join('|') + '|' + (Battle.lastLogs || []).map(l => String(l.html)).join('|'));
-    /战利品|击败|击溃|遁走|重伤|轰然倒地/.test(logTxt) ? pass('T7 战斗结算日志') : fail('T7 战斗结算日志', logTxt.slice(-80));
+    /战利品|击败|击溃|遁走|重伤|轰然倒地|倒了下去|败北/.test(logTxt) ? pass('T7 战斗结算日志') : fail('T7 战斗结算日志', logTxt.slice(-80));   // v34：补战败文案关键词（低血遁走被拦→败北也是合法结算）
 
   }
 
@@ -591,7 +591,7 @@ try {
   }
 
   /* ---------- T12-B 金丹天劫（种子：筑基圆满）——三策博弈，随境界愈难 ---------- */
-  await seedAndLoad({ name: '渡劫道人', realmIdx: 1, layer: 3, exp: 1075, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, statLossPct: 0, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
+  await seedAndLoad({ name: '渡劫道人', realmIdx: 1, layer: 3, exp: 950, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, statLossPct: 0, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
   await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
   await sleep(300);
   const card12b = await page.evaluate(() => {
@@ -615,7 +615,7 @@ try {
     let t12b = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
     for (let tries = 0; t12b.realmIdx !== 2 && tries < 2; tries++) {   // v30：渡劫成算钳 95%，重试 1→3 次消抖
       console.log('  - T12 金丹天劫意外失败，重试一次');
-      await seedAndLoad({ name: '渡劫道人', realmIdx: 1, layer: 3, exp: 1075, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, statLossPct: 0, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
+      await seedAndLoad({ name: '渡劫道人', realmIdx: 1, layer: 3, exp: 950, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, statLossPct: 0, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
       await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
       await sleep(300);
       await clickSel(page, '[data-action="act-breakthrough"]');
@@ -634,7 +634,7 @@ try {
   await page.evaluate(() => {
     const d = JSON.parse(localStorage.getItem('fanren_wd_3'));
     const pl = d.player;
-    pl.realmIdx = 9; pl.layer = 3; pl.exp = 2500000000; pl.sect = null;
+    pl.realmIdx = 9; pl.layer = 3; pl.exp = 2125000000; pl.sect = null;
     localStorage.setItem('fanren_wd_3', JSON.stringify({ v: 1, player: pl, meta: { name: pl.name, realmText: '真仙圆满', day: 100, age: 20, ts: Date.now(), dead: false } }));
   });
   await clickSel(page, '[data-action="act-newgame"]');
@@ -895,7 +895,7 @@ try {
   }
 
   /* ---------- T21 法宝挡劫（消耗护身法宝+根基虚浮） ---------- */
-  await seedAndLoad({ name: '挡劫人', realmIdx: 1, layer: 3, exp: 1075, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
+  await seedAndLoad({ name: '挡劫人', realmIdx: 1, layer: 3, exp: 950, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } });
   {
     await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
     await sleep(300);
@@ -906,7 +906,7 @@ try {
       const artBtnEnabled = await page.$eval('[data-action="trib-strategy"][data-strategy="artifact"]', el => !el.disabled).catch(() => false);
       artBtnEnabled ? pass('T21 持对应法宝时挡劫可选') : fail('T21 挡劫可用性', '');
       // 成算上限 95%，5% 天然失败率：失败则重种子重试一次
-      const T21_PATCH = { name: '挡劫人', realmIdx: 1, layer: 3, exp: 1075, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } };
+      const T21_PATCH = { name: '挡劫人', realmIdx: 1, layer: 3, exp: 950, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } };
       await clickSel(page, '[data-action="trib-strategy"][data-strategy="artifact"]');
       await sleep(3600);
       let t21 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
