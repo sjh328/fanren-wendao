@@ -141,10 +141,18 @@ const NpcSys = {
       let gain = GameData.layerNeed(Utils.clamp(s.realmIdx, 0, 9), Math.min(3, s.layer))
         * Utils.randF(0.05, 0.12) * (0.6 + d.talent * 0.18);
       // v20 宿敌养成：与你结怨者追着你成长——落后越多，修得越凶
-      if (s.grudge) {
+      // v36（E227）温和追赶：所有落后 NPC ×1.05~2.5（落后 1~30 小层）；与宿敌增益取 max 不叠乘，
+      // 防「宿敌×2.5 再叠追赶×2.5」双乘失控——grudge 者维持现 ×1.5+ 强度只取高者
+      {
         const myRp = p.realmIdx * 4 + p.layer;
         const hisRp = s.realmIdx * 4 + s.layer;
-        gain *= 1.5 + Utils.clamp((myRp - hisRp) * 0.1, 0, 1);
+        const chaseMul = 1 + Utils.clamp(myRp - hisRp, 0, 30) * 0.05;
+        if (s.grudge) {
+          const grudgeMul = 1.5 + Utils.clamp((myRp - hisRp) * 0.1, 0, 1);
+          gain *= Math.max(grudgeMul, chaseMul);
+        } else if (chaseMul > 1) {
+          gain *= chaseMul;
+        }
       }
       if (Utils.chance(10)) { // 争夺机缘
         gain *= 2;
@@ -281,6 +289,20 @@ const NpcSys = {
     if (won) s.sparWins = (s.sparWins || 0) + 1; else s.sparLoses = (s.sparLoses || 0) + 1;   // v20 切磋段位
   },
   /** NPC 之敌（战斗用） */
+  /** v36（E227）：NPC 综合战力估算——从 buildEnemy 属性基式（hp=(55+rp^1.6×5)×mod、atk=(6+rp×2.6)×mod、
+   *  def=(4+rp×2.2)×mod、spd=7+rp×0.9，mod=0.92+talent×0.04）反推，再按 Stat.power 同权重式折算，
+   *  与玩家 Stat.power(p) 同量纲可比（榜行「可敌/略逊/远逊」三档由此判定；境界排序口径不受影响） */
+  npcCombatPower(p, id) {
+    const s = p.npcs[id];
+    if (!s) return 0;
+    const rp = Utils.clamp(s.realmIdx * 4 + s.layer, 0, 60);
+    const mod = 0.92 + (this.def(id) || { talent: 3 }).talent * 0.04;
+    const atk = Math.round((6 + rp * 2.6) * mod);
+    const def = Math.round((4 + rp * 2.2) * mod);
+    const hp = Math.round((55 + Math.pow(rp, 1.6) * 5) * mod);
+    const spd = Math.round(7 + rp * 0.9);
+    return Math.round(atk * 2 + def * 1.5 + hp * 0.3 + spd * 1 + 8 * 2 + 5 * 1.5 + 8 * 0.5);
+  },
   buildEnemy(p, id) {
     const d = this.def(id);
     const s = this.state(p, id);
@@ -380,7 +402,13 @@ const NpcSys = {
     KarmaSys.addKarma(2, true);   // v30：正当决斗只记微业——原 +8 与「散财化解零孽障」倒挂，玩家系统性规避了断
     Log.add(`一战之后，恩怨两清。${(this.def(id) || {}).name || ''} 收起敌意，与你相顾无言。（孽障 +2）`, 'system');
     if (showdown) {
-      const pool = Object.keys(GameData.ITEMS).filter(k => GameData.ITEMS[k].type === 'artifact' && (GameData.ITEMS[k].grade || 0) >= 1 && (GameData.ITEMS[k].grade || 0) <= 3);
+      // v36（E214）：彩头随境下限——grade 1~3 恒定成中高境分解货；r0~1 → 灵级起步、r2~3 → 玄级、
+      // r4+ → 地级起步（与 betray 的 tier 换算 :474 同族口径）；grade 池上限维持 3——天级及以上
+      // artifact 存量未盘点，不为彩头引入未验证资产；池空回落 gMin−1
+      const gMin = Utils.clamp(Math.floor(s.realmIdx / 2) + 1, 1, 3);
+      const inPool = g => Object.keys(GameData.ITEMS).filter(k => GameData.ITEMS[k].type === 'artifact' && (GameData.ITEMS[k].grade || 0) >= g && (GameData.ITEMS[k].grade || 0) <= 3);
+      let pool = inPool(gMin);
+      if (!pool.length && gMin > 1) pool = inPool(gMin - 1);
       const art = Utils.pick(pool);
       Bag.addItem(art, 1);
       Log.add(`雷台之约如约兑现——你收下 ${(GameData.ITEMS[art] || {}).name || '一件法宝'} 作为彩头。胜负已分，恩怨两讫。`, 'gain');
@@ -437,6 +465,11 @@ const NpcSys = {
     const today = Math.floor(p.day || 0);
     if (s.sparDay === today) { UI.toast(`今日已与${d.name}切磋过——武道贵精不贵多，明日再来讨教`); return; }
     s.sparDay = today;
+    // v36（E198）：每日 3 场跨 NPC 总限——E131 只限单 NPC 频次，24 人同日各一场的总量通道依旧
+    // 零时间零灵石成本（r3 全扫日修为 21025 ≈ 闭关日均 12.7 倍）；形态对齐 SectSys.claimLeft
+    if (p._sparCountDay !== today) { p._sparCountDay = today; p._sparCount = 0; }
+    if ((p._sparCount || 0) >= 3) { UI.toast('今日已三度以武会友——筋骨酸软，明日再战'); return; }
+    p._sparCount = (p._sparCount || 0) + 1;
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴
     const sparLine = this.lineFor(p, id, 'spar');
@@ -738,7 +771,7 @@ const NpcSys = {
     UI.toast(`感悟 +${insight}`);
     Game.afterAction();
   },
-  /** v19 论道：以时间为束，换修为与感悟（关系愈深，倾囊相授） */
+  /** v19 论道：以时间为束，换修为与感悟（v36 E197：收益改自随乘数、与档位解耦——「关系愈深倾囊相授」由感悟与好感承接） */
   async discuss(id) {
     const p = Game.player;
     const d = this.def(id);
@@ -753,8 +786,13 @@ const NpcSys = {
       UI.toast('交情尚浅，对方只肯泛泛而谈');
       return;
     }
+    // v36（E197）：每 NPC 每日一场——原无日限无成本，24 人轮刷日均 56~89.6×eco（修炼的 7~11.2 倍），
+    // v34 以 ×5.4 校准的境界曲线被整条旁路；形态对齐切磋 E131 日限
+    const today = Math.floor(p.day || 0);
+    if (s._discussDay === today) { UI.toast(`今日已与${d.name}论道过——大道贵悟不贵频，明日再叙`); return; }
+    s._discussDay = today;
     const insight = tier.id === 'sworn' ? 4 : tier.id === 'bosom' ? 3 : 2;
-    const gain = Math.round((40 + insight * 30) * GameData.eco(p.realmIdx) * (0.8 + d.talent * 0.08));
+    const gain = Math.round(Cultivate.baseGain(p) * (1.0 + d.talent * 0.08));   // v36（E197）：自随乘数——talent 1~5 → 1.08~1.4× baseGain，收益与 rel 解耦断「越论道越要论道」自增强环
     Cultivate.addExp(p, gain);
     p.insight = Math.min(100, (p.insight || 0) + insight);
     if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 4);

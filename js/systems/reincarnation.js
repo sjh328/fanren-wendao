@@ -50,10 +50,13 @@ const ReincarnationSys = {
    *  apply(p2, ctx)：ctx = { kept（携入轮回的法宝 id）, origin（出身定义） } */
   TREE_EFFECTS: [
     { name: '一世之家', desc: '初始灵石翻倍', apply: (p2, ctx) => { p2.stones.low += Math.round((ctx.origin ? ctx.origin.start.stones : 150) || 0); } },
-    { name: '生而知之', desc: '悟性 +2', apply: (p2) => { p2.attrs.comp = Math.min(10, p2.attrs.comp + 2); } },
+    // v36（E228）：四维层满值折算——属性未满走原加成（min(10,+n) 与旧版逐位一致）；已满（>=10）
+    // 改授 cultGift（修炼效率 +2%/层），多周目后期四维满值后不再固定零收益
+    { name: '生而知之', desc: '悟性 +2', apply: (p2) => { if (p2.attrs.comp >= 10) { p2.cultGift = (p2.cultGift || 0) + 2; } else { p2.attrs.comp = Math.min(10, p2.attrs.comp + 2); } } },
     { name: '故物重携', desc: '多带一件法宝', apply: (p2, ctx) => { if (ctx.kept) p2.bag[ctx.kept] = (p2.bag[ctx.kept] || 0) + 1; } },
-    { name: '福缘深厚', desc: '福缘 +2', apply: (p2) => { p2.attrs.luck = Math.min(10, p2.attrs.luck + 2); } },
-    { name: '道基天成', desc: '全属性 +1', apply: (p2) => { for (const k of ['gen', 'comp', 'luck', 'body']) p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } },
+    { name: '福缘深厚', desc: '福缘 +2', apply: (p2) => { if (p2.attrs.luck >= 10) { p2.cultGift = (p2.cultGift || 0) + 2; } else { p2.attrs.luck = Math.min(10, p2.attrs.luck + 2); } } },
+    // 道基天成/道骨按各维分别判定：部分满则满的维折算（每满一维折 +0.5%，四维全满 +2% 与单维层对齐）
+    { name: '道基天成', desc: '全属性 +1', apply: (p2) => { let full = 0; for (const k of ['gen', 'comp', 'luck', 'body']) { if (p2.attrs[k] >= 10) full++; else p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } if (full) p2.cultGift = (p2.cultGift || 0) + Math.round(2 * full / 4); } },
     { name: '名门之后', desc: '初始声望 +30', apply: (p2) => { p2.reputation = (p2.reputation || 0) + 30; } },
     { name: '福泽绵长', desc: '初始气运 +10', apply: (p2) => { p2.fortune = (p2.fortune || 0) + 10; } },
     { name: '骨血传玉', desc: '自带上古碎片', apply: (p2) => { p2.bag['m_gupian'] = (p2.bag['m_gupian'] || 0) + 1; } },
@@ -65,7 +68,7 @@ const ReincarnationSys = {
     { name: '道胎', desc: '出生即练气二层', apply: (p2) => { p2.layer = Math.max(p2.layer, 1); } },
     { name: '灵兽通心', desc: '驯服初始亲昵 +20', apply: (p2) => { p2.bondGift = 20; } },
     { name: '旧识遍江湖', desc: '初始声望 +50', apply: (p2) => { p2.reputation = (p2.reputation || 0) + 50; } },
-    { name: '道骨', desc: '全属性再 +1', apply: (p2) => { for (const k of ['gen', 'comp', 'luck', 'body']) p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } },
+    { name: '道骨', desc: '全属性再 +1', apply: (p2) => { let full = 0; for (const k of ['gen', 'comp', 'luck', 'body']) { if (p2.attrs[k] >= 10) full++; else p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } if (full) p2.cultGift = (p2.cultGift || 0) + Math.round(2 * full / 4); } },   // v36（E228）：全属性再+1，满值折算同道基天成
     { name: '轮回行者', desc: '每次兵解额外 +1 印记', apply: (p2) => { p2.flags.reincWalker = true; } },
   ],
   get TREE_NAMES() { return this.TREE_EFFECTS.map(t => `${t.name}（${t.desc}）`); },
@@ -109,7 +112,9 @@ const ReincarnationSys = {
       const needTxt = extra
         ? (on ? '（已解锁）' : `（余额解锁 ${this.TREE_EXTRA_COST} 枚）`)
         : (on ? '' : `（需累计 ${(i + 1) * 3} 枚）`);
-      return `<div class="tip-line">· ${on ? '<b class="hl">✦</b>' : '<span style="color:var(--text-faint)">🔒</span>'} 第${i + 1}层 <b>${name}</b>${needTxt}</div>`;
+      // v36（E228）：四维属性层（生而知之/福缘深厚/道基天成/道骨）满值折算提示——不再伪装普通未解锁态
+      const giftTxt = [1, 3, 4, 13].includes(i) ? '<span style="color:var(--text-faint)">（对应属性满十时折化为修炼效率 +2%）</span>' : '';
+      return `<div class="tip-line">· ${on ? '<b class="hl">✦</b>' : '<span style="color:var(--text-faint)">🔒</span>'} 第${i + 1}层 <b>${name}</b>${needTxt}${giftTxt}</div>`;
     }).join('');
     const nextEarned = tier < 10 ? `1~10 层距下一层还差 <b class="hl">${(Math.floor(earned / 3) + 1) * 3 - earned}</b> 枚累计印记` : '';
     const extraIdx = legacy.treeExtra || 0;

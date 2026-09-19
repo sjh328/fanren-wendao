@@ -137,24 +137,29 @@ const CaveSys = {
     // v32 修瑕（E62）：回环 afterAction 拆除——visitorEvent 由 dailySettle 调用，而 dailySettle
     // 在 afterAction 尾部，此处再调 afterAction 曾使整条收尾链（渲染/存档/成就/日更）双跑一遍
   },
-  /** v20 聚灵加速：花灵石点燃聚灵阵，当日修炼效率 ×1.5（日限一次） */
+  /** v20 聚灵加速：花灵石点燃聚灵阵，点燃后 3 日内修炼效率 ×1.5 */
   /** v24 聚灵加速定价单源化：随境界走 stoneEco 曲线（解除 v20 的 4 境封顶，高境灵石有了日常去路） */
   rushCost(p) { return Math.round(120 * GameData.stoneEco(p ? p.realmIdx : 0)); },
   async spiritRush() {
     const p = Game.player;
     if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
     const today = Math.floor(p.day || 0);
-    if (p.rushDay === today) { UI.toast('聚灵阵今日已点燃，明日再来'); return; }
+    // v36（E218）：3 日窗口口径——窗口未激活才可再点，防窗口内重复扣款顺延覆写 rushDay
+    const inWindow = p.rushDay != null && today - p.rushDay < 3;
+    if (inWindow) { UI.toast(`聚灵阵灵机未散（余 ${3 - (today - p.rushDay)} 日），无需再燃`); return; }
     const cost = this.rushCost(p);
+    // v36（E218）：净收益按场景实算——修炼增量 0.5×baseGain（窗口恰覆盖一轮）、闭关增量 8×baseGain（开局一次结算被窗口整段 ×1.5）
+    const nextRound = Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 0.5));
+    const secludeBonus = Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 8));
     const ok = await UI.popup({
       title: '聚灵加速',
-      html: `燃烧灵石为聚灵阵供能——<b>今日修炼效率 ×1.5</b>（每轮修炼约 ${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 1.5))} 修为）。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 日限一次；闭关与自动修炼同样受益。</span>`,
+      html: `燃烧灵石为聚灵阵供能——<b>点燃后 3 日内修炼效率 ×1.5</b>（下一轮修炼约 +${nextRound} 修为；若即将闭关，整轮闭关约 +${secludeBonus} 修为）。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 灵机未散（3 日内）不可再燃；闭关与自动修炼同样受益。诚实账：挂机流净赚仅约 +${nextRound} 修为对 ${Utils.fmtNum(cost)} 灵石——聚灵的正确定位是闭关前点燃。</span>`,
       options: [{ text: '点燃聚灵阵', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     p.rushDay = today;
-    Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
+    Log.add(`聚灵阵轰然全开——3 日内修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
     Story.chron('点燃聚灵阵（日修加速）');
     Game.afterAction();
   },
@@ -184,12 +189,13 @@ const CaveSys = {
       if (!plot || !plot.seed || plot.wateredDay === today) continue;
       const grown = Math.max(0, Math.floor(p.day || 0) - (plot.plantedDay || 0));
       const remaining = Math.max(0, (plot.days || 0) - grown);
+      // v36（E202）：顺手除虫提到熟田判定之前——原 remaining<=0 continue 把除虫一并挡在成熟田外，
+      // 而 checkPest 照样给熟田上虫、harvest 照罚过熟折半：只有惩罚没有出口
+      if (plot.pested) { plot.pested = false; cured++; }
       if (remaining <= 0) continue;   // 已熟之田无需雨露
       plot.wateredDay = today;
       plot.days = grown + Math.max(1, Math.round(remaining * 0.9));
       watered++;
-      // v35（U3）：顺手除虫——纯仪式操作，无决策价值，两个「一键」都不该漏
-      if (plot.pested) { plot.pested = false; cured++; }
     }
     // 全兽抚摸（与 BeastSys.pat 一致：+4~8 亲昵，触发第三技检查）
     if (typeof BeastSys !== 'undefined') {
@@ -382,10 +388,11 @@ const CaveSys = {
           <div class="gf-info">
             <div class="gf-name">第 ${i + 1} 田 · ${GameData.ITEMS[plot.crop].name} ${ripe ? '<span class="tag safe">已成熟</span>' : `<span class="tag">生长中 ${grown}/${plot.days}日</span>`}</div>
             <div class="bar" style="height:12px"><div class="bar-fill exp" style="width:${pct}%"></div><span class="bar-text">${Math.floor(pct)}%</span></div>
+            <div class="gf-desc">可收 ×2｜过熟 20 日折半｜季秋 +1</div>
             ${ripe && over >= 20 ? '<div class="gf-desc"><span class="neg">过熟日久，收获将折半，请尽快采收。</span></div>' : ''}
           </div>
           <div class="gf-actions">${ripe
-            ? `<button class="btn btn-sm btn-primary" data-action="act-cave-harvest" data-i="${i}">收 获</button>`
+            ? `<button class="btn btn-sm btn-primary" data-action="act-cave-harvest" data-i="${i}">收 获</button>${plot.pested ? `<button class="btn btn-sm btn-danger" data-action="act-cave-pest" data-i="${i}">除 虫</button>` : ''}`
             : `<button class="btn btn-sm" data-action="act-cave-water" data-i="${i}">浇 水</button>${plot.pested ? `<button class="btn btn-sm btn-danger" data-action="act-cave-pest" data-i="${i}">除 虫</button>` : ''}`}</div>
         </div>`);
       }

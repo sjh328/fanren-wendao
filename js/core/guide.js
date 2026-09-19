@@ -163,13 +163,16 @@ LOCKS: {
     }
     // 2 聚灵加速（v35（U3）：首日明示价格并征求同意，可选「以后不再询问」——原静默扣款，
     // 后期每日 137 万灵石的支出藏在家务按钮里）
-    if (p.cave && p.rushDay !== today && p._autoRush !== 'skip') {
+    // v36（E218）：聚灵 3 日窗口终态守卫——窗口未激活（!inWindow）才询问/点燃；inWindow 时整步
+    // 跳过（不弹窗不扣款）。E205 的单日跳过与三态偏好语义不变
+    const inWindow = p.rushDay != null && today - p.rushDay < 3;
+    if (p.cave && !inWindow && p._autoRush !== 'skip' && p._autoRushSkipDay !== today) {
       const cost = CaveSys.rushCost(p);
       let go = p._autoRush === 'always';
       if (!go) {
         const c = await UI.popup({
           title: '一键行权 · 聚灵加速',
-          html: `今日聚灵阵尚未点燃：燃 <b>${Utils.fmtNum(cost)}</b> 灵石，可得<b>今日修炼效率 ×1.5</b>。<br><span class="tip-line">选择「以后不再询问」后，一键行权将默认照常聚灵（灵石不足时自动跳过）。</span>`,
+          html: `今日聚灵阵尚未点燃：燃 <b>${Utils.fmtNum(cost)}</b> 灵石，<b>点燃后 3 日内修炼效率 ×1.5</b>（下一轮修炼约 +${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 0.5))} 修为；若即将闭关，整轮闭关约 +${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 8))} 修为）。<br><span class="tip-line">选择「以后不再询问」后，一键行权将默认照常聚灵（灵石不足时自动跳过）；偏好随时可在设置中心修改。</span>`,
           options: [
             { text: `今日聚灵（-${Utils.fmtNum(cost)}）`, value: 'once', primary: true },
             { text: '以后都聚，不再询问', value: 'always' },
@@ -178,12 +181,12 @@ LOCKS: {
         });
         if (c === 'always') { p._autoRush = 'always'; go = true; }
         else if (c === 'once') go = true;
-        else { p._autoRush = 'skip'; }
+        else if (c === 'skip') { p._autoRushSkipDay = today; }   // v36（E205）：仅当日——undefined（ESC/遮罩）不落任何偏好，下一行权自然重问
       }
       if (go) {
         if (Bag.spendStones(cost)) {
           p.rushDay = today;
-          Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
+          Log.add(`聚灵阵轰然全开——3 日内修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
           done.push('聚灵加速');
         } else {
           Log.add('聚灵阵静默着——灵石不足，今日便不点了。', 'info');

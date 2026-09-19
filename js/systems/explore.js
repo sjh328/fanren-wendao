@@ -60,7 +60,7 @@ const Explore = {
         bctx.wx = wx0;
         // §23 魔域：妖魔狂化，凶险与收获并增
         if (WorldSys.isMagic(p, map.id)) {
-          bctx.worldMul = 1.3; bctx.dropMul = 1.4;
+          bctx.worldMul = 1.3; bctx.dropMul = (bctx.dropMul || 1) * 1.4;   // v36（E208）：覆写改叠乘——兽潮 1.3 与魔域 1.4 并发时两倍率俱应生效
           Log.add('魔气森然——此间妖魔已被魔域之气狂化！', 'warn');
         }
         // v20 多波妖群（一成几率）与天时上下文（夜战/雨雾，阶段三继续扩展）

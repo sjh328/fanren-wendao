@@ -32,6 +32,7 @@ const CraftSys = {
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 1) r += 10;
     r += Utils.clamp((p.fortune || 0) * 0.1, 0, 15);
     if (typeof CaveSys !== 'undefined' && CaveSys.pillBonus) r += CaveSys.pillBonus(p);
+    if (p.sect && p.sect.faction === 'danding') r += 8;   // v36（E226）：丹鼎阁派系 perk——炼丹成丹率 +8%
     if ((p.poison || 0) > Stat.poisonCap(p) * 0.5) r -= 5;   // v28 联动：手有浮毒，丹火不稳（丹毒过半成丹率 -5）
     if (fire) r += this.fireMatch(p, recipe, fire);
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 6) return Utils.clamp(r, 40, 95);
@@ -70,8 +71,9 @@ const CraftSys = {
     Bag.removeItem('m_danfang', r.needPages);
     p.flags.recipeOk = p.flags.recipeOk || {};
     p.flags.recipeOk[r.id] = true;
-    p.insight = Math.min(100, (p.insight || 0) + 6);
-    Log.add(`你将 ${r.needPages} 页残稿拼合推演——失传丹方【<b>${out.name}</b>】重见天日！（突破感悟 +6）`, 'realm');
+    const insGain = p.sect && p.sect.faction === 'cangjing' ? Math.round(6 * 1.15) : 6;   // v36（E226）：藏经楼派系 perk——参悟所得 +15%（6→7）
+    p.insight = Math.min(100, (p.insight || 0) + insGain);
+    Log.add(`你将 ${r.needPages} 页残稿拼合推演——失传丹方【<b>${out.name}</b>】重见天日！（突破感悟 +${insGain}）`, 'realm');
     UI.announce(`✦ 丹方重光 · ${out.name} ✦`, 'gold');
     Story.chron(`参悟失传丹方「${out.name}」`);
     Ambience.sfx('rare');
@@ -143,11 +145,13 @@ const CraftSys = {
     if (p.realmIdx >= 4) pool.push('tal_posha');
     return pool;
   },
-  /** 期望产量（与 drawTalisman 实发逐项同源：rand(0,2) 取均值 1） */
+  /** 期望产量（与 drawTalisman 实发逐项同源：rand(0,2) 取均值 1；v36（E224）补仲夏期望——
+   *  91/365 摊入避免 drawCost 逐日跳变；drawTalisman 实发仲夏 +2 不动（v20 天时风味），定价把权重算进去） */
   expectedQty(p) {
     let q = 3 + (p.realmIdx >= 2 ? 1 : 0) + (DaoSys.tierLevel(p) >= 1 ? 1 : 0);
     q *= 1 + (DaoSys.tierLevel(p) >= 2 ? 0.2 : 0.12);   // 朱砂境 20% 翻倍（此前 12%）
     if (DaoSys.tierLevel(p) >= 6) q += 2;   // 符仙境 +2（在翻倍后追加）
+    q += (typeof Art !== 'undefined' && Art.seasonOf(p) === 1 ? 2 * 91 / 365 : 0);   // v36（E224）：仲夏窗口 91/365 摊入期望——E128「成本与实发同源」的季节缺口补齐
     return q;
   },
   drawCost(p) {

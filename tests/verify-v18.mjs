@@ -77,7 +77,7 @@ console.log('===== SA 源码静态组 =====');
   gdata.includes('回落 NPCS 名单') ? pass('SA14 char() 兜底回落（A7）') : fail('SA14 兜底', '');
   world.includes("type === 'zhongbao'") && world.includes('ev.mapId = map.id;') && world.includes("type === 'lingyi'") && world.includes("type === 'neiluan'") && world.includes("type === 'qiren'") ? pass('SA15 四类大事专属公告+重宝mapId（A8）') : fail('SA15 世界大事', '');
   (ui.match(/data-action="stat-detail" data-stat=/g) || []).length >= 7 ? pass('SA16 属性明细七按钮接线（A9）') : fail('SA16 stat-detail', '');
-  ui.includes("act: (!rush && p.cave) ? 'act-spirit-rush'") && ui.includes('data-action="act-spirit-rush"') ? pass('SA17 聚灵加速双入口（A10）') : fail('SA17 聚灵', '');
+  ui.includes("act: (!inRushWin && p.cave) ? 'act-spirit-rush'") && ui.includes('data-action="act-spirit-rush"') ? pass('SA17 聚灵加速双入口（A10；v36 E218 窗口口径随新语义修订）') : fail('SA17 聚灵', '');
   achieve.includes('test: p => Achieve.stonesTotal(p) >= 1000') && achieve.includes("console.warn('成就判定异常:'") ? pass('SA18 e1/e2 this 修复+异常留痕（A11）') : fail('SA18 成就', '');
 
   /* ---- B1 战斗灵兽塔抽样 ---- */

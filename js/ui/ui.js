@@ -3,6 +3,9 @@
  * §16 界面渲染
  * ====================================================================== */
 const UI = {
+  // v36（E231）：数值文案单源——「改参数忘改文案」三连（v34 A4/v32 E16/v35 E168）后的防复发地基：
+  // 手册与面板的比值文案一律由此拼串，真值常量由 check-actions「文案-常量」定点对账锚定（漂移即红）
+  FACTS: { offlineEff: '普通修炼六成', offlineCap: 120, bountyDays: 3, sellRate: '四成五' },
   el: {},
   cache() {
     for (const id of ['start-screen', 'create-screen', 'game-screen', 'start-slots', 'create-attrs', 'create-rating',
@@ -641,10 +644,25 @@ const UI = {
     // v24 求签行内直签——无需再绕道游历·天下；v33（C2）：行内附连签计程，进度随手可见
     const signProg = DailySign.progress(p);
     rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}（连签 ${signProg.day}/7）` : (signProg.broken ? '今日未求签 · 连签已断，重新计程' : (signProg.streak > 0 ? `今日未求签 · 连签 ${signProg.day}/7${signProg.left > 0 ? `，差 ${signProg.left} 日满签` : '，今日满签！'}` : '今日未求签')), act: signed ? '' : 'act-sign', actText: '摇 签' });
-    const rush = p.rushDay === today;
-    // v32 修瑕（A10）：聚灵加速原在此只给「前往」跳转、洞府主楼卡又无点燃按钮——带确认弹窗的
-    // 正常交互流程（CaveSys.spiritRush）全工程不可达（与 v30 宗门死按钮同病灶）。改行内直燃。
-    rows.push({ state: rush ? 'ok' : 'todo', label: '聚灵加速', stat: rush ? '已点燃 · 修炼 ×1.5' : (p.cave ? `阵未点燃 · ${Utils.fmtNum(CaveSys.rushCost(p))} 灵石` : '洞府未辟'), act: (!rush && p.cave) ? 'act-spirit-rush' : '', actText: '点 燃' });
+    // v36（E218）：聚灵 3 日窗口口径——窗口内即「已点燃」态（余 N 日），窗口外才可再燃
+    const inRushWin = p.rushDay != null && today - p.rushDay < 3;
+    rows.push({ state: inRushWin ? 'ok' : 'todo', label: '聚灵加速', stat: inRushWin ? `已点燃 · 3 日内修炼 ×1.5（余 ${3 - (today - p.rushDay)} 日）` : (p.cave ? `阵未点燃 · ${Utils.fmtNum(CaveSys.rushCost(p))} 灵石` : '洞府未辟'), act: (!inRushWin && p.cave) ? 'act-spirit-rush' : '', actText: '点 燃' });
+    // v36（E219）：悟道入日常卡——已悟 → ok；insight≥20 未悟 → todo + 行内直达确认弹窗（act-wudao，
+    // 走 Cultivate.wuDao 原确认流程，不做免确认直悟——20 感悟是资源决策）；insight<20 → ok 态报进度
+    // （避免低感悟期卡面永远差一件事）；stat 文案分境界与悟道弹窗口径一致（r9 报炼作仙元 1000）
+    {
+      const wudaoDone = p._wuDaoDay === today;
+      const r9 = p.realmIdx >= 9;
+      const canWudao = (p.insight || 0) >= 20;
+      rows.push({
+        state: (wudaoDone || !canWudao) ? 'ok' : 'todo',
+        label: '悟道',
+        stat: wudaoDone ? (r9 ? '今日已悟 · 炼作仙元 1000' : '今日已悟 · 炼作修为')
+          : canWudao ? `感悟 ${p.insight}/20 · 可炼作${r9 ? '仙元 1000' : '修为'}`
+          : `感悟 ${p.insight || 0}/20 · 攒足可炼作${r9 ? '仙元' : '修为'}`,
+        act: (!wudaoDone && canWudao) ? 'act-wudao' : '', actText: '悟 道',
+      });
+    }
     const plots = (p.cave && p.cave.plots) || [];
     const ripe = plots.filter(pl => pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
     const growing = plots.filter(pl => pl && pl.seed).length;
@@ -1170,7 +1188,7 @@ const UI = {
     const sellFold = sellable.length ? `
       <details class="fold shop-sell-fold" data-fold="shop-sell" ${Game.foldState['shop-sell'] ? 'open' : ''}>
         <summary>◈ 出售物品（${sellable.length} 种 · 可售总值 <b class="hl">${Utils.fmtNum(sellTotal)}</b> 灵石 ▾）</summary>
-        <div class="tip-line" style="margin:6px 0">· 四折回收${p.dao === 'pill' ? '，丹药另有丹道加成' : ''}；全售需二次确认。凡品杂物可在乾坤袋「一键卖凡品」。</div>
+        <div class="tip-line" style="margin:6px 0">· ${this.FACTS.sellRate}回收${p.dao === 'pill' ? '，丹药另有丹道加成' : ''}；全售需二次确认。凡品杂物可在乾坤袋「一键卖凡品」。</div>
         ${sellRows}${sellable.length > SELL_CAP ? `<div class="tip-line" style="margin:6px 0">· 其余 ${sellable.length - SELL_CAP} 种贱价之物从略——可用「一键卖凡品」或逐类全售处理。</div>` : ''}
       </details>` : '<div class="tip-line">背包中暂无可售之物。</div>';
     return `
@@ -1428,7 +1446,7 @@ const UI = {
     return `
       <div class="card">
         <div class="card-title">✦ 悬赏使命 <span style="font-size:12px;color:var(--text-dim)">接榜 · 践诺 · 领赏</span></div>
-        <div class="tip-line" style="margin:0 0 6px">· 悬赏三日一换，达成后记得及时领赏；猎杀类目标游历时自动计入。</div>
+        <div class="tip-line" style="margin:0 0 6px">· 悬赏${this.FACTS.bountyDays}日一换，达成后记得及时领赏；猎杀类目标游历时自动计入。</div>
         ${bountySection}
       </div>`;
   },
@@ -2084,7 +2102,7 @@ const UI = {
       </details>
       <details class="fold"><summary>✦ 营生与经济</summary>
         <div class="tip-line">· 洞府灵田自种自收（离线亦生长）；种子在坊市「灵田种子」区；一键行权可代收代种。</div>
-        <div class="tip-line">· 悬赏板两日一换，猎杀目标游历自动计入；宗门任务同源——贡献换功法秘宝。</div>
+        <div class="tip-line">· 悬赏板${this.FACTS.bountyDays}日一换，猎杀目标游历自动计入；宗门任务同源——贡献换功法秘宝。</div>
         <div class="tip-line">· 奇市：黑市每月初三开市三日（贵六成但货奇）；拍卖行每六十日一件稀有拍品。</div>
         <div class="tip-line">· 闲置法器可在祭炼堂「熔铸回收」分解成玄铁矿与灵石——天级神兵也按品阶兜底计价。</div>
         <div class="tip-line">· 灵田灵兽寻宝有「归来」红点提醒；奇市开市、拍期将止也会在页签上亮灯。</div>
@@ -2098,7 +2116,7 @@ const UI = {
       </details>
       <details class="fold"><summary>✦ 杂录</summary>
         <div class="tip-line">· 快捷键：剧情中 Enter/空格 翻页；战斗中 1~5 普攻/法诀/防御/道具/遁走；QWERTASD 切页签；ESC 关层。</div>
-        <div class="tip-line">· 离线时灵田照常生长、修为按修炼四成效率自行精进（上限 30 日）；灵泉、访客、节庆等日常亦按日补结（互动节庆自动从简）。</div>
+        <div class="tip-line">· 离线时灵田照常生长、修为按${this.FACTS.offlineEff}效率自行精进（上限 ${this.FACTS.offlineCap} 日；闭关加成不计入）；灵泉、访客、节庆等日常亦按日补结（互动节庆自动从简）。</div>
         <div class="tip-line">· 图鉴五类收满各得全属性 +1%（永久）；成就页未完成的排在前头。</div>
         <div class="tip-line">· 问道录（问道页右上）收录你看过的全部剧情、人物志、年表、抉择树与百科。</div>
       </details>`;
@@ -2274,7 +2292,7 @@ const UI = {
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
   },
   /** v5：境界突破演出——全屏对应色系微光闪过 + 古风描写渐显（约 3 秒，不挡操作） */
-  realmShow(text, color) {
+  realmShow(text, color, tierOverride) {
     const app = document.getElementById('app');
     let flash = document.getElementById('realm-flash');
     let show = document.getElementById('realm-show');
@@ -2290,7 +2308,8 @@ const UI = {
     show.style.setProperty('--aura-soft', this.aura(color, 0.55));
     show.querySelector('.rs-text').textContent = text;
     // v19 突破演出分档：境界越高，异象越盛（低境轻光 → 中境光环 + 粒子 → 高境全屏潮涌）
-    const tier = (Game.player && Game.player.realmIdx) || 0;
+    // v36（E230）：tierOverride 显式档位——仙界仪式（落名/晋层/证道）以仙阶分档而非凡间境界
+    const tier = tierOverride != null ? tierOverride : ((Game.player && Game.player.realmIdx) || 0);
     const tierCls = tier >= 7 ? 'rs-t3' : tier >= 4 ? 'rs-t2' : tier >= 2 ? 'rs-t1' : '';
     flash.classList.remove('go', 'rs-t1', 'rs-t2', 'rs-t3');
     show.classList.remove('go', 'rs-t1', 'rs-t2', 'rs-t3');

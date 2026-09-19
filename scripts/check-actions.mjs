@@ -47,5 +47,42 @@ const dead = [...defined].filter(a => !used.has(a)).sort();
 let bad = false;
 for (const a of missing) { console.error(`✗ NO-HANDLER: data-action="${a}" 无处理器（死按钮）`); bad = true; }
 for (const a of dead) { console.error(`✗ NO-ENTRY: '${a}' 处理器无任何静态入口（死代码）`); bad = true; }
+
+/* ======================================================================
+ * v36（E231）「文案-常量」定点对账——「改参数忘改文案」三连（v34 A4/v32 E16/v35 E168）
+ * 的防复发门禁：UI.FACTS 的每个数值与实现侧真值常量静态抽取比对，漂移即红。
+ *   FACTS.offlineCap  ↔ js/game.js  离线上限 Math.min(120,
+ *   FACTS.bountyDays  ↔ bounty.js   轮换阈值 `today - p.bounties.day > 2`（+1 即天数）
+ *   FACTS.sellRate    ↔ shop.js     回收折价 base * 0.45（45 → 「四成五」）
+ * ====================================================================== */
+{
+  const read = p => fs.readFileSync(path.join(ROOT, p), 'utf8').replace(/\r\n/g, '\n');
+  const uiSrc = read('js/ui/ui.js');
+  const fact = (k, re) => { const m = uiSrc.match(re); if (!m) { console.error(`✗ FACTS.${k} 缺失或形态漂移（UI.FACTS 应为文案单源）`); bad = true; return null; } return m[1]; };
+  const cap = fact('offlineCap', /offlineCap:\s*(\d+)/);
+  const bdays = fact('bountyDays', /bountyDays:\s*(\d+)/);
+  const sellTxt = fact('sellRate', /sellRate:\s*'([^']+)'/);
+  const CN = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+  const cnRate = pct => (pct < 10 ? `${CN[pct]}成` : (pct % 10 === 0 ? `${CN[pct / 10]}成` : `${CN[Math.floor(pct / 10)]}成五`));
+  if (cap != null) {
+    const capImpl = (read('js/game.js').match(/Math\.min\((\d+),/) || [])[1];
+    if (capImpl != null && Number(cap) !== Number(capImpl)) {
+      console.error(`✗ 文案漂移: FACTS.offlineCap=${cap} ≠ 离线上限实现 ${capImpl}（js/game.js）`); bad = true;
+    }
+  }
+  if (bdays != null) {
+    const bountyImpl = (read('js/systems/bounty.js').match(/today\s*-\s*p\.bounties\.day\s*>\s*(\d+)/) || [])[1];
+    if (bountyImpl != null && Number(bdays) !== Number(bountyImpl) + 1) {
+      console.error(`✗ 文案漂移: FACTS.bountyDays=${bdays} ≠ 悬赏轮换阈值 ${bountyImpl}+1（bounty.js）`); bad = true;
+    }
+  }
+  if (sellTxt != null) {
+    const sellImpl = (read('js/systems/shop.js').match(/base\s*\*\s*0\.(\d+)/) || [])[1];
+    if (sellImpl != null && sellTxt !== cnRate(Number(sellImpl))) {
+      console.error(`✗ 文案漂移: FACTS.sellRate='${sellTxt}' ≠ 回收折价 0.${sellImpl}（shop.js，应作「${cnRate(Number(sellImpl))}」）`); bad = true;
+    }
+  }
+}
+
 if (bad) process.exit(1);
-console.log(`✅ 动作路由对账通过：静态入口 ${used.size} 个 · 处理器 ${defined.size} 个 · 零漂移`);
+console.log(`✅ 动作路由对账通过：静态入口 ${used.size} 个 · 处理器 ${defined.size} 个 · 零漂移 · FACTS 文案-常量三点对齐`);

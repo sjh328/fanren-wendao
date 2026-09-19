@@ -121,6 +121,10 @@ const Story = {
   async choose(i) {
     const c = this.cur;
     if (!c) return;
+    // v36（E199）：温书态抉择/细察一律只读——原无守卫，重读每遍重发细察气运（+2/遍）、
+    // 重演 pick() 结算（c2_end 拓印→感悟+5+上古碎片等 24+ 段可无限刷、碎片合本命无上限）
+    // 并改写 recordChoice/setFlag 抉择史（E135 同族第 4 处漏网，v33 A2 抉择因果网被污染）
+    if (c.readonly) return;
     const sc = c.scenes[c.idx];
     const opt = sc.options[i];
     if (!opt) return;
@@ -301,6 +305,26 @@ const Story = {
       // v21：抉择卡升级——甲/乙/丙编号、前尘所选标记（回顾重读时）
       const SEQ = ['甲', '乙', '丙', '丁'];
       const prevChoice = this.choiceOf(c.id);
+      const prevOpt = sc.options.find(o => o.value === prevChoice);
+      if (c.readonly) {
+        // v36（E199）：温书态纯文本——选项保留列表排版但去按钮化（无 data-action，不可再点），
+        // 「前尘所选」改一行说明；细察卡按当年旗标直接展示线索文本——配合 choose() 守卫，
+        // 重读不再重发气运/重演结算/改写抉择史
+        const clue = sc.t === 'investigate' && (sc.win || sc.lose)
+          ? ((sc.flag && this.hasFlag(sc.flag) ? (sc.win || sc.lose) : (sc.lose || sc.win)) || [])
+            .map(t => t.split('\n').map(x => `<p class="story-p">${x}</p>`).join('')).join('')
+          : '';
+        body = `
+      <div class="story-text story-choice-lead">${sc.t === 'investigate' ? '「细察」' : ''}${sc.text}</div>
+      <div class="story-choices">${sc.options.map((o, i) =>
+        `<div class="story-opt ${prevChoice === o.value ? 'story-opt-prev' : ''}">
+          <span class="story-opt-seq">${SEQ[i] || i + 1}</span>
+          <span class="story-opt-text">${o.text}</span>
+        </div>`).join('')}</div>
+      ${clue}
+      ${prevOpt ? `<div class="story-choice-note">· 前尘所选：${prevOpt.text}</div>` : ''}
+      <div class="story-choice-note">· 温书回看——前尘抉择已成定局，不再改写因果。</div>`;
+      } else {
       body = `
       <div class="story-text story-choice-lead">${sc.t === 'investigate' ? '「细察」' : ''}${sc.text}</div>
       <div class="story-choices">${sc.options.map((o, i) =>
@@ -310,6 +334,7 @@ const Story = {
           ${prevChoice === o.value ? '<span class="story-opt-tag">前尘所选</span>' : ''}
         </button>`).join('')}</div>
       <div class="story-choice-note">· 抉择即因果——此念将记入问道录，并影响日后际遇。</div>`;
+      }
     } else if (sc.t === 'figure') {
       // v19 剧情大图：关键章人物横幅（chr: '@c_xxx'，art: 底衬题词）
       const chr = GameData.char(sc.chr || '');
@@ -351,11 +376,11 @@ const Story = {
     box.innerHTML = `
       ${c.title ? `<div class="story-chapter">${Utils.esc(c.title)}</div>` : ''}
       <div class="story-body">${body}</div>
-      ${sc.t === 'choice' || sc.t === 'battle' ? '' : `<div class="story-foot">
+      ${!c.readonly && (sc.t === 'choice' || sc.t === 'battle') ? '' : `<div class="story-foot">
         <span class="story-page">${c.idx + 1} / ${c.scenes.length}</span>
         <span style="display:flex;gap:8px;align-items:center">
           ${c.readonly ? '' : `<button class="btn btn-sm" data-action="story-auto">${this._auto ? '⏸ 自动中' : '▶ 自动'}</button><button class="btn btn-sm" data-action="story-skip" title="快速翻至章末，抉择与战斗处自停">⏭ 跳过本章</button>`}
-          <button class="btn btn-primary" data-action="story-next">${c.readonly ? '合 上' : (last ? '终 ✦' : '继 续 ▸')}</button>
+          <button class="btn btn-primary" data-action="story-next">${c.readonly ? (last ? '合 上' : '继 续 ▸') : (last ? '终 ✦' : '继 续 ▸')}</button>
         </span>
       </div>`}
       ${c.readonly ? '<button class="story-close-x" data-action="story-close" title="关闭">✕</button>' : ''}`;

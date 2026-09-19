@@ -195,7 +195,7 @@ const GameData = {
     pill_juqi:     { name: '聚气丹',   type: 'pill', grade: 0, price: 130,     desc: '凝聚散逸灵气，服之可得六十点修为。', use: { exp: 60 }, poison: 6 },
     pill_ningqi:   { name: '凝气丹',   type: 'pill', grade: 1, price: 220,    desc: '筑基修士常备丹药，服之可得二百四十点修为。', use: { exp: 240 }, poison: 14 },
     pill_peiyuan:  { name: '培元丹',   type: 'pill', grade: 1, price: 1100,    desc: '温养元气，服之可得六百点修为。', use: { exp: 600 }, poison: 25 },
-    pill_pojing:   { name: '破境丹',   type: 'pill', grade: 2, price: 2600,   desc: '药力霸道，服之可得两千点修为，丹毒颇深。', use: { exp: 2000 }, poison: 45 },
+    pill_pojing:   { name: '破境丹',   type: 'pill', grade: 2, price: 1300,   desc: '药力霸道，服之可得两千点修为，丹毒颇深。', use: { exp: 2000 }, poison: 45 },   // v36（E222）：2600→1300——原单价 1.30 完爆同配方 posha 0.56 两倍余，两品成死品；现 0.65 落 ±20% 带内保留「破煞更优」梯度（丹毒 45/2000=0.0225 高于 posha 0.010 是「药力霸道」风味，毒高价低构成取舍）
     pill_jiuzhuan: { name: '九转金丹', type: 'pill', grade: 3, price: 24000,  desc: '丹中极品，服之得一万五千点修为。', use: { exp: 15000 }, poison: 60 },
     pill_taichu:   { name: '太初神丹', type: 'pill', grade: 4, price: 210000,  desc: '蕴含太初之气，服之得八万点修为。', use: { exp: 80000 }, poison: 75 },
     pill_zaohua:   { name: '造化仙丹', type: 'pill', grade: 5, price: 350000, desc: '夺天地造化，服之得四十万点修为。', use: { exp: 400000 }, poison: 90 },
@@ -226,7 +226,7 @@ const GameData = {
     pill_yanshou3: { name: '天元续命丹', type: 'pill', grade: 5, price: 500000, desc: '夺天地一线生机，寿元 +50 年。', use: { life: 50 }, poison: 25 },
     pill_dujie:    { name: '渡劫丹',   type: 'pill', grade: 4, price: 400000, desc: '以雷晶为引淬炼道基——下次渡劫成算 +5（服后印记留于识海，一丹一劫）。', use: { dujie: 1 }, poison: 12 },
     m_qipei:       { name: '器胚残片', type: 'material', tier: 2, price: 0, desc: '炼器炸炉后残留的器胚碎块——集齐六片，可在炼器坊抵一次炸炉之厄（六片抵半份材料）。' },
-    pill_tianyuan: { name: '天元造化丹', type: 'pill', grade: 5, price: 280000, desc: '丹道至高造化，服之得廿五万点修为。', use: { exp: 250000 }, poison: 85 },
+    pill_tianyuan: { name: '天元造化丹', type: 'pill', grade: 5, price: 280000, desc: '丹道至高造化，服之得卅二万点修为。', use: { exp: 320000 }, poison: 85 },   // v36（E222）：exp 250000→320000——原单价 1.12 被 zaohua 三维压制成死品；现 0.875 与 zaohua 持平（毒 85<90、上架晚一境 minRealm 7），定位「圆满期收官大丹」
     fruit_tianji:  { name: '天机果', type: 'pill', grade: 4, price: 52000, desc: '天地灵机所凝的异果，服之可令一项先天属性突破十点桎梏（至多十二点）。', use: { stat12: 1 }, poison: 30 },
     /* ---- 符箓（符修可画可售，战斗中人人可祭出）---- */
     tal_huoshe: { name: '火蛇符', type: 'talisman', grade: 1, price: 22, ecoPrice: true, power: 2.2, desc: '朱砂勾火蛇之形，掷出化焰伤敌（战斗中造成约2.2倍攻击伤害，符光必中）。', fkind: 'damage' },
@@ -335,8 +335,8 @@ const GameData = {
     seed_lingcao:  { name: '灵草种',   type: 'seed', grade: 1, price: 30,    crop: 'm_lingcao',  days: 10, desc: '播入灵田，十日可收【百年灵草】。' },
     seed_lingzhi:  { name: '灵芝种',   type: 'seed', grade: 2, price: 220,   crop: 'm_lingzhi',  days: 25, desc: '播入灵田，廿五日可收【千年灵芝】。' },
     seed_bingpo:   { name: '冰魄花种', type: 'seed', grade: 2, price: 2600,  crop: 'm_bingpo',   days: 30, desc: '播入灵田，三十日可收【冰魄石】。' },
-    seed_xuelian:  { name: '雪莲种',   type: 'seed', grade: 3, price: 1800,  crop: 'm_xuelian',  days: 45, desc: '播入灵田，四十五日可收【万年雪莲】。' },
-    seed_lianhun:  { name: '炼魂花种', type: 'seed', grade: 3, price: 2200,  crop: 'm_lianhun',  days: 50, desc: '播入灵田，五十日可收【炼魂石】。' },
+    seed_xuelian:  { name: '雪莲种',   type: 'seed', grade: 3, price: 1800,  crop: 'm_xuelian',  days: 19, desc: '播入灵田，十九日可收【万年雪莲】。' },   // v36（E223）：45→19——日均 431.6 落 grade2 冰魄 413.3 与 grade4 星辉 1150.0 之间（原 45 日日均 182 仅为 grade2 的 44%，升档种田反亏过半效率）
+    seed_lianhun:  { name: '炼魂花种', type: 'seed', grade: 3, price: 2200,  crop: 'm_lianhun',  days: 21, desc: '播入灵田，廿一日可收【炼魂石】。' },   // v36（E223）：50→21——日均 466.7 与雪莲同档且 > 雪莲（与种子价 2200>1800 同序）；只压天数不作物价（八张配方材料成本零外溢）
     seed_xingchen: { name: '星辉草种', type: 'seed', grade: 4, price: 15000, crop: 'm_xingchen', days: 60, desc: '播入灵田，六十日可收【星辰砂】。' },
     /* ---- v3 秘境专属：失传功法 / 上古法宝碎片 / 本命法宝 / 派系信物 ---- */
     gf_wangchen:{ name: '忘尘剑意',   type: 'gongfa', gtype: 'attack',  grade: 4, price: 0, desc: '秘境失传剑意，一剑忘尘，物我两断。', bonus: { atkPct: [16, 7], crit: [3, 1.5] }, skill: { tag: '剑',  name: '忘尘一剑', kind: 'damage', power: 3.3, mp: 28, desc: '忘却尘俗的一剑，快过天雷' } },
@@ -963,14 +963,14 @@ const GameData = {
     { id: 'n24', name: '燕回时', title: '归雁剑侠',   sect: null,      talent: 4, realm: 1, kin: [],      temper: '侠气', desc: '路见不平必拔刀的游侠剑客，宁折不弯。' },
   ],
 
-  /* ---------- §24 宗门长老派系（站队得专属资源，敌对派系派高危任务） ---------- */
+  /* ---------- §24 宗门长老派系（站队得专属资源，敌对派系派高危任务；v36 E226：三派 perk 与七五折秘藏——站队自此有取舍） ---------- */
   SECT_FACTIONS: [
-    { id: 'tianshu',  name: '天枢殿', motto: '征伐之道，以战养战', desc: '主战长老一脉，崇尚以杀止杀。',
-      giftText: '入门赐灵石三百与【天枢战纹】信物', gift: { stones: 300, item: 'z_tianshu' }, exclusive: [{ item: 'gf_tumo', cost: 1800 }] },
-    { id: 'danding',  name: '丹鼎阁', motto: '丹火不熄，道火不灭', desc: '执掌丹房的长老一脉，丹药管够。',
+    { id: 'tianshu',  name: '天枢殿', motto: '征伐之道，以战养战', desc: '主战长老一脉，崇尚以杀止杀。', perkText: '每战获胜修为 +10%',
+      giftText: '入门赐灵石三百与【天枢战纹】信物', gift: { stones: 300, item: 'z_tianshu' }, exclusive: [{ item: 'gf_tumo', cost: 1900 }] },
+    { id: 'danding',  name: '丹鼎阁', motto: '丹火不熄，道火不灭', desc: '执掌丹房的长老一脉，丹药管够。', perkText: '炼丹成丹率 +8%',
       giftText: '入门赐【破境丹】×2 与【丹心玉佩】信物', gift: { stones: 100, item: 'z_danxin', extra: { pill_pojing: 2 } }, exclusive: [{ item: 'pill_jiuzhuan', cost: 900 }] },
-    { id: 'cangjing', name: '藏经楼', motto: '典藏万法，开卷有益', desc: '看守藏经楼的长老一脉，典籍为尊。',
-      giftText: '入门赐一部攻防典籍与【藏经阁印】信物', gift: { stones: 100, item: 'z_cangjing', gongfa: ['gf_lieyang', 'gf_xuantian'] }, exclusive: [{ item: 'gf_dayan', cost: 1800 }] },
+    { id: 'cangjing', name: '藏经楼', motto: '典藏万法，开卷有益', desc: '看守藏经楼的长老一脉，典籍为尊。', perkText: '参悟所得 +15%',
+      giftText: '入门赐一部攻防典籍与【藏经阁印】信物', gift: { stones: 100, item: 'z_cangjing', gongfa: ['gf_lieyang', 'gf_xuantian'] }, exclusive: [{ item: 'gf_dayan', cost: 1900 }] },
   ],
 
   /* ---------- §25 秘境（每个大境界一座，肉鸽式节点探索） ---------- */

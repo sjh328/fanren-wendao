@@ -367,11 +367,18 @@ const Tribulation = {
       await Utils.sleep(900);
       document.getElementById('tribulation-modal').classList.add('hidden');
       this.state = null;
-      p.pendingDao = true; // 初入筑基（或转世重修）叩问大道；若遇偷袭则战后开启
-      Game.afterAction();
+      // v36（E201）：渡劫失利偷袭段对齐 dungeon E59 时序（E143 同族第 12 处）——原 pendingDao
+      // 与 afterAction 先行、偷袭 400ms 后才开战：叩问弹窗与节庆在偷袭开打前弹出相撞，且
+      // pendingDao 被 game.js 叩问闸门提前消费（下方注释自述「若遇偷袭则战后开启」零实现）。
+      // 现开战在前、afterAction 在后：偷袭战 end() 收尾链自然承接节庆与叩问
       if (ambushNpc) {
+        p.pendingDao = true;
         await Utils.sleep(400);
         Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambushNpc), npcId: ambushNpc, mode: 'hunt', ambush: true, mapName: '渡劫之地' });
+        Game.afterAction();
+      } else {
+        p.pendingDao = true;
+        Game.afterAction();
       }
     }
   },

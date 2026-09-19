@@ -99,7 +99,10 @@ const Utils = {
 const Daily = {
   resetIfNew(p, key) {
     const t = Math.floor(p.day || 0);
-    if ((p[key] || -1) === t) return false;
+    // v36（E203）：严格比较——原式以 (p[key] || -1) 兜底比对，第 0 日恒失配（0||-1 → -1），同日反复判新
+    // （E175 同族 coercion 陷阱残留在单源地基）；未定义键自然判新一日。消费方核验：auction 盖戳
+    // 第 0 日由「反复盖」变「盖一次」无副作用、xian 闸门真值在飞升后（day 巨大）行为不变
+    if (p[key] === t) return false;
     p[key] = t;
     return true;
   },

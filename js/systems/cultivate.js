@@ -12,7 +12,7 @@ const Cultivate = {
     if (p.dao === 'array' && DaoSys.tierLevel(p) >= 2) g *= 1.1;   // v10 阵道六境·聚灵境
     if (typeof Art !== 'undefined' && Art.seasonOf(p) === 0) g *= 1.1;   // v20 孟春灵潮：修炼 +10%
     if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) g *= 1.2;   // v20 天下大事·灵潮
-    if (p.rushDay === Math.floor(p.day || 0)) g *= 1.5;   // v20 聚灵加速
+    if (p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < 3) g *= 1.5;   // v36（E218）：聚灵 3 游戏日窗口——点燃后 3 日内所有修炼 ×1.5（原仅点燃当日；闭关开局一次结算恰被窗口整段覆盖，普通修炼/挂机恰覆盖点燃后一轮）
     return g;
   },
   /** v20 闭关效率：隆冬蛰伏 +10% */

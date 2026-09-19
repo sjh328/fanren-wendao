@@ -46,9 +46,10 @@ const TowerSys = {
 
   /** v30 塔绩兑换所：塔绩 = p.counters.towerWins（累计胜层），兑换扣除；最高层纪录不受影响 */
   REDEEMS: [
-    { id: 'stones', name: '塔灵纳财', cost: 15, desc: '灵石 120×境界经济' },
+    { id: 'stones', name: '塔灵纳财', cost: 15, desc: '灵石 120×境界经济（日限两次）' },
     { id: 'ore',    name: '玄铁一匣', cost: 20, desc: '玄铁矿 ×8' },
     { id: 'pill',   name: '培元丹一炉', cost: 30, desc: '培元丹 ×1' },
+    { id: 'qihun', name: '器魂五枚', cost: 40, desc: '器魂 ×5——塔中金石之精，淬器之魂' },
     { id: 'leijing', name: '雷晶核（塔心所藏）', cost: 60, desc: '雷晶核 ×1——渡劫丹主材' },
   ],
   /** 塔绩兑换实耗（v31 E10：雷晶核等渡劫主材随境界加价 + 日限一枚——原恒 60 塔绩，后期约两日白拿一枚） */
@@ -63,6 +64,14 @@ const TowerSys = {
       this.syncToday(p);
       if ((p.tower.today.leijingDay || -1) === today) { UI.toast('塔心的雷晶核今日已被请走——塔灵需要时间再凝一枚'); return; }
     }
+    if (r.id === 'stones') {
+      const today = Math.floor(p.day || 0);
+      this.syncToday(p);
+      // v36（E221）：纳财日限 2 次/日——v30 层奖日额度（300×eco/日）在兑换侧被原样绕开：
+      // 深爬每胜层 +1 绩线性变现 8×eco/层且不占游戏日。日限两次后 r9 深爬 30 层×2 次
+      // 日灵石进账 240×eco ≤ 层奖日额度 300×eco 同量级，口子封死
+      if (p.tower.today.stonesRedeemDay === today && (p.tower.today.stonesRedeemN || 0) >= 2) { UI.toast('塔灵今日的纳财已尽（日限两次）——塔库也要细水长流，明日再来'); return; }
+    }
     if ((p.counters.towerWins || 0) < cost) { UI.toast('塔绩不足'); return; }
     const ok = await UI.popup({
       title: `塔绩兑换 · ${r.name}`,
@@ -73,9 +82,14 @@ const TowerSys = {
     if ((p.counters.towerWins || 0) < cost) { UI.toast('塔绩不足'); return; }
     p.counters.towerWins -= cost;
     if (r.id === 'leijing') p.tower.today.leijingDay = Math.floor(p.day || 0);
-    if (r.id === 'stones') { const s = Math.round(120 * GameData.stoneEco(p.realmIdx)); Bag.addStones(s); Log.add(`塔灵倾囊——灵石 +${Utils.fmtNum(s)}。`, 'gain'); }
+    if (r.id === 'stones') {
+      p.tower.today.stonesRedeemDay = Math.floor(p.day || 0);
+      p.tower.today.stonesRedeemN = (p.tower.today.stonesRedeemN || 0) + 1;
+      const s = Math.round(120 * GameData.stoneEco(p.realmIdx)); Bag.addStones(s); Log.add(`塔灵倾囊——灵石 +${Utils.fmtNum(s)}。`, 'gain');
+    }
     else if (r.id === 'ore') { Bag.addItem('m_xuantie', 8); Log.add('塔灵奉上玄铁矿 ×8——塔基深处所凝。', 'gain'); }
     else if (r.id === 'pill') { Bag.addItem('pill_peiyuan', 1); Log.add('塔灵奉上培元丹 ×1——塔中丹房的陈年存货。', 'gain'); }
+    else if (r.id === 'qihun') { p.qihun = (p.qihun || 0) + 5; Log.add('塔灵奉上<b>器魂</b> ×5——塔中金石之精，淬器之魂。', 'gain'); }   // v36（E221）：与 sect.js 兑换 special:'qihun' 同款发放路径（p.qihun 直加）
     else if (r.id === 'leijing') { Bag.addItem('m_leijing', 1); Log.add('塔心深处取出一枚<b>雷晶核</b>——塔灵言道：「此物应劫而生，渡劫丹的主材。」', 'gain'); }
     UI.renderAll();
     Game.afterAction();
@@ -84,7 +98,9 @@ const TowerSys = {
   /** 塔状态自愈结构（老档无缝） */
   state(p) {
     if (!p.tower) p.tower = { best: 0, today: { day: 0, used: 0, bought: 0 }, run: null };
-    if (!p.tower.today || typeof p.tower.today.day !== 'number') p.tower.today = { day: 0, used: 0, bought: 0 };
+    if (!p.tower.today || typeof p.tower.today.day !== 'number') p.tower.today = { day: 0, used: 0, bought: 0, stonesRedeemDay: 0, stonesRedeemN: 0 };
+    if (p.tower.today.stonesRedeemN == null) p.tower.today.stonesRedeemN = 0;   // v36（E221）：老档自愈补默认
+    if (p.tower.today.stonesRedeemDay == null) p.tower.today.stonesRedeemDay = 0;
     return p.tower;
   },
   syncToday(p) {
@@ -92,7 +108,8 @@ const TowerSys = {
     const d = Math.floor(p.day || 0);
     // v31 修瑕：层奖灵石日额度同随换日清零——此前只清 used/bought，历史层奖累计达上限后每日层奖恒 0，
     // 与「归于明日」文案相反
-    if (t.today.day !== d) { t.today.day = d; t.today.used = 0; t.today.bought = 0; t.today.stones = 0; }
+    // v36（E221）：纳财次数随换日清零（stonesRedeemDay 印章由 redeem 兑换时重盖）
+    if (t.today.day !== d) { t.today.day = d; t.today.used = 0; t.today.bought = 0; t.today.stones = 0; t.today.stonesRedeemN = 0; }
   },
   leftToday(p) {
     const t = this.state(p);
@@ -223,6 +240,16 @@ const TowerSys = {
     }
   },
 
+  /** v36（E200）：塔内续层/塔内弹窗对节庆（及一切进行中弹层、战斗）挂起等待——轮询「无弹窗且无战斗」
+   *  再放行，超时放行防死锁。E143 同族第 11 处：end() 收尾链的 afterAction 此刻两条件皆空，
+   *  节庆立即 fire（旗标前置不重试），随后宝箱/奇遇/祝福/跳层赌约任一弹窗开启都会把未决节庆
+   *  静默吞掉（除夕年兽被按「安分守岁」结算） */
+  async waitIdle(timeoutMs = 10000) {
+    const t0 = Date.now();
+    while ((UI._popupResolve || Battle.active) && Date.now() - t0 < timeoutMs) await Utils.sleep(50);
+    if (UI._popupResolve || Battle.active) Log.add('塔中异象未歇——续层不再苦等，机会随后自会接上。', 'info');
+  },
+
   /** 胜利结算（Battle.victory 的 ctx.tower 分支调用） */
   async onVictory(B) {
     const p = Game.player;
@@ -258,7 +285,8 @@ const TowerSys = {
     const floor = run.floor;
     run.floor++;
     Log.add(`登天塔第 ${floor} 层已克——层奖：修为 +${Utils.fmtNum(exp)}、灵石 +${Utils.fmtNum(stones)}${healPct > 0 ? `，气血回复 ${Math.round(healPct * 100)}%` : ''}。`, 'gain');
-    Game.afterAction();
+    // v36（E200）：此处重复 afterAction 删除——battle.js 塔分支先 end(false)，其收尾已跑 afterAction
+    // （E62 同族冗余），重复日结会让节庆检查/日结双跑
     // 每 5 层：宝箱；每 7 层：奇遇层；每 3 层：祝福三选一；其余层自动续层
     // v31 修瑕（E7）：多重合层并列触发——原 else-if 串联曾让 15/30/45 层宝箱吞掉祝福、35/70 层吞掉奇遇；
     // 仅最后一环推进层，任一环「离塔」即中止后续环节
@@ -267,8 +295,9 @@ const TowerSys = {
     if (floor % 7 === 0) steps.push('event');
     if (floor % 3 === 0) steps.push('bless');
     let quitAll = false;
-    if (!steps.length) { await Battle.wait(900); this.nextFloor(); }
+    if (!steps.length) { await Battle.wait(900); await this.waitIdle(); this.nextFloor(); }   // v36（E200）：自动续层前挂起至节庆了结
     else {
+      await this.waitIdle();   // v36（E200）：宝箱/奇遇/祝福三步弹窗开启前挂起——防单例弹窗强释吞掉未决节庆
       for (let i = 0; i < steps.length; i++) {
         const advance = i === steps.length - 1;
         const s = steps[i];
@@ -283,23 +312,24 @@ const TowerSys = {
       // 跳进再下一层——被跳层真正一无所获，层奖/纪录/文案三者归位；拒绝则照常作战（v32 体验不变）。
       // 兜底：若该层已被打完（自动战斗等时机已过），赌约作罢不追溯。
       if (!quitAll && run && run.floor < 90 && Utils.chance(15)) {
+        await this.waitIdle();   // v36（E200）：赌约弹窗构造前挂起——防赌约弹窗开启本身吞掉未决节庆
         const skipTarget = run.floor;   // 即将开打/刚开打的下一层
         let settled = false;
         UI.popup({
           title: '✦ 登天塔 · 跳层赌约',
-          html: `塔中忽起异风——下一层的守影气息暴涨。<br><span class="tip-line">· 赌约：跳过第 ${skipTarget} 层（放弃其层奖），直上第 ${skipTarget + 1} 层；此后守影攻击 +25%（本次登塔内）。塔绩 +1。</span>`,
+          html: `塔中忽起异风——下一层的守影气息暴涨。<br><span class="tip-line">· 赌约：跳过第 ${skipTarget} 层（放弃其层奖），直上第 ${skipTarget + 1} 层；此后守影攻击渐凶——每次赌约 +25%，可叠加（本次登塔内）。塔绩 +1。</span>`,
           options: [{ text: '掷下赌约 · 直上二层', value: true, primary: true }, { text: '稳步登楼', value: false }],
-        }).then(ok2 => {
+        }).then(async ok2 => {
           if (settled || !ok2) return;
           settled = true;
+          await this.waitIdle();   // v36（E200）：应约时若有节庆战斗/弹窗未了，挂起至了结再走校验与续层
           const B = Battle.active;
           if (!run || !B || B.over || !B.ctx || B.ctx.mapName !== `登天塔 · 第 ${skipTarget} 层`) {
             Log.add('塔风已散——这一层已在脚下，赌约错过了兑现的时机。', 'info');
             return;
           }
           run.floor += 1;   // 连同常规 +1 合计跳两层
-          run.risk = (run.risk || 0) + 1;
-          run.riskAtk = 1.25;
+          run.riskAtk = (run.riskAtk || 1) * 1.25;   // v36（E211）：累乘——原覆盖赋值使多次赌约仍恒 +25%；run.risk 死字段（全工程唯一读写点）删除
           p.counters.towerWins = (p.counters.towerWins || 0) + 1;
           Log.add('你应下赌约——塔风呼啸，石阶在脚下连退两层！（塔绩 +1，此后守影更凶）', 'event');
           Battle.end();   // 作废被跳层（未出手，零损耗）

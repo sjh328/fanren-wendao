@@ -102,6 +102,18 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA13 剧情键盘守卫：不越过剧情战/细察（E134 P1）') : fail('SA13 键盘守卫', '');
   story.includes('if (c.readonly) return;') && story.includes('此战已成往事')
     ? pass('SA14 重读剧情不可触发真实战斗（E135 P1）') : fail('SA14 重读战斗', '');
+  {
+    const chooseIdx = story.indexOf('async choose(i)');
+    const guardIdx = chooseIdx >= 0 ? story.indexOf('if (c.readonly) return;', chooseIdx) : -1;
+    const fortIdx = chooseIdx >= 0 ? story.indexOf('KarmaSys.addFortune(2)', chooseIdx) : -1;
+    const footRo = story.indexOf("!c.readonly && (sc.t === 'choice' || sc.t === 'battle') ? '' :") >= 0;
+    const roText = story.includes('温书回看') && story.includes('<div class="story-opt ')
+      && story.includes('前尘所选：') && story.includes('this.hasFlag(sc.flag) ? (sc.win || sc.lose)');
+    const enterRo = gamejs.includes("Story.cur.readonly || (sc.t !== 'choice'");
+    guardIdx > chooseIdx && guardIdx < fortIdx && footRo && roText && enterRo
+      ? pass('SA14b 温书模式四收口：choose 守卫先于发奖 / 纯文本卡去按钮化 / foot 条件式 / Enter 放行（v36 E199）')
+      : fail('SA14b 温书收口', `${guardIdx}/${fortIdx}/${footRo}/${roText}/${enterRo}`);
+  }
   ui.includes("    const sellable = Object.keys(p.bag)\n      .filter(id => GameData.ITEMS[id] && (GameData.ITEMS[id].price || 0) > 0)")
     && ui.includes("filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'gongfa')")
     ? pass('SA15 万宝阁/功法页脏 id 判空（E136 P1）') : fail('SA15 脏 id', '');
@@ -178,7 +190,8 @@ console.log('===== SA 源码静态组 =====');
   cave.includes('careCore(p) {') && guide.includes('CaveSys.careCore(p)')
     ? pass('SA39 一键行权吸收一键照料·共用 careCore（U3）') : fail('SA39 日常归一', '');
   guide.includes("今日聚灵阵尚未点燃") && guide.includes("p._autoRush === 'always'")
-    ? pass('SA40 聚灵扣款明示+不再询问记忆（U3）') : fail('SA40 聚灵明示', '');
+    && guide.includes("p._autoRushSkipDay !== today") && guide.includes("else if (c === 'skip') { p._autoRushSkipDay = today; }")
+    ? pass('SA40 聚灵扣款明示+不再询问记忆+单日跳过三态（U3/E205）') : fail('SA40 聚灵明示', '');
   ui.includes('灵田浇水') && ui.includes('灵兽抚摸') && ui.includes('虫害')
     ? pass('SA41 今日修行卡补浇水/抚兽/除虫行（U3）') : fail('SA41 修行卡', '');
   cave.includes('if (remaining <= 0) continue;   // 已熟之田无需雨露')

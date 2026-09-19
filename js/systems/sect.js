@@ -196,7 +196,7 @@ const SectSys = {
       Game.afterAction();
       return;
     }
-    Battle.start(t.target, { mapName: '宗门生死状', sectDanger: taskIdx });
+    Battle.start(t.target, { mapName: '宗门生死状', sectDanger: taskIdx, dangerTask: true });   // v36（E226）：dangerTask 旗标——战败侧追加真实代价（处方的 explore.js 入口实锚为生死状接取开战处：生死状是「接了才生效」的契约，野外偶遇同名精英不应触发）
     Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
   },
   onDangerWin(taskIdx) {
@@ -243,7 +243,7 @@ const SectSys = {
     if (!f) return;
     const ok = await UI.popup({
       title: '长老派系 · 站队',
-      html: `确定依附 <b>${f.name}</b> 吗？<br>${f.desc}<br>${f.giftText}。<br><span class="neg">站队之后，敌对派系将给你派发高危任务，且不可改换门庭。</span>`,
+      html: `确定依附 <b>${f.name}</b> 吗？<br>${f.desc}<br>${f.perkText ? `派系传承之利：${f.perkText}；可在长老处七五折兑换派系秘藏。<br>` : ''}${f.giftText}。<br><span class="neg">站队之后，敌对派系将给你派发高危生死状——战败折损甚重，且不可改换门庭。</span>`,
       options: [{ text: '执弟子礼', value: true, primary: true }, { text: '再观望观望', value: false }],
     });
     if (!ok) return;
@@ -347,11 +347,14 @@ const SectSys = {
     }
   },
 
-  /* ---------- v22 宗门大比：每五年一届，三轮车轮战，胜负皆有名次 ---------- */
-  TOURNEY_EVERY: 5,
+  /* ---------- v22 宗门大比：每三年一届，三轮车轮战，胜负皆有名次 ---------- */
+  // v36（E213）：TOURNEY_EVERY 5→3——实玩约 3 年至飞升，5 年一届使首届大比落到飞升之后、
+  // 整链成准死内容；3 年一届保证凡间一世至少一届、首届落在金丹前后 day≈730~1095；
+  // 仙界长岁照常供应。30 日过期规则保留（:360-363）
+  TOURNEY_EVERY: 3,
   TOURNEY_ROUNDS: ['首轮', '次轮', '决胜轮'],
   TOURNEY_FOES: ['同门师兄', '同门师姐', '首座大师兄'],
-  /** 行动收尾钩子：每逢五年（游戏年）开一届大比 */
+  /** 行动收尾钩子：每逢三年（游戏年）开一届大比 */
   tourneyCheck(p) {
     if (!p.sect) return;
     const y = WorldSys.year(p);

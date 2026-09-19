@@ -95,8 +95,10 @@ const Game = {
           // modal 不清 cur），Enter 可把 idx 越过 battle 场景直接 finish，胜负旗标（k3/k6/k8/k9 等）
           // 永久丢失；investigate（细察）同样可被越过，四枚线索旗标静默蒸发。守卫与 skip() 自停集合对齐
           if (Battle.active) return;
+          // v36（E199）：上守卫仅对非 readonly 生效——温书态互动场景已纯文本化（E199 ②③），
+          // Enter 恒可翻页，否则重读的抉择/细察/战卡页键盘端同型卡死
           const sc = Story.cur && Story.cur.scenes[Story.cur.idx];
-          if (!sc || (sc.t !== 'choice' && sc.t !== 'battle' && sc.t !== 'investigate')) { Story.next(); e.preventDefault(); }
+          if (!sc || Story.cur.readonly || (sc.t !== 'choice' && sc.t !== 'battle' && sc.t !== 'investigate')) { Story.next(); e.preventDefault(); }
         }
         return;
       }
@@ -300,7 +302,7 @@ const Game = {
     }
     if (springOn && !p.dead) Log.add('【灵泉】离线的日子里，洞府灵泉照常日日涌出灵石，皆已收入储物袋。', 'gain');
     if (offlineExp > 0) {
-      Log.add(`离山的日子你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（离线修行按六成效率折算，共 ${realDays} 日）。`, 'gain');
+      Log.add(`离山的日子你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（按普通修炼六成效率折算，不计闭关加成，共 ${realDays} 日）。`, 'gain');   // v36（E217）：口径如实——闭关流实得约 37% 的落差从暗亏变明示（折算基数维持普通修炼，E217 提案明确不采纳）
     }
     // v34（E1）：离线小结——回家一份四行账的「仪式」，收益不再藏在默认折叠的日志红点后
     if (!p.dead && realDays >= 1 && (offlineExp > 0 || aggSnap.spring || aggSnap.disciple || aggSnap.xianVisit)) {
@@ -542,7 +544,7 @@ const Game = {
     'act-sell-common': () => ShopSys.sellCommon(),
     'act-use-low-pills': () => Bag.autoUseLowPills(),
     /* --- v5 氛围音效面板 --- */
-    'amb-panel': () => { const el = document.getElementById('amb-panel'); if (el) el.classList.toggle('hidden'); },
+    'amb-panel': () => { const el = document.getElementById('amb-panel'); if (el) el.classList.toggle('hidden'); if (typeof Ambience !== 'undefined' && Ambience.syncRushPref) Ambience.syncRushPref(); },   // v36（E205）：打开面板回读聚灵偏好显示值
     /* --- v6 成就图鉴 / 挂机 / 存档导出导入 --- */
     'act-codex': () => UI.achvModal(),
     'act-figures': () => QuestSys.openArchive('figures'),
@@ -727,6 +729,7 @@ const Game = {
     /* --- v13 洞府 / 灵兽 --- */
     'act-cave-up': () => CaveSys.upgrade(),
     'act-spirit-rush': () => CaveSys.spiritRush(),   // v20 聚灵加速
+    'act-wudao': () => Cultivate.wuDao(),   // v36（E219）：今日修行卡悟道行内直达（原确认弹窗保留）
     'act-cave-plant': (d) => CaveSys.plant(Number(d.i)),
     'act-cave-harvest': (d) => CaveSys.harvest(Number(d.i)),
     'act-cave-water': (d) => CaveSys.water(Number(d.i)),

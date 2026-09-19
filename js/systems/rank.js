@@ -39,20 +39,30 @@ const RankSys = {
       const gap = r.power - myPower;
       const gapTxt = r.id === 'me' ? '此即是你'
         : !st || !st.alive ? '' : (gap > 0 ? `高 ${gap} 小层` : gap < 0 ? `低 ${-gap} 小层` : '与你并肩');
+      // v36（E227）：战力对比档位——npcCombatPower（buildEnemy 口径反推）vs Stat.power 同量纲三档
+      let vsTxt = '';
+      if (st && st.alive) {
+        const ratio = NpcSys.npcCombatPower(p, r.id) / Math.max(1, Stat.power(p));
+        vsTxt = (ratio >= 0.9 && ratio <= 1.1) ? '可敌' : (ratio >= 0.7 && ratio <= 1.3) ? '略逊' : '远逊';
+      }
       const w = Math.round(Utils.clamp(r.power / topPower * 100, 5, 100));
       return `
       <div class="rank-row ${r.id === 'me' ? 'me' : ''}">
         <span class="rank-no ${i < 3 ? 'top' + (i + 1) : ''}">${i + 1}</span>
-        <span class="rank-name">${Utils.esc(r.name)}${relTxt ? ` <i class="rank-rel">${relTxt}</i>` : ''}</span>
+        <span class="rank-name">${Utils.esc(r.name)}${relTxt ? ` <i class="rank-rel">${relTxt}</i>` : ''}${vsTxt ? ` <i class="rank-rel">${vsTxt}</i>` : ''}</span>
         <span class="rank-bar"><span style="width:${w}%"></span></span>
         <span class="rank-pow">${GameData.REALM_NAMES[Math.min(9, Math.floor(r.power / 4))]}${GameData.LAYER_NAMES[Utils.clamp(r.power % 4, 0, 3)]}<i class="rank-gap">${gapTxt}</i></span>
       </div>`;
     }).join('');
+    // v36（E227）：距上一位还差 X 小层——登顶前的追赶目标感（境界排序口径不变）
+    const ahead = myIdx > 0 ? rows[myIdx - 1] : null;
+    const chaseTip = ahead ? `<div class="tip-line">· 距上一位 <b>${Utils.esc(ahead.name)}</b> 还差 <b class="hl">${ahead.power - myPower}</b> 小层——境界精进，名次自至。</div>` : '';
     return `
     <div class="card">
       <div class="card-title">✦ 天骄榜 ${top ? '<span class="tag warn">天下第一 · 全属性 +2%</span>' : `<span class="tag">你的排名 · 第 ${myIdx + 1} 位</span>`}</div>
       <div class="card-desc">修行界在世风云修士与你的境界排名（按境界小层排布；殒身者自榜上除名）。登顶者名动天下：全属性 +2%，每日另有气运小赏。</div>
       <div class="tip-line">· 你的综合战力 ⚔ <b>${Utils.fmtNum(Stat.power(p))}</b>（装备/功法/灵兽一应计入）——境界是名次，战力是底气。</div>
+      ${chaseTip}
       <div class="tip-line">· 登天塔本档最佳 <b>第 ${p.counters.towerBest || 0} 层</b>${(typeof Meta !== 'undefined' && Meta.data.towerBest) ? `｜跨世最佳 第 ${Meta.data.towerBest} 层` : ''}——塔中十层，亦是真仙终章的敲门砖。</div>
       <div class="rank-list">${rowsHtml}</div>
     </div>`;

@@ -820,9 +820,10 @@ try {
   const v7 = await page.evaluate(() => ({
     card: !!document.querySelector('#tab-content .daily-card'),
     rows: document.querySelectorAll('#tab-content .daily-row').length,
-    go: [...document.querySelectorAll('#tab-content .daily-card .guide-go')].every(b => (b.dataset.action === 'act-tab' && b.dataset.tab) || b.dataset.action === 'act-sign'),   // v24 求签行内直签
+    // v36（E219/E218）：行内直达动作随卡面扩充——act-wudao 悟道直悟、act-spirit-rush 聚灵直燃
+    go: [...document.querySelectorAll('#tab-content .daily-card .guide-go')].every(b => (b.dataset.action === 'act-tab' && b.dataset.tab) || b.dataset.action === 'act-sign' || b.dataset.action === 'act-spirit-rush' || b.dataset.action === 'act-wudao'),
   }));
-  v7.card && v7.rows >= 4 && v7.go ? pass('V7 今日修行聚合卡（' + v7.rows + ' 事，前往/直签键齐全）') : fail('V7 聚合卡', JSON.stringify(v7));
+  v7.card && v7.rows >= 4 && v7.go ? pass('V7 今日修行聚合卡（' + v7.rows + ' 事，前往/直签/直悟/直燃键齐全）') : fail('V7 聚合卡', JSON.stringify(v7));
 
   // V8 当前建议：每条可带「前往」跳转
   const v8 = await page.evaluate(() => ({
@@ -980,7 +981,7 @@ try {
   const w9 = await page.evaluate(async () => {
     const p = Game.player;
     p.sect = { id: 'qingyun', contrib: 0, faction: null, rank: 'outer', tasks: [], lastTourney: 0, tourney: null };
-    p.day = 365 * 4 + 300;   // WorldSys.year = floor(day/365)+1 = 第 5 年 → 大比开幕
+    p.day = 365 * 2 + 300;   // WorldSys.year = floor(day/365)+1 = 第 3 年 → 大比开幕（v36 E213：三年一届）
     SectSys.tourneyCheck(p);
     const opened = !!p.sect.tourney;
     Game.actions['act-tab']({ tab: 'sect' });

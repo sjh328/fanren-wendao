@@ -141,7 +141,7 @@ const Stat = {
       crit: Utils.clamp(5 + (A.luck + (eq.luck || 0)) * 0.6 + (gf.crit || 0) + (eq.crit || 0) + (beastPass.crit || 0) + (dx.crit || 0) + (pl.crit || 0), 0, 75),
       dodge: Utils.clamp((gf.dodge || 0) + (eq.dodge || 0) + (sb.dodge || 0) + (beastPass.dodge || 0) + (dx.dodge || 0) + (pl.dodge || 0) + (p.dao === 'array' && DaoSys.tierLevel(p) >= 4 ? 8 : 0), 0, 35),   // v10 阵道六境·迷踪境 · v13 宗门/灵兽
       block: Utils.clamp(8 + (gf.block || 0) + (eq.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0), 0, 60),   // v10 般若六境·铁骨境；v31 修瑕：补读 eq.block——词缀「磐石」/玄天玉佩/仙缘玉环的格挡此前是死键（强化按功能键收费、明细表却虚报）
-      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0) + (pl.cultPct || 0) + xianLayers * 2,   // v30 补个人线 cultPct；v31 仙阶每层修炼效率 +2%
+      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0) + (pl.cultPct || 0) + xianLayers * 2 + (p.cultGift || 0),   // v30 补个人线 cultPct；v31 仙阶每层修炼效率 +2%；v36（E228）传承树四维满值折算 cultGift（百分点计，经 gainMult 生效）
       stonePct: (sb.stonePct || 0) + (eq.stonePct || 0) + (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3),   // v20 藏宝阁
       luck: A.luck + (eq.luck || 0),
       pillPct: (sb.pillPct || 0) + (pl.pillPct || 0),

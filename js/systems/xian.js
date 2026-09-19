@@ -62,6 +62,8 @@ const XianSys = {
     p.xianjie.layer = 0;
     const d = this.def(p);
     Log.add(`<b>仙籍落名</b>——你正式踏入 <b>${d.name}</b> 之列！${d.ascendText}`, 'realm');
+    // v36（E230）：仙界仪式按仙阶分档演出——落名（地仙 t1）/晋层（t1~t2）/证道（t3）
+    UI.realmShow(`仙籍落名 · ${d.name}`, '#cfe3f5', 2);
     UI.announce('✦ 仙籍落名 · 地仙', 'gold');
     Ambience.sfx('breakthrough');
     Story.chron('仙籍落名，初入地仙');
@@ -115,6 +117,8 @@ const XianSys = {
       ReincarnationSys.writeLegacy(legacy);
     }
     Log.add(`仙劫散去，霞光满身——你晋入 <b>${d.name}</b> 之列！${d.ascendText}`, 'realm');
+    // v36（E230）：晋层按仙阶分档演出——t1~t2 档（同 v19 突破分档法，证道另走 t3）
+    UI.realmShow(`仙劫功成 · 晋 ${d.name}`, '#cfe3f5', to <= 2 ? 2 : 5);
     UI.announce(`✦ 仙劫功成 · 晋 ${d.name} ✦`, 'gold');
     Story.chron(`仙劫功成，晋入${d.name}`);
     if (to >= 4) UI.toast('大罗已成——圆满之后，道祖之境可期');
@@ -128,6 +132,10 @@ const XianSys = {
     p.counters.xianyuan = (p.counters.xianyuan || 0);
     if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.grantMarks) ReincarnationSys.grantMarks(1, 'dao_zu');
     Log.add(`<b>道祖之境</b>——大罗圆满，万道归一。人间修士穷尽想象的尽头，也不过是你此刻的起点。（轮回印记 +1）`, 'realm');
+    // v36（E230）：证道祖之境配白金色 t3 档全屏异象（4.6s 上行长尾）+ 终局专属音色——最高里程碑
+    // 的演出密度自此不低于普通突破；演出非阻塞（setTimeout 摘除），announce aria-live 读屏可达
+    UI.realmShow('道 祖 之 境 · 万 道 归 一', '#e8e0f0', 9);
+    Ambience.sfx('daoZu');
     UI.announce('✦ 道 祖 之 境 ✦', 'gold');
     Story.chron('证道祖之境');
   },

@@ -77,6 +77,18 @@ const Ambience = {
         UI.toast(e.target.value === 'lite' ? '日志密度：精简' : '日志密度：全量');
       });
     }
+    // v36（E205）：一键行权 · 聚灵偏好三态——'skip' 的永久语义自此只能在此显式设置、随时可改回
+    // （存量脏档经 ESC/遮罩误触写入的 skip 经设置页可见可改；「每次询问」= undefined 不落盘）
+    const rush = document.getElementById('amb-rush');
+    if (rush) {
+      this.syncRushPref();
+      rush.addEventListener('change', e => {
+        const p = Game.player;
+        if (!p) return;
+        p._autoRush = e.target.value === 'ask' ? undefined : e.target.value;
+        UI.toast(e.target.value === 'always' ? '聚灵偏好：总是聚灵' : e.target.value === 'skip' ? '聚灵偏好：从不聚灵' : '聚灵偏好：每次询问');
+      });
+    }
     // v13 设置中心：战斗速度
     const spd = document.getElementById('amb-speed');
     if (spd) {
@@ -167,6 +179,10 @@ const Ambience = {
     if (kind === 'breakthrough') {
       [329.63, 392.0, 440.0, 523.25, 659.25].forEach((f, i) => this.tone(f, t + i * 0.13, 0.9, { type: 'triangle', gain: 0.28 }));
       this.tone(130.81, t, 1.8, { type: 'sine', gain: 0.20 });
+    } else if (kind === 'daoZu') {   // v36（E230）：证道祖之境——白金色长尾上行，终局专属音色（盛于破境）
+      [261.63, 392.0, 523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this.tone(f, t + i * 0.16, 1.2, { type: 'triangle', gain: 0.30 }));
+      this.tone(130.81, t, 3.2, { type: 'sine', gain: 0.24 });
+      this.tone(1046.5, t + 1.0, 2.2, { type: 'sine', gain: 0.12 });
     } else if (kind === 'auction') {
       this.tone(196, t, 0.18, { type: 'square', gain: 0.30 });
       this.tone(131, t + 0.22, 0.3, { type: 'square', gain: 0.34 });
@@ -298,5 +314,13 @@ const Ambience = {
   render() {
     const btn = document.getElementById('amb-toggle');
     if (btn) btn.classList.toggle('on', this.sfxOn || this.musicOn);
+  },
+  /** v36（E205）：设置面板打开时同步聚灵偏好显示值——偏好存于玩家档（p._autoRush）而非 amb
+   *  偏好文件，面板为静态 DOM，init 时玩家多半尚未读档，须于每次打开时回读 */
+  syncRushPref() {
+    const rush = document.getElementById('amb-rush');
+    if (!rush) return;
+    const p = Game.player;
+    rush.value = (p && p._autoRush) || 'ask';
   },
 };
