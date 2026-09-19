@@ -511,6 +511,7 @@ try {
     p.partner = null;
     p.npcs.n2.alive = true; p.npcs.n2.met = true; p.npcs.n2.rel = 20;
     p.bag['pill_juqi'] = 1; p.stones.low += 100000;
+    for (const k of Object.keys(p.bag)) if (GameData.ITEMS[k] && GameData.ITEMS[k].type === 'pill' && k !== 'pill_juqi') delete p.bag[k];   // v35（U1）：偏好消耗改为价最低件，先清同类保证目标唯一
     const origPopup = UI.popup.bind(UI);
     let choseLike = false;
     UI.popup = async (o) => {
@@ -959,7 +960,7 @@ try {
   const w8 = await page.evaluate(async () => {
     const p = Game.player;
     const today = Math.floor(p.day);
-    p.signDay = -1;
+    p.signDay = -1; p._autoRush = 'always';   // v35（U3）：聚灵明示后测试预置不再询问
     p.cave = { lv: 1, plots: [{ seed: 'seed_lingcao', crop: 'm_lingcao', days: 1, plantedDay: today - 3 }], builds: {} };
     p.bounties = { day: Math.floor(p.day), list: [{ name: '测试悬赏', type: 'kill', target: 'm_lingcao', need: 1, progress: 1, desc: 'x', chain: 3 }] };   // v30：chain 3 为连锁终点（领完不再续，测试确定）
     Guide.dailyAll();
@@ -1309,12 +1310,12 @@ try {
     p.counters.mapExplores = p.counters.mapExplores || {};
     p.counters.mapExplores.village = 99; p.counters.wins = 99;
     const d1 = UI.dots().quest;
-    p.counters.gupianGot = 9;
+    p.bag['m_gupian'] = 9;   // v35（E160）：红点改按当前持有判定
     const d2 = UI.dots()['map:realm'];
     Game.actions['act-tab']({ tab: 'map' });
     const html = document.getElementById('tab-content').innerHTML;
     const subDot = /subtab-btn[^>]*data-tab="map:realm"[^>]*>.*<span class="dot"/.test(html.replace(/\n/g, ''));
-    p.counters.gupianGot = 0;
+    delete p.bag['m_gupian'];   // v35（E160）：还原
     return { d1, d2, subDot };
   });
   z4.d1 && z4.d2 && z4.subDot ? pass('Z4 红点统一源 UI.dots（页签+子页签）') : fail('Z4 红点', JSON.stringify(z4));

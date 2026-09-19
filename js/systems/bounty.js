@@ -60,6 +60,11 @@ const BountySys = {
     if (t.progress >= t.need) Log.add('悬赏已然达成，可领取赏格！', 'gain');
     Game.afterAction();
   },
+  /** v35（E144）：收集悬赏兜底赏格单源——原 claim 实发 ×2 而 UI 预览漏乘（预览腰斩），
+   *  玩家据预览做「卖店 vs 交悬赏」决策全部失真。两处共用此式 */
+  collectFloor(t) {
+    return Math.round(ShopSys.sellPrice(t.target) * t.need * 2);
+  },
   claim(idx) {
     const p = Game.player;
     const B = this.stateOf(p);
@@ -68,8 +73,7 @@ const BountySys = {
     let r = this.rewards(p);
     // v29 修瑕：收材料悬赏的赏格兜底——此前境界 0 交 3~6 个一阶材料（卖店值 72~240）只赏 60 灵石，交悬赏不如摆摊
     if (t.type === 'collect') {
-      const matValue = ShopSys.sellPrice(t.target) * t.need;
-      r.stones = Math.max(r.stones, Math.round(matValue * 2));
+      r.stones = Math.max(r.stones, this.collectFloor(t));
     }
     // v27 联动：声望赏格真正入账——此前 UI 标注 ×1.15/×1.3/×1.5 而实发从未乘算
     const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;

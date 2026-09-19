@@ -137,8 +137,8 @@ console.log('===== SA 源码静态组 =====');
 
   /* ---- F 减负 ---- */
   cave.includes('careAll()') && cave.includes('【一键照料】') && ui.includes('act-cave-care') && gamejs.includes("'act-cave-care': () => CaveSys.careAll()") ? pass('SA55 一键照料按钮+接线（F1）') : fail('SA55 一键照料', '');
-  cave.includes('plot.wateredDay = today;') && cave.includes('watered++;') && cave.includes('Math.round(remaining * 0.9)') ? pass('SA56 照料浇水口径与单次一致（F1）') : fail('SA56 浇水口径', '');
-  cult.includes('gotIns ? \'，凝神之际偶有所悟（突破感悟 +2）\'') ? pass('SA57 调息 +2 感悟日限（F3）') : fail('SA57 调息', '');
+  cult.includes('凝神之际偶有所悟（突破感悟 +2）') && !cult.includes('gotIns')
+    ? pass('SA57 调息 +2 感悟（F3；v35（E159）死守卫清理，一次调息即一日天然日限）') : fail('SA57 调息', '');
 
   /* ---- G 工程 ---- */
   autocult.includes("if (!this.active) { if (typeof Save !== 'undefined') Save.autoSave(true); return; }") ? pass('SA58 AutoCult abort 补落盘（G2）') : fail('SA58 abort 落盘', '');

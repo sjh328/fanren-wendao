@@ -39,11 +39,10 @@ const ReincarnationSys = {
   TREE_EXTRA_COST: 4,
   baseTier(legacy) { return Math.floor(Math.min(30, legacy.marksEarned || 0) / 3) + (legacy.treeExtra || 0); },
   writeLegacy(l) {
-    const raw = JSON.stringify(l);
-    try {
-      if (Save.storage.setItem) Save.storage.setItem(Save.KEY + this.legacyKey(), raw);
-      else Save.mem[Save.KEY + this.legacyKey()] = raw;
-    } catch (e) { /* ignore */ }
+    // v35（E133）修瑕：内存档路径原直拼 `Save.KEY + this.legacyKey()` 写 mem（mem['fanren_wd_legacy_global']），
+    // 而 Save.read('legacy_global') 读的是 mem['legacy_global']——隐私模式/禁存储下 write 只写不读，
+    // 历世数/印记/传承树/前世编年整链每会话清零、marksGiven 去重失效（E123 同族第 3 例）。统一走 Save.writeRaw
+    Save.writeRaw(this.legacyKey(), JSON.stringify(l));
   },
   /** v30 轮回镜：印记多元化发放入口（图鉴大成/塔30层/飞升/个人线全通）——跨世去重，即时落盘 */
   /** v32 修瑕（E32）：传承树唯一源——原 TREE_NAMES 与 execute 内 TREE_EFFECTS 双源命名
@@ -61,7 +60,9 @@ const ReincarnationSys = {
     { name: '道韵残响', desc: '保留一条前世道韵', apply: (p2) => { p2.flags.daoYunEcho = true; } },
     { name: '逆天改命', desc: '四维重掷取最优', apply: (p2) => { p2.rerollBest = true; } },
     /* —— v32（D2）传承树 11~15 层（余额解锁）—— */
-    { name: '道胎', desc: '出生即练气二层', apply: (p2) => { p2.layer = Math.max(p2.layer, 2); } },
+    // v35（E149）修瑕：道胎原 layer=2 实发「练气后期」（LAYER_NAMES[2]），与描述「练气二层」差一档、
+    // 且与来世预约「生而近道（练气三层）」同质撞车——归位为 layer=1（练气中期），两者拉开一档
+    { name: '道胎', desc: '出生即练气二层', apply: (p2) => { p2.layer = Math.max(p2.layer, 1); } },
     { name: '灵兽通心', desc: '驯服初始亲昵 +20', apply: (p2) => { p2.bondGift = 20; } },
     { name: '旧识遍江湖', desc: '初始声望 +50', apply: (p2) => { p2.reputation = (p2.reputation || 0) + 50; } },
     { name: '道骨', desc: '全属性再 +1', apply: (p2) => { for (const k of ['gen', 'comp', 'luck', 'body']) p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } },
@@ -83,9 +84,14 @@ const ReincarnationSys = {
     legacy.marks = (legacy.marks || 0) + n;
     legacy.marksEarned = (legacy.marksEarned || 0) + n;   // v32（D1）：分账——累计获得同步入账
     this.writeLegacy(legacy);
-    // v32 修瑕（E34）：当世 grantMarks 原只写 legacy 不回写 p.reinc.marks——当世属性与成就
-    // （印记斑驳等）不更新，轮回镜却宣称「全属性永久 +X%」
-    if (Game.player && Game.player.reinc) Game.player.reinc.marks = Math.min(30, legacy.marksEarned || 0);
+    // v32 修瑕（E34）+ v35（E180）：当世 grantMarks 原只回写已兵解者（p.reinc 存在）——首世玩家
+    // 靠图鉴大成/登天塔/飞升攒下的印记「全属性永久 +X%」当世一个百分点不加（轮回镜承诺失义，
+    // 且开始界面即可开轮回镜）。现首世建立轻量 reinc 使承诺当世兑现；firstLife 标记隔离前世
+    // 专属语义（成就「轮回初醒」仍须真正兵解、前世洞府机缘仍只属转世者）
+    if (Game.player) {
+      if (!Game.player.reinc) Game.player.reinc = { lives: 0, marks: 0, compPct: 0, grudges: [], firstLife: true };
+      Game.player.reinc.marks = Math.min(30, legacy.marksEarned || 0);
+    }
     Log.add(`✦ 轮回印记 +${n}（${why}）——血脉深处的道韵又厚了一分（累计获得 ${legacy.marksEarned} 枚）。`, 'realm');
     UI.toast(`✦ 轮回印记 +${n}`);
     return true;
@@ -285,6 +291,9 @@ const ReincarnationSys = {
     // v18 传承树：每3枚印记解锁一层天赋；v31 修瑕（E22）：效果单源化为 TREE_EFFECTS 表——
     // 原散落 10 个 if，层间耦合曾两度出连环 bug；行为逐条等价，另附出生天赋清单日志
     const treeTier = this.baseTier(legacy);   // v32（D1）：累计获得 + 余额层
+    // v35（E132）修瑕：基础携带改为「无条件 +1」且置于树层效果之前——原兜底式 `!p2.bag[kept]`
+    // 会被「故物重携」自己加的那件堵死（树层 +1 后条件即假、兜底跳过），第 3 层自 v26 起是死天赋
+    if (kept) p2.bag[kept] = (p2.bag[kept] || 0) + 1;
     // v32 修瑕（E32）：树效果走模块唯一源 TREE_EFFECTS（apply 参数化 p2/ctx），出生天赋清单日志随之
     const unlockedTalents = this.TREE_EFFECTS.filter((t2, i2) => treeTier >= i2 + 1);
     for (const t2 of unlockedTalents) t2.apply(p2, { kept, origin });
@@ -292,8 +301,6 @@ const ReincarnationSys = {
     const towerBest = legacy.towerBest || 0;
     if (towerBest >= 10) p2.fortune = (p2.fortune || 0) + 5;
     if (towerBest >= 20) p2.attrs.comp = Math.min(10, p2.attrs.comp + 1);
-    // v26 修瑕：第三层「多带一件法宝」加的那件不再被这里覆盖回 1
-    if (kept && !p2.bag[kept]) p2.bag[kept] = 1;
     for (const gid of grudges) {
       const s = p2.npcs[gid];
       if (s) { s.rel = -35; s.grudge = true; s.pastLife = true; }

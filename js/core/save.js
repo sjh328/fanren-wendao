@@ -58,6 +58,7 @@ write(key, player) {
     } catch (e) {
       console.warn('存档失败', e);
       this.mem[key] = raw;   // v34（E124）：QuotaExceeded 等写入异常也镜像内存档——原只 toast，本条进度直接丢弃
+      try { if (this.storage.removeItem) this.storage.removeItem(this.KEY + key + '_v'); } catch (e2) { /* ignore */ }   // v35（E191）：回收孤儿校验键（配额本已紧张，孤儿键自加剧）
       UI.toast('存档写入异常，请检查存储空间', true);
     }
     UI.saveFlash();
@@ -72,6 +73,9 @@ write(key, player) {
     try {
       const cur = this.read('auto');
       if (!cur || !cur.player || !cur.meta || !cur.meta.ts) return;
+      // v35（E137）修瑕：坐化收场的死档不再滚入 bak2——原无 dead 过滤，死档回捞时会把当前
+      // 活档 auto 整体覆盖成死档（安全网自身成了销毁通道）
+      if (cur.meta.dead) return;
       if (Date.now() - cur.meta.ts < 60000) return;   // 刚写过的不算「上次会话」
       const prev = this.read('bak2');
       if (!prev || !prev.meta || (prev.meta.ts || 0) < cur.meta.ts) {
@@ -85,6 +89,8 @@ write(key, player) {
     try { this.storage.removeItem ? this.storage.removeItem(this.KEY + key) : delete this.mem[key]; } catch (e) { /* ignore */ }
     // v31 修瑕（E26）：联动清掉该档的成就图鉴 meta 键——此前删档后 fanren_wd_meta_<slot> 永久残留
     try { this.storage.removeItem ? this.storage.removeItem(this.KEY + 'meta_' + key) : delete this.mem['meta_' + key]; } catch (e) { /* ignore */ }
+    // v35（E191）：删档一并回收 _v 校验键（孤儿校验键与正式键等大，配额紧张场景自加剧）
+    try { this.storage.removeItem ? this.storage.removeItem(this.KEY + key + '_v') : delete this.mem[key + '_v']; } catch (e) { /* ignore */ }
   },
   /** 每次行动实时落盘（保持外部读取 localStorage 所见即所得）；
    *  force 参数保留兼容（关页 / 切后台等关键时机调用），当前策略下与常规写入一致。 */

@@ -169,24 +169,27 @@ const CaveSys = {
     if (auto && typeof Game !== 'undefined' && Game._offlineAgg) Game._offlineAgg.spring = (Game._offlineAgg.spring || 0) + gain;   // v34（E1）：灵泉离线入账并入日报——原只报「照常涌出」不给数额，玩家对不上账
     if (!auto) Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。`, 'gain');
   },
-  /** v34（F1）：一键照料——全田浇水 + 全兽抚摸 + 未求签则求签，一纸小账。
-   *  满配洞府每日「浇水×8 + 摸兽×N + 求签」十二余次纯仪式点击，放置游戏被手点绑架；
-   *  收益规则逐项与单次操作完全一致，只是合并结算。 */
-  careAll() {
-    const p = Game.player;
-    if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
+  /** v34（F1）一键照料 + v35（U3）照料核心抽出：全田浇水 + 全兽抚摸 + 全田除虫——
+   *  一键照料（洞府页）与一键行权（今日修行卡）共用同一 helper，行为严格一致。
+   *  返回 { watered, patted, cured } 供两处各自汇总。 */
+  careCore(p) {
     const today = Math.floor(p.day || 0);
-    let watered = 0, patted = 0, signed = false;
+    let watered = 0, patted = 0, cured = 0;
     // 全田浇水（逻辑与 water() 一致：剩余生长期 ×0.9）
+    // v35（E154）修瑕：成熟田（remaining=0）不再计入浇水业绩——原照记 watered++，
+    // 一键照料日志「浇水 8 块」实有一半是零效果凑数
     const plots = this.plotsOf(p);
     for (let i = 0; i < plots.length; i++) {
       const plot = plots[i];
       if (!plot || !plot.seed || plot.wateredDay === today) continue;
-      plot.wateredDay = today;
       const grown = Math.max(0, Math.floor(p.day || 0) - (plot.plantedDay || 0));
       const remaining = Math.max(0, (plot.days || 0) - grown);
-      plot.days = grown + (remaining > 0 ? Math.max(1, Math.round(remaining * 0.9)) : 0);
+      if (remaining <= 0) continue;   // 已熟之田无需雨露
+      plot.wateredDay = today;
+      plot.days = grown + Math.max(1, Math.round(remaining * 0.9));
       watered++;
+      // v35（U3）：顺手除虫——纯仪式操作，无决策价值，两个「一键」都不该漏
+      if (plot.pested) { plot.pested = false; cured++; }
     }
     // 全兽抚摸（与 BeastSys.pat 一致：+4~8 亲昵，触发第三技检查）
     if (typeof BeastSys !== 'undefined') {
@@ -198,15 +201,27 @@ const CaveSys = {
         patted++;
       }
     }
+    return { watered, patted, cured };
+  },
+  /** v34（F1）：一键照料——全田浇水 + 全兽抚摸 + 除虫 + 未求签则求签，一纸小账。
+   *  满配洞府每日「浇水×8 + 摸兽×N + 求签」十二余次纯仪式点击，放置游戏被手点绑架；
+   *  收益规则逐项与单次操作完全一致，只是合并结算。 */
+  careAll() {
+    const p = Game.player;
+    if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
+    const today = Math.floor(p.day || 0);
+    const { watered, patted, cured } = this.careCore(p);
     // 求签（未签时补一签）
+    let signed = false;
     if (typeof DailySign !== 'undefined' && p.signDay !== today) {
       DailySign.draw();
       signed = p.signDay === today;
     }
-    if (!watered && !patted && !signed) { UI.toast('今日的照料都已做过了'); return; }
+    if (!watered && !patted && !signed && !cured) { UI.toast('今日的照料都已做过了'); return; }
     const parts = [];
     if (watered) parts.push(`灵田浇水 ${watered} 块`);
     if (patted) parts.push(`灵兽抚摸 ${patted} 只`);
+    if (cured) parts.push(`除虫 ${cured} 块`);
     if (signed) parts.push('黄历求签一卦');
     Log.add(`【一键照料】${parts.join('、')}——洞府诸事俱毕，灵气氤氲。`, 'gain');
     Game.afterAction();

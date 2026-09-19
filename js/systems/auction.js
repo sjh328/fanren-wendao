@@ -3,19 +3,24 @@
  * §11.9 v19 拍卖行 AuctionSys（每六十日一件稀有拍品，三档出价博弈）
  * ====================================================================== */
 const AuctionSys = {
-  /* v29：补 minRealm 门槛（底价随境界经济浮动，低境不再白捡毕业神装） */
+  /* v29：补 minRealm 门槛（底价随境界经济浮动，低境不再白捡毕业神装）
+   * v35（E147）：功法拍品按品阶重定价——原 v13 旧价与品阶体系脱节：grade5 九天雷神经 9000/minRealm2
+   * 比 grade3 大衍神诀 12000/minRealm3 还便宜且门槛低两境，金丹期 1.2 万灵石锁定毕业功法。
+   * 现按 grade3≥10000/grade4≥20000/grade5≥45000 重排，池内相邻品阶底价单调（price-audit 门禁） */
   LOT_POOL: [
     { item: 's_hj_sha', base: 16000, minRealm: 3 }, { item: 's_hj_pao', base: 15000, minRealm: 3 }, { item: 's_hj_ling', base: 14000, minRealm: 3 },
     { item: 's_xy_jian', base: 30000, minRealm: 4 }, { item: 's_xy_ling', base: 28000, minRealm: 4 },
-    { item: 'm_danfang', base: 4000, minRealm: 1 },
-    { item: 'gf_zhoutian', base: 6000, minRealm: 2 }, { item: 'gf_leishen', base: 9000, minRealm: 2 },
-    { item: 'gf_hunyuan', base: 9000, minRealm: 3 }, { item: 'gf_niepan', base: 9000, minRealm: 3 },
+    // v35（E174）：minRealm 1→0——原 LOT_POOL 最低门槛 1 使 r0 时 usable 恒空、回落全池，
+    // 练气期 60 日锁期内掷出的必然是整期不可竞拍的拍品（v31 E41 要修的场景在 r0 原样复现）
+    { item: 'm_danfang', base: 4000, minRealm: 0 },
+    { item: 'gf_zhoutian', base: 10000, minRealm: 3 }, { item: 'gf_leishen', base: 48000, minRealm: 5 },
+    { item: 'gf_hunyuan', base: 20000, minRealm: 4 }, { item: 'gf_niepan', base: 46000, minRealm: 5 },
     { item: 'w_sanqing', base: 12000, minRealm: 3 }, { item: 'pill_zaohua', base: 160000, minRealm: 6 },
     // v34（D1）：造化仙丹底价 15000/minRealm4 → 160000/6——原与坊市价 350000（转卖 157500）脱钩 23 倍、
     // 门槛还低两境：r4 落槌 17250 转手 157500，60 日一轮零风险套利。现稳健出价已高于转卖价，倒挂归负。
 
     { item: 'gf_dayan', base: 12000, minRealm: 3 }, { item: 'm_gupian', base: 10000, minRealm: 3 },
-    { item: 'gf_wangchen', base: 15000, minRealm: 4 }, { item: 'gf_feixian', base: 15000, minRealm: 4 },
+    { item: 'gf_wangchen', base: 22000, minRealm: 4 }, { item: 'gf_feixian', base: 10000, minRealm: 3 },
     { item: 'fruit_tianji', base: 22000, minRealm: 4 },   // v20 天机果（先天破桎）
   ],
   PERIOD: 60,
@@ -153,7 +158,7 @@ const AuctionSys = {
         UI.announce('✦ 竞拍得手 · ' + def.name + ' ✦', 'gold');
         Story.chron(`拍卖行竞得「${def.name}」`);
       }
-      p.auction.until = 0;   // 本期拍品易主，刷新下一件
+      p.auction.until = -1;   // 本期拍品易主，刷新下一件（v35（E175）：原 until=0 与开局 day=0 相撞——`until < day` 恒假，第 0 日内可对同一拍品无限复购）
       if (isMystery) Daily.resetIfNew(p, '_boxDay');   // v32 修瑕（E20）+ v33（E73）：古匣日限一枚（迁 p 本体日结总线，防 state() 轮换清账）
       p.auction.seq = (p.auction.seq || 0) + 1;   // v29：期号递进——同日不再掷出同一件拍品
       Ambience.sfx('auction');   // v19 落槌音

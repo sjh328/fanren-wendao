@@ -238,8 +238,8 @@ const NpcSys = {
     if (!ok) return;
     Log.add(`你向 <b>${d.name}</b> 递上雷台战书——三百年恩怨，今日做个了断！`, 'warn');
     Story.chron(`与 ${d.name} 约战雷台`);
-    Game.afterAction();
     Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, mode: 'confront', showdown: true, mapName: '雷台' });
+    Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
   },
   pickAmbusher(p) {
     const ids = Object.keys(p.npcs || {}).filter(id => p.npcs[id].grudge && p.npcs[id].alive);
@@ -274,7 +274,9 @@ const NpcSys = {
     const s = this.state(p, id);
     if (!s) return;
     s.met = true;
-    s.rel = Utils.clamp(s.rel + (won ? 5 : 2), -100, 100);
+    // v35（E131）：落败不再加好感——原败也 +2，配合无限切磋构成零成本好感印钞机；
+    // 胜 +5 不变（且受每日一场限制）
+    if (won) s.rel = Utils.clamp(s.rel + 5, -100, 100);
     this.mem(p, id, 'spar', won ? '切磋获胜' : '切磋落败');   // v19 记忆
     if (won) s.sparWins = (s.sparWins || 0) + 1; else s.sparLoses = (s.sparLoses || 0) + 1;   // v20 切磋段位
   },
@@ -387,15 +389,19 @@ const NpcSys = {
     }
   },
   /* ---------- 社交动作 ---------- */
+  /** v35（U1）：礼数成本锚定双方境界较低一方——原按 NPC 境界指数膨胀（对方自行涨到 r8 后
+   *  一份寻常礼 130 万灵石换 +1~3 好感），偏好系统对高境修士事实失效 */
+  socialEco(p, s) { return GameData.stoneEco(Math.min(p.realmIdx || 0, s.realmIdx || 0)); },
   befriendCost(p, id) {
     const s = this.state(p, id);
-    return s ? Math.round(20 * GameData.stoneEco(s.realmIdx)) : 20;
+    return s ? Math.round(20 * this.socialEco(p, s)) : 20;
   },
   async befriend(id) {
     const p = Game.player;
     const d = this.def(id);
     const s = this.state(p, id);
     if (!d || !s || !s.alive) return;
+    if (this.isAway(p, id)) { UI.toast(`${d.name} 行游在外，旬末方归`); return; }
     const cost = this.befriendCost(p, id);
     const ok = await UI.popup({
       title: `结交 · ${d.name}`,
@@ -423,11 +429,18 @@ const NpcSys = {
     const d = this.def(id);
     const s = this.state(p, id);
     if (!d || !s || !s.alive || Battle.active) return;
+    // v35（U1）：行游在外者不在山中——江湖页互动一并拦下（原只挡偶遇，机制纯装饰）
+    if (this.isAway(p, id)) { UI.toast(`${d.name} 行游在外，旬末方归`); return; }
+    // v35（E131）修瑕：切磋原零成本无限刷好感（胜 +5、败 +2，连输 45 场可把任意渡劫修士刷到
+    // 莫逆）——赠礼/论道/结交三套社交被免费切磋完全支配。现每 NPC 每日限一场；落败不加好感
+    // （以武会友，胜负皆不损交情），胜 +5 不变，「三胜指点」回归阶段性目标
+    const today = Math.floor(p.day || 0);
+    if (s.sparDay === today) { UI.toast(`今日已与${d.name}切磋过——武道贵精不贵多，明日再来讨教`); return; }
+    s.sparDay = today;
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴
     const sparLine = this.lineFor(p, id, 'spar');
     Log.add(`你向 ${d.name} 递出战书，只较技，不拼命。${sparLine ? `<span style="color:var(--text-faint)">${d.name}：${sparLine}</span>` : ''}`, 'event');
-    Game.afterAction();
     Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, spar: true, mapName: '切磋台' });
   },
   async betray(id) {
@@ -450,8 +463,8 @@ const NpcSys = {
       s.rel = Utils.clamp(s.rel - 30, -100, 100);
       this.addGrudge(p, id);
       this.mem(p, id, 'betray', '背刺未遂');   // v19 记忆
-      Game.afterAction();
       Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, mode: 'hunt', ambush: true, mapName: '背刺之地' });
+      Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
       return;
     }
     const loot = Math.round(Utils.rand(40, 70) * GameData.stoneEco(s.realmIdx));
@@ -549,8 +562,8 @@ const NpcSys = {
         Log.add(`你以前世记忆寻因究果，赔罪补过。${d.name} 长叹一声，前尘恩怨一笔勾销。（气运 +5）`, 'gain');
       } else if (choice === 'fight') {
         Log.add(`你与 ${d.name} 前世今生的是非，今日做个了断！`, 'warn');
-        Game.afterAction();
         Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, mode: 'confront', mapName: '前世恩怨了断之地' });
+        Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
         return;
       } else {
         Log.add('你垂下眼帘，暂且隐忍。有些债，躲不掉，只能慢慢还。', 'info');
@@ -585,10 +598,16 @@ const NpcSys = {
     if (!d || !s || !s.alive) return;
     if (!s.met) { UI.toast('素未谋面，何谈赠礼'); return; }
     if (Battle.active) return;
-    const cost = Math.round(30 * GameData.stoneEco(s.realmIdx));
+    if (this.isAway(p, id)) { UI.toast(`${d.name} 行游在外，旬末方归`); return; }
+    // v35（U1）：成本锚定双方境界较低一方（原按 NPC 境界指数膨胀，高境修士一份礼 130 万起）
+    const cost = Math.round(30 * this.socialEco(p, s));
     const like = this.NPC_LIKES[id];
     const catName = this.LIKE_NAMES[like] || '';
-    const likeItemId = like ? Object.keys(p.bag).find(k => GameData.ITEMS[k] && GameData.ITEMS[k].type === like) : null;
+    // v35（U1）：偏好消耗改为取该类别中「价最低」的一件——原取 Object.keys 首个命中（包里最早的），
+    // 可能无声烧掉毕业法宝/保命金光符
+    const likeItemId = like ? Object.keys(p.bag)
+      .filter(k => GameData.ITEMS[k] && GameData.ITEMS[k].type === like)
+      .sort((a2, b2) => (GameData.ITEMS[a2].price || 0) - (GameData.ITEMS[b2].price || 0))[0] || null : null;
     const likeCost = cost * 2;
     const tier = this.tierOf(Math.max(0, s.rel));
     const midautumn = typeof FestivalSys !== 'undefined' && FestivalSys.is(p, 'zhongqiu');
@@ -610,7 +629,10 @@ const NpcSys = {
       if (!Bag.spendStones(likeCost)) { UI.toast('灵石不足'); return; }
       const itemName = GameData.ITEMS[likeItemId].name;
       Bag.removeItem(likeItemId, 1);
-      gain = Math.round(gain * 1.5) + (midautumn ? gain0 : 0);
+      gain = Math.round(gain * 1.5);
+      // v35（E158）：中秋「情谊加倍」统一乘算口径——原 like 路径走 +gain0 加法（实为 ×2.5），
+      // 与寻常礼 ×2 两套实发并存；现两条路径统一「各自基数 ×2」
+      if (midautumn) gain *= 2;
       likeNote = `——${itemName} 送到了心坎上`;
     } else {
       if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
@@ -667,7 +689,7 @@ const NpcSys = {
     const wishes = [
       { text: '寻一味灵药', need: { m_lingcao: 2 }, rel: 8, ok: () => KarmaSys.addFortune(1) },
       { text: '听你说说外头的见闻', need: null, rel: 5, ok: () => { p.insight = Math.min(100, (p.insight || 0) + 3); } },
-      { text: '陪TA饮一壶好茶', cost: Math.round(50 * GameData.stoneEco(s.realmIdx)), rel: 6, ok: null },
+      { text: '陪TA饮一壶好茶', cost: Math.round(50 * this.socialEco(p, s)), rel: 6, ok: null },
     ];
     const w = Utils.pick(wishes);
     const needTxt = w.need ? Object.entries(w.need).map(([k, n]) => `${(GameData.ITEMS[k] || {}).name}×${n}`).join('、')
@@ -724,6 +746,7 @@ const NpcSys = {
     if (!d || !s || !s.alive) return;
     if (!s.met) { UI.toast('素未谋面，何谈论道'); return; }
     if (Battle.active) return;
+    if (this.isAway(p, id)) { UI.toast(`${d.name} 行游在外，旬末方归`); return; }   // v35（U1）
     const tier = this.tierOf(Math.max(0, s.rel));
     if (s.rel < 0) { UI.toast('对方对你心怀芥蒂，无意与你论道'); return; }   // v32 修瑕（E44）：原 tierOf(Math.max(0,s.rel)) 恒 ≥known——cold/foe 分支永不触发（结怨者仍可论道）
     if (tier.id === 'known') {

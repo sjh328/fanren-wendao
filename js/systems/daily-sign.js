@@ -21,11 +21,18 @@ const DailySign = {
         return `气血 -${Math.round(hpLoss)}、灵石 -${Utils.fmtNum(sLoss)}`;
       } },
   ],
-  /** v33（C2/D2）：连签进度——「距七日满签还差几日」单源（黄历卡与今日修行卡共用） */
+  /** v33（C2/D2）：连签进度——「距七日满签还差几日」单源（黄历卡与今日修行卡共用）
+   *  v35（E145）修瑕：原只读 streak 不校验断签——连签 5 日后闭关 30 日，出关黄历卡仍挂
+   *  「连签第 5/7 日」（tooltip 还说三日内再来即延续），实际再签已静默归 1。
+   *  现按「今日距上次求签是否仍在三日容差内」判定，断签时 broken 标记供 UI 标红。 */
   progress(p) {
     const streak = p.signStreak || 0;
-    const day = streak > 0 ? ((streak - 1) % 7) + 1 : 0;
-    return { streak, day, left: day > 0 ? 7 - day : 7 };
+    const today = Math.floor((p && p.day) || 0);
+    const last = (p && p.signDay != null) ? p.signDay : null;
+    const broken = streak > 0 && last != null && (today - last > 3);
+    const eff = broken ? 0 : streak;
+    const day = eff > 0 ? ((eff - 1) % 7) + 1 : 0;
+    return { streak: eff, day, left: day > 0 ? 7 - day : 7, broken };
   },
   draw() {
     const p = Game.player;
@@ -41,6 +48,10 @@ const DailySign = {
     // v33（C2）重构：原要求「逐游戏日」续签，而探索+2 日/修炼+3 日/闭关+30 日随手断签——正常
     // 节奏下七日连签几乎不可达成。改三日内（gap≤3）皆视为延续；超过三日或首次求签则重新计程。
     const gap = p.signDay == null ? Infinity : today - p.signDay;
+    // v35（E145）：断签重置不再静默——超容差归 1 时补一条日志，七日满签承诺被吞时玩家有账可查
+    if ((p.signStreak || 0) > 1 && !(gap >= 1 && gap <= 3)) {
+      Log.add(`距上次求签已隔 ${gap > 365 ? '许久' : gap + ' 日'}——连签计程自今日重新算起。`, 'info');
+    }
     p.signStreak = (gap >= 1 && gap <= 3) ? (p.signStreak || 0) + 1 : 1;
     const streakDay = ((p.signStreak - 1) % 7) + 1;
     let item;

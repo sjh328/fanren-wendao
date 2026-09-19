@@ -374,7 +374,8 @@ try {
   const srcAll = fs.readFileSync('game.js', 'utf8');
   const checks = [
     ['VF1 长老令次日更张（until today+1）', srcAll.includes('until: today + 1')],
-    ['VF2 转世传承法宝不再被覆盖', srcAll.includes('if (kept && !p2.bag[kept]) p2.bag[kept] = 1')],
+    // v35（E132）：基础携带改无条件 +1 且先于树层效果——原兜底条件式使『故物重携』成死天赋
+    ['VF2 转世传承法宝不再被覆盖', srcAll.includes('if (kept) p2.bag[kept] = (p2.bag[kept] || 0) + 1;')],
     ['VF3 强化写入穿戴实例', srcAll.includes("if (eq && typeof eq === 'object') eq.enhance = Math.min(this.MAX_LV, lv + 1)")],
     ['VF4 migrate 读原始存档强化', srcAll.includes('const srcEnh = (p.enhanced && typeof p.enhanced === \'object\') ? p.enhanced : {}')],
     ['VF5 放归清理 active2', srcAll.includes('if (p.beasts.active2 === uid) p.beasts.active2 = null')],

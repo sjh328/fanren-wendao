@@ -11,7 +11,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const SKIP = /[\\/](node_modules|dist|releases|attic|tests|docs|\.git|\.zcode|\.wrangler|gui-test-screenshots|drafts)([\\/]|$)/;
+// v35（E166）：SKIP 补 scripts/——shoot-*/repro-* 等一次性脚本里的 page.click 选择器字符串
+// 被计入 used，虚高静态入口数、弱化 NO-ENTRY 死代码检测
+const SKIP = /[\\/](node_modules|dist|releases|attic|tests|docs|scripts|\.git|\.zcode|\.wrangler|gui-test-screenshots|drafts)([\\/]|$)/;
 const files = [];
 (function walk(d) {
   for (const f of fs.readdirSync(d)) {
@@ -30,6 +32,9 @@ for (const f of files) {
   // v33（E93）：动态拼接入口 `act: 'act-xxx'`（模板字面量 data-action="${r.act}" 逃逸静态对账——
   // A10 类死按钮的盲区）。引用值必须是 actions 表中的键。
   for (const m of src.matchAll(/\bact:\s*'([a-z0-9-]+)'/g)) used.add(m[1]);
+  // v35（E166）：三元形态 `act: cond ? '' : 'act-xxx'`（如今日修行卡按完成度灰显的行内按钮）
+  // 纳入对账——原正则不匹配，动作值静态逃逸（当前仅「误报方向」安全，但属门禁强度缺口）
+  for (const m of src.matchAll(/\bact:\s*[a-zA-Z$][\w$.]*\s*\?\s*''\s*:\s*'([a-z0-9-]+)'/g)) used.add(m[1]);
   // actions 表键：仅认「'key': (…)」形态（js/game.js 与构建产物 game.js 各扫一遍无妨，Set 去重）
   const at = src.indexOf('actions: {');
   if (at >= 0) {

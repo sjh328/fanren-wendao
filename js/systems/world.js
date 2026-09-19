@@ -85,10 +85,21 @@ const WorldSys = {
     let text = '';
     if (type === 'demon') {
       const candidates = GameData.MAPS.filter(m => m.id !== 'village' && !w.magicMaps.includes(m.id));
-      const map = candidates.length ? Utils.pick(candidates) : Utils.pick(GameData.MAPS);
-      w.magicMaps.push(map.id);
-      ev.mapId = map.id;
-      text = `<b>魔界入侵</b>——魔气吞没 ${map.name}！此后其地化为<b>魔域</b>：妖魔狂化暴增，凶险倍之，然魔物所获亦丰。`;
+      // v35（E156）修瑕：候选耗尽时原兜底 pick(GameData.MAPS) 可把「新手村」推成魔域（重复 push
+      // 还会产生脏数据）——现改为「魔气复炽」卷土重袭一处既有魔域（不再新增、永不波及新手村）
+      const map = candidates.length ? Utils.pick(candidates) : Utils.pick(GameData.MAPS.filter(m => w.magicMaps.includes(m.id)));
+      if (map) {
+        if (!w.magicMaps.includes(map.id)) w.magicMaps.push(map.id);
+        ev.mapId = map.id;
+        text = candidates.length
+          ? `<b>魔界入侵</b>——魔气吞没 ${map.name}！此后其地化为<b>魔域</b>：妖魔狂化暴增，凶险倍之，然魔物所获亦丰。`
+          : `<b>魔气复炽</b>——天下再无可蚀之地，魔气回卷 ${map.name}！旧魔域愈发狂化深重，然魔物所获亦更丰。`;
+      } else {
+        // 极端兜底（理论上不可达）：无任何可侵之地时降级为灵气潮汐
+        ev.type = 'lingchao';
+        w.lingchaoUntil = y + 6;
+        text = `<b>灵气潮汐</b>——天地灵机自行涨落，此后数年修炼事半功倍。`;
+      }
     } else if (type === 'preach') {
       w.preachUntil = y + 10;
       text = `<b>圣地讲道</b>——道音涤荡神魂，此后十年天下修士<b>悟性倍增</b>。`;
@@ -154,8 +165,8 @@ const WorldSys = {
       en.hpMax = Math.round(en.hpMax * 1.4); en.atk = Math.round(en.atk * 1.25);
       en.expGain = Math.round(en.expGain * 1.6); en.stoneGain = Math.round(en.stoneGain * 1.8);
       en.hp = en.hpMax;
-      Game.afterAction();
       Battle.start(null, { enemy: en, weType: 'demon', mapName: '魔域前线' });
+      Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
       return;
     }
     if (ev.type === 'preach') {
@@ -177,8 +188,8 @@ const WorldSys = {
       const nid = ids.length ? Utils.pick(ids) : null;
       if (nid) {
         Log.add('你投入宗门战团，与敌对修士战作一团！', 'event');
-        Game.afterAction();
         Battle.start(null, { enemy: NpcSys.buildEnemy(p, nid), npcId: nid, mode: 'war', mapName: '宗门战场' });
+        Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
         return;
       }
       const stones = Math.round(50 * GameData.stoneEco(p.realmIdx));
@@ -201,8 +212,8 @@ const WorldSys = {
       en.hpMax = Math.round(en.hpMax * 1.3); en.atk = Math.round(en.atk * 1.2);
       en.expGain = Math.round(en.expGain * 1.8); en.stoneGain = Math.round(en.stoneGain * 2);
       en.hp = en.hpMax;
-      Game.afterAction();
       Battle.start(null, { enemy: en, weType: 'beastwave', mapName: '兽潮前线' });
+      Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
       return;
     } else if (ev.type === 'zhongbao') {
       // v30 重宝现世：争夺战——胜者得宝
@@ -212,8 +223,8 @@ const WorldSys = {
       const en = buildMonster(mid, Math.max(0, p.realmIdx * 4 + 1 - GameData.MONSTERS[mid].power), { elitePlus: true });
       en.hpMax = Math.round(en.hpMax * 1.3); en.hp = en.hpMax;
       en.expGain = Math.round(en.expGain * 1.5); en.stoneGain = Math.round(en.stoneGain * 1.5);
-      Game.afterAction();
       Battle.start(null, { enemy: en, weType: 'zhongbao', mapName: '夺宝之地', dropMul: 1.5 });
+      Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
       return;
     } else if (ev.type === 'neiluan') {
       // v30 宗门内乱：三选一

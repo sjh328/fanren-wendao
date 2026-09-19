@@ -38,7 +38,7 @@ const Ambience = {
         this.applyFontScale(v);
         const pref = Save.read('amb') || {};
         pref.fontScale = v;
-        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        Save.writeRaw('amb', JSON.stringify(pref));   // v35（E193）：读写统一走 Save 单源入口（原 mem 路径键名错位，隐私模式下设置互相清零）
         UI.toast(`界面字号：${{ 100: '标准', 110: '大', 122: '特大' }[v] || v + '%'}`);
       });
     }
@@ -51,7 +51,7 @@ const Ambience = {
         this.applyAnimPref(e.target.checked);
         const pref = Save.read('amb') || {};
         pref.anim = e.target.checked;
-        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        Save.writeRaw('amb', JSON.stringify(pref));   // v35（E193）：读写统一走 Save 单源入口（原 mem 路径键名错位，隐私模式下设置互相清零）
         UI.toast(e.target.checked ? '数字动效：开' : '数字动效：关（性能模式）');
       });
     }
@@ -62,7 +62,7 @@ const Ambience = {
       tw.addEventListener('click', e => {
         const pref = Save.read('amb') || {};
         pref.typewriter = e.target.checked;
-        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        Save.writeRaw('amb', JSON.stringify(pref));   // v35（E193）：读写统一走 Save 单源入口（原 mem 路径键名错位，隐私模式下设置互相清零）
         UI.toast(e.target.checked ? '剧情逐字演出：开' : '剧情逐字演出：关（即刻全显）');
       });
     }
@@ -72,7 +72,7 @@ const Ambience = {
       dens.addEventListener('change', e => {
         const pref = Save.read('amb') || {};
         pref.logDens = e.target.value;
-        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        Save.writeRaw('amb', JSON.stringify(pref));   // v35（E193）：读写统一走 Save 单源入口（原 mem 路径键名错位，隐私模式下设置互相清零）
         if (typeof Log !== 'undefined') Log.density = e.target.value;
         UI.toast(e.target.value === 'lite' ? '日志密度：精简' : '日志密度：全量');
       });
@@ -97,7 +97,7 @@ const Ambience = {
         this.applyDensity(e.target.value);
         const pref = Save.read('amb') || {};
         pref.density = e.target.value;
-        try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, JSON.stringify(pref)); else Save.mem[this.KEY] = JSON.stringify(pref); } catch (err) {}
+        Save.writeRaw('amb', JSON.stringify(pref));   // v35（E193）：读写统一走 Save 单源入口（原 mem 路径键名错位，隐私模式下设置互相清零）
         UI.toast(e.target.value === 'compact' ? '界面密度：紧凑' : '界面密度：舒适');
       });
     }
@@ -130,10 +130,9 @@ const Ambience = {
   persist() {
     // v29 修瑕：读回旧偏好合并后再写——此前只写音效三项，切一次音效会把字号/性能/逐字/日志密度全部静默重置
     let pref = {};
-    try { const raw0 = Save.storage.getItem ? Save.storage.getItem(this.KEY) : Save.mem[this.KEY]; pref = JSON.parse(raw0 || '{}') || {}; } catch (e) {}
+    try { pref = Save.read('amb') || {}; } catch (e) {}   // v35（E193）：读也走单源（原 mem 路径读无前缀键、写有前缀键）
     pref.sfx = this.sfxOn; pref.music = this.musicOn; pref.vol = this.vol;
-    const raw = JSON.stringify(pref);
-    try { if (Save.storage.setItem) Save.storage.setItem(this.KEY, raw); else Save.mem[this.KEY] = raw; } catch (e) { /* ignore */ }
+    Save.writeRaw('amb', JSON.stringify(pref));
   },
   ensureCtx() {
     const AC = window.AudioContext || window.webkitAudioContext;

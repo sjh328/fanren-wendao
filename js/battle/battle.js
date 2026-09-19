@@ -753,6 +753,9 @@ const Battle = {
     if (await this.controlledConsume(st)) return;
     // v13 灵兽协助：出战灵兽有四成几率抢先扑击
     if (typeof BeastSys !== 'undefined' && await BeastSys.assist(st)) { await this.victory(); return; }
+    // v35（E171）：魔棘反伤可经助战把玩家打到 0 血——行动前统一查存活（塔心不灭/元婴代死/
+    // defeat 判定单源于 afterEnemyPhase），不再带着尸体继续出手
+    if (p.hp <= 0) { await this.afterEnemyPhase(st); return; }
     switch (kind) {
       case 'attack': {
         const daoTier = DaoSys.tierLevel(p);
@@ -772,8 +775,8 @@ const Battle = {
           B.lastSkillTag = null; B.skillChain = 0; B.skillSeq = 0;   // v32（C3）：普攻断连珠之势
           // v18 种族克制（玩家恒为人族；v20 修瑕：移除恒真三元死条件）
           const speciesRel = GameData.speciesRelation('human', B.enemy.species);
-          if (speciesRel > 0) dmg *= 1.15;
-          else if (speciesRel < 0) dmg *= 0.85;
+          if (speciesRel > 0) dmg *= 1 + GameData.BALANCE.SPECIES_COUNTER.bonus;
+          else if (speciesRel < 0) dmg *= 1 - GameData.BALANCE.SPECIES_COUNTER.bonus;   // v35（E173）：克制幅度接线 SPECIES_COUNTER.bonus（原字面量 ±15%）
           const eqFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p) : {};   // v19 词缀特效
           // v19 词缀·斩杀：对血量低于两成的敌人增伤
           if (eqFx.execute > 0 && B.enemy.hp < B.enemy.hpMax * 0.2) dmg *= 1 + eqFx.execute;
@@ -927,10 +930,17 @@ const Battle = {
           this.pushFloat('me', `+${heal}`, 'heal');
           this.log(`你施展 <b>${sk.name}</b>，气血恢复 ${heal} 点。`, 'log-gain');
         } else if (sk.kind === 'buffDef') {
+          const fresh = B.buffs.defRounds <= 0;   // 续施不重复触发
           B.buffs.defPower = power; B.buffs.defRounds = sk.rounds;
+          // v35（E140）修瑕：镜像补接——法诀护体系走旧 B.buffs 直写不经 gainBuff，「镜像」永不触发
+          //（同词缀下丹药/符箓增益会触发）；因 B.buffs 与 StatusFx 是两套体系，防御不可双计，
+          // 故走专用探针只补镜像反应，不落 fx
+          if (fresh) this.mirrorProbe();
           this.log(`你施展 <b>${sk.name}</b>，周身罡气激荡，防御大增！`, 'log-gain');
         } else if (sk.kind === 'buffDodge') {
+          const fresh2 = B.buffs.dodgeRounds <= 0;
           B.buffs.dodgeBonus = power; B.buffs.dodgeRounds = sk.rounds;
+          if (fresh2) this.mirrorProbe();   // v35（E140）：残影步类同理
           this.log(`你施展 <b>${sk.name}</b>，身形化作残影！`, 'log-gain');
         }
         break;
@@ -1099,6 +1109,8 @@ const Battle = {
     }
     this.render();
     if (B.enemy.hp <= 0) { await this.victory(); return; }
+    // v35（E171）：魔棘反伤致死不再被敌方对着尸体补完整一轮——直接进收尾判定
+    if (p.hp <= 0) { await this.afterEnemyPhase(st); return; }
     await this.wait(560);
     await this.enemyTurn();
     if (!this.active) return;
@@ -1122,7 +1134,15 @@ const Battle = {
     if (!B) return;
     const fresh = !StatusFx.has(B.myFx, st.kind);
     StatusFx.add(B.myFx, st);
-    if (fresh && B.enemy && B.enemy.hp > 0 && this.eFx(B, 'e_mirror')) {
+    if (fresh) this.mirrorProbe();
+  },
+
+  /** v35（E140）：镜像反应探针——供 gainBuff 与法诀 buffDef/buffDodge（旧 B.buffs 直写路径，
+   *  不入 StatusFx 故不能走 gainBuff，否则防御双计）共用 */
+  mirrorProbe() {
+    const B = this.active;
+    if (!B || !B.enemy || B.enemy.hp <= 0) return;
+    if (this.eFx(B, 'e_mirror')) {
       B.enemy._mirror = (B.enemy._mirror || 0) + 1;
       B.enemy.atk = Math.round(B.enemy.atk * 1.08);
       this.log(`【镜像】${B.enemy.name} 映照你的增益，妖气涨了一分（攻击 +8%）！`, 'log-warn');
@@ -1273,7 +1293,9 @@ const Battle = {
       const healSkills = skills.filter(([id]) => (GameData.ITEMS[id].skill || {}).kind === 'heal');
       const dmgSkills = skills.filter(([id]) => (GameData.ITEMS[id].skill || {}).kind === 'damage');
       if (p.hp < st.maxHp * 0.35 && healSkills.length) {
-        healSkills.sort((a2, b2) => ((GameData.ITEMS[b2[0]].skill || {}).heal || 0) - ((GameData.ITEMS[a2[0]].skill || {}).heal || 0));   // v32 修瑕（E12）：按回复量择优（原恒取第一个）
+        // v35（E139）修瑕：比较器原读死键 `.heal`（治疗法诀的回复量字段是 `.power`，全表无 .heal），
+        // 恒 0 空转、永远施放插入序第一个治疗诀——v32（E12）的「按回复量择优」从未生效
+        healSkills.sort((a2, b2) => ((GameData.ITEMS[b2[0]].skill || {}).power || 0) - ((GameData.ITEMS[a2[0]].skill || {}).power || 0));
         this.act('skill', healSkills[0][0]); return;
       }
       if (dmgSkills.length) {
@@ -1525,14 +1547,14 @@ const Battle = {
       this.addMorale(6);
       return;
     }
-    let dmg = Stat.afterDef(this.enAtk(e) * mult, this.myDef(st)) * Utils.randF(0.85, 1.15);
+    let dmg = Stat.afterDef(this.enAtk(e) * mult, this.myDef(st)) * Utils.randF(GameData.BALANCE.COMBAT.DMG_RAND_MIN, GameData.BALANCE.COMBAT.DMG_RAND_MAX);   // v35（E173）：敌方随机区间接线集中配置
     // v18 种族克制：敌方攻击时计算种族关系
     const speciesRel = GameData.speciesRelation(e.species, 'human');
-    if (speciesRel > 0) dmg *= 1.15;
-    else if (speciesRel < 0) dmg *= 0.85;
+    if (speciesRel > 0) dmg *= 1 + GameData.BALANCE.SPECIES_COUNTER.bonus;
+    else if (speciesRel < 0) dmg *= 1 - GameData.BALANCE.SPECIES_COUNTER.bonus;
     // v34（C3）：会心计入被偷走的「明目」增益（偷梁换柱 critup 此前零读取）
     const crit = Utils.chance(e.crit + StatusFx.pctOf(e.fx, 'critup'));
-    if (crit) dmg *= 1.6;
+    if (crit) dmg *= GameData.BALANCE.COMBAT.ENEMY_CRIT_MULT;   // v35（E173）：接线集中配置（原字面量 1.6）
     const preMit = dmg;   // v29：总减伤封顶锚点（攻防/克制/暴击之后）
     const blocked = Utils.chance(st.block);
     if (blocked) dmg *= GameData.BALANCE.COMBAT.BLOCK_REDUCTION;   // v32（E24）：接线集中配置
@@ -1601,11 +1623,11 @@ const Battle = {
     this.log(text, crit ? 'log-crit' : 'log-battle');
   },
 
-  rollDrops(e, ctx = {}) {
+  rollDrops(e, ctx = {}, rate = 1) {
     const p = Game.player;
     const drops = [];
     // v20 夜战：夜行所获亦丰（额外掉落判定）
-    if (ctx.wx && ctx.wx.night && Utils.chance(35)) {
+    if (ctx.wx && ctx.wx.night && Utils.chance(35 * rate)) {
       const mat = Utils.pick(GameData.matsByTier(e.dropTier));
       Bag.addItem(mat, 1);
       drops.push(`${GameData.ITEMS[mat].name} ×1（夜获）`);
@@ -1617,14 +1639,14 @@ const Battle = {
       drops.push(`${GameData.ITEMS[mat].name} ×${qty}`);
     }
     // v20 精英词缀·守财：死后掉落翻倍（额外一次材料掷取）
-    if (e._fxGold && Utils.chance(60)) {
+    if (e._fxGold && Utils.chance(60 * rate)) {
       const qty = Utils.chance(20) ? 2 : 1;
       const mat = Utils.pick(GameData.matsByTier(e.dropTier));
       Bag.addItem(mat, qty);
       drops.push(`${GameData.ITEMS[mat].name} ×${qty}（守财遗财）`);
     }
     // v19 丹方残页：精英 12% / 普通妖兽 3%
-    if (Utils.chance(e.elite ? 12 : 3)) {
+    if (Utils.chance((e.elite ? 12 : 3) * rate)) {
       Bag.addItem('m_danfang', 1);
       drops.push('丹方残页 ×1');
     }
@@ -1640,7 +1662,7 @@ const Battle = {
         drops.push('【上古法宝碎片】');
       }
     }
-    if (e.rareDrop && Utils.chance(30 + KarmaSys.rareDropBonus(p))) {
+    if (e.rareDrop && Utils.chance((30 + KarmaSys.rareDropBonus(p)) * rate)) {
       const rd = GameData.ITEMS[e.rareDrop];
       if (!(rd.type === 'gongfa' && p.gongfa[e.rareDrop])) {
         Bag.addItem(e.rareDrop, 1);
@@ -1650,7 +1672,7 @@ const Battle = {
     // v32 修瑕（E7）：仙缘套装断头路补源——灵墟/雷狱精英第二稀有掉落（仙缘剑/铃）
     // v33（E78）修瑕：气运加成原全额叠加（10+45=55%），与「一成几率」文案差五倍——
     // 第二稀有单独压系数（封顶约二成），大福缘仍占便宜但不至于刷穿断头路
-    if (e.rareDrop2 && Utils.chance(10 + Math.round(KarmaSys.rareDropBonus(p) * 0.25))) {
+    if (e.rareDrop2 && Utils.chance((10 + Math.round(KarmaSys.rareDropBonus(p) * 0.25)) * rate)) {
       const rd2 = GameData.ITEMS[e.rareDrop2];
       if (rd2) { Bag.addItem(e.rareDrop2, 1); drops.push(`【${rd2.name}】`); }
     }
@@ -1670,7 +1692,15 @@ const Battle = {
       const waveExp = Math.round(B.enemy.expGain * 0.5);
       Cultivate.addExp(p, waveExp);
       p.counters.wins++;
-      Log.add(`你击溃了第 ${B.waveIdx + 1} 波妖群（修为 +${Utils.fmtNum(waveExp)}）——喘息未定，第 ${B.waveIdx + 2} 波已扑到眼前！`, 'warn');
+      // v35（E169）修瑕：中间波原只发半额修为——灵石/掉落全无、悬赏/宗门/精英计数只认最终波，
+      // 三波妖群的前两波白打（悬赏目标在波内时「亲手斩杀却不推进」，玩家直观感受为任务坏了）
+      const waveStone = Math.round(B.enemy.stoneGain * 0.5);
+      if (waveStone > 0) Bag.addStones(waveStone);
+      const waveDrops = this.rollDrops(B.enemy, B.ctx, 0.5);
+      if (B.enemy.elite) p.counters.killsElite = (p.counters.killsElite || 0) + 1;
+      if (B.enemy.id) { SectSys.onKill(B.enemy.id); BountySys.onKill(B.enemy.id); }
+      Log.add(`你击溃了第 ${B.waveIdx + 1} 波妖群（修为 +${Utils.fmtNum(waveExp)}${waveStone ? `、灵石 +${Utils.fmtNum(waveStone)}` : ''}）——喘息未定，第 ${B.waveIdx + 2} 波已扑到眼前！`, 'warn');
+      if (waveDrops.length) Log.add(`捡获：${waveDrops.join('、')}。`, 'log-gain');
       B.waveIdx++;
       const e2 = buildMonster(B.ctx.waveIds[B.waveIdx]);
       // v30 修瑕：续波与首波同口径——夜战倍率 1.1→1.15、补吃 worldMul、补图鉴收录（原续波敌不 Meta.see，图鉴漏收）
@@ -1707,6 +1737,7 @@ const Battle = {
       B.enemyFxIds = [];
       if (e2.elite) this.rollEliteFx(B); else B.enemyFxIds = [];
       B.intent = null;
+      if (!B.ctx.firstStrike && !B.ctx.ambush) this.planIntent();   // v35（E170）：续波重掷意图——原置空不重掷，每波首回合读招博弈断档一轮
       Anim.drop('bt-ehp');
       this.log(`⚔ 第 ${B.waveIdx + 1} 波——<b class="grade-0">${e2.name}</b>（${e2.realmLabel}${e2.elite ? ' · 精英' : ''}${e2.tplName ? ' · ' + e2.tplName : ''}）杀入战团！`, 'warn');
       B.busy = false;   // v22 修瑕：先解忙再渲染——原顺序会把 disabled 按钮锁死整场多波战斗（手动战斗卡死）

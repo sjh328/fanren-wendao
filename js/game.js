@@ -81,10 +81,22 @@ const Game = {
     // 键盘：ESC 依次收起 弹窗（按取消）→ 氛围面板 → 大道弹窗；战斗中 1~5 快捷出手
     document.addEventListener('keydown', (e) => {
       const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement && document.activeElement.tagName) || '');
+      // v35（E185）：role="button" 元素（如属性构成 🔍）的键盘桥接——Enter/Space 触发点击，
+      // tabindex 补齐后键盘/读屏用户首次可达这些入口
+      if (!typing && (e.key === 'Enter' || e.key === ' ') && document.activeElement instanceof HTMLElement
+        && document.activeElement.getAttribute('role') === 'button') {
+        document.activeElement.click();
+        e.preventDefault();
+        return;
+      }
       if (Story.active()) {   // v15：剧情演出中屏蔽快捷键（Enter/空格推进剧情）
         if (e.key === 'Enter' || e.key === ' ') {
+          // v35（E134）修瑕：原只排除了 choice——剧情战开场后 Story.cur 仍在（startBattle 只隐藏
+          // modal 不清 cur），Enter 可把 idx 越过 battle 场景直接 finish，胜负旗标（k3/k6/k8/k9 等）
+          // 永久丢失；investigate（细察）同样可被越过，四枚线索旗标静默蒸发。守卫与 skip() 自停集合对齐
+          if (Battle.active) return;
           const sc = Story.cur && Story.cur.scenes[Story.cur.idx];
-          if (!sc || sc.t !== 'choice') { Story.next(); e.preventDefault(); }
+          if (!sc || (sc.t !== 'choice' && sc.t !== 'battle' && sc.t !== 'investigate')) { Story.next(); e.preventDefault(); }
         }
         return;
       }
@@ -209,7 +221,9 @@ const Game = {
     if (data.meta && data.meta.dead) { UI.toast('此存档已坐化，无法读取', true); return false; }
     UI.closeOverlays();   // 状态同步：清掉可能残留的战斗 / 弹窗覆盖层
     AutoCult.abort();   // v6
-    this.slot = key === 'auto' ? null : key;
+    // v35（E192）：slot 归一为数字——原 dataset 传入的字符串 '1' 与导入面板的数字 1 严格相等
+    // 不命中，Meta.importTo 的「同槽即时生效」分支时灵时不灵
+    this.slot = key === 'auto' ? null : Number(key);
     this.player = PlayerFactory.migrate(data.player);
     this.enterGame();
     Log.clear();
@@ -257,7 +271,7 @@ const Game = {
     // v34（A4）：效率 0.4→0.6——在线挂机每 0.28s 推 3 日，旧参数下挂夜 8 小时只得 12 有效日，
     // 「回家礼物」薄得近乎羞辱；0.6×120 日后长离线有实感，仍显著低于在线效率，无刷点
     let offlineExp = 0;
-    if (p.realmIdx >= 0 && !p.dead) {
+    if (!p.dead) {   // v35（E196）：原 `p.realmIdx >= 0 &&` 恒真死条件删除（realmIdx 已被 migrate/create 钳制 0..9）
       try {
         const st = Stat.compute(p);
         const rushDayBak = p.rushDay; p.rushDay = null;
@@ -273,12 +287,10 @@ const Game = {
     // v32 修瑕（E60）：离线逐日回放标记 + 收益聚合——弟子历练/仙界访客等 auto 钩子原逐日刷屏
     //（30 日离线 30~40 条），现聚合为一条「离线日报」
     this._offlineAgg = {};
-    this._offlineReplay = true;
     for (let i = 0; i < realDays && !p.dead; i++) {
       Time.add(1);
       this.dailySettle(p, true);
     }
-    this._offlineReplay = false;
     p._settleDay = Math.floor(p.day || 0);   // v33（E81）：回放已逐日补结——原不同步 _settleDay，读档后首次行动再补结一轮（至多 30 次冗余日结，全靠各钩子日界防重兜底）
     const aggSnap = Object.assign({}, this._offlineAgg);   // v34（E1）：快照聚合（flush 会清空）
     this.flushOfflineAgg();
@@ -458,15 +470,21 @@ const Game = {
       // v30 滚动快照回捞：把 bak2 写入 auto 后读档（误删/损坏后的安全网）
       const snap = Save.read('bak2');
       if (!snap || !snap.player) { UI.toast('没有可回捞的快照'); return; }
+      // v35（E137）修瑕：回捞前先验快照——dead 档（坐化收场滚入的旧快照）不再允许覆盖当前
+      // 活档（原先覆写 auto 后才被 loadFrom 的死档检查拦下，当前进度已实际被销毁且无副本）；
+      // 覆写前另落一份 auto_pre_bak2 作二级保险
+      if (snap.meta && snap.meta.dead) { UI.toast('该快照来自一位已坐化的修士，无法回捞', true); return; }
       const ok = await UI.popup({
         title: '回捞上次快照',
-        html: `快照时间：第 ${snap.meta.day} 日 · ${snap.meta.realmText} · ${snap.meta.name}。<br>将把这份快照写入自动存档并读取（当前 auto 会被覆盖）。`,
+        html: `快照时间：第 ${snap.meta.day} 日 · ${snap.meta.realmText} · ${snap.meta.name}。<br>将把这份快照写入自动存档并读取（当前 auto 会被覆盖，原档暂存于「回捞前自动档」）。`,
         options: [{ text: '回 捞', value: true, primary: true }, { text: '作罢', value: false }],
       });
       if (!ok) return;
       try {
+        const cur = Save.read('auto');
+        if (cur && cur.player) Save.writeRaw('auto_pre_bak2', JSON.stringify(cur));
         const raw = JSON.stringify(snap);
-        if (Save.storage.setItem) Save.storage.setItem(Save.KEY + 'auto', raw); else Save.mem['auto'] = raw;
+        Save.writeRaw('auto', raw);
       } catch (e) { UI.toast('回捞失败', true); return; }
       Game.loadFrom('auto');
     },

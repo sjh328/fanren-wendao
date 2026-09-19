@@ -130,7 +130,35 @@ const CraftSys = {
     }
     Game.afterAction();
   },
-  drawCost(p) { return Math.round(40 * GameData.stoneEco(p.realmIdx)); },
+  /** v35（E128）：画符成本挂预期产出单源定价——原 40×eco 固定成本对符池严重脱钩：
+   *  r4+ 符池 8 种均价 75.4、产量期望 8 张，变现 271×eco，单击净赚 231×eco/日（≈11~15 场战斗收入）；
+   *  且 v18 的同日成本阶梯被 Time.add(1) 每画推进一日、_drawCount 恒归零，防印钞设计结构性失效。
+   *  现按「符池均价 × 期望产量EV × 0.55 × stoneEco」定价：倒卖期望约 -18% 归负，
+   *  自用（符箓战斗爆发价值远高于面值）依旧划算——画符回归「符修的核心产出」而非印钞机。 */
+  talismanPool(p) {
+    const pool = ['tal_huoshe', 'tal_zilei'];
+    if (p.realmIdx >= 1) pool.push('tal_jinguang', 'tal_jifengfu');
+    if (p.realmIdx >= 2) pool.push('tal_fuling', 'tal_shigu');
+    if (p.realmIdx >= 3) pool.push('tal_bingpo');
+    if (p.realmIdx >= 4) pool.push('tal_posha');
+    return pool;
+  },
+  /** 期望产量（与 drawTalisman 实发逐项同源：rand(0,2) 取均值 1） */
+  expectedQty(p) {
+    let q = 3 + (p.realmIdx >= 2 ? 1 : 0) + (DaoSys.tierLevel(p) >= 1 ? 1 : 0);
+    q *= 1 + (DaoSys.tierLevel(p) >= 2 ? 0.2 : 0.12);   // 朱砂境 20% 翻倍（此前 12%）
+    if (DaoSys.tierLevel(p) >= 6) q += 2;   // 符仙境 +2（在翻倍后追加）
+    return q;
+  },
+  drawCost(p) {
+    const pool = this.talismanPool(p);
+    const avg = pool.reduce((s2, id) => s2 + (GameData.ITEMS[id].price || 0), 0) / Math.max(1, pool.length);
+    return Math.max(40, Math.round(this.expectedQty(p) * avg * 0.55 * GameData.stoneEco(p.realmIdx)));
+  },
+  /** 同日连画阶梯（1×→5×）：一次画符即推进一日，实际仅在极窄窗口生效，保留以防未来时耗改动 */
+  drawMult(p) { return 1 + Math.min(4, (p._drawCount || 0) * 0.75); },
+  /** UI 显示价（成本 × 当日阶梯） */
+  drawPrice(p) { return Math.round(this.drawCost(p) * this.drawMult(p)); },
   /** 画符（符修专属）：耗灵石出符，可自用可售卖 */
   /** 画符（符修专属）：耗灵石出符，可自用可售卖；v13 起随境界逐步解锁新符箓
    *  v18：每日画符成本递增（首次 1×，每轮 +50%，最多 5 倍），防止印钞 */
@@ -152,12 +180,8 @@ const CraftSys = {
     if (typeof Art !== 'undefined' && Art.seasonOf(p) === 1) qty += 2;   // v20 仲夏雷雨：朱砂易引雷，成符 +2
     if (Utils.chance(p.dao === 'talisman' && DaoSys.tierLevel(p) >= 2 ? 20 : 12)) qty *= 2;   // v10 符道六境·朱砂境
     if (DaoSys.tierLevel(p) >= 6) qty += 2;   // v10 符道六境·符仙境
-    // v13 符池：随境界解锁高阶符箓
-    const pool = ['tal_huoshe', 'tal_zilei'];
-    if (p.realmIdx >= 1) pool.push('tal_jinguang', 'tal_jifengfu');
-    if (p.realmIdx >= 2) pool.push('tal_fuling', 'tal_shigu');
-    if (p.realmIdx >= 3) pool.push('tal_bingpo');
-    if (p.realmIdx >= 4) pool.push('tal_posha');
+    // v13 符池：随境界逐步解锁高阶符箓（v35（E128）抽单源 talismanPool——成本定价与实发同池）
+    const pool = this.talismanPool(p);
     const out = {};
     for (let i = 0; i < qty; i++) {
       const pick = pool[Math.floor(Math.random() * pool.length)];

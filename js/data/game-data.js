@@ -550,7 +550,9 @@ const GameData = {
     { item: 'gf_zixiao',      cost: 9000 },
     { item: 'pill_dujie',     cost: 8000 },   // v30：宗门兑换补渡劫丹
     { item: 'pill_taichu',    cost: 5000 },
-    { item: 'm_xianjing',     cost: 800,  qty: 2 },
+    /* v35（E129）：仙晶兑换 cost 800→8000——原 2 枚卖店 45,000 灵石（面值/贡献 125，同表其余 9~50），
+     * 构成「灵石→材料→贡献→灵石」×6 印钞环；对齐 pill_taichu 档后汇率回落 12.5 */
+    { item: 'm_xianjing',     cost: 8000, qty: 2 },
     { item: 'gf_jianxin',     cost: 30000 },
     { item: 'gf_hongmeng',    cost: 30000 },
     { item: 'pill_zaohua',    cost: 20000 },
@@ -852,7 +854,7 @@ const GameData = {
     { id: 'sword',    name: '剑修', motto: '以剑证道，一往无前',
       desc: '剑锋所指，万法皆断。攻击 +50%，防御 -20%；剑心桀骜难驯，大境界渡劫难度 +30%；普攻有两成几率触发【剑心通明】伤害翻倍（剑心通明境后提至三成）。' },
     { id: 'pill',     name: '丹道', motto: '丹炉一转，造化乾坤',
-      desc: '炼丹成功率 +60%，丹药效果 +30%；常年守着丹炉，疏于斗法——攻击 -15%；坊市出售丹药价格提升五成。' },
+      desc: '炼丹成功率 +60%，丹药效果 +30%；常年守着丹炉，疏于斗法——攻击 -15%；坊市出售丹药加价两成五，药理境再添一成五。' },
     { id: 'talisman', name: '符修', motto: '一符在手，天地借法',
       desc: '战斗中可祭出符箓，轰出高额爆发；可在坊市挥毫画符售卖营生；法诀灵力消耗 +20%。' },
     { id: 'body',     name: '体修', motto: '肉身成圣，金刚不坏',

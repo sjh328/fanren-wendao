@@ -56,11 +56,15 @@ bump('manifest.webmanifest', [
 ]);
 console.log(`✓ 版本号单源注入：?v=${cacheV} · SW fanren-wd-v${swV} · manifest 描述`);
 
-/* 1) 可玩本体快照 */
+/* 1) 可玩本体快照（v35（E195）：先落 staging 再原子 rename——原 mkdir+逐个 copy 非原子，
+ *    中途失败会留下半成品目录且被「已存在」护栏挡死重跑，须人工删目录才能继续） */
 const FILES = ['index.html', 'game.js', 'style.css', 'sw.js', 'manifest.webmanifest', 'README.md'];
-fs.mkdirSync(relDir, { recursive: true });
-for (const f of FILES) fs.copyFileSync(path.join(ROOT, f), path.join(relDir, f));
-fs.cpSync(path.join(ROOT, 'icons'), path.join(relDir, 'icons'), { recursive: true });
+const staging = path.join(ROOT, 'releases', `.staging-v${ver}`);
+fs.rmSync(staging, { recursive: true, force: true });
+fs.mkdirSync(staging, { recursive: true });
+for (const f of FILES) fs.copyFileSync(path.join(ROOT, f), path.join(staging, f));
+fs.cpSync(path.join(ROOT, 'icons'), path.join(staging, 'icons'), { recursive: true });
+fs.renameSync(staging, relDir);
 
 /* 2) 根目录更新说明镜像为最新版 */
 fs.copyFileSync(notesSrc, path.join(ROOT, 'UPDATE_NOTES.md'));

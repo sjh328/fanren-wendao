@@ -529,6 +529,12 @@ const ForgeSys = {
     }
     return !!p.bag['z_benming'];
   },
+  /** v35（E160）：碎片「可合成本命」单源判定——原红点/横幅/建议以 counters.gupianGot（累计收取）
+   *  判定且三处守卫互不一致：合成本命后碎片清零红点仍永久假亮、碎片卖掉横幅仍挂「集齐可合成」。
+   *  语义回归「当前持有 ≥9 且尚无本命」 */
+  gupianReady(p) {
+    return (p.bag && (p.bag['m_gupian'] || 0) >= 9) && !this.benmingOwn(p);
+  },
   async feedBenming() {
     const p = Game.player;
     if (!p.benming) p.benming = { lv: 0 };

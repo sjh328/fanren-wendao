@@ -148,6 +148,10 @@ const Story = {
   async startBattle() {
     const c = this.cur;
     if (!c || this._battling) return;
+    // v35（E135）修瑕：问道录「重读」可触发真实战斗——skip()/自动播放均有 readonly 守卫，
+    // 唯 startBattle 漏网：重读章节的「迎 战」按钮真打一场、战斗计数/掉落/成就照单全收，
+    // 且重读战斗中战败还会叠加 E134 的序列错乱。回顾模式一律不放行
+    if (c.readonly) return;
     const sc = c.scenes[c.idx];
     if (!sc || sc.t !== 'battle') return;
     const p = Game.player;
@@ -328,7 +332,9 @@ const Story = {
       <div class="story-battle-card">
         <div class="story-battle-name">⚔ ${Utils.esc(sc.label || '剧情战')}${foeName ? ' · ' + Utils.esc(foeName) : ''}</div>
         <div class="story-text">${sc.text || ''}</div>
-        <button class="btn btn-primary" data-action="story-battle">迎 战 ▸</button>
+        ${c.readonly
+          ? '<div class="story-text" style="color:var(--text-faint)">—— 此战已成往事，回顾不再重演（当年胜负自见下文）。</div>'
+          : '<button class="btn btn-primary" data-action="story-battle">迎 战 ▸</button>'}
       </div>`;
     } else if (sc.t === 'montage') {
       body = `<div class="story-montage">${(sc.text || '').split('\n').map(t => `<p class="story-p">${t}</p>`).join('')}</div>`;

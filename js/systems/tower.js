@@ -277,21 +277,34 @@ const TowerSys = {
           : await this.blessStep(p, run, floor, advance);
         if (quit) { quitAll = true; break; }
       }
-      // v32（C6）：跳层赌约——过关后偶发的风险自选：跳过下一层（弃其层奖）直上二层，
-      // 本次登塔内守影攻 +25%，塔绩 +1/次。roguelike 从「只拿祝福」变「每层的贪稳抉择」。
+      // v32（C6）跳层赌约——v35（E138）修瑕：原接受分支 `run.floor += 1` 抬高的是**已开打的这一层**，
+      // 被跳层照发层奖（且按被抬高层计价）、最高层纪录虚增——赌约成了稳赚不赔的正期望。
+      // 现接受分支改为「作废刚开打的这一层」：该层战斗（弹窗拦路、尚未出手）就地收场、
+      // 跳进再下一层——被跳层真正一无所获，层奖/纪录/文案三者归位；拒绝则照常作战（v32 体验不变）。
+      // 兜底：若该层已被打完（自动战斗等时机已过），赌约作罢不追溯。
       if (!quitAll && run && run.floor < 90 && Utils.chance(15)) {
-        const ok2 = await UI.popup({
+        const skipTarget = run.floor;   // 即将开打/刚开打的下一层
+        let settled = false;
+        UI.popup({
           title: '✦ 登天塔 · 跳层赌约',
-          html: `塔中忽起异风——下一层的守影气息暴涨。<br><span class="tip-line">· 赌约：跳过第 ${run.floor + 1} 层（放弃其层奖），直上第 ${run.floor + 2} 层；此后守影攻击 +25%（本次登塔内）。塔绩 +1。</span>`,
+          html: `塔中忽起异风——下一层的守影气息暴涨。<br><span class="tip-line">· 赌约：跳过第 ${skipTarget} 层（放弃其层奖），直上第 ${skipTarget + 1} 层；此后守影攻击 +25%（本次登塔内）。塔绩 +1。</span>`,
           options: [{ text: '掷下赌约 · 直上二层', value: true, primary: true }, { text: '稳步登楼', value: false }],
-        });
-        if (ok2) {
+        }).then(ok2 => {
+          if (settled || !ok2) return;
+          settled = true;
+          const B = Battle.active;
+          if (!run || !B || B.over || !B.ctx || B.ctx.mapName !== `登天塔 · 第 ${skipTarget} 层`) {
+            Log.add('塔风已散——这一层已在脚下，赌约错过了兑现的时机。', 'info');
+            return;
+          }
           run.floor += 1;   // 连同常规 +1 合计跳两层
           run.risk = (run.risk || 0) + 1;
           run.riskAtk = 1.25;
           p.counters.towerWins = (p.counters.towerWins || 0) + 1;
           Log.add('你应下赌约——塔风呼啸，石阶在脚下连退两层！（塔绩 +1，此后守影更凶）', 'event');
-        }
+          Battle.end();   // 作废被跳层（未出手，零损耗）
+          this.nextFloor();
+        });
       }
     }
   },
@@ -404,7 +417,13 @@ const TowerSys = {
         <div class="tip-line">· ${healTxt}，塔风一清。</div>`,
       options: [{ text: '继续登层', value: true, primary: true }, { text: '收手离塔（带足战利品）', value: '__quit' }],
     });
-    if (v === '__quit' || v == null) { if (v === '__quit') { this.leave(); return true; } return false; }
+    if (v === '__quit' || v == null) {
+      if (v === '__quit') { this.leave(); return true; }
+      // v35（E172）：ESC 对齐 blessStep——原静默滞留不续层，玩家被丢回游历页如同掉线
+      // （宝箱重物已在弹窗前置入，故仅提示续层）
+      if (advance) this.nextFloor();
+      return false;
+    }
     if (advance) this.nextFloor();
     return false;
   },

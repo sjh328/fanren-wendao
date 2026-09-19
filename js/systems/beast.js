@@ -165,6 +165,7 @@ const BeastSys = {
     if (tac === 'guard' && p.hp < Stat.compute(p).maxHp * 0.4) chase += 15;
     if (!Utils.chance(Utils.clamp(chase, 5, 80))) return false;   // v30：亲昵/连击/招式呼应皆入追击成算
     const dmg = Math.max(1, Math.round(st.atk * (0.22 + b.level * 0.03) * (1 + b.power * 0.02) * (b.evolved ? 1.3 : 1) * Utils.randF(0.8, 1.2)));   // v19 进化 ×1.3
+    let hitTotal = dmg;   // v35（E141）：含蚀魂等追加，供 onEnemyHit 结算（反伤/不灭）
     B.enemy.hp = Math.max(0, B.enemy.hp - dmg);
     B.hitShake = true;
     if (B.stats) { B.stats.out += dmg; if (B.stats.src) B.stats.src.beast += dmg; }   // v20 伤害构成统计
@@ -193,6 +194,7 @@ const BeastSys = {
       } else if (sk.kind === 'mpburn') {
         const extra = Math.max(1, Math.round(dmg * 0.25));
         B.enemy.hp = Math.max(0, B.enemy.hp - extra);
+        hitTotal += extra;
         if (B.stats) { B.stats.out += extra; if (B.stats.src) B.stats.src.beast += extra; }
         skillNote += `【${sk.name}·蚀魂 +${extra}】`;
       } else if (sk.kind === 'guard') {
@@ -205,6 +207,9 @@ const BeastSys = {
       }
     }
     Battle.log(`${skillNote}你的灵兽 <b>${b.name}</b> 亦张牙舞爪扑上助战——造成 <b>${dmg}</b> 点伤害！`, 'log-gain');
+    // v35（E141）修瑕：助战路径原未接 onEnemyHit——带「不灭」的精英可被灵兽补刀无声跳过复活、
+    // 「魔棘」对助战伤害零反弹（同一词缀时灵时不灵）。按总伤（含蚀魂追加）统一结算
+    Battle.onEnemyHit(B, st, hitTotal);
     Battle.render();
     await Battle.wait(360);
     // v30：法诀呼应——主人刚施展过法诀，灵兽以天生属性补一手侵扰（五成几率）
@@ -248,30 +253,37 @@ const BeastSys = {
     Bag.removeItem('m_neidan', 1);
     b.exp += 500;
     let up = false;
-    while (b.level < 10 && b.exp >= b.level * 400) { b.exp -= b.level * 400; b.level++; up = true; }
-      if (up) {
-        let extra = '';
-        // v19 五阶习得物种天生技，九阶精进
-        // v34（E122）：原死条件 `!b.skills.length` 把「带继承技驯来」的灵兽（驯服即 slice 一条技能）
-        // 永远挡在第一物种技门外——同物种两种养成结果且无任何说明。改为按物种 id 判重补插。
-        if (b.level === 5 && this.SPECIES_SKILLS[b.species] && !(b.skills || []).some(s => s && s.name === this.SPECIES_SKILLS[b.species].name)) {
-          b.skills = b.skills || [];
-          b.skills.unshift({ ...this.SPECIES_SKILLS[b.species] });
-          extra = `，并领悟天生技【${b.skills[0].name}】`;
-        } else if (b.level === 9 && b.skills && b.skills.length && b.skills[0].pct) {
-          b.skills[0].pct = Math.round(b.skills[0].pct * 1.5 * 10) / 10;
-          extra = `，天生技【${b.skills[0].name}】威力精进`;
-        }
-        // v20 十阶开第二天生技
-        if (b.level >= 10 && (!b.skills || b.skills.length < 2) && this.SPECIES_SKILLS2[b.species]) {
-          b.skills = b.skills || [];
-          b.skills.push({ ...this.SPECIES_SKILLS2[b.species] });
-          extra = `，并领悟第二天生技【${b.skills[b.skills.length - 1].name}】！`;
-        }
-        // v32 修瑕（E2）：第三技判定移出 if(up)（checkThirdSkill 在下方独立执行，亲昵路线不再漏发）
-        Log.add(`【${b.name}】吞下内丹，周身妖气一涨——灵兽升至 <b>${b.level} 阶</b>！${extra || '协助作战愈发骁勇。'}`, 'gain');
-        UI.toast(`${b.name} 升至 ${b.level} 阶`);
-      } else {
+    let extra = '';
+    // v35（E142）修瑕：物种技/精进判定移入 while 逐级结算——原只在循环结束后做 `b.level === 5/9`
+    // 等值比较，攒经验跳级（4 级兽攒 3899 经验一口 4→6、8 级攒两趟派遣 8→10）可永漏五阶天生技与
+    // 九阶精进且无补救；逐级结算后任何跳级路径都不再漏
+    while (b.level < 10 && b.exp >= b.level * 400) {
+      b.exp -= b.level * 400;
+      b.level++;
+      up = true;
+      // v19 五阶习得物种天生技，九阶精进
+      // v34（E122）：原死条件 `!b.skills.length` 把「带继承技驯来」的灵兽（驯服即 slice 一条技能）
+      // 永远挡在第一物种技门外——同物种两种养成结果且无任何说明。改为按物种 id 判重补插。
+      if (b.level === 5 && this.SPECIES_SKILLS[b.species] && !(b.skills || []).some(s => s && s.name === this.SPECIES_SKILLS[b.species].name)) {
+        b.skills = b.skills || [];
+        b.skills.unshift({ ...this.SPECIES_SKILLS[b.species] });
+        extra = `，并领悟天生技【${b.skills[0].name}】`;
+      } else if (b.level === 9 && b.skills && b.skills.length && b.skills[0].pct) {
+        b.skills[0].pct = Math.round(b.skills[0].pct * 1.5 * 10) / 10;
+        extra = `，天生技【${b.skills[0].name}】威力精进`;
+      }
+      // v20 十阶开第二天生技
+      if (b.level >= 10 && (!b.skills || b.skills.length < 2) && this.SPECIES_SKILLS2[b.species]) {
+        b.skills = b.skills || [];
+        b.skills.push({ ...this.SPECIES_SKILLS2[b.species] });
+        extra = `，并领悟第二天生技【${b.skills[b.skills.length - 1].name}】！`;
+      }
+    }
+    if (up) {
+      // v32 修瑕（E2）：第三技判定移出 if(up)（checkThirdSkill 在下方独立执行，亲昵路线不再漏发）
+      Log.add(`【${b.name}】吞下内丹，周身妖气一涨——灵兽升至 <b>${b.level} 阶</b>！${extra || '协助作战愈发骁勇。'}`, 'gain');
+      UI.toast(`${b.name} 升至 ${b.level} 阶`);
+    } else {
       Log.add(`【${b.name}】吞下内丹，妖气渐长（灵兽经验 +500）。`, 'info');
     }
     this.checkThirdSkill(b);   // v32 修瑕（E2）：喂食即检查第三技（十阶+亲昵 ≥80 任意时点补发）
@@ -402,7 +414,16 @@ const BeastSys = {
     b.trip = null;
     Game.afterAction();
   },
-  /** v20 斗兽场：押注观战，胜得 1.6 倍彩头（v30：日限三场，防满养成兽正期望无限复投） */
+  /** v20 斗兽场：押注观战，胜得 1.6 倍彩头（v30：日限三场）
+   *  v35（U2/E177）重构：斗兽场从「盲押陷阱」变「可决策的风险定价」——原对手分布下初始兽
+   *  胜率 21%、中期 24%（对 1.6 倍赔付期望 -61%~-66%，中前期是纯亏陷阱），仅毕业兽 +32%，
+   *  且界面零胜率信息。现胜算由养成度（力量/阶数/蜕变/亲昵四维加权）单点定夺：
+   *  低养成 ≈44%、满养成 ≈77%（毕业兽正期望保留、日限三场封量），面板实时显示胜算预估
+   *  与 62.5% 保本线——押不押、押多大，第一次有据可依。 */
+  arenaWinP(b) {
+    const s = Utils.clamp(b.power, 1, 60) / 60 * 0.4 + (b.level / 10) * 0.3 + (b.evolved ? 0.15 : 0) + Math.min(1, (b.bond || 0) / 100) * 0.15;
+    return Math.round(Utils.clamp(42 + 35 * s, 42, 77));
+  },
   async arena() {
     const p = Game.player;
     const b = this.activeBeast(p);
@@ -416,9 +437,12 @@ const BeastSys = {
       { name: '中注', base: 800 },
       { name: '豪注', base: 5000 },
     ];
+    const winP = this.arenaWinP(b);
     const pick = await UI.popup({
       title: `斗兽场 · ${b.name}`,
-      html: `洞府演武场难得热闹—— ${b.name}（${b.level} 阶${b.evolved ? ' · 蜕变' : ''}）对阵山野妖王。<br>押它一注，胜者得 1.6 倍彩头。`,
+      html: `洞府演武场难得热闹—— ${b.name}（${b.level} 阶${b.evolved ? ' · 蜕变' : ''}${(b.bond || 0) >= 80 ? ' · 心有灵犀' : ''}）对阵山野妖王。<br>
+        <span class="tip-line">· 胜算预估 <b class="hl">${winP}%</b>（按力量/阶数/蜕变/亲昵折算）</span>
+        <span class="tip-line">· 胜者得 1.6 倍彩头——胜算 62.5% 方为保本，养成愈深，胜算愈高。</span>`,
       options: tiers.map((t, i) => ({ text: `${t.name}（${Utils.fmtNum(Math.round(t.base * eco))}灵石）`, value: i, primary: i === 0 })).concat([{ text: '看看就好', value: null }]),
     });
     if (pick == null) return;
@@ -426,16 +450,7 @@ const BeastSys = {
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     p.counters.arena.n++;
     Time.add(1);
-    // v29 修瑕：对手同权重吃养成项（阶数/蜕变/亲昵）——此前 oppScore 只看 power，
-    // 养成后胜率远超盈亏点（赔付 1.8 倍），斗兽场成了正期望印钞机
-    // v30 复核：满养成兽仍 +20%~47% 期望——对手阶数/蜕变分布再压一档并加日限三场
-    const oppPower = Utils.clamp(Math.round(b.power * Utils.randF(0.8, 1.3)), 1, 60);
-    const oppLevel = Math.max(1, b.level + Utils.rand(-1, 3));
-    const oppEvo = Utils.chance(Utils.clamp(18 + b.level * 7, 0, 75));
-    const oppBond = Utils.rand(0, Math.max(12, b.bond || 0));
-    const myScore = b.power + b.level * 2 + (b.evolved ? 8 : 0) + (b.bond || 0) / 10 + Utils.rand(0, 10);
-    const oppScore = oppPower + oppLevel * 2 + (oppEvo ? 8 : 0) + oppBond / 10 + Utils.rand(0, 10);
-    const win = myScore >= oppScore;
+    const win = Utils.chance(winP);
     if (win) {
       const prize = Math.round(cost * 1.6);
       Bag.addStones(prize);

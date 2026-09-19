@@ -206,23 +206,28 @@ const Cultivate = {
     Time.add(1);
     if (p.dead) return;
     if (p.dao === 'body') DaoSys.gain(p, 10);   // v16 体魄：吐纳炼体
-    // v34（F3）：调息 +2 感悟（每游戏日限一次）——修炼自回血、闭关回更多，调息原是三枚死按钮之一；
-    // 打坐凝神偶有顿悟，赋予其独有收益后成为「回血顺便赚感悟」的低耗决策点
-    p._restDay = p._restDay || -1;
-    const dayNow = Math.floor(p.day || 0);
-    const gotIns = p._restDay !== dayNow;
-    if (gotIns) { p._restDay = dayNow; p.insight = Math.min(100, (p.insight || 0) + 2); }
-    Log.add(`你寻一处灵气充裕之地打坐调息，气血灵力恢复大半${detox ? `，气机流转间化解了 ${detox} 点丹毒` : ''}${gotIns ? '，凝神之际偶有所悟（突破感悟 +2）' : ''}。`, 'gain');
+    // v34（F3）：调息 +2 感悟——修炼自回血、闭关回更多，调息原是三枚死按钮之一；
+    // 打坐凝神偶有顿悟，赋予其独有收益后成为「回血顺便赚感悟」的低耗决策点。
+    // v35（E159）：原「每游戏日限一次」守卫在 Time.add(1) 之后判定，dayNow 恒为新日、守卫永不拦截——
+    // 但「一次调息恰耗一日」本身构成天然日限，效果与设计意图一致；现移除死守卫并注明口径
+    p.insight = Math.min(100, (p.insight || 0) + 2);
+    Log.add(`你寻一处灵气充裕之地打坐调息，气血灵力恢复大半${detox ? `，气机流转间化解了 ${detox} 点丹毒` : ''}，凝神之际偶有所悟（突破感悟 +2）。`, 'gain');
     Game.afterAction();
   },
   secludeCost(p) { return Math.round(30 * GameData.stoneEco(p.realmIdx)); },
   async seclude() {
     const p = Game.player;
     const cost = this.secludeCost(p);
+    // v35（U5c）：真仙圆满态预估改报仙元——原预估恒按修为口径（「≈6.8 亿修为」），实发却是
+    // 溢流折算的仙元（数字币种双失真）
+    const r9Full = p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeed(p.realmIdx, 3);
+    const est = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMultExp());
     const ok = await UI.popup({
       title: '闭关修炼',
       html: `闭关三十日，心无旁骛，修行效率远胜平日。<br>
-        预计可得修为 <span class="hl">≈${Utils.fmtNum(Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMultExp()))}</span>（视悟性与诸般加成略有浮动）。<br>
+        ${r9Full
+          ? `修为轴已至尽头——预计可炼 <span class="hl">仙元 ≈${Utils.fmtNum(Math.max(1, Math.round(est / (GameData.eco(9) * 0.05))))}</span>（圆满态溢流折算，视加成略有浮动）。`
+          : `预计可得修为 <span class="hl">≈${Utils.fmtNum(est)}</span>（视悟性与诸般加成略有浮动）。`}<br>
         需支付洞府灵石开销 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石／轮。<br>
         <span class="neg">若修为已至圆满，闭关中会自行冲关。</span>
         <label class="opt-line"><input type="checkbox" id="seclude-until-level">
@@ -241,7 +246,9 @@ const Cultivate = {
     if (p.dao === 'array') DaoSys.gain(p, 10);   // v16 阵道：聚灵
     if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
     Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
+    const yuanBefore = p.counters.xianyuan || 0;
     this.addExp(p, gain);
+    const yuanGain = (p.counters.xianyuan || 0) - yuanBefore;   // v35（U5c）：圆满态溢流折算的仙元入账
     UI.float(`修为 +${Utils.fmtNum(gain)} · 丹毒 -12`);   // v21 行动浮字
     p.poison = Math.max(0, p.poison - 12);
     Time.add(30);
@@ -249,11 +256,15 @@ const Cultivate = {
     let advanced = false;
     if (p.layer === 3 && p.exp >= GameData.layerNeed(p.realmIdx, 3)) {
       await Utils.sleep(400);
+      const r0 = p.realmIdx, l0 = p.layer;
       await this.breakthrough(10);
-      advanced = true;   // 冲关 / 天劫自有一幕演出，不再另弹结算
+      // v35（U5c）修瑕：r9 圆满时 breakthrough 早退（358 行 realmIdx>=9 直接 return），
+      // 原 advanced 恒置 true 吞掉结算报告——圆满态单轮闭关从此「无出关一纸账」。
+      // 现以境界是否真变迁为准。
+      advanced = p.realmIdx !== r0 || p.layer !== l0;
     }
     Game.afterAction();
-    if (!advanced) this.settleReport({ rounds: 1, exp: gain, days: 30, advanced: 0, from: null, to: this.realmLabel(p) });   // v21 结算报告
+    if (!advanced) this.settleReport({ rounds: 1, exp: gain, xianyuan: yuanGain, days: 30, advanced: 0, from: null, to: this.realmLabel(p) });   // v21 结算报告
   },
   /** v21：闭关结算报告——出关一纸小账，进益历历在目 */
   realmLabel(p) { return GameData.REALM_NAMES[p.realmIdx] + GameData.LAYER_NAMES[p.layer]; },
@@ -263,6 +274,8 @@ const Cultivate = {
     const rows = [
       [`闭关轮次`, `${rep.rounds} 轮`],
       [`修为进益`, `<b class="hl">+${Utils.fmtNum(Math.round(rep.exp))}</b>`],
+      // v35（U5c）：圆满态溢流炼作的仙元单独成行——原报告只报名义修为，真仙圆满期对不上账
+      ...(rep.xianyuan > 0 ? [[`仙元炼化`, `<b class="hl" style="color:var(--gold,#d4af37)">+${Utils.fmtNum(Math.round(rep.xianyuan))}</b>`]] : []),
       [`丹毒化解`, `<b style="color:var(--ok)">-${rep.rounds * 12}</b>`],
       [`历时`, `${Utils.fmtNum(rep.days)} 日`],
     ];
@@ -280,15 +293,18 @@ const Cultivate = {
     let p = Game.player;
     Log.add('你拂尘入室，立誓非至进境，不出此关。', 'system');
     let rounds = 0;
-    const rep = { rounds: 0, exp: 0, days: 0, advanced: 0, from: this.realmLabel(p) };   // v21 结算报告累计
+    const rep = { rounds: 0, exp: 0, xianyuan: 0, days: 0, advanced: 0, from: this.realmLabel(p) };   // v21 结算报告累计（v35（U5c）：补仙元行）
     while (rounds++ < 120) {
       if (!p || p.dead || Game.player !== p) return;   // 兵解/回溯等更换玩家对象时，旧循环立即作废
       // v29 修瑕：剧情/弹窗挂起时闭关暂停——此前节庆弹窗会被下一轮闭关的自动取消逻辑顶掉
       // v30 修瑕：天劫弹窗未决同样必须暂停——原守护只查剧情/弹窗，冲关劫决期间循环继续烧灵石岁月、
       //          重入 Tribulation.run 连环吞渡劫丹并反复覆写回溯备份 bak（对齐 autocult 的守护）
       // v31 修瑕：战斗进行中同样必须暂停——守护此前缺 Battle.active，循环间隙点探索开战后闭关照常烧岁月
+      // v35（E152）：补叩问大道弹窗守护——dao-modal 不是 UI.popup，转道后渡劫失利（pendingDao）
+      // 弹出的叩问大道在场时，循环原会继续烧灵石与岁月（与 AutoCult 的守护不对称）
       if ((typeof Story !== 'undefined' && Story.active && Story.active()) || UI._popupResolve || Tribulation.state
-        || (typeof Battle !== 'undefined' && Battle.active)) {
+        || (typeof Battle !== 'undefined' && Battle.active)
+        || (document.getElementById('dao-modal') && !document.getElementById('dao-modal').classList.contains('hidden'))) {
         Log.add('天劫将至、外事来扰，你暂敛心神，出关一顾。', 'warn');
         break;
       }
@@ -303,7 +319,9 @@ const Cultivate = {
       if (p.dao === 'array') DaoSys.gain(p, 10);   // v16 阵道：聚灵
       if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
       Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（第${rounds}轮 · 修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
+      const yuanBefore = p.counters.xianyuan || 0;
       this.addExp(p, gain);
+      rep.xianyuan += (p.counters.xianyuan || 0) - yuanBefore;   // v35（U5c）：圆满态溢流折算的仙元
       rep.rounds++; rep.exp += gain; rep.days += 30;
       p.poison = Math.max(0, p.poison - 12);
       Time.add(30);

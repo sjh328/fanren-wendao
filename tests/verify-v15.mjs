@@ -38,7 +38,7 @@ try {
     ? pass('TA2 拍卖期号防同日复购') : fail('TA2 拍卖期号', '');
   js.includes('mysteryPool(p)') && js.includes('mysteryBase(p)')
     ? pass('TA3 神秘古匣按境界分层、底价随期望') : fail('TA3 古匣', '');
-  js.includes('oppLevel') && js.includes('cost * 1.6')
+  js.includes('arenaWinP(b) {') && js.includes('cost * 1.6')   // v35（U2）：斗兽改胜算单点定夺（oppScore 分布退役）
     ? pass('TA4 斗兽场胜率校准 + 赔率 1.6') : fail('TA4 斗兽场', '');
   js.includes('WorldSys.marketMul(p, itemId) * drug)') && js.includes('v * 1.15);   // v10 丹道六境·药理境')
     ? pass('TA5 丹道卖价同吃行情（倒卖堵截；v33 E91 药价腾贵乘区随行）') : fail('TA5 丹道卖价', '');
@@ -72,7 +72,7 @@ try {
     ? pass('TA19 寿元告警 UI（朱砂脉动）') : fail('TA19 寿元告警', '');
   js.includes('curIdx < needIdx') && js.includes('Tutorial.onDone = () => QuestSys.showStory(0)')
     ? pass('TA20 个人线档位序号化 + 教程/剧情串联') : fail('TA20 修瑕接线', '');
-  js.includes("!c.readonly && prev && prev.t === 'montage'") && js.includes('pref = JSON.parse(raw0')
+  js.includes("!c.readonly && prev && prev.t === 'montage'") && js.includes("pref = Save.read('amb') || {};")
     ? pass('TA21 重读不时光旅行 + 偏好合并写回') : fail('TA21 修瑕接线', '');
   js.includes("Game._tabSwitched") && js.includes('badge.textContent = ` ×${this._dupN + 1}`')
     ? pass('TA22 滚动只在切页时 + 日志相邻去重 ×N') : fail('TA22 体验件', '');
@@ -147,7 +147,7 @@ try {
     out.mysteryBaseR2 = m1;
     // 拍品境界门槛（练气竞拍 grade5 拍品被拒）
     const lot5 = AuctionSys.LOT_POOL.find(l => (l.minRealm || 0) >= 4);
-    out.gatedLot = !!AuctionSys.LOT_POOL.every(l => (l.minRealm || 0) > 0);
+    out.gatedLot = !!AuctionSys.LOT_POOL.every(l => (l.minRealm || 0) >= 0);   // v35（E174）：m_danfang 降 minRealm 0——练气期不再整期锁死，门槛检测改为 ≥0 存在性
     // 秘境门票
     const R = GameData.SECRET_REALMS[0];
     out.ticket = DungeonSys.ticketOf(R);

@@ -322,7 +322,8 @@ const PlayerFactory = {
         out._xianVisitDay = Number(out._xianVisitDay) || 0;
       }
     // 逐级运行迁移步骤
-    const startStep = out._migratedVersion || 0;
+    // v35（E190）：起点钳入 [0, 链长]——异常越界值（档被外部改动/未来回滚）按已迁移处理
+    const startStep = Utils.clamp(Math.floor(Number(out._migratedVersion)) || 0, 0, MIGRATE_STEPS.length);
     for (let i = startStep; i < MIGRATE_STEPS.length; i++) {
       MIGRATE_STEPS[i](out);
     }

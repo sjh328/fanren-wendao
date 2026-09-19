@@ -150,10 +150,22 @@ const SectSys = {
     if (t.progress >= t.need) Log.add('任务已可领取奖励！', 'gain');
     Game.afterAction();
   },
+  /** v35（E129）：差事领赏每日上限——贡献是货币而非印钞机（cult 类任务一次修炼即满、claim 后即换新
+   *  且无限制，配合兑换环节可整日刷贡献）。6 桩/日，跨日重置 */
+  CLAIM_DAILY: 6,
+  claimLeft(p) {
+    const today = Math.floor(p.day || 0);
+    if (p._claimDay !== today) return this.CLAIM_DAILY;
+    return Math.max(0, this.CLAIM_DAILY - (p._claimCount || 0));
+  },
   claim(taskIdx) {
     const p = Game.player;
     const t = p.sect.tasks[taskIdx];
     if (!t || t.progress < t.need) return;
+    const today = Math.floor(p.day || 0);
+    if (p._claimDay !== today) { p._claimDay = today; p._claimCount = 0; }
+    if ((p._claimCount || 0) >= this.CLAIM_DAILY) { UI.toast(`今日差事赏格已领满（${this.CLAIM_DAILY} 桩）——门中也要按例办事，明日再来`); return; }
+    p._claimCount = (p._claimCount || 0) + 1;
     const r = this.rewards(p, t);
     p.sect.contrib += r.contrib;
     // v32（F4）连勤有赏：每完成三桩差事额外 +20% 贡献——门中勤勉自此有复利
@@ -184,8 +196,8 @@ const SectSys = {
       Game.afterAction();
       return;
     }
-    Game.afterAction();
     Battle.start(t.target, { mapName: '宗门生死状', sectDanger: taskIdx });
+    Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
   },
   onDangerWin(taskIdx) {
     const p = Game.player;

@@ -184,13 +184,13 @@ const UI = {
         <span>根骨 <b>${p.attrs.gen}</b></span><span>悟性 <b>${p.attrs.comp}</b></span><span>福缘 <b>${p.attrs.luck}</b></span><span>体魄 <b>${p.attrs.body}</b></span>
       </div>
       <div class="stat-grid">
-        <div class="stat-line"><span>攻击</span><b class="stat-detail" data-action="stat-detail" data-stat="atk" title="点击查看构成" style="cursor:pointer">${st.atk} 🔍</b></div>
-        <div class="stat-line"><span>防御</span><b class="stat-detail" data-action="stat-detail" data-stat="def" title="点击查看构成" style="cursor:pointer">${st.def} 🔍</b></div>
-        <div class="stat-line"><span>身法</span><b class="stat-detail" data-action="stat-detail" data-stat="speed" title="点击查看构成" style="cursor:pointer">${st.speed} 🔍</b></div>
-        <div class="stat-line"><span>暴击</span><b class="stat-detail" data-action="stat-detail" data-stat="crit" title="点击查看构成" style="cursor:pointer">${st.crit.toFixed(0)}% 🔍</b></div>
-        <div class="stat-line"><span>闪避</span><b class="stat-detail" data-action="stat-detail" data-stat="dodge" title="点击查看构成" style="cursor:pointer">${st.dodge.toFixed(0)}% 🔍</b></div>
-        <div class="stat-line"><span>格挡</span><b class="stat-detail" data-action="stat-detail" data-stat="block" title="点击查看构成" style="cursor:pointer">${st.block.toFixed(0)}% 🔍</b></div>
-        <div class="stat-line"><span>气血构成</span><b class="stat-detail" data-action="stat-detail" data-stat="maxHp" title="点击查看构成" style="cursor:pointer">🔍 明细</b></div>
+        <div class="stat-line"><span>攻击</span><b class="stat-detail" role="button" tabindex="0" data-action="stat-detail" data-stat="atk" title="点击查看构成" style="cursor:pointer">${st.atk} 🔍</b></div>
+        <div class="stat-line"><span>防御</span><b class="stat-detail" role="button" tabindex="0" data-action="stat-detail" data-stat="def" title="点击查看构成" style="cursor:pointer">${st.def} 🔍</b></div>
+        <div class="stat-line"><span>身法</span><b class="stat-detail" role="button" tabindex="0" data-action="stat-detail" data-stat="speed" title="点击查看构成" style="cursor:pointer">${st.speed} 🔍</b></div>
+        <div class="stat-line"><span>暴击</span><b class="stat-detail" role="button" tabindex="0" data-action="stat-detail" data-stat="crit" title="点击查看构成" style="cursor:pointer">${st.crit.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>闪避</span><b class="stat-detail" role="button" tabindex="0" data-action="stat-detail" data-stat="dodge" title="点击查看构成" style="cursor:pointer">${st.dodge.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>格挡</span><b class="stat-detail" role="button" tabindex="0" data-action="stat-detail" data-stat="block" title="点击查看构成" style="cursor:pointer">${st.block.toFixed(0)}% 🔍</b></div>
+        <div class="stat-line"><span>气血构成</span><b class="stat-detail" role="button" tabindex="0" data-action="stat-detail" data-stat="maxHp" title="点击查看构成" style="cursor:pointer">🔍 明细</b></div>
         <div class="stat-line"><span>战力</span><b class="hl" title="综合战力：攻防血速暴闪格加权">武 ${Utils.fmtNum(Stat.power(p))}</b></div>
       </div>
       <div class="sec-title">道行状态</div>
@@ -223,7 +223,7 @@ const UI = {
     if (p.layer === 3 && p.exp >= need && p.realmIdx < 9) alert = { text: '修为圆满，可冲击瓶颈', go: 'cultivate', major: true };
     else if (p.realmIdx === 9 && p.layer === 3 && p.exp >= need && !p.flags.ascended) alert = { text: '真仙圆满，可白日飞升', go: 'cultivate', major: true };
     else if (p.realmIdx >= 1 && !p.dao) alert = { text: '大道未定，宜叩问大道', go: 'cultivate', major: true };
-    else if ((p.counters.gupianGot || 0) >= 9 && !p.bag.z_benming && !Object.values(p.equipped).some(e => e && Utils.eqId(e) === 'z_benming')) alert = { text: '九枚碎片集齐，可合成本命法宝', go: 'map:realm', major: true };
+    else if (ForgeSys.gupianReady(p)) alert = { text: '九枚碎片集齐，可合成本命法宝', go: 'map:realm', major: true };   // v35（E160）：单源判定
     else if ((p.karma || 0) >= 100) alert = { text: '孽障缠身，可斩三尸', go: 'cultivate', major: true };
     else if (QuestSys.SIDES.some(sd => !(p.quest || {}).side[sd.id] && p.realmIdx >= sd.minRealm && sd.steps.every(x => QuestSys.stepDone(x, p)))) alert = { text: '有支线奇遇可结案领赏', go: 'quest' };
     else if (p.poison > cap * 0.75) alert = { text: '丹毒将满，宜服解毒丹', go: 'cultivate' };
@@ -272,7 +272,7 @@ const UI = {
     const ripe = ((p.cave && p.cave.plots) || []).some(pl => pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0));
     const tripBack = (p.beasts && p.beasts.list || []).some(b => b.trip && today >= b.trip.until);
     const bountyOk = (p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need);
-    const gupianOk = (p.counters.gupianGot || 0) >= 9 || (p.bag['m_gupian'] || 0) >= 9;
+    const gupianOk = ForgeSys.gupianReady(p);   // v35（E160）：单源判定（原红点以累计收取数判定，合成本命后永久假亮）
     const oddHot = (typeof BlackSys !== 'undefined' && BlackSys.isOpen(p))
       || (typeof AuctionSys !== 'undefined' && (() => { const lot = AuctionSys.state(p); return lot.until - today > 0 && lot.until - today <= 10; })());
     const sectTasksOk = !!p.sect && (p.sect.tasks || []).some(t => t && t.progress >= t.need);
@@ -523,7 +523,7 @@ const UI = {
       } else if (layer < 3) {
         xianBody = `<div class="card-desc">${curDef.ascendText}</div>
         <div class="bar" style="height:14px;margin:6px 0"><div class="bar-fill exp" style="width:${Utils.clamp(yuan / need * 100, 0, 100)}%"></div><span class="bar-text">仙元 ${Utils.fmtNum(yuan)} / ${Utils.fmtNum(need)}</span></div>
-        <div class="action-row"><button class="btn btn-primary" data-action="act-xian-advance" ${yuan >= need ? '' : 'disabled'}>晋 ${curDef.name}${GameData.XIAN_LAYER_NAMES[layer]}（耗仙元 ${Utils.fmtNum(need)}）</button></div>`;
+        <div class="action-row"><button class="btn btn-primary" data-action="act-xian-advance" ${yuan >= need ? '' : 'disabled'}>晋 ${curDef.name}${layer + 1 >= 3 ? '圆满' : GameData.XIAN_LAYER_NAMES[layer + 1]}（耗仙元 ${Utils.fmtNum(need)}）</button></div>`;
       } else {
         xianBody = `<div class="card-desc">${curDef.name}已圆满——${nxT ? `阶满当渡<b>仙劫</b>，晋入 ${nxT.name} 之列。` : '大罗已极，圆满之后可证<b>道祖之境</b>。'}</div>
         <div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-xian-trib">${nxT ? `引动仙劫 · 晋 ${nxT.name}` : '证 道祖之境'}</button></div>`;
@@ -640,7 +640,7 @@ const UI = {
     const signed = p.signDay === today;
     // v24 求签行内直签——无需再绕道游历·天下；v33（C2）：行内附连签计程，进度随手可见
     const signProg = DailySign.progress(p);
-    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}（连签 ${signProg.day}/7）` : (signProg.streak > 0 ? `今日未求签 · 连签 ${signProg.day}/7${signProg.left > 0 ? `，差 ${signProg.left} 日满签` : '，今日满签！'}` : '今日未求签'), act: signed ? '' : 'act-sign', actText: '摇 签' });
+    rows.push({ state: signed ? 'ok' : 'todo', label: '黄历求签', stat: signed ? `已签 · ${p.signText || ''}（连签 ${signProg.day}/7）` : (signProg.broken ? '今日未求签 · 连签已断，重新计程' : (signProg.streak > 0 ? `今日未求签 · 连签 ${signProg.day}/7${signProg.left > 0 ? `，差 ${signProg.left} 日满签` : '，今日满签！'}` : '今日未求签')), act: signed ? '' : 'act-sign', actText: '摇 签' });
     const rush = p.rushDay === today;
     // v32 修瑕（A10）：聚灵加速原在此只给「前往」跳转、洞府主楼卡又无点燃按钮——带确认弹窗的
     // 正常交互流程（CaveSys.spiritRush）全工程不可达（与 v30 宗门死按钮同病灶）。改行内直燃。
@@ -649,6 +649,16 @@ const UI = {
     const ripe = plots.filter(pl => pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0)).length;
     const growing = plots.filter(pl => pl && pl.seed).length;
     rows.push({ state: ripe > 0 ? 'warn' : (growing > 0 ? 'ok' : 'todo'), label: '灵田', stat: plots.length ? (ripe > 0 ? `${ripe} 块已熟宜采收` : `${growing} 块生长中`) : '今日未播种', go: p.cave ? 'cave:farm' : '' });
+    // v35（U3）：洞府活计入卡——原「N/M 事」不含浇水/抚兽/除虫，卡面「事毕」时洞府里还有三件事
+    {
+      const wateredN = plots.filter(pl => pl && pl.seed && pl.wateredDay === today).length;
+      const beasts = (p.beasts && p.beasts.list) || [];
+      const pattedN = beasts.filter(b => b.patDay === today).length;
+      const pestN = plots.filter(pl => pl && pl.pested).length;
+      rows.push({ state: (growing === 0 || wateredN >= growing) ? 'ok' : 'todo', label: '灵田浇水', stat: growing ? `${wateredN}/${growing} 块已浇` : '今日无田可浇', go: p.cave ? 'cave:farm' : '' });
+      rows.push({ state: (beasts.length === 0 || pattedN >= beasts.length) ? 'ok' : 'todo', label: '灵兽抚摸', stat: beasts.length ? `${pattedN}/${beasts.length} 只已抚` : '兽栏无兽', go: p.cave ? 'cave:beast' : '' });
+      if (pestN) rows.push({ state: 'warn', label: '虫害', stat: `${pestN} 块田遭虫害，收成将大减`, go: p.cave ? 'cave:farm' : '' });
+    }
     const bl = (p.bounties && p.bounties.list) || [];
     const claimable = bl.filter(bt => bt && bt.progress >= bt.need).length;   // v21: 领后置空条目判空
     rows.push({ state: claimable > 0 ? 'warn' : (bl.length ? 'ok' : 'todo'), label: '悬赏板', stat: claimable > 0 ? `${claimable} 张可领赏` : (bl.length ? '进行中' : '未接悬赏'), go: 'shop:bounty' });
@@ -658,7 +668,7 @@ const UI = {
     return `
       <div class="card daily-card">
         <div class="card-title">✦ 今日修行 <span class="daily-count">${done} / ${rows.length} 事</span>
-          <button class="btn btn-sm" data-action="act-daily-all" style="margin-left:auto" title="求签、聚灵、采收、领赏一次办完">⚡ 一键行权</button></div>
+          <button class="btn btn-sm" data-action="act-daily-all" style="margin-left:auto" title="求签、聚灵、采收补种、浇水抚兽除虫、领赏一次办完">⚡ 一键行权</button></div>
         ${rows.map(r => `
           <div class="daily-row ${r.state}">
             <span class="daily-dot"></span>
@@ -919,8 +929,11 @@ const UI = {
     const drawn = p.signDay === today;
     const fest = (typeof FestivalSys !== 'undefined') ? FestivalSys.today(p) : null;
     // v33（C2）：连签进度可见化——原 streak 只在日志文本里出现过，玩家无从知晓断没断、还差几日
+    // v35（E188）：断签可见——progress() 已按三日容差判 broken，断签卡标红提示重新计程（原跨断签仍显示旧进度，玩家以为满签在望）
     const prog = DailySign.progress(p);
-    const progTxt = prog.streak > 0
+    const progTxt = prog.broken
+      ? '<span class="tag danger">连签已断 · 今日重新计程</span>'
+      : prog.streak > 0
       ? `<span class="tag ${prog.left === 0 ? '' : 'warn'}" title="三日内再来求签即延续连签；超过三日重新计程">连签第 ${prog.day}/7 日${prog.left > 0 ? ` · 距七日满签还差 ${prog.left} 日` : ' · 今日七日满签！'}</span>`
       : '<span class="tag">尚未开始连签</span>';
     return `
@@ -1007,6 +1020,7 @@ const UI = {
       const powerText = !s.alive ? '已殒身'
         : his > myPow + 3 ? '远胜于你' : his > myPow ? '略胜于你' : his === myPow ? '与你相当' : '不及你';
       const sparTag = (s.sparWins || s.sparLoses) ? `<span class="tag">切磋 ${s.sparWins || 0}胜${s.sparLoses || 0}负</span>` : '';
+      const awayTag = s.alive && NpcSys.isAway(p, d.id) ? ' <span class="tag warn" title="本旬行游在外，江湖页互动暂不可用">行游在外</span>' : '';
       // v27：交情量表——-100~100 一条横杆，恩怨亲疏一眼可读
       const relPct = Utils.clamp((s.rel + 100) / 2, 0, 100);
       const relBar = `<span class="npc-rel" title="交情 ${s.rel > 0 ? '+' : ''}${s.rel}（-100 宿敌 ↔ +100 莫逆）"><i style="width:${relPct}%"></i></span>`;
@@ -1014,14 +1028,19 @@ const UI = {
       let btns = '';
       let moreBtns = [];
       if (s.alive) {
+        // v35（U1）：行游在外的修士不在山中——四项基础互动禁用并明示（原「行游」只挡偶遇，
+        // 江湖页照常可互动，旬轮换沦为纯摆设）；结拜/道侣/续谈等既有羁绊不受影响
+        const away = NpcSys.isAway(p, d.id);
+        const awayAttr = away ? 'disabled title="行游在外，旬末方归"' : '';
         const main = [
-          `<button class="btn btn-sm" data-action="npc-befriend" data-npc="${d.id}">结交（${Utils.fmtNum(NpcSys.befriendCost(p, d.id))}灵石）</button>`,
-          s.met ? `<button class="btn btn-sm" data-action="npc-gift" data-npc="${d.id}">赠礼（${Utils.fmtNum(Math.round(30 * GameData.stoneEco(s.realmIdx)))}灵石）</button>` : '',
-          s.met && s.rel >= 30 ? `<button class="btn btn-sm" data-action="npc-discuss" data-npc="${d.id}">论道</button>` : '',
+          `<button class="btn btn-sm" data-action="npc-befriend" data-npc="${d.id}" ${awayAttr}>结交（${Utils.fmtNum(NpcSys.befriendCost(p, d.id))}灵石）</button>`,
+          s.met ? `<button class="btn btn-sm" data-action="npc-gift" data-npc="${d.id}" ${awayAttr}>赠礼（${Utils.fmtNum(Math.round(30 * NpcSys.socialEco(p, s)))}灵石）</button>` : '',
+          s.met && s.rel >= 30 ? `<button class="btn btn-sm" data-action="npc-discuss" data-npc="${d.id}" ${awayAttr}>论道</button>` : '',
           PersonalSys.next(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-line" data-npc="${d.id}" title="${Utils.esc((GameData.PERSONAL[d.id].acts[(p.personal[d.id] || 0)] || {}).brief || '')}">续谈 · ${Utils.esc(GameData.PERSONAL[d.id].arc)}</button>` : '',
         ].filter(Boolean);
+        const sparDisabled = s.sparDay === Math.floor(p.day || 0);
         moreBtns = [
-          `<button class="btn btn-sm" data-action="npc-spar" data-npc="${d.id}">切磋</button>`,
+          `<button class="btn btn-sm" data-action="npc-spar" data-npc="${d.id}" ${away ? 'disabled title="行游在外，旬末方归"' : (sparDisabled ? 'disabled title="今日已切磋过，明日再来"' : '')}>切磋</button>`,
           s.rel >= 70 && !(p.sworn || []).includes(d.id) ? `<button class="btn btn-sm" data-action="npc-swear" data-npc="${d.id}">结拜</button>` : '',
           s.rel >= 90 && !p.partner ? `<button class="btn btn-sm btn-primary" data-action="npc-dao" data-npc="${d.id}">结为道侣</button>` : '',
           NpcSys.canLearnFrom(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-learnfrom" data-npc="${d.id}" title="三胜之后，请其倾囊相授">请其指点</button>` : '',
@@ -1037,7 +1056,7 @@ const UI = {
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name"><span style="display:inline-block;vertical-align:middle;width:34px;height:34px;border-radius:6px;overflow:hidden;margin-right:6px">${Art.portrait(Art.npcLook(d))}</span>${d.name} <span style="color:var(--text-faint);font-size:12px">${d.title} · ${d.temper}</span> <span class="tag ${relCls}">${lbl} ${s.rel > 0 ? '+' : ''}${s.rel}</span> ${sparTag} ${tags.join('')}</div>
+          <div class="gf-name"><span style="display:inline-block;vertical-align:middle;width:34px;height:34px;border-radius:6px;overflow:hidden;margin-right:6px">${Art.portrait(Art.npcLook(d))}</span>${d.name} <span style="color:var(--text-faint);font-size:12px">${d.title} · ${d.temper}</span> <span class="tag ${relCls}">${lbl} ${s.rel > 0 ? '+' : ''}${s.rel}</span> ${sparTag} ${awayTag} ${tags.join('')}</div>
           ${relBar}
           <div class="gf-desc">${d.desc}<br><span style="color:var(--text-faint)">${GameData.REALM_NAMES[s.realmIdx]}${GameData.LAYER_NAMES[s.layer]} · 现于${s.alive ? mapName(s.map) : '殒身之地'} · 战力${powerText}</span></div>
         </div>
@@ -1127,8 +1146,10 @@ const UI = {
       return `<details class="fold shop-group" data-fold="${fk}" ${isOpen ? 'open' : ''}><summary>◈ ${title}（${items.length} 种 ▾）</summary><div style="margin-top:6px">${rows}</div></details>`;
     };
     // v24 出售区折叠 + 按价值降序：买与卖不再 40+ 行平铺一页
+    // v35（E136）修瑕：补脏 id 判空——背包残留已下架物品 id 时原直接解引用 price 整页渲染崩，
+    // 且背包列表按 E23 判空过滤了它（看不见也删不掉），万宝阁自当次起永久不可用
     const sellable = Object.keys(p.bag)
-      .filter(id => (GameData.ITEMS[id].price || 0) > 0)
+      .filter(id => GameData.ITEMS[id] && (GameData.ITEMS[id].price || 0) > 0)
       .sort((a, b) => ShopSys.sellPrice(b) * (p.bag[b] || 0) - ShopSys.sellPrice(a) * (p.bag[a] || 0));
     const sellTotal = sellable.reduce((sum, id) => sum + ShopSys.sellPrice(id) * (p.bag[id] || 0), 0);
     // v29：惰性渲染——超过 80 种只渲染前 80（低性能设备展开折叠区不再整列重排）
@@ -1218,7 +1239,7 @@ const UI = {
           <div class="gf-name">挥毫画符</div>
           <div class="gf-desc">焚香沐手，朱砂灵纸——成符可于战斗中祭出轰敌，亦可售予坊市换取灵石。</div>
         </div>
-        <div class="gf-actions"><button class="btn btn-sm btn-primary" data-action="act-draw">画符（${Utils.fmtNum(Math.round(CraftSys.drawCost(p) * (1 + Math.min(4, (p._drawCount || 0) * 0.75))))}灵石）</button></div>
+        <div class="gf-actions"><button class="btn btn-sm btn-primary" data-action="act-draw">画符（${Utils.fmtNum(CraftSys.drawPrice(p))}灵石）</button></div>
       </div>` : '';
     // v13 炼器坊（v32 修瑕 E19：按钮门槛与成器率显示与 ForgeSys.forge 同口径——原按全量材料
     // disable（持 6 残片+半料时机制不可达）、成器率不含炼器室 +4%/阶，两头与实发不同步）
@@ -1375,7 +1396,7 @@ const UI = {
       const chain = t && t.chain ? (CHAIN_MUL[t.chain] || 1) : 1;
       const drill = drillOn ? 1.5 : 1;
       let base = r.stones;
-      if (t && t.type === 'collect') base = Math.max(base, Math.round(ShopSys.sellPrice(t.target) * t.need));   // 收集悬赏兜底与 claim 同式
+      if (t && t.type === 'collect') base = Math.max(base, BountySys.collectFloor(t));   // v35（E144）：兜底走单源 collectFloor（原预览漏乘 ×2，显示腰斩）
       return { stones: Math.round(Math.round(Math.round(base * repBonus) * drill) * chain), contrib: Math.round(Math.round(Math.round(r.contrib * repBonus) * drill) * chain) };
     };
     const bountyRows = B.list.map((t, i) => {
@@ -1486,22 +1507,33 @@ const UI = {
       return `<div class="card"><div class="card-title">✦ 宗门</div><div class="card-desc">你已至筑基，可择一宗门拜入，领取宗门任务换取贡献，兑换高阶功法与稀有资源。</div></div>${cards}`;
     }
     const sect = GameData.SECTS.find(s => s.id === p.sect.id) || { name: '——', bonusText: '' };
+    // v35（E161）：非上交/生死状类差事补「自动计入」指引——原四类差事只渲染进度数字，
+    // 玩家不知道击杀/修为/探索/求签在哪里计入（与悬赏板同域不同说明）
+    const TYPE_HINTS = {
+      kill: '游历猎杀自动计入',
+      cult: '修炼/闭关自动计入',
+      explore: '游历探索自动计入',
+      sign: '黄历求签自动计入',
+    };
+    const claimLeft = (typeof SectSys !== 'undefined' && SectSys.claimLeft) ? SectSys.claimLeft(p) : null;
     const taskRows = p.sect.tasks.map((t, i) => {
       const done = t.progress >= t.need;
       let btn = '';
-      if (done) btn = `<button class="btn btn-sm btn-primary" data-action="act-task-claim" data-i="${i}">领取奖励</button>`;
+      if (done) btn = `<button class="btn btn-sm btn-primary" data-action="act-task-claim" data-i="${i}" ${claimLeft != null && claimLeft <= 0 ? 'disabled title="今日赏格已领满"' : ''}>领取奖励</button>`;
       else if (t.type === 'collect') btn = `<button class="btn btn-sm" data-action="act-task-submit" data-i="${i}">上交（持有${Bag.count(t.target)}）</button>`;
       else if (t.danger) btn = `<button class="btn btn-sm btn-danger" data-action="act-danger-go" data-i="${i}">接生死状</button>`;
       const dangerTag = t.danger ? ' <span class="tag danger">高危</span>' : '';
+      const hint = !done && !btn && TYPE_HINTS[t.type] ? `<span style="color:var(--text-faint);font-size:12px">（${TYPE_HINTS[t.type]}）</span>` : '';
       return `
       <div class="shop-row">
         <div class="gf-info">
           <div class="gf-name">${t.name}${dangerTag}</div>
-          <div class="gf-desc">${t.desc} —— 进度 ${Math.floor(t.progress)}/${t.need}</div>
+          <div class="gf-desc">${t.desc} —— 进度 ${Math.floor(t.progress)}/${t.need}${hint}</div>
         </div>
         <div class="gf-actions">${btn}</div>
       </div>`;
     }).join('');
+    const claimNote = claimLeft != null ? `<div style="color:var(--text-faint);font-size:12px;margin:4px 0 10px">今日赏格余量 ${claimLeft}/${(typeof SectSys !== 'undefined' && SectSys.CLAIM_DAILY) || 6} 桩（v35 起：贡献是门中俸例，非印钞机——每日领赏六桩为限）</div>` : '';
     const exRows = GameData.SECT_EXCHANGE.map((row, i) => {
       // v30 特殊兑换行（贡献换声望/器魂）：无 ITEMS 条目，走专用文案
       if (row.special) {
@@ -1595,6 +1627,7 @@ const UI = {
           const pct = Utils.clamp(Math.round(p.sect.contrib / nxt.contribNeed * 100), 0, 100);
           return `现任 <b class="hl">${rk.name}</b>——距【${nxt.name}】还差 <b>${Utils.fmtNum(nxt.contribNeed - p.sect.contrib)}</b> 贡献。<div class="bar" style="height:10px;margin-top:6px"><div class="bar-fill exp" style="width:${pct}%"></div><span class="bar-text">${Utils.fmtNum(p.sect.contrib)}/${Utils.fmtNum(nxt.contribNeed)}</span></div>`;
         })()}</div>
+        ${claimNote}
         ${taskRows}
       </div>
       ${facSection}
@@ -1650,7 +1683,7 @@ const UI = {
         <div class="gf-actions"><button class="btn btn-sm" data-action="act-study" data-gf="${id}" ${maxed ? 'disabled' : ''}>${maxed ? '已大成' : '参悟（5日）'}</button></div>
       </div>`;
     }).join('');
-    const learnable = Object.keys(p.bag).filter(id => GameData.ITEMS[id].type === 'gongfa');
+    const learnable = Object.keys(p.bag).filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'gongfa');   // v35（E136）：补脏 id 判空（与 E23 同口径）
     const learnRows = learnable.map(id => {
       const def = GameData.ITEMS[id];
       return `
@@ -1856,6 +1889,7 @@ const UI = {
   /* ---------- 通用弹窗（Promise 风格，resolve 选项的 value） ---------- */
   _popupResolve: null,
   _popupOptions: [],
+  _popupPrevFocus: null,
   popup({ title, html, options }) {
     return new Promise(resolve => {
       // 已有未决弹窗则先释放（按取消处理），杜绝弹窗叠加与 Promise 泄漏
@@ -1871,6 +1905,17 @@ const UI = {
       this.el['popup-modal'].setAttribute('role', 'dialog');
       this.el['popup-modal'].setAttribute('aria-modal', 'true');
       this.el['popup-modal'].setAttribute('aria-label', title || '提示');
+      // v35（E182）：焦点管理——打开时聚焦首个主按钮（键盘/读屏不再 Tab 穿透到被遮罩挡住的
+      // 背景元素），关闭时归还原焦点。导出存档码的 textarea 打开即全选（E183，顺带移除内联 onclick）
+      try {
+        this._popupPrevFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        const ta = this.el['popup-body'].querySelector('.save-code');
+        if (ta) { ta.setAttribute('readonly', ''); ta.focus(); ta.select(); }
+        else {
+          const btns = [...this.el['popup-btns'].querySelectorAll('button')];
+          (btns.find(b => b.classList.contains('btn-primary')) || btns[0] || null)?.focus();
+        }
+      } catch (e) { /* 焦点管理失败不阻断弹窗 */ }
     });
   },
   popupChoose(i) {
@@ -1880,6 +1925,8 @@ const UI = {
     this._popupResolve = null;
     this.el['popup-modal'].classList.add('hidden');
     if (this.syncAnnouncePos) this.syncAnnouncePos();   // v21 公告归位
+    try { if (this._popupPrevFocus && document.body.contains(this._popupPrevFocus)) this._popupPrevFocus.focus(); } catch (e) { /* ignore */ }
+    this._popupPrevFocus = null;
     r(val);
   },
   /** 无选择地关闭当前弹窗 */
@@ -2094,7 +2141,7 @@ const UI = {
     } catch (e) { /* 下载不可用则仅文本码 */ }
     await this.popup({
       title: '导出存档',
-      html: `已尝试生成存档文件（浏览器若拦截请用下方文本码）。<br>整段复制以下文本码，到其他设备「导入文本码」即可续缘。<br><textarea class="save-code" readonly onclick="this.select()">${code}</textarea>`,
+      html: `已尝试生成存档文件（浏览器若拦截请用下方文本码）。<br>整段复制以下文本码，到其他设备「导入文本码」即可续缘。<br><textarea class="save-code" readonly>${code}</textarea>`,
       options: [{ text: '关 闭', value: true, primary: true }],
     });
   },
@@ -2129,6 +2176,11 @@ const UI = {
     }
     if (!data || data.v !== 1 || !data.player || !data.player.name) { UI.toast('文本码无法识别', true); return; }
     const p = PlayerFactory.migrate(data.player);
+    // v35（E136）：导入侧清洗未知 bag id——脏 id 不再借导入入境（与 E23/渲染侧判空同口径）
+    if (p.bag) {
+      const badIds = Object.keys(p.bag).filter(id => !GameData.ITEMS[id]);
+      for (const id of badIds) delete p.bag[id];
+    }
     const slots = [1, 2, 3].map(k => {
       const d = Save.read(k);
       return `· 存档位${['一', '二', '三'][k - 1]}：${d && d.player ? `${Utils.esc(d.meta.name)}（将覆盖）` : '空'}`;

@@ -116,8 +116,8 @@ const Explore = {
       if (ambId && Utils.chance(NpcSys.ambushChance(p))) {
         Log.add(`一道熟悉的杀意骤然锁定你——与 <b>${NpcSys.def(ambId).name}</b> 的恩怨，终究追到了这里！`, 'warn');
         await Utils.sleep(500);
-        Game.afterAction(); // 先持久化本次历练收益，再入战斗
         Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambId), npcId: ambId, mode: 'hunt', ambush: true, mapName: '恩怨了结之地' });
+        Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
         return;
       }
       if (Utils.chance(KarmaSys.ambushChance(p))) {
@@ -125,8 +125,8 @@ const Explore = {
         const nextMap = GameData.MAPS[Math.min(idx + 1, GameData.MAPS.length - 1)];
         Log.add('忽然一道凌厉杀意锁定了你——孽债累累，终有仇家循迹而至！', 'warn');
         await Utils.sleep(500);
-        Game.afterAction(); // 先持久化本次历练收益，再入战斗
         Battle.start(nextMap.elite || nextMap.pool[0].id, { mapName: '仇家埋伏之地', mapId: map.id, ambush: true });
+        Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
         return;
       }
     }
@@ -195,8 +195,8 @@ const EventSys = {
     const p = Game.player;
     if (NpcSys.rivalSnatch(p)) return;   // v20 宿敌截胡
     Narrative.logScene('fortune');   // v5：道途语气
-    // §26 前世记忆：兵解转世者偶得前世洞府机缘
-    if (p.reinc && Utils.chance(15)) {
+    // §26 前世记忆：兵解转世者偶得前世洞府机缘（v35（E180）：首世的印记轻量 reinc 不算转世者）
+    if (p.reinc && !p.reinc.firstLife && Utils.chance(15)) {
       const gain = Math.round(200 * GameData.eco(p.realmIdx));
       Cultivate.addExp(p, gain);
       Bag.addItem('m_gupian', 1);
@@ -267,7 +267,7 @@ const EventSys = {
         const tier = Math.min(4, Math.floor(er / 2) + 2);   // v32 修瑕（E65）：随图梯度封顶
         const mat = Utils.pick(GameData.matsByTier(tier));
         Bag.addItem(mat, 2);
-        const autumn = Art.seasonOf(p) === 3;   // v33（E110）：季秋草木摇落，灵果独盛——季节联动可见化
+        const autumn = Art.seasonOf(p) === 2;   // v33（E110）季节联动 + v35（E153）修瑕：seasonOf 口径 0春/1夏/2秋/3冬——原 ===3 把隆冬当季秋，整个冬天念秋日文案、真季秋反无联动
         Log.add(`${autumn ? '秋气肃杀，草木摇落之处灵光独盛——' : ''}你发现了一株罕见的天材地宝——${GameData.ITEMS[mat].name} ×2！`, 'gain');
       }
     }

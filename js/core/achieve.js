@@ -47,11 +47,11 @@ const Achieve = {
     { id: 'e6', cat: 'exp', name: '仙侣同途', desc: '与心悦之人结为道侣', reward: { fortune: 10 }, test: p => !!p.partner },
     /* ---- 转世 ---- */
     { id: 's1', cat: 'reinc', name: '窥见轮回', desc: '窥得兵解转世之机', reward: { stones: 500 }, test: p => !!p.canReincarnate },
-    { id: 's2', cat: 'reinc', name: '轮回初醒', desc: '完成第一次兵解转世', reward: { fortune: 8 }, test: p => !!p.reinc },
+    { id: 's2', cat: 'reinc', name: '轮回初醒', desc: '完成第一次兵解转世', reward: { fortune: 8 }, test: p => !!p.reinc && !p.reinc.firstLife },   // v35（E180）：首世印记轻量 reinc 不算兵解
     { id: 's3', cat: 'reinc', name: '宿命重逢', desc: '身负前世恩怨，与故人重逢', reward: { stones: 600 }, test: p => Object.values(p.npcs || {}).some(s => s.pastLife) },
     { id: 's4', cat: 'reinc', name: '三生三世', desc: '历经三世轮回', reward: { fortune: 15 }, test: p => p.reinc && (p.reinc.lives || 0) >= 3 },
     { id: 's5', cat: 'reinc', name: '印记斑驳', desc: '累计三枚轮回印记', reward: { fortune: 12 }, prog: p => `${Math.min(3, p.reinc ? (p.reinc.marks || 0) : 0)}/3`, test: p => p.reinc && (p.reinc.marks || 0) >= 3 },
-    { id: 's6', cat: 'reinc', name: '宿慧渐开', desc: '转世之身历练十次', reward: { stones: 800 }, prog: p => `${Math.min(10, p.counters.explores || 0)}/10`, test: p => p.reinc && (p.counters.explores || 0) >= 10 },
+    { id: 's6', cat: 'reinc', name: '宿慧渐开', desc: '转世之身历练十次', reward: { stones: 800 }, prog: p => `${Math.min(10, p.counters.explores || 0)}/10`, test: p => !!p.reinc && !p.reinc.firstLife && (p.counters.explores || 0) >= 10 },
     /* ---- v18 挑战成就 ---- */
     { id: 'c1', cat: 'battle', name: '无伤之道', desc: '在一场战斗中毫发无伤地获胜', reward: { fortune: 5 }, test: p => (p.counters.hitlessWins || 0) >= 1 },
     { id: 'c2', cat: 'battle', name: '雷霆之速', desc: '三回合内结束一场战斗', reward: { fortune: 8 }, test: p => (p.counters.quickWins || 0) >= 1 },

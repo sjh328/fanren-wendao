@@ -46,8 +46,11 @@ const XianSys = {
     if (this.yuan(p) < need) { UI.toast(`仙元不足（需 ${Utils.fmtNum(need)}）`); return; }
     p.counters.xianyuan -= need;
     p.xianjie.layer++;
-    Log.add(`仙元入体，道行更进——你晋入 <b>${d.name}${GameData.XIAN_LAYER_NAMES[this.layer(p) - 1]}</b>！（全属性 +1.5%，修炼效率 +2%）`, 'realm');
-    UI.announce(`✦ 仙阶晋升 · ${d.name}${GameData.XIAN_LAYER_NAMES[this.layer(p) - 1]}`, 'gold');
+    // v35（E146）修瑕：播报原读「晋升前」的层名（names[layer-1]）——晋入中期播成「初期」、
+    // 晋入圆满播成「后期」，与 label()（layer>=3 → 圆满）口径差一位
+    const ln2 = this.layer(p) >= 3 ? '圆满' : GameData.XIAN_LAYER_NAMES[this.layer(p)];
+    Log.add(`仙元入体，道行更进——你晋入 <b>${d.name}${ln2}</b>！（全属性 +1.5%，修炼效率 +2%）`, 'realm');
+    UI.announce(`✦ 仙阶晋升 · ${d.name}${ln2}`, 'gold');
     Ambience.sfx('breakthrough');
     Game.afterAction();
   },

@@ -53,7 +53,7 @@ LOCKS: {
       (full && p.realmIdx < 9) ? 'realm' :
       (full && p.realmIdx === 9 && !p.flags.ascended) ? 'ascend' :
       (p.realmIdx >= 1 && !p.dao) ? 'dao' :
-      ((p.counters.gupianGot || 0) >= 9 && !p.benming) ? 'gupian' :
+      ForgeSys.gupianReady(p) ? 'gupian' :   // v35（E160）：单源判定
       ((p.karma || 0) >= 100) ? 'karma' :
       (p.poison > cap * 0.75) ? 'poison' :
       (p.hp < st.maxHp * 0.3) ? 'hp' : null;
@@ -86,7 +86,7 @@ LOCKS: {
     if ((p.beasts && p.beasts.list || []).some(b => b.trip && Math.floor(p.day || 0) >= b.trip.until)) {
       t.push({ text: '<b>新知</b>：灵兽寻宝已归——洞府·灵兽可点「归来」收取灵材', go: 'cave:beast' });
     }
-    if ((p.counters.gupianGot || 0) >= 9 && !p.benming && fa !== 'gupian') {
+    if (ForgeSys.gupianReady(p) && fa !== 'gupian') {   // v35（E160）：单源判定
       t.push({ text: '<b>新知</b>：上古碎片已足九枚——秘境页可合成本命法宝', go: 'map:realm' });
     }
     if (Object.values(p.gongfa || {}).some(g => g.level >= 2) && !(typeof Stat !== 'undefined' && Stat.activeDaoYun(p).length)) {
@@ -147,7 +147,10 @@ LOCKS: {
     for (let l = 0; l < p.layer; l++) sum += GameData.layerNeed(p.realmIdx, l);
     return sum + p.exp;
   },
-  /** v22 一键日常：求签 → 聚灵 → 采收灵田 → 领悬赏，一纸小账回报（无可办则提示） */
+  /** v22 一键日常：求签 → 聚灵 → 采收灵田 → 照料（浇水/抚兽/除虫）→ 领悬赏 → 宗门领赏，一纸小账回报
+   *  v35（U3）日常归一：原「一键行权」与洞府「一键照料」两张皮——各办一半日常，虫害无人接管；
+   *  现行权吸收照料核心（共用 CaveSys.careCore，行为与一键照料严格一致）。
+   *  聚灵扣款不再静默：首日弹一次确认（可选「以后不再询问」），花钱决策回到明面上。 */
   async dailyAll() {
     const p = Game.player;
     if (!p || p.dead) return;
@@ -158,15 +161,33 @@ LOCKS: {
       DailySign.draw();
       if (p.signDay === today) done.push('黄历求签');
     }
-    // 2 聚灵加速（静默执行，省去确认弹窗）
-    if (p.cave && p.rushDay !== today) {
-      const cost = CaveSys.rushCost(p);   // v24 定价单源化（随境界）
-      if (Bag.spendStones(cost)) {
-        p.rushDay = today;
-        Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
-        done.push('聚灵加速');
-      } else {
-        Log.add('聚灵阵静默着——灵石不足，今日便不点了。', 'info');
+    // 2 聚灵加速（v35（U3）：首日明示价格并征求同意，可选「以后不再询问」——原静默扣款，
+    // 后期每日 137 万灵石的支出藏在家务按钮里）
+    if (p.cave && p.rushDay !== today && p._autoRush !== 'skip') {
+      const cost = CaveSys.rushCost(p);
+      let go = p._autoRush === 'always';
+      if (!go) {
+        const c = await UI.popup({
+          title: '一键行权 · 聚灵加速',
+          html: `今日聚灵阵尚未点燃：燃 <b>${Utils.fmtNum(cost)}</b> 灵石，可得<b>今日修炼效率 ×1.5</b>。<br><span class="tip-line">选择「以后不再询问」后，一键行权将默认照常聚灵（灵石不足时自动跳过）。</span>`,
+          options: [
+            { text: `今日聚灵（-${Utils.fmtNum(cost)}）`, value: 'once', primary: true },
+            { text: '以后都聚，不再询问', value: 'always' },
+            { text: '今日跳过', value: 'skip', primary: false },
+          ],
+        });
+        if (c === 'always') { p._autoRush = 'always'; go = true; }
+        else if (c === 'once') go = true;
+        else { p._autoRush = 'skip'; }
+      }
+      if (go) {
+        if (Bag.spendStones(cost)) {
+          p.rushDay = today;
+          Log.add(`聚灵阵轰然全开——今日修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
+          done.push('聚灵加速');
+        } else {
+          Log.add('聚灵阵静默着——灵石不足，今日便不点了。', 'info');
+        }
       }
     }
     // 3 采收成熟灵田
@@ -195,6 +216,13 @@ LOCKS: {
           Log.add(`你顺手把 ${pn} 块空田都播上了【${GameData.ITEMS[seeds[0]].name}】。`, 'info');
         }
       }
+    }
+    // 3.5 v35（U3）：照料核心——浇水/抚兽/除虫（与洞府「一键照料」共用同一 helper）
+    if (p.cave) {
+      const { watered, patted, cured } = CaveSys.careCore(p);
+      if (watered) done.push(`全田浇水 ×${watered}`);
+      if (patted) done.push(`灵兽抚摸 ×${patted}`);
+      if (cured) done.push(`除虫 ×${cured}`);
     }
     // 4 领取已达成的悬赏——先刷新当日榜单（stateOf 有日界再生），再按当前榜领取
     const B = (typeof BountySys !== 'undefined') ? BountySys.stateOf(p) : null;

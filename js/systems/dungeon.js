@@ -12,7 +12,7 @@ const DungeonSys = {
     if (!D || D.stuck) return;
     const hasTal = Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman');
     if (!hasTal) { UI.toast('需消耗一张符箓以施展窥探秘术'); return; }
-    const talId = Object.keys(p.bag).find(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman');
+    const talId = Object.keys(p.bag).filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman').sort((a, b) => (GameData.ITEMS[a].price || 0) - (GameData.ITEMS[b].price || 0))[0];   // v35（E155）：改耗价最低的符——原取首个命中，可能无声烧掉金光符等保命高符
     Bag.removeItem(talId, 1);
     const nodeNames = { battle: '⚔ 战斗', treasure: '🎁 宝箱', fortune: '✨ 奇遇', trap: '⚠ 陷阱', npc: '🗣 遭遇', boss: '☠ 守关' };
     const info = D.choices.map((t, i) => `${i === 0 ? '左' : '右'}路：${nodeNames[t] || t}`).join(' | ');

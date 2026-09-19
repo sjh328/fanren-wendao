@@ -182,7 +182,7 @@ const FestivalSys = {
             UI.announce('✦ 年关大吉 ✦', 'gold');
             Story.chron('除夕迎战年兽得胜');
           } else {
-            Story.chron('除夕年兽来袭，闭门自守');
+            Story.chron('除夕迎战年兽失利，闭门疗伤');   // v35（E157）：原与「安分守岁」共用一句，迎战落败回顾时自相矛盾
           }
           Game.afterAction();
         },

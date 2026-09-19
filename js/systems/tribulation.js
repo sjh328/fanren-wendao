@@ -249,6 +249,14 @@ const Tribulation = {
       }
       UI.announce(`渡劫功成 · 晋入${GameData.REALM_NAMES[p.realmIdx]}期`, 'gold');   // v4
       UI.toast(`渡劫成功！${GameData.REALM_NAMES[p.realmIdx]}期`);
+      // v35（E130）修瑕：成功分支原无 return，坠落至函数尾段的「失利专用」收尾——每次突破成功都折寿
+      // 十年（与上方「寿元上限提升」播报自相矛盾）、道侣道贺说成「劫输了」、宿敌照常趁虚偷袭、
+      // pendingDao 误置。收尾归位：成功自持收场，失利尾段只在 else 内走。
+      await Utils.sleep(900);
+      document.getElementById('tribulation-modal').classList.add('hidden');
+      this.state = null;
+      Game.afterAction();
+      return;
     } else {
       if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 8, '渡劫失利');
       // §24 渡劫虚弱期：道侣/结拜概率护法
@@ -324,45 +332,47 @@ const Tribulation = {
         this.state = null;
         return;
       }
-    }
-    // v29 天年：渡劫失利折寿十年（选择回溯者本次渡劫已尽数抹去，不折寿）
-    if (!p.dead && !S.xian) Time.cutLife(p, 10, '天劫反噬');   // v31：仙劫失利折仙元不折寿
-    // v30 补遗：道侣共渡天劫——失利之际道侣扶住你（心魔 -2，患难见真情）
-    if (!p.dead && p.partner) {
-      const ps = (typeof NpcSys !== 'undefined' && NpcSys.state) ? NpcSys.state(p, p.partner) : null;
-      const pd = (typeof NpcSys !== 'undefined' && NpcSys.def) ? NpcSys.def(p.partner) : null;
-      if (ps && ps.alive && pd) {
-        ps.rel = Utils.clamp(ps.rel + 3, -100, 100);
-        if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, -2, '道侣安慰');
-        if (typeof NpcSys !== 'undefined' && NpcSys.mem) NpcSys.mem(p, p.partner, 'story', '共渡天劫');
-        Log.add(`<b>${pd.name}</b> 顶着余雷冲上雷台扶住你：「劫输了，人还在——来日方长。」（交情 +3，心魔 -2）`, 'gain');
-      }
-    }
-    // §24 渡劫虚弱期：宿敌趁火打劫
-    let ambushNpc = null;
-    if (!p.dead) {
-      const ambId = NpcSys.tribAmbush(p);
-      if (ambId) {
-        const saved = p.partner && Utils.chance(55) ? p.partner
-          : ((p.sworn || []).length && Utils.chance(40) ? p.sworn[0] : null);
-        if (saved) {
-          p.npcs[saved].rel = Utils.clamp(p.npcs[saved].rel + 5, -100, 100);
-          this.log(`千钧一发之际，<b>${NpcSys.def(saved).name}</b> 自天外赶来，一剑逼退偷袭者！`, 'log-gain');
-        } else {
-          ambushNpc = ambId;
-          this.log(`劫云未散，杀机已至——<b>${NpcSys.def(ambId).name}</b> 趁你渡劫虚弱，悍然出手偷袭！`, 'log-loss');
+      // —— v35（E130）：以下「失利专用」收尾整段移入 else——原位于 if/else 之后，
+      // 成功分支因无 return 坠落到此：折寿/道侣安慰/宿敌偷袭/叩问大道在突破成功时全部误发。
+      // v29 天年：渡劫失利折寿十年（选择回溯者本次渡劫已尽数抹去，不折寿）
+      if (!p.dead && !S.xian) Time.cutLife(p, 10, '天劫反噬');   // v31：仙劫失利折仙元不折寿
+      // v30 补遗：道侣共渡天劫——失利之际道侣扶住你（心魔 -2，患难见真情）
+      if (!p.dead && p.partner) {
+        const ps = (typeof NpcSys !== 'undefined' && NpcSys.state) ? NpcSys.state(p, p.partner) : null;
+        const pd = (typeof NpcSys !== 'undefined' && NpcSys.def) ? NpcSys.def(p.partner) : null;
+        if (ps && ps.alive && pd) {
+          ps.rel = Utils.clamp(ps.rel + 3, -100, 100);
+          if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, -2, '道侣安慰');
+          if (typeof NpcSys !== 'undefined' && NpcSys.mem) NpcSys.mem(p, p.partner, 'story', '共渡天劫');
+          Log.add(`<b>${pd.name}</b> 顶着余雷冲上雷台扶住你：「劫输了，人还在——来日方长。」（交情 +3，心魔 -2）`, 'gain');
         }
-        await Utils.sleep(700);
       }
-    }
-    await Utils.sleep(900);
-    document.getElementById('tribulation-modal').classList.add('hidden');
-    this.state = null;
-    p.pendingDao = true; // 初入筑基（或转世重修）叩问大道；若遇偷袭则战后开启
-    Game.afterAction();
-    if (ambushNpc) {
-      await Utils.sleep(400);
-      Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambushNpc), npcId: ambushNpc, mode: 'hunt', ambush: true, mapName: '渡劫之地' });
+      // §24 渡劫虚弱期：宿敌趁火打劫
+      let ambushNpc = null;
+      if (!p.dead) {
+        const ambId = NpcSys.tribAmbush(p);
+        if (ambId) {
+          const saved = p.partner && Utils.chance(55) ? p.partner
+            : ((p.sworn || []).length && Utils.chance(40) ? p.sworn[0] : null);
+          if (saved) {
+            p.npcs[saved].rel = Utils.clamp(p.npcs[saved].rel + 5, -100, 100);
+            this.log(`千钧一发之际，<b>${NpcSys.def(saved).name}</b> 自天外赶来，一剑逼退偷袭者！`, 'log-gain');
+          } else {
+            ambushNpc = ambId;
+            this.log(`劫云未散，杀机已至——<b>${NpcSys.def(ambId).name}</b> 趁你渡劫虚弱，悍然出手偷袭！`, 'log-loss');
+          }
+          await Utils.sleep(700);
+        }
+      }
+      await Utils.sleep(900);
+      document.getElementById('tribulation-modal').classList.add('hidden');
+      this.state = null;
+      p.pendingDao = true; // 初入筑基（或转世重修）叩问大道；若遇偷袭则战后开启
+      Game.afterAction();
+      if (ambushNpc) {
+        await Utils.sleep(400);
+        Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambushNpc), npcId: ambushNpc, mode: 'hunt', ambush: true, mapName: '渡劫之地' });
+      }
     }
   },
 };
