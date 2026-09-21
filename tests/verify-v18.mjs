@@ -120,7 +120,7 @@ console.log('===== SA 源码静态组 =====');
   reinc.includes('get TREE_NAMES()') ? pass('SA51 传承树名单派生单源（E32）') : fail('SA51 单源', '');
   reinc.includes('Game.player.reinc.marks = Math.min(30, legacy.marksEarned || 0)') ? pass('SA52 grantMarks 回写当世（E34）') : fail('SA52 回写', '');
   stat.includes("name: '仙阶（每层 +1.5% 全属性）'") && stat.includes("name: '洞天（每重修炼 +3%）'") && stat.includes("name: '图鉴大成（每类 +1% 全属性）'") ? pass('SA53 明细补三行（E35）') : fail('SA53 明细', '');
-  stat.includes('Math.min(20, (p.flags && p.flags.xinmoCleared) || 0)') ? pass('SA54 心魔凝练封顶折算（E35）') : fail('SA54 心魔封顶', '');
+  stat.includes('Math.min(6, (p.flags && p.flags.xinmoCleared) || 0)') ? pass('SA54 心魔凝练封顶折算（E35；v37（E245）+20% 不可达装饰改如实 +6%，与 XinmoSys.scale 同口径）') : fail('SA54 心魔封顶', '');
   pfac.includes('out.lifeCut = Math.max(0, Math.floor(Number(out.lifeCut)) || 0);') ? pass('SA55 脏档 NaN 清洗（E36）') : fail('SA55 NaN 清洗', '');
   pfac.includes("!(out.flags && out.flags.ascended)) out.xianjie = { idx: 0, layer: 0 }") && xian.includes('this.unlocked(p) && this.cur(p) > 0') ? pass('SA56 仙籍加成 unlocked 校验（E36）') : fail('SA56 unlocked', '');
   cult.includes('圆满态至多再闭六轮即请出关') ? pass('SA57 真仙圆满闭关护栏（E37）') : fail('SA57 闭关护栏', '');

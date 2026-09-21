@@ -156,8 +156,8 @@ console.log('===== SA 源码静态组 =====');
       ? pass('SA91 手册两处数值对齐实发：悬赏三日/离线六成 120 日（E215，E231 起 FACTS 拼串）') : fail('SA91 手册口径', '');
     ui.includes('${this.FACTS.sellRate}回收') && !ui.includes('四折回收')
       ? pass('SA92 万宝阁四成五回收对齐 shop.js 0.45（E216，E231 起 FACTS 拼串）') : fail('SA92 回收口径', '');
-    gamejs.includes('按普通修炼六成效率折算，不计闭关加成')
-      ? pass('SA93 离线小结口径如实（E217）') : fail('SA93 离线小结', '');
+    gamejs.includes('${UI.FACTS.offlineEff}效率折算，不计闭关加成')
+      ? pass('SA93 离线小结口径如实（E217；v37（E277）改引 UI.FACTS.offlineEff 单源拼串 + 聚灵加护段）') : fail('SA93 离线小结', '');
   }
 
   /* ---- v36 U1 升级包 E218~E220 ---- */
@@ -170,9 +170,9 @@ console.log('===== SA 源码静态组 =====');
       ? pass('SA94b spiritRush 窗口守卫 + 弹窗净收益按场景实算 0.5/8×baseGain（E218）') : fail('SA94b 净收益', '');
     guide.includes('const inWindow = p.rushDay != null && today - p.rushDay < 3;') && guide.includes('!inWindow && p._autoRush !== \'skip\' && p._autoRushSkipDay !== today') && guide.includes('点燃后 3 日内修炼效率 ×1.5')
       ? pass('SA95 一键行权聚灵终态守卫 + 窗口口径弹窗（E205/E218）') : fail('SA95 行权聚灵', '');
-    ui.includes("label: '悟道'") && ui.includes("act: (!wudaoDone && canWudao) ? 'act-wudao' : ''") && ui.includes('感悟 ${p.insight}/20')
+    ui.includes("label: '悟道'") && ui.includes("act: (!wudaoDone && canWudao) ? 'act-wudao' : ''") && ui.includes('感悟 ${p.insight}/${wdCost}')
       && gamejs.includes("'act-wudao': () => Cultivate.wuDao(),")
-      ? pass('SA96a 悟道入今日修行卡三态 + act-wudao 行内接线（E219）') : fail('SA96a 悟道行', '');
+      ? pass('SA96a 悟道入今日修行卡三态 + act-wudao 行内接线（E219；v37（E265）门槛改随境 wdCost=20+2r 卡面/弹窗/实扣三处同源）') : fail('SA96a 悟道行', '');
     ui.includes('已点燃 · 3 日内修炼 ×1.5')
       ? pass('SA96b 今日修行卡聚灵行窗口口径与行权一致（E218）') : fail('SA96b 卡面', '');
     bal.includes('全行动效率横向表') && bal.includes('GATE = { cult: 2.2, seclude: 1.4 }') && bal.includes('process.exitCode = 1') && bal.includes('await NpcSys.discuss(\'n1\')')
@@ -487,16 +487,18 @@ try {
   const rB7 = await page.evaluate(async () => {
     const out = {};
     const p = Game.player;
-    p.day = 400; p._settleDay = 400; p._wuDaoDay = -1; p.dao = null; p.realmIdx = 2; p.insight = 20;   // 对齐 _settleDay：防 afterAction 的 30 日补结插入洞府访客等噪音（本断言只验悟道本体）
-    out.todoRow = UI.renderDailyCard().includes('感悟 20/20 · 可炼作修为') && UI.renderDailyCard().includes('data-action="act-wudao"');
-    out.progressRow = (() => { p.insight = 12; const ok = UI.renderDailyCard().includes('感悟 12/20 · 攒足可炼作修为'); p.insight = 20; return ok; })();
+    // v37（E265）：悟道成本改随境 20+2×realmIdx（wuDaoCost 单源）——r2 为 24，卡面/拦截/实扣三处同口径
+    p.day = 400; p._settleDay = 400; p._wuDaoDay = -1; p.dao = null; p.realmIdx = 2; p.insight = 24;
+    const savedCaveB22 = p.cave; p.cave = null;   // v37（B9 定稿）：洞府访客/虫害等异步插账隔离（cave 论道访客 +2 感悟会让扣除后不为 0）   // 对齐 _settleDay：防 afterAction 的 30 日补结插入洞府访客等噪音（本断言只验悟道本体）
+    out.todoRow = UI.renderDailyCard().includes('感悟 24/24 · 可炼作修为') && UI.renderDailyCard().includes('data-action="act-wudao"');
+    out.progressRow = (() => { p.insight = 12; const ok = UI.renderDailyCard().includes('感悟 12/24 · 攒足可炼作修为'); p.insight = 24; return ok; })();
     out.doneRow = (() => { p._wuDaoDay = 400; const ok = UI.renderDailyCard().includes('今日已悟 · 炼作修为'); p._wuDaoDay = -1; return ok; })();
-    // r9 报仙元口径
-    const r9save = p.realmIdx; p.realmIdx = 9;
-    out.r9Row = UI.renderDailyCard().includes('炼作仙元 1000');
-    p.realmIdx = r9save;
+    // r9 报仙元口径（池空视同全再生——纯度文案不入卡面）
+    const r9save = p.realmIdx; p.realmIdx = 9; p.insight = 40;
+    out.r9Row = UI.renderDailyCard().includes('感悟 40/38 · 可炼作仙元');
+    p.realmIdx = r9save; p.insight = 24;
     // 行内直达走原确认弹窗 + 日限 _wuDaoDay 计数。页面异步系统（挂机/日结系定时器）会在 await
-    // 间隙写 p.insight——把 insight=20 的注入放进弹窗桩体内：桩体 resolve 到 wuDao 续延之间是
+    // 间隙写 p.insight——把 insight=24 的注入放进弹窗桩体内：桩体 resolve 到 wuDao 续延之间是
     // 纯微任务链，定时器不可插队，扣除后恰为 0 是确定的
     const op = UI.popup; let popupTitle = '';
     // 仅对悟道弹窗放行——wuDao 收尾链 afterAction 可能触发洞府访客等其他弹窗，恒 true 会误接受（散修论道 +2 感悟污染断言）
@@ -504,13 +506,14 @@ try {
     const expBefore = p.exp;
     await Cultivate.wuDao();
     UI.popup = op;
+    p.cave = savedCaveB22;
     out.confirmed = popupTitle === '悟 道' && p._wuDaoDay === 400 && p.insight === 0 && p.exp > expBefore;
     return out;
   });
   rB7.todoRow && rB7.progressRow && rB7.doneRow
-    ? pass('RB22a 悟道入卡三态：≥20 todo+行内钮 / <20 ok 进度 / 已悟 ok（E219）') : fail('RB22a 三态', JSON.stringify(rB7));
-  rB7.r9Row ? pass('RB22b 悟道 stat 分境界：r9 报「炼作仙元 1000」（E219）') : fail('RB22b r9', JSON.stringify(rB7));
-  rB7.confirmed ? pass('RB22c 行内直达走原「悟 道」确认弹窗 + _wuDaoDay 日限与 20 点扣除（E219）') : fail('RB22c 直达', JSON.stringify(rB7));
+    ? pass('RB22a 悟道入卡三态：≥门槛 todo+行内钮 / <门槛 ok 进度 / 已悟 ok（E219；v37（E265）门槛随境 20+2r，r2=24）') : fail('RB22a 三态', JSON.stringify(rB7));
+  rB7.r9Row ? pass('RB22b 悟道 stat 分境界：r9 报「可炼作仙元」（E219；v37 起仙元随纯度折算，卡面不再写死 1000）') : fail('RB22b r9', JSON.stringify(rB7));
+  rB7.confirmed ? pass('RB22c 行内直达走原「悟 道」确认弹窗 + _wuDaoDay 日限与 24 点（20+2×r2）扣除（E219/E265）') : fail('RB22c 直达', JSON.stringify(rB7));
 
   /* ---- RB B7 v36 U3：E223 种子日均链 / 卡面收成口径 ---- */
   const rB9 = await page.evaluate(() => {

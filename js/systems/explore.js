@@ -222,7 +222,7 @@ const EventSys = {
       case 'wudao': {
         const gain = Math.round(60 * eco);
         Cultivate.addExp(p, gain);
-        p.insight = Math.min(100, p.insight + 5);
+        Cultivate.addInsight(p, 5, false);
         Log.add(`你在一座悟道古碑前静立半日，若有所悟。修为 +${Utils.fmtNum(gain)}，突破感悟 +5。`, 'gain');
         break;
       }
@@ -384,7 +384,7 @@ const EventSys = {
         if (correct) {
           const gain = Math.round(120 * GameData.eco(this.ecoRealm(p, map)));   // v33（E104）
           Cultivate.addExp(p, gain);
-          p.insight = Math.min(100, p.insight + 5);
+          Cultivate.addInsight(p, 5, false);
           Log.add(`「善。」老者抚须而笑。修为 +${Utils.fmtNum(gain)}，突破感悟 +5。`, 'gain');
         } else {
           const gain = Math.round(40 * GameData.eco(this.ecoRealm(p, map)));   // v33（E104）

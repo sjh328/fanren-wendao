@@ -15,7 +15,7 @@ const CHROME = CHROME_CANDIDATES.find(f => f && fs.existsSync(f)) || 'C:/Program
 
 const browser = await puppeteer.launch({ headless: true, executablePath: CHROME, args: ['--no-sandbox'] });
 const page = await browser.newPage();
-await page.goto('http://localhost:8341/index.html?v=33', { waitUntil: 'networkidle0' });
+await page.goto('http://localhost:8341/index.html', { waitUntil: 'networkidle0' });   // v37（E262）：无 query——server.mjs 已 no-cache，写死 ?v 只会漂移
 await new Promise(r => setTimeout(r, 600));
 
 // 采样：每境界在「标准玩家画像」下测 修为/日 与 突破成算（静修/天劫基准）
@@ -121,17 +121,25 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
 
   // v36（E220）：全行动效率横向表——每境枚举各主动作的修为/游戏日与灵石/游戏日，供门禁比较。
   // 感悟→修为折算显式公式（表值不随实现者漂移）：汇率锚定悟道——20 感悟 = 2.5×baseGain，
-  // 即 1 感悟 = 0.125×baseGain。分母只计调息再生（+2 感悟/日）：论道/听讲/秘境的感悟产出视作
-  // 各主动作行的行内附赠，不进入悟道分母（否则论道感悟会循环摊薄论道自己的门禁值）。
+  // 即 1 感悟 = 0.125×baseGain。分母只计调息再生（+2 感悟/日）。
+  // v37（E264/E265）：「论道门禁间接约束」豁免删除——E265 已证其不成立（听讲链 ×3.54 越 E220 带
+  // 而论道行门禁对感悟供给端失明）；感悟纯度 ρ 折算落地后，购买悟道链/听讲链以 gated 行实测入带，
+  // 悟道收益随实现走（读 Cultivate.WUDAO_PUR_FLOOR，纯度底折系数回滚即现形）。
   const actionRows = [];
   const GATE = { cult: 2.2, seclude: 1.4 };   // 门禁：任一 gated 行 > 修炼日均×2.2 或 > 闭关日均×1.4 → 报警
   for (let r = 0; r <= 9; r++) {
     const p = PlayerFactory.create('模拟道人', { gen: 6, comp: 6, luck: 6, body: 6 });
     p.realmIdx = r; p.layer = 0; p.exp = 0; p.dao = null;
-    const base = Cultivate.baseGain(p) * (1 + Stat.compute(p).cultPct / 100);   // 与主表同口径（不含 gainMult 随机）
+    const k = 1 + Stat.compute(p).cultPct / 100;
+    const base = Cultivate.baseGain(p) * k;   // 与主表同口径（不含 gainMult 随机）
+    const raw = Cultivate.baseGain(p);        // 无悟性乘数基数——悟道收益不走 gainMult/cultPct
     const cult = base / 3;                    // 修炼日均（一次修炼 3 日）
     const seclude = base * 16 / 30;           // 闭关日均（30 日 ×10×1.6，开局一次结算）
     const eco = GameData.eco(r), se = GameData.stoneEco(r);
+    // v37（E265）：悟道纯度底折系数随实现走——ρ=0（纯购买链）收益保留 WUDAO_PUR_FLOOR 比例，
+    // 系数被改（如回滚注 1.0）购买链行即越带，门禁非零退出
+    const purFloor = (typeof Cultivate.WUDAO_PUR_FLOOR === 'number') ? Cultivate.WUDAO_PUR_FLOOR : 0.3;
+    const pur = rho => purFloor + (1 - purFloor) * rho;
     // 论道行实调 NpcSys.discuss 捕获实发（talent5 NPC、rel≥30）——门禁随实现走，E197 公式回滚即现形
     let discussGain = 0;
     const savedAdd = Cultivate.addExp, savedTime = Time.add, savedAA = Game.afterAction, savedPlayer = Game.player;
@@ -142,18 +150,23 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
     Cultivate.addExp = savedAdd; Time.add = savedTime; Game.afterAction = savedAA; Game.player = savedPlayer;
     const share = (() => { const w = GameData.SECRET_REALMS[r].weights; const s = Object.values(w).reduce((a, b) => a + b, 0); return w.battle / s; })();
     const dungeonExp = (8 * share + 1) * 22 * eco / 9;   // 9 层×1 日；战斗节点期望 = 8×权重占比 + boss，均按 22×eco 平价计（精英/深度境界跃迁未计，与战斗行同约定，保守）
+    // v37（E265）：听讲链供给节拍——听讲 +8（外源）与调息 +2（再生）各耗 1 游戏日 → 5 感悟/日，
+    // ρ = 2/10 = 0.2；悟道一场耗 20+2r（wuDaoCost 同式）→ 每 (20+2r)/5 日一场
+    const listenCycle = (20 + 2 * r) / 5;
     actionRows.push({
       realm: GameData.REALM_NAMES[r], cult, seclude,
       rows: [
         { key: '修炼', exp: cult, stones: 0, gated: true },
         { key: '闭关', exp: seclude, stones: -se, gated: true },   // 灵石列：闭关开销 30×stoneEco 摊 30 日
         { key: '调息', exp: 2 * 0.125 * base, stones: 0, gated: true },   // +2 感悟/日 × 悟道汇率
-        { key: '悟道', exp: r >= 9 ? 0 : base * 2.5 / 10, stones: 0, gated: r < 9, note: r >= 9 ? '仙元 1000/次（日限，不入修为门禁）' : '20 感悟→2.5×baseGain，按调息再生摊 10 日' },
+        { key: '悟道', exp: r >= 9 ? 0 : raw * 2.5 / 10, stones: 0, gated: r < 9, note: r >= 9 ? '仙元（日限，不入修为门禁）' : '自然链 ρ=1：按调息再生摊 10 日，2.5×baseGain 全额' },
+        { key: '悟道·购买链', exp: r >= 9 ? 0 : raw * 2.5 * pur(0), stones: r >= 9 ? 0 : -5000, gated: r < 9, note: 'v37（E264）：筑基丹 1 枚/日（50 感悟 ≥ 20+2r 耗）喂发每日一场，ρ=0 → 收益折 WUDAO_PUR_FLOOR；丹耗 5000 灵石/日入灵石列（现状 ×7.08 由此压入带）' },
         { key: '论道', exp: discussGain / 2, stones: 0, gated: true, note: '实调 discuss：talent5 → 1.4×baseGain/2 日（E197）' },
-        { key: '听讲', exp: 0, stones: 0, gated: false, note: '感悟 +8/日（行内附赠，按悟道汇率约合 1.0×baseGain/日，不入门禁）；耗贡献 300' },
+        { key: '听讲→悟道链', exp: r >= 9 ? 0 : raw * 2.5 * pur(0.2) / listenCycle, stones: 0, gated: r < 9, note: 'v37（E265）：听讲 +8（外源）+调息 +2（再生）各耗 1 日 → 5 感悟/日、ρ=0.2，每 (20+2r)/5 日一场；耗贡献 300/场听讲（原「行内附赠不入门禁」豁免已证不成立，删除）' },
         { key: '悬赏', exp: 0, stones: 60 * se / 9, gated: false, note: '赏格 60×stoneEco（灵石+贡献，无修为）；按猎杀型均值 4.5 杀 ×2 日/杀 摊' },
         { key: '探索', exp: 22 * eco / 2, stones: 15 * se / 2, gated: true, note: '同境战胜 22×eco / 每次探索 2 日' },
         { key: '秘境一轮', exp: dungeonExp, stones: -2 * se / 9, gated: true, note: '9 层×1 日；战斗节点期望 8×权重占比+boss，平价 22×eco（精英/深度跃迁未计，保守）；门票 2×stoneEco，宝箱灵石未计' },
+        { key: '塔深爬', exp: 2 * cult / 3, stones: 100 * se, gated: true, note: 'v37（E273）：免费 1 次/日、整场计 3 日（TowerSys.enter Time.add(3)）、层奖修为日额度 2×修炼日均（EXP_ALLOW_MUL）——一场深爬修为封顶 2×cult、吞吐 1 场/3 日；层奖灵石 300×stoneEco/场同摊' },
       ],
     });
   }
@@ -194,15 +207,15 @@ for (const st of sim.stoneRows) md += `| ${st.realm} | ${st.dayIn.toLocaleString
 
 // v36（E220）：全行动效率横向表 + 门禁
 md += `\n## v36 全行动效率横向表（E220 门禁基准）\n\n`;
-md += `折算口径：感悟→修为锚定悟道（20 感悟 = 2.5×baseGain，即 1 感悟 = 0.125×baseGain）；标准画像同主表（四维 6/6/6/6，layer 0）。分母只计调息再生（+2 感悟/日）——论道/听讲/秘境的感悟产出视作行内附赠，不进入悟道分母（玩家以论道/听讲感悟喂养悟道使实际分母缩短时，行为上限由论道行门禁间接约束）。单位：修为/游戏日｜灵石/游戏日（负为支出）。\n\n`;
-md += `| 境界 | 修炼 | 闭关 | 调息 | 悟道 | 论道 | 听讲 | 悬赏 | 探索 | 秘境一轮 |\n|---|---|---|---|---|---|---|---|---|---|\n`;
+md += `折算口径：感悟→修为锚定悟道（20 感悟 = 2.5×baseGain，即 1 感悟 = 0.125×baseGain）；标准画像同主表（四维 6/6/6/6，layer 0）。分母只计调息再生（+2 感悟/日）。v37（E264/E265）：悟道收益按感悟纯度 ρ 折算（收益 = baseGain×2.5×(WUDAO_PUR_FLOOR+(1−WUDAO_PUR_FLOOR)×ρ)，系数随实现走）；购买悟道链/听讲链/塔深爬以 gated 行实测入门禁（原「论道门禁间接约束」豁免已证不成立，删除）。单位：修为/游戏日｜灵石/游戏日（负为支出）。\n\n`;
+md += `| 境界 | 修炼 | 闭关 | 调息 | 悟道 | 悟道·购买链 | 论道 | 听讲→悟道链 | 悬赏 | 探索 | 秘境一轮 | 塔深爬 |\n|---|---|---|---|---|---|---|---|---|---|---|---|\n`;
 const fmtCell = v => v >= 0 ? v.toLocaleString() : `-${Math.abs(v).toLocaleString()}`;
 for (const ar of sim.actionRows) {
   const cells = ar.rows.map(row => `${row.exp > 0 ? fmtCell(Math.round(row.exp)) : '0'}${row.stones ? `｜${fmtCell(Math.round(row.stones))}` : ''}`);
   md += `| ${ar.realm} | ${cells.join(' | ')} |\n`;
 }
 md += `\n> 行内备注：${sim.actionRows[0].rows.map(row => row.note ? `${row.key}——${row.note}` : '').filter(Boolean).join('；')}。\n`;
-md += `> 听讲/悬赏无修为主收益：听讲感悟为行内附赠不入门禁；悬赏赏格为灵石+贡献。论道行为实调 NpcSys.discuss 捕获实发（talent5），门禁随实现走。\n`;
+md += `> 悬赏无修为主收益（赏格为灵石+贡献）；论道行为实调 NpcSys.discuss 捕获实发（talent5）；悟道链两行随 Cultivate.WUDAO_PUR_FLOOR 实现值走，门禁随实现走。\n`;
 
 // v36（E220）门禁：任一 gated 行修为效率 > 修炼日均×2.2 或 > 闭关日均×1.4 → 报警非零退出
 const gateViolations = [];
@@ -220,7 +233,7 @@ if (gateViolations.length) {
   console.error('⚠ E220 门禁报警：\n' + gateViolations.join('\n'));
   process.exitCode = 1;
 } else {
-  md += '全部 gated 行落入带内：修炼 ×1.00、闭关 ×1.60、调息/悟道 ×0.75、论道 ×2.10（talent5 上限，实调实发）、探索 ×1.38、秘境一轮 ×1.5（平价保守口径）——**门禁全绿**。\n';
+  md += '全部 gated 行落入带内：修炼 ×1.00、闭关 ×1.60、调息/悟道 ×0.75、悟道·购买链 ≈×2.12（ρ=0 折底，贴带运行）、论道 ×2.10（talent5 上限，实调实发）、听讲→悟道链 ≈×0.6、探索 ×1.38、秘境一轮 ×1.5（平价保守口径）、塔深爬 ≈×0.67（额度+整场计日双腿）——**门禁全绿**。\n';
   console.log('✓ E220 门禁全绿');
 }
 

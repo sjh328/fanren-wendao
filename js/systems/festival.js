@@ -9,9 +9,14 @@ const FestivalSys = {
     const doy = Math.floor((p.day || 0) % 365) + 1;
     return GameData.FESTIVALS.find(f => f.day === doy) || null;
   },
+  /** v37（E247）：互动节庆名录——auto 回放（闭关/离线跨日补结）遇之改挂起补办而非就地从简 */
+  INTERACTIVE: ['shangyuan', 'zhongyuan', 'chuxi'],
+  PENDING_DAYS: 3,   // 补办窗口：出关后 3 游戏日内
   /** 每次行动后检查：节庆日首次触发（按 年+节庆 记旗标，一年只过一次）
-   *  v27 auto=离线回放模式：互动型节庆自动从简（不弹窗、不开战），资源型节庆照常入账 */
+   *  v27 auto=离线回放模式：互动型节庆自动从简（不弹窗、不开战），资源型节庆照常入账
+   *  v37（E247）：非 auto 收尾先查挂起补办；auto 遇互动节庆改挂 p.pendingFestival（双同步迁移） */
   check(p, auto = false) {
+    if (!auto) this.resolvePending(p);
     const f = this.today(p);
     if (!f || !p || p.dead) return;
     const year = Math.floor((p.day || 0) / 365) + 1;
@@ -23,6 +28,12 @@ const FestivalSys = {
     // 年兽开战与秘境/世界事件开战互斥（Battle.start 对 active 静默丢弃，后到者连旗标带机缘一并蒸发）
     if (!auto && (Battle.active || UI._popupResolve)) return;
     p.flags[key] = true;
+    // v37（E247）：auto 回放遇互动节庆——挂起待补办（完整版含除夕年兽战），不再就地从简
+    if (auto && this.INTERACTIVE.includes(f.id)) {
+      p.pendingFestival = { id: f.id, day: Math.floor(p.day || 0) };
+      Log.add(`【节庆 · ${f.name}】你在闭关中错过了今日的热闹——三日内出关，还来得及补办。`, 'info');
+      return;
+    }
     // v33（E107）修瑕：fire 中途抛错（异步 rejection 不入 dailySettle 的 try/catch）时旗标已落、
     // 整年节庆静默蒸发——现失败回滚旗标，收尾链下次 afterAction 重试（置位保持在前，防重入环）。
     try {
@@ -33,30 +44,66 @@ const FestivalSys = {
       throw err;
     }
   },
+  /** v37（E247）：补办入口——非 auto 收尾链（出关后的 afterAction / enterGame 后首次行动）调用。
+   *  3 游戏日内弹完整版（含除夕年兽战）；超期自动从简结算 + 日志「错过了」。
+   *  与 E200 TowerSys.waitIdle 四时机挂起语义不冲突：战斗/弹窗在场时不催办，出塔再补办 */
+  resolvePending(p) {
+    const pf = p.pendingFestival;
+    if (!pf || !pf.id) return;
+    if (Battle.active || UI._popupResolve) return;
+    const fdef = GameData.FESTIVALS.find(x => x.id === pf.id);
+    p.pendingFestival = null;
+    if (!fdef) return;
+    const days = Math.floor(p.day || 0) - Math.floor(pf.day || 0);
+    if (days > this.PENDING_DAYS) {
+      Log.add(`（${fdef.name}的补办时机已过——那场热闹，终究是错过了。）`, 'info');
+      this.fire(p, fdef, true);   // 超期自动从简结算
+      return;
+    }
+    Log.add(`你想起${days > 0 ? ` ${days} 日前` : ''}错过的【${fdef.name}】——如今补办，热闹还赶得上！`, 'event');
+    try {
+      const r = this.fire(p, fdef, false);
+      if (r && typeof r.catch === 'function') r.catch(() => {});
+    } catch (err) { console.error('节庆补办异常:', err); }
+  },
   /** 当日是否某节庆（供玩法钩子查询，如中秋赠礼加倍） */
   is(p, id) { const f = this.today(p); return !!(f && f.id === id); },
   async fire(p, f, auto = false) {
+    if (typeof Ambience !== 'undefined') Ambience.sfx('bell');   // v37（E232）：开节钟磬（死音效 bell 接线）
     Log.add(`【节庆 · ${f.name}】${f.desc}`, 'event');
     if (!auto) UI.announce(`✦ ${f.name} ✦`, 'gold');
     if (f.id === 'shangyuan') {
       if (auto) {   // v27：离线错过灯会，随手揭一签
-        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Cultivate.addInsight(p, 2, false);
         Log.add('（离线错过灯会——你隔日对着记忆里的谜面想了想，也算略有所得。突破感悟 +2）', 'info');
         return;
       }
       // v28 联动：灯谜正误率吃有效悟性（40 + 悟性×2，封顶 85）——读得多，猜得准
       const right = Utils.chance(Math.min(85, 40 + Stat.compOf(p) * 2));
+      // v37（E251）：正解按年哈希轮换（复用黑市 day-hash 轮子），成算不再决定「答对与否」，
+      // 改作用于答对后的奖励品质第二层——消除「低悟性故意答错更优」的逆选择；primary 标记随正解走
+      const year = Math.floor((p.day || 0) / 365) + 1;
+      const correct = ['a', 'b', 'c'][Utils.hashStr('riddle' + year) % 3];
       const ans = await UI.popup({
         title: '上元灯会 · 灯谜',
         html: '一盏走马灯下悬着谜面：「白日隐形，夜里提灯，照尽人间不平。——打一修行之物。」',
-        options: [{ text: '火符', value: 'a' }, { text: '明镜', value: 'b', primary: true }, { text: '灯芯', value: 'c' }],
+        options: [
+          { text: '火符', value: 'a', primary: correct === 'a' },
+          { text: '明镜', value: 'b', primary: correct === 'b' },
+          { text: '灯芯', value: 'c', primary: correct === 'c' },
+        ],
       });
-      if ((right && ans === 'b') || (!right && ans !== 'b')) {
-        p.insight = Math.min(100, (p.insight || 0) + 5);
-        KarmaSys.addFortune(1);
-        Log.add('你揭下谜底——满堂彩声，灯楼主人赠你一页前辈手札。（突破感悟 +5，气运 +1）', 'gain');
+      if (ans === correct) {
+        if (right) {
+          Cultivate.addInsight(p, 5, false);
+          KarmaSys.addFortune(1);
+          Log.add('你揭下谜底——满堂彩声，灯楼主人赠你一页前辈手札。（突破感悟 +5，气运 +1）', 'gain');
+        } else {
+          Cultivate.addInsight(p, 3, false);   // 品质第二层：成算不足，赏格折中
+          Log.add('谜底虽对，玄机只解了三分——灯楼主人笑着递上半页手札。（突破感悟 +3）', 'gain');
+        }
       } else {
-        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Cultivate.addInsight(p, 2, false);
         Log.add('谜底揭错，众人善意的哄笑里，你也悟得几分。（突破感悟 +2）', 'info');
       }
     } else if (f.id === 'huazhao') {
@@ -92,7 +139,7 @@ const FestivalSys = {
       // v30 端午：食粽驱邪 / 观舟得彩
       if (auto) {
         p.poison = Math.max(0, p.poison - 10);
-        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Cultivate.addInsight(p, 2, false);
         Log.add('（离线端午——邻里送来的粽子还温着。食粽驱邪，丹毒 -10，感悟 +2。）', 'info');
         return;
       }
@@ -106,7 +153,7 @@ const FestivalSys = {
       });
       if (c === 'zong') {
         p.poison = Math.max(0, p.poison - 15);
-        p.insight = Math.min(100, (p.insight || 0) + 3);
+        Cultivate.addInsight(p, 3, false);
         Log.add('糯米裹着枣香下肚，一股暖流涤荡百脉——丹毒 -15，感悟 +3。', 'gain');
       } else {
         const win = Utils.chance(50);
@@ -131,7 +178,7 @@ const FestivalSys = {
       });
       if (c2 === 'climb') {
         KarmaSys.addFortune(2);
-        p.insight = Math.min(100, (p.insight || 0) + 2);
+        Cultivate.addInsight(p, 2, false);
         Log.add('你一路登上最高处，天地忽然开阔——襟怀一畅，气运 +2，感悟 +2。', 'gain');
       } else {
         const st = Stat.compute(p);

@@ -235,19 +235,30 @@ const Bag = {
     Log.add(`你装备了 <b>${def.name}</b>。`, 'gain');
     Game.afterAction();
   },
-  /** v30 词缀留档：卸下/换装时把实例词缀存入 p.affixKept[id]（与强化心得留档对称） */
+  /** v30 词缀留档：卸下/换装时把实例词缀存入 p.affixKept[id]（与强化心得留档对称）
+   *  v37（E267）：词缀星一并留档——留档形态升级为 { affixes, stars }（洗出的★卸下再穿不再蒸发）；
+   *  restoreAffix 兼容旧形态（纯 affixes 对象）双保险 */
   keepAffix(p, inst) {
     if (!inst || typeof inst !== 'object' || !inst.affixes) return;
     const id = Utils.eqId(inst);
     if (!id) return;
     p.affixKept = p.affixKept || {};
-    p.affixKept[id] = { ...inst.affixes };
+    p.affixKept[id] = { affixes: { ...inst.affixes }, stars: { ...(inst.stars || {}) } };
   },
-  /** v30 词缀还原：装备时把留档词缀写回实例（有留档不重掷，无留档走惰性补掷） */
+  /** v30 词缀还原：装备时把留档词缀写回实例（有留档不重掷，无留档走惰性补掷）
+   *  v37（E267）：同步还原词缀星；兼容两形态——新形态 {affixes, stars} 与旧形态（纯 affixes 对象，
+   *  无 affixes 键时按旧档解读），旧形态读后即升级为新形态落盘 */
   restoreAffix(p, itemId, inst) {
     if (!inst) return;
-    if (p.affixKept && p.affixKept[itemId]) {
-      inst.affixes = { ...p.affixKept[itemId] };
+    const kept = p.affixKept && p.affixKept[itemId];
+    if (kept) {
+      if (kept.affixes && typeof kept.affixes === 'object') {
+        inst.affixes = { ...kept.affixes };
+        inst.stars = { ...(kept.stars || {}) };
+      } else {
+        inst.affixes = { ...kept };
+        inst.stars = inst.stars || {};
+      }
       delete p.affixKept[itemId];
     }
   },
@@ -276,9 +287,7 @@ const Bag = {
     const enh = (p.enhanced || {})[itemId] || 0;
     const oreBack = (def.grade || 0) + 1 + enh;
     // v24：0 价稀有物（天级/仙级神兵、秘境专属）按品阶兜底计价，高分战利品不再沦为背包垃圾
-    const GRADE_FALLBACK = [300, 800, 2000, 6000, 16000, 40000];
-    const baseVal = (def.price || 0) > 0 ? def.price : (GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500);
-    const stones = Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2)));
+    const stones = ForgeSys.salvageStones(def, enh);   // v37（E254）：分解公式与兜底价单源（ForgeSys.salvageStones）
     const ok = await UI.popup({
       title: `分解 · ${def.name}`,
       html: `将法宝投入熔炉回炉重铸：<br>· 玄铁矿 ×${oreBack}（含强化回炉）<br>· 灵石 ${Utils.fmtNum(stones)}<br>· <b>器魂 ×${2 + (def.grade || 0) * 2 + enh}</b>（祭炼堂重铸词缀之用）<br><span class="neg">分解之物与其祭炼心得、词缀留档将一并化去，无法找回${(p.equipped.weapon && Utils.eqId(p.equipped.weapon) === itemId) || (p.equipped.armor && Utils.eqId(p.equipped.armor) === itemId) || (p.equipped.accessory && Utils.eqId(p.equipped.accessory) === itemId) ? '（在穿实例的词缀与强化不受影响，仅清同 id 留档）' : ''}。</span>`,   // v32 修瑕（E22）：文案区分「同 id 留档」与「在穿实例」——原承诺过强
@@ -420,7 +429,7 @@ const Pill = {
       const lost = Math.round(p.exp * 0.1);
       p.exp = Math.max(0, p.exp - lost);
       p.poison = Math.round(cap * 0.5);
-      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 6, '丹毒反噬');
+      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 4, '丹毒超限仍强行服丹');   // v37（E245）：超限服丹 +4（原丹毒反噬 +6，按处方归一）——心魔新行为来源
       Log.add(`你服下 <b>${def.name}</b>（${effectText.join('，')}），然而丹毒冲破上限，药力反噬，根基受损！`, 'warn');
       Log.add(`气血翻涌，当前层修为 -${Utils.fmtNum(lost)}。切记丹毒将满时莫要强行服丹！`, 'loss');
     } else {

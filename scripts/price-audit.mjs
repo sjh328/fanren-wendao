@@ -101,6 +101,32 @@ const report = await page.evaluate(() => {
       sectProblems.push(`[贡献汇率倒挂] ${row.item}(${d.name}) 成本${row.cost}贡献 → 面值${d.price * (row.qty || 1)}（面值/贡献 ${facePerContrib.toFixed(1)}，同表中枢 9~50）`);
     }
   }
+  // v37（E263）：第四路增补「卖值/贡献」丹药族横向锚——宗门兑丹卖店的直接量纲
+  //（dujie 旧价 8000 时静态卖值/贡献 22.5，同表离散 4.09×，构成「贡献兑渡劫丹卖店 ×16.7」套利主窗口）。
+  // 锚范围钉死（防「收窄锚自证清白」）：只取 GameData.ITEMS[item].type==='pill' 且 price>0 的兑换行——
+  // · pill_xisui price=0（game-data.js 丹药表），经 shop.js sellPrice 的 max(1,…) 卖值退化为 1，
+  //   1/200=0.005 无判别力，排除出锚（本注释即口径在案处）；
+  // · 装备/功法/杂件行不入锚——贡献价含「学习资格/器魂」等非卖店价值，0.45 折卖后天然低，全表离散无判别力。
+  // 口径用静态 0.45 回收系数（与拍卖路 `Math.floor(price*0.45)` 同式）——坊市行情 ±20% 波动是噪声，
+  // 静态口径确定性可复跑；族内 max/min >3× 报警。
+  const sectPillRatioProblems = [];
+  const sectPillRatios = [];
+  {
+    const ratios = [];
+    for (const row of G.SECT_EXCHANGE) {
+      if (!row.item || row.item.startsWith('_') || row.special) continue;
+      const d = G.ITEMS[row.item];
+      if (!d || d.type !== 'pill' || !d.price) continue;   // price=0（pill_xisui）排除：卖值退化 1/200=0.005 无判别力（见上注）
+      const sell = Math.max(1, Math.floor(d.price * 0.45));
+      ratios.push({ id: row.item, name: d.name, ratio: sell * (row.qty || 1) / row.cost });
+    }
+    sectPillRatios.push(...ratios.map(x => `${x.id}:${x.ratio.toFixed(2)}`));
+    if (ratios.length >= 2) {
+      const hi = ratios.reduce((a, b) => (b.ratio > a.ratio ? b : a));
+      const lo = ratios.reduce((a, b) => (b.ratio < a.ratio ? b : a));
+      if (hi.ratio / lo.ratio > 3) sectPillRatioProblems.push(`[宗门兑丹离散] 族内卖值/贡献 max ${hi.id} ${hi.ratio.toFixed(2)} / min ${lo.id} ${lo.ratio.toFixed(2)} = ${(hi.ratio / lo.ratio).toFixed(2)}×（门禁 ≤3×）`);
+    }
+  }
   // v35（U6）：画符现金流分境界扫描——变现期望（期望产量EV × 池均价 × 0.45 × stoneEco）
   // 对 drawPrice 不得为正（v35 前单击净赚 231×eco/日，成本阶梯被 Time.add 结构性废掉）
   // v36（E224）：按 seasonOf ∈ {0,1,2,3} 四季复扫——仲夏 +2 已摊入 expectedQty（craft.js E224），
@@ -241,6 +267,31 @@ const report = await page.evaluate(() => {
         }
         // 悬赏领赏（猎杀型均值 4.5 杀 × 2 日/杀）
         actionBoard.push({ action: `悬赏领赏(r${r})`, perDay: (60 * eco(r)) / 9 });
+        // v37（E266）：悬赏 collect 行——与猎杀行同摊（farm 4.5 料 ≈ 4.5 探索 × 2 日/次），
+        // 取 max(基准赏格, 兜底 floor 1.2×卖价×need)；购料口径的正负由下方购料环专项检测裁决
+        {
+          const matsT = Math.min(4, Math.floor(r / 2) + 1);
+          const ms = G.matsByTier(matsT);
+          if (ms.length) {
+            const avgFloor = ms.reduce((s, m) => s + Math.max(1, Math.floor((G.ITEMS[m].price || 0) * 0.45)) * 4.5 * 1.2, 0) / ms.length;
+            actionBoard.push({ action: `悬赏·收集(r${r})`, perDay: Math.max(60 * eco(r), avgFloor) / 9, v37: true });
+          }
+        }
+        // v37（E263）：宗门兑换行——贡献经差事领取（每桩贡献 30+22r；E129 日限 6 桩是上限而非可达吞吐：
+        // cult 桩需 120×eco 修为≈5 轮修炼、kill 桩需 4~5 杀×2 日，故按「约一桩/日」混合吞吐摊）。
+        // 兑换行日均灵石 = sell×qty ÷ cost × 日均贡献。只取 price>0 之物（price=0 卖值退化 1 无意义，
+        // 同第四路锚口径）；r=0 无宗门不入榜；minRealm 门内才采样——门槛外的兑换窗口不存在，采了就是假敞口
+        if (r >= 1) {
+          const contribPerDay = 30 + r * 22;
+          for (const row of G.SECT_EXCHANGE) {
+            if (!row.item || row.item.startsWith('_') || row.special) continue;
+            const d = G.ITEMS[row.item];
+            if (!d || !d.price || d.type === 'gongfa') continue;   // 功法价 0 自动跳过；非卖店价值物不入灵石榜
+            if ((row.minRealm || 0) > r) continue;
+            const sell = Math.max(1, Math.floor(d.price * 0.45)) * (row.qty || 1);
+            actionBoard.push({ action: `宗门兑换·${d.name}(r${r})`, perDay: sell / row.cost * contribPerDay, v37: true });
+          }
+        }
         // 塔绩兑换（每胜层 +1 绩、塔战零游戏日 → 每绩价值 = 发放灵石价值/绩成本，折 1 层/日）
         for (const rd of TowerSys.REDEEMS) {
           let val = 0;
@@ -272,16 +323,38 @@ const report = await page.evaluate(() => {
   actionBoard.sort((a, b) => b.perDay - a.perDay);
   const top10 = actionBoard.slice(0, 10);
   const boardProblems = [];
+  // 中位基线钉死在 v36 行集（`!x.v37` 过滤；v36 采样 374 行）：离散比检查的标定基线是 v36 行集——
+  // 该行集下中位为负、检查按其原样语义运行；若让 v37 新行（全为正的小额信息行）参与中位，
+  // 中位翻正即对 v36 已受控 Top1（塔绩纳财，E221 已日限）误报 76 万倍离群——这是基线漂移不是新套利。
+  // 新行各有专项门：第四路丹药族离散锚（上方）/ 购料环期望检测（下方）/ v35 面值贡献比。
   if (top10.length) {
     const ecoOf = a => Number(a.match(/r(\d+)\)$/)[1]);
     const top1 = top10[0];
     const line = 300 * G.stoneEco(ecoOf(top1.action));
     if (top1.perDay > line) boardProblems.push(`[现金流榜登顶] ${top1.action} 净 ${Math.round(top1.perDay)}/日 > 300×eco 线 ${Math.round(line)}`);
-    const mids = actionBoard.map(x => x.perDay).sort((a, b) => a - b);
-    const median = mids[Math.floor(mids.length / 2)];
+    const mids = actionBoard.filter(x => !x.v37).map(x => x.perDay).sort((a, b) => a - b);
+    const median = mids[Math.min(mids.length - 1, Math.floor(mids.length / 2))];
     if (median > 0 && top1.perDay / median > 8) boardProblems.push(`[现金流榜离群] Top1 ${top1.action} 为中位数 ${Math.round(median)} 的 ${(top1.perDay / median).toFixed(1)} 倍（>8×）`);
   }
-  return { rows: rows.length, zeroPrice, problems, auctionProblems, betProblems, betSamples, betTotal, betEv23, sectProblems, drawProblems, auctionGradeProblems, tierProblems, top10, boardProblems, boardAll: actionBoard.length };
+  // v37（E266）：第八路「购料→交收集悬赏」全链条期望检测——坊市全价购 need 件 vs 兜底赏格
+  //（1.2×卖价×need；连锁乘数 v37 起不作用于 floor，本检测按 floor 口径即购料环收益上限）。
+  // 期望 >0 即「买料交悬赏」正期望环（E266 病灶：旧系数 2×下 1.6 连锁即 3.2×卖价 > 2.22×卖价购价）。
+  // 仍正则 floor 系数降至 1.0（处方在案）
+  const bountyLoopProblems = [];
+  {
+    for (let r = 0; r <= 9; r++) {
+      const tier = Math.min(4, Math.floor(r / 2) + 1);
+      for (const m of G.matsByTier(tier)) {
+        const d = G.ITEMS[m];
+        if (!d || !d.price) continue;
+        const need = 4.5;   // 收集悬赏 need 3~6 均值
+        const floorPay = Math.max(1, Math.floor(d.price * 0.45)) * need * 1.2;   // v37 E266 后 floor 系数 1.2
+        const buyCost = d.price * need;   // 坊市全价（行情/折扣未计——取对玩家最不利的全价口径）
+        if (floorPay > buyCost) bountyLoopProblems.push(`[购料环正期望] r${r} ${d.name} floor ${Math.round(floorPay)} > 购价 ${Math.round(buyCost)}（need ${need}）`);
+      }
+    }
+  }
+  return { rows: rows.length, zeroPrice, problems, auctionProblems, betProblems, betSamples, betTotal, betEv23, sectProblems, sectPillRatioProblems, sectPillRatios, drawProblems, auctionGradeProblems, tierProblems, top10, boardProblems, boardAll: actionBoard.length, boardV37N: actionBoard.filter(x => x.v37).length, bountyLoopProblems };
 });
 
 await browser.close();
@@ -290,12 +363,16 @@ md += report.problems.length ? report.problems.map(p => `- ${p}`).join('\n') + '
 md += `\n## v34 扩容检测\n\n- 拍卖池倒挂（${report.auctionProblems.length}）：\n` + (report.auctionProblems.length ? report.auctionProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
 md += `- 黑市赌袋期望越界（${report.betProblems.length}）：\n` + (report.betProblems.length ? report.betProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
 md += `\n## v35 扩容检测\n\n- 宗门贡献汇率倒挂（${report.sectProblems.length}）：\n` + (report.sectProblems.length ? report.sectProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
+md += `\n## v37 扩容检测（E263/E266）\n\n- 第四路·宗门兑丹「卖值/贡献」族内离散（锚 type==='pill' && price>0；pill_xisui price=0 卖值退化 1/200=0.005 无判别力排除出锚；离散 >3× 报警）：\n`;
+md += `  - 族内采样：${report.sectPillRatios.join('、') || '无'}\n`;
+md += `- 第四路报警（${report.sectPillRatioProblems.length}）：\n` + (report.sectPillRatioProblems.length ? report.sectPillRatioProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 族内离散 ≤3×，无兑丹卖店档位塌陷。\n');
+md += `- 第八路·购料环期望（坊市全价购料 vs 收集悬赏兜底 floor，>0 报警）：${report.bountyLoopProblems.length ? '\n' + report.bountyLoopProblems.map(p => `  - ${p}`).join('\n') + '\n' : '全境界全档材料期望 ≤0（floor 1.2×卖价 < 全价购价），环已破。\n'}`;
 md += `- 画符现金流越界（${report.drawProblems.length}，四季复扫）：\n` + (report.drawProblems.length ? report.drawProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
 md += `- 拍卖功法品阶倒挂（${report.auctionGradeProblems.length}）：\n` + (report.auctionGradeProblems.length ? report.auctionGradeProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
 md += `\n## v36 扩容检测\n\n- 赌袋采样执行：${report.betSamples}/${report.betTotal}（四采样点全执行为验收线；满气运端已并入上方赌袋检测）\n`;
 md += `- 满气运端（luck23）EV 信息行：${report.betEv23.join('、')}（门禁线 0.6×成本；处方预期 ≤0 待数据侧后续校准，见 UPDATE_NOTES）\n`;
 md += `- 第七路·同表档位单调性（${report.tierProblems.length}）：\n` + (report.tierProblems.length ? report.tierProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 丹药配方对/丹药档位/种子相邻档/符箓池全零。\n');
-md += `- 第八路·per-action 现金流榜（采样 ${report.boardAll} 行，Top10）：\n`;
+md += `- 第八路·per-action 现金流榜（采样 ${report.boardAll} 行，其中 v37 新增 ${report.boardV37N} 行=悬赏·收集+宗门兑换，参与榜单与 300×eco 绝对线；中位基线钉死 v36 行集见源码注）：\n`;
 md += (report.top10.length ? report.top10.map((x, i) => `  ${i + 1}. ${x.action} —— 净 ${Math.round(x.perDay).toLocaleString()} 灵石/日`).join('\n') + '\n' : '  - 无。\n');
 md += `- 第八路·榜报警（${report.boardProblems.length}）：\n` + (report.boardProblems.length ? report.boardProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无越 300×eco 线或 Top1/中位 >8× 的离群动作。\n');
 console.log(md);

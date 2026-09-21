@@ -171,13 +171,18 @@ const ForgeSys = {
    *  f4: 700 料 EV 1890，5 日/炉收益仍数倍于同期探索，低境印钞）。工费按成品估值阶梯比例收取：
    *  grade≤2 收 25%、3~4 收 15%、5+/套装收 10%——低阶断套利，高阶添 sink。
    *  估值基价：成品价；套装件 price:0 时按品阶 Fallback（与古匣估值同族）。 */
-  FEE_FALLBACK: [300, 800, 2000, 6000, 16000, 40000],
   feeOf(r) {
     const out = GameData.ITEMS[r.out];
     if (!out) return 0;
-    const base = out.price || this.FEE_FALLBACK[Utils.clamp(out.grade || 0, 0, 5)] || 1000;
+    const base = out.price || GameData.GRADE_FALLBACK[Utils.clamp(out.grade || 0, 0, 5)] || 1000;   // v37（E254）：兜底价单源（原 fee 兜底数组双写删除）
     const pct = (out.grade || 0) <= 2 ? 0.25 : (out.grade || 0) <= 4 ? 0.15 : 0.10;
     return Math.max(1, Math.round(base * pct));
+  },
+  /** v37（E254）：分解回炉灵石单源——baseVal（0 价稀有物按品阶兜底 GameData.GRADE_FALLBACK）
+   *  ×0.15×(1+心得×0.2)，下限 10。bag.salvage 实收与 ui 熔铸面板预览双写自此消解 */
+  salvageStones(def, enh = 0) {
+    const baseVal = (def.price || 0) > 0 ? def.price : (GameData.GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500);
+    return Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2)));
   },
   /** 执行炼器（v31 D7：炸炉产器胚残片；持 6 片材料折半——大额炼器赌博补上保底）
    *  v32（E6）：残片入炉——耗 6 片不减材料：成器率 +10%，且成功品自带「保底一条后缀」旗标 */
@@ -283,6 +288,11 @@ const ForgeSys = {
     if (suf) {
       const tip = suf.per ? `${suf.desc} · 本件实值 ${this.affixActual(suf, g, ST.suffix || 0)}` : suf.desc;
       parts.push(`<span class="affix-s" title="${Utils.esc(tip)}">◈${suf.name}${starTxt(ST.suffix || 0)}</span>`);
+    }
+    // v37（E249）：机制词条位显示（强化 +12 解锁，洗练淬出；实例 optional mech 字段）
+    if (inst && typeof inst === 'object' && inst.mech) {
+      const mech = this.mechDef(inst.mech);
+      if (mech) parts.push(`<span class="affix-m" title="${Utils.esc(mech.desc)}">✦${mech.name}</span>`);
     }
     return parts.join(' ');
   },
@@ -422,6 +432,15 @@ const ForgeSys = {
     } else inst.stars[part] = 0;
     const d = this.affixDef(part, inst.affixes[part]);
     Log.add(`你以玄铁重淬【${def.name}】——${part === 'prefix' ? '前缀' : '后缀'}词缀化为【<b>${d.name}</b>】${inst.stars[part] ? `★${inst.stars[part]}` : ''}：${d.desc}${keepSide ? `（已锁${keepSide === 'prefix' ? '前缀' : '后缀'}）` : ''}${d.per ? `（本件实值：${this.affixActual(d, g, inst.stars[part] || 0)}）` : ''}`, part === 'prefix' ? 'gain' : 'system');
+    // v37（E249）：词条位——强化 +12 的法宝每次洗练随机淬出机制词条（池 4 枚，覆盖旧词条）
+    if ((inst.enhance || 0) >= 12) {
+      const oldMech = inst.mech;
+      const m = Utils.pick(this.MECHS);
+      inst.mech = m.id;
+      Log.add(oldMech
+        ? `机制词条重淬——【${def.name}】词条位自【${(this.mechDef(oldMech) || {}).name || oldMech}】转为【<b>${m.name}</b>】：${m.desc}`
+        : `器成通灵——【${def.name}】强化已达十二重，词条位开启！淬出机制词条【<b>${m.name}</b>】：${m.desc}`, 'gain');
+    }
     Ambience.sfx('forge');
     Game.afterAction();
   },
@@ -506,9 +525,10 @@ const ForgeSys = {
     if (n < 2) { UI.toast('须先集齐该套至少两件'); return; }
     const ore = 10 * (lv + 1);
     const stones = Math.round(2000 * (lv + 1) * GameData.sinkCurve(p.realmIdx) / 2.2);
+    const tech = sdef.tech ? (GameData.SET_TECHS || {})[sdef.tech] : null;
     const ok = await UI.popup({
       title: `套装炼化 · ${sdef.name}`,
-      html: `以同源灵韵淬炼套装（${n}/${sdef.pieces.length} 件在身）——每阶套装效果 <b>+2%</b>（当前 ${lv} 阶）。<br>需灵石 <span class="hl">${Utils.fmtNum(stones)}</span> 与【玄铁矿】×${ore}。`,
+      html: `以同源灵韵淬炼套装（${n}/${sdef.pieces.length} 件在身）——每阶套装效果 <b>+2%</b>（当前 ${lv} 阶）。<br>需灵石 <span class="hl">${Utils.fmtNum(stones)}</span> 与【玄铁矿】×${ore}。${tech && lv + 1 >= 3 ? `<br><span class="hl">三阶圆满将解锁套装技【${tech.name}】——${tech.desc}</span>` : ''}`,
       options: [{ text: '炼 化', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
@@ -591,6 +611,42 @@ const ForgeSys = {
       .filter(([, sdef]) => sdef.pieces.every(id => worn.includes(id)))
       .map(([sid, sdef]) => sdef);
   },
+  /* ---------- v37（E249）套装技与机制词条 ---------- */
+  /** 套装技：套装炼化三阶 + 成套在身时生效（机制技，非数值；消费端唯一漏斗零新增分叉）：
+   *  · zhenyuanOnHit（玄天·磐岩之意）：受击回真元 5%——battle.js enemyTurn 伤害漏斗单点（B.playerHit 标记处）
+   *  · killAtk（血河·血河叠浪）：击杀叠攻 3%×5 层——battle.js onEnemyHit 统一总线的 hp<=0 判定点，
+   *    加成经 myAtk 单漏斗作用于全部伤害路径 */
+  setTechs(p) {
+    const t = {};
+    if (!p || !p.equipped) return t;
+    const worn = Object.values(p.equipped).filter(Boolean).map(e => (typeof e === 'string' ? e : e.id));
+    for (const [sid, sdef] of Object.entries(GameData.SETS || {})) {
+      if (!sdef.tech) continue;
+      const n = sdef.pieces.filter(id => worn.includes(id)).length;
+      if (n >= sdef.pieces.length && ((p.setForge || {})[sid] || 0) >= 3) t[sdef.tech] = true;
+    }
+    return t;
+  },
+  hasSetTech(p, tech) { return !!this.setTechs(p)[tech]; },
+  /** 机制词条池（强化 +12 解锁一格，洗练侧随机淬出；实例 optional mech 字段，undefined 即无——零迁移） */
+  MECHS: [
+    { id: 'combochase', name: '连击追击', desc: '普攻命中后 20% 概率追加一次六成威力追击' },
+    { id: 'laststand',  name: '致命保命', desc: '每场一次，受到致死伤害时保留 1 点气血' },
+    { id: 'killheal',   name: '击杀回血', desc: '击杀敌人时回复 8% 气血上限' },
+    { id: 'zmax',       name: '真元圆满', desc: '真元上限 +15%' },
+  ],
+  mechDef(id) { return this.MECHS.find(m => m.id === id) || null; },
+  /** 机制词条聚合：仅计入强化 ≥12 的已穿戴实例（词条位随强化解锁、掉级即封存的口径） */
+  mechsOf(p) {
+    const set = {};
+    if (!p || !p.equipped) return set;
+    for (const inst of Object.values(p.equipped)) {
+      if (!inst || typeof inst !== 'object') continue;
+      if ((inst.enhance || 0) >= 12 && inst.mech) set[inst.mech] = (set[inst.mech] || 0) + 1;
+    }
+    return set;
+  },
+  hasMech(p, id) { return !!this.mechsOf(p)[id]; },
   /** 强化等级显示后缀 */
   enhText(p, id, asNote = false) {
     const lv = this.lvOf(p, id);

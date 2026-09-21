@@ -61,9 +61,12 @@ const BountySys = {
     Game.afterAction();
   },
   /** v35（E144）：收集悬赏兜底赏格单源——原 claim 实发 ×2 而 UI 预览漏乘（预览腰斩），
-   *  玩家据预览做「卖店 vs 交悬赏」决策全部失真。两处共用此式 */
+   *  玩家据预览做「卖店 vs 交悬赏」决策全部失真。两处共用此式。
+   *  v37（E266）：系数 2→1.2——旧系数下「购料（全价 ≈2.22×卖价/件）→交悬赏」构成正期望环
+   *  （连锁乘算叠加后最高 3.2×卖价）；1.2 仍比 v29 前直卖 0.45 系数显著优待收集者。
+   *  price-audit 第八路购料环检测锚此口径（floor 为购料环收益上限） */
   collectFloor(t) {
-    return Math.round(ShopSys.sellPrice(t.target) * t.need * 2);
+    return Math.round(ShopSys.sellPrice(t.target) * t.need * 1.2);
   },
   claim(idx) {
     const p = Game.player;
@@ -71,10 +74,12 @@ const BountySys = {
     const t = B.list[idx];
     if (!t || t.progress < t.need) return;
     let r = this.rewards(p);
-    // v29 修瑕：收材料悬赏的赏格兜底——此前境界 0 交 3~6 个一阶材料（卖店值 72~240）只赏 60 灵石，交悬赏不如摆摊
-    if (t.type === 'collect') {
-      r.stones = Math.max(r.stones, this.collectFloor(t));
-    }
+    // v29 修瑕：收材料悬赏的赏格兜底——此前境界 0 交 3~6 个一阶材料（卖店值 72~240）只赏 60 灵石，交悬赏不如摆摊。
+    // v37（E266）：兜底抽出连锁乘算——floor 是「保交割不亏摆摊」的兜底线而非可乘算赏格：先记下 floor，
+    // 声望/长老令仍照常加成基准赏格，最终实发 = max(基准赏格×连锁, floor)。若 floor 也吃连锁
+    //（旧路径 1.6×2=3.2×卖价），购料环（全价 2.22×卖价/件）恒正期望，环破不掉
+    let floorStones = 0;
+    if (t.type === 'collect') floorStones = this.collectFloor(t);
     // v27 联动：声望赏格真正入账——此前 UI 标注 ×1.15/×1.3/×1.5 而实发从未乘算
     const repBonus = (typeof RepSys !== 'undefined' && RepSys.bountyBonus) ? RepSys.bountyBonus(p) : 1;
     if (repBonus > 1) r = { stones: Math.round(r.stones * repBonus), contrib: Math.round(r.contrib * repBonus) };
@@ -91,7 +96,7 @@ const BountySys = {
     const CHAIN_TAG = ['', '连锁 · ', '连锁Ⅱ · ', '连锁Ⅲ · '];
     const curChain = t.chain || 0;
     const mul = CHAIN_MUL[curChain] || 1;
-    const gainStones = Math.round(r.stones * mul);
+    const gainStones = Math.max(Math.round(r.stones * mul), floorStones);   // v37（E266）：连锁只乘基准赏格，floor 恒为下限
     Bag.addStones(gainStones);
     if (p.sect) p.sect.contrib += Math.round(r.contrib * mul);
     Log.add(`悬赏【${t.name}】交付！赏得灵石 ${Utils.fmtNum(gainStones)}${p.sect ? `、宗门贡献 +${Math.round(r.contrib * mul)}` : ''}。`, 'gain');

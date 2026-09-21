@@ -5,7 +5,7 @@
 const UI = {
   // v36（E231）：数值文案单源——「改参数忘改文案」三连（v34 A4/v32 E16/v35 E168）后的防复发地基：
   // 手册与面板的比值文案一律由此拼串，真值常量由 check-actions「文案-常量」定点对账锚定（漂移即红）
-  FACTS: { offlineEff: '普通修炼六成', offlineCap: 120, bountyDays: 3, sellRate: '四成五' },
+  FACTS: { offlineEff: '普通修炼六成', offlineCap: 120, bountyDays: 3, sellRate: '四成五', blackOpen: '每月初一至初三开市三日' },
   el: {},
   cache() {
     for (const id of ['start-screen', 'create-screen', 'game-screen', 'start-slots', 'create-attrs', 'create-rating',
@@ -169,8 +169,8 @@ const UI = {
     chips.push(`<span class="chip hot${p.poison > poisonCap * 0.75 ? ' risk' : ''}" title="丹毒 ${Math.round(p.poison)}/${poisonCap}：超过上限将反噬损毁修为">丹毒 <b>${Math.round(p.poison)}</b>/${poisonCap}</span>`);
     chips.push(`<span class="chip lucky" title="气运：机缘与好事的眷顾">气运 <b>${p.fortune || 0}</b></span>`);
     chips.push(`<span class="chip sin${(p.karma || 0) >= 60 ? ' risk' : ''}" title="孽障：招致仇家偷袭，达百可斩三尸">孽障 <b>${p.karma || 0}</b>${(p.karma || 0) >= 100 ? '·可斩' : ''}</span>`);
-    if ((p.xinmo || 0) >= 40) chips.push(`<span class="chip hot${(p.xinmo || 0) >= 100 ? ' risk' : ''}" title="心魔：丹毒反噬/渡劫失利/玄影窥伺所积。满百须于识海降伏（胜则全属性+1%/次，永久）">心魔 <b>${Math.round(p.xinmo || 0)}</b>${(p.xinmo || 0) >= 100 ? '·劫至' : ''}</span>`);   // v19
-    if ((p.flags && p.flags.xinmoCleared)) chips.push(`<span class="chip lucky" title="心魔凝练：每降伏心魔一次，全属性永久 +1%">凝练 <b>+${p.flags.xinmoCleared}%</b></span>`);   // v19
+    if ((p.xinmo || 0) >= 40) { const xth = XinmoSys.threshold(p); chips.push(`<span class="chip hot${(p.xinmo || 0) >= xth ? ' risk' : ''}" title="心魔：丹毒反噬/渡劫失利/玄影窥伺/邪行业障所积。${xth >= 100 ? '满百' : '七十'}须于识海降伏（胜则全属性+1%/次，至多凝练 +6%）">心魔 <b>${Math.round(p.xinmo || 0)}</b>${(p.xinmo || 0) >= xth ? '·劫至' : ''}</span>`); }   // v19；v37（E245）：阈值随境界 70/100，凝练封顶 +6%
+    if ((p.flags && p.flags.xinmoCleared)) chips.push(`<span class="chip lucky" title="心魔凝练：每降伏心魔一次，全属性永久 +1%（至多 +6%）">凝练 <b>+${Math.min(6, p.flags.xinmoCleared)}%</b></span>`);   // v19；v37（E245）：封顶如实
     const chipsHtml = `
       <div class="chip-row">${chips.join('')}</div>
       <div class="bar" title="丹毒 ${Math.round(p.poison)} / ${poisonCap}"><div class="bar-fill poison" style="width:${Utils.clamp(p.poison / poisonCap * 100, 0, 100)}%"></div><span class="bar-text${p.poison <= 0 ? ' dim' : ''}">${Math.round(p.poison / poisonCap * 100)}%</span></div>`;
@@ -273,6 +273,7 @@ const UI = {
     const today = Math.floor(p.day || 0);
     const need = GameData.layerNeed(p.realmIdx, p.layer);
     const ripe = ((p.cave && p.cave.plots) || []).some(pl => pl && pl.seed && (today - (pl.plantedDay || 0)) >= (pl.days || 0));
+    const pest = ((p.cave && p.cave.plots) || []).some(pl => pl && pl.pested);   // v37（E234）：虫害红点——静默损失通道点亮
     const tripBack = (p.beasts && p.beasts.list || []).some(b => b.trip && today >= b.trip.until);
     const bountyOk = (p.bounties && p.bounties.list || []).some(bt => bt && bt.progress >= bt.need);
     const gupianOk = ForgeSys.gupianReady(p);   // v35（E160）：单源判定（原红点以累计收取数判定，合成本命后永久假亮）
@@ -285,8 +286,8 @@ const UI = {
         || (p.realmIdx === 9 && p.layer === 3 && p.exp >= need && !p.flags.ascended)
         || !!p.canReincarnate,
       quest: (typeof QuestSys !== 'undefined') ? QuestSys.sideClaimable(p) : false,
-      cave: ripe || tripBack,
-      'cave:farm': ripe,
+      cave: ripe || tripBack || pest,   // v37（E234）：虫害并入 cave 通道
+      'cave:farm': ripe || pest,
       'cave:beast': tripBack,
       map: !!(p.world && p.world.pending) || gupianOk,
       'map:realm': gupianOk,
@@ -295,7 +296,7 @@ const UI = {
       shop: bountyOk || oddHot,
       'shop:bounty': bountyOk,
       'shop:odd': oddHot,
-      sect: (!p.sect && p.realmIdx >= 1) || sectTasksOk || tourneyOn,
+      sect: (!p.sect && p.realmIdx >= 1 && !p.flags.sectDeclined) || sectTasksOk || tourneyOn,   // v37（E237）：散修拒绝宗门后红点熄灭（sectDeclined 单键）
       gongfa: false,
     };
     return this._dotsCache;
@@ -453,7 +454,7 @@ const UI = {
       extra += `
       <div class="card ${ready ? 'card-trib' : ''}">
         <div class="card-title">✦ 心魔劫 ${ready ? '<span class="tag danger">心魔值已满</span>' : `<span class="tag warn">心魔值 ${Math.round(xinmoVal)}</span>`}</div>
-        <div class="card-desc">丹毒反噬、渡劫失利、暗处窥伺，皆令心魔滋长。心魔满百必劫——于识海中直面它，胜则道心凝练（全属性永久 +1%/次）。${(p.flags && p.flags.xinmoCleared) ? `<br>· 你已降伏心魔 <b>${p.flags.xinmoCleared}</b> 次。` : ''}</div>
+        <div class="card-desc">丹毒反噬、渡劫失利、暗处窥伺、邪行恶业，皆令心魔滋长。心魔${p.realmIdx >= 6 ? '至七十' : '满百'}必劫——于识海中直面它，胜则道心凝练（全属性永久 +1%/次，至多 +6%）。${(p.flags && p.flags.xinmoCleared) ? `<br>· 你已降伏心魔 <b>${p.flags.xinmoCleared}</b> 次。` : ''}</div>
         ${ready ? '<div class="action-row"><button class="btn btn-danger" data-action="act-xinmo">降伏心魔</button></div>' : ''}
       </div>`;
     }
@@ -601,7 +602,7 @@ const UI = {
           <div class="act-sub-row">
             <button class="btn" data-action="act-rest">打坐调息（1日）</button>
             <button class="btn" data-action="act-seclude">闭关（30日 · ${Utils.fmtNum(secludeCost)}灵石）</button>
-            <button class="btn" data-action="act-wudao" title="耗 20 点突破感悟炼作修为（飞升后炼作仙元），每日一次">悟 道（感悟 ${p.insight || 0}/100）</button>   <!-- v32（D5） -->
+            <button class="btn" data-action="act-wudao" title="耗 ${Cultivate.wuDaoCost(p)} 点突破感悟炼作修为（感悟纯度愈高所得愈丰——打坐调息所生的感悟为上品；飞升后炼作仙元），每日一次">悟 道（感悟 ${p.insight || 0}/100）</button>   <!-- v32（D5）；v37（E265）成本随境、纯度口径 -->
             ${(Bag.count('pill_liaoshang') || Bag.count('pill_huiling')) ? `<button class="btn" data-action="act-use-low-pills">一键服丹</button>` : ''}
             ${AutoCult.active
               ? `<button class="btn btn-danger" data-action="act-auto-stop">停止自动修炼（${AutoCult.rounds}轮）</button>`
@@ -647,19 +648,21 @@ const UI = {
     // v36（E218）：聚灵 3 日窗口口径——窗口内即「已点燃」态（余 N 日），窗口外才可再燃
     const inRushWin = p.rushDay != null && today - p.rushDay < 3;
     rows.push({ state: inRushWin ? 'ok' : 'todo', label: '聚灵加速', stat: inRushWin ? `已点燃 · 3 日内修炼 ×1.5（余 ${3 - (today - p.rushDay)} 日）` : (p.cave ? `阵未点燃 · ${Utils.fmtNum(CaveSys.rushCost(p))} 灵石` : '洞府未辟'), act: (!inRushWin && p.cave) ? 'act-spirit-rush' : '', actText: '点 燃' });
-    // v36（E219）：悟道入日常卡——已悟 → ok；insight≥20 未悟 → todo + 行内直达确认弹窗（act-wudao，
-    // 走 Cultivate.wuDao 原确认流程，不做免确认直悟——20 感悟是资源决策）；insight<20 → ok 态报进度
-    // （避免低感悟期卡面永远差一件事）；stat 文案分境界与悟道弹窗口径一致（r9 报炼作仙元 1000）
+    // v36（E219）：悟道入日常卡——已悟 → ok；insight≥门槛 未悟 → todo + 行内直达确认弹窗（act-wudao，
+    // 走 Cultivate.wuDao 原确认流程，不做免确认直悟——感悟是资源决策）；insight<门槛 → ok 态报进度
+    // （避免低感悟期卡面永远差一件事）；stat 文案分境界与悟道弹窗口径一致（r9 报炼作仙元）。
+    // v37（E265）：门槛改随境 wuDaoCost（20+2r），卡面与弹窗、实扣三处同源
     {
       const wudaoDone = p._wuDaoDay === today;
       const r9 = p.realmIdx >= 9;
-      const canWudao = (p.insight || 0) >= 20;
+      const wdCost = Cultivate.wuDaoCost(p);
+      const canWudao = (p.insight || 0) >= wdCost;
       rows.push({
         state: (wudaoDone || !canWudao) ? 'ok' : 'todo',
         label: '悟道',
-        stat: wudaoDone ? (r9 ? '今日已悟 · 炼作仙元 1000' : '今日已悟 · 炼作修为')
-          : canWudao ? `感悟 ${p.insight}/20 · 可炼作${r9 ? '仙元 1000' : '修为'}`
-          : `感悟 ${p.insight || 0}/20 · 攒足可炼作${r9 ? '仙元' : '修为'}`,
+        stat: wudaoDone ? (r9 ? '今日已悟 · 炼作仙元' : '今日已悟 · 炼作修为')
+          : canWudao ? `感悟 ${p.insight}/${wdCost} · 可炼作${r9 ? '仙元' : '修为'}`
+          : `感悟 ${p.insight || 0}/${wdCost} · 攒足可炼作${r9 ? '仙元' : '修为'}`,
         act: (!wudaoDone && canWudao) ? 'act-wudao' : '', actText: '悟 道',
       });
     }
@@ -716,7 +719,7 @@ const UI = {
     <div class="card">
       <div class="card-title">✦ 洞府 · ${lv} 层 ${maxed ? '<span class="tag safe">聚灵之极</span>' : ''}</div>
       <div class="card-desc">聚灵阵运转不息：修炼效率 <b class="hl">+${lv * 4}%</b> · 灵田 ${CaveSys.plotCount(p)}/8 块 · 兽栏 ${BeastSys.maxSlots(p)} 位。</div>
-      ${p.rushDay === Math.floor(p.day || 0) ? '' : `<div class="action-row"><button class="btn" data-action="act-spirit-rush" title="燃烧灵石为聚灵阵供能，今日修炼效率 ×1.5">⚡ 点燃聚灵阵（今日修炼 ×1.5 · ${Utils.fmtNum(CaveSys.rushCost(p))} 灵石）</button></div>`}
+      ${(p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < 3) ? '' : `<div class="action-row"><button class="btn" data-action="act-spirit-rush" title="燃烧灵石为聚灵阵供能，点燃后 3 日内修炼效率 ×1.5">⚡ 点燃聚灵阵（3 日内修炼 ×1.5 · ${Utils.fmtNum(CaveSys.rushCost(p))} 灵石）</button></div>`}
       <div class="action-row"><button class="btn" data-action="act-cave-care" title="全田浇水 · 全兽抚摸 · 补求签——一日仪式一键完成">👐 一键照料（浇水 / 抚兽 / 求签）</button></div>
       ${maxed ? '' : `<div class="action-row"><button class="btn btn-primary" data-action="act-cave-up">扩建洞府（${Utils.fmtNum(c.stones)}灵石${matsTxt ? ' · ' + matsTxt : ''}）</button></div>`}
       ${CaveSys.dongtianRow ? CaveSys.dongtianRow(p) : ''}
@@ -756,6 +759,7 @@ const UI = {
           <button class="btn btn-sm" data-action="act-beast-active" data-uid="${b.uid}">${isOn ? '歇 息' : '出 战'}</button>
           <button class="btn btn-sm" data-action="act-beast-active2" data-uid="${b.uid}">${isOn2 ? '归 栏' : '护 持'}</button>
           <button class="btn btn-sm" data-action="act-beast-feed" data-uid="${b.uid}" ${(Bag.count('m_neidan') && b.level < 10) ? '' : 'disabled'}>${b.level >= 10 ? '十阶圆满' : `喂内丹（${Bag.count('m_neidan')}）`}</button>
+          ${(b.level < 10 && Bag.count('m_neidan') > 1) ? `<button class="btn btn-sm" data-action="act-beast-feed-multi" data-uid="${b.uid}" title="连喂五枚（不足或十阶自停）">连喂 ×5</button>` : ''}
           ${!b.evolved && b.level >= 10 ? `<button class="btn btn-sm btn-primary" data-action="act-beast-evolve" data-uid="${b.uid}">蜕 变</button>` : ''}
           <details class="fold npc-more" data-fold="beast-care-${b.uid}" ${Game.foldState[`beast-care-${b.uid}`] ? 'open' : ''}><summary>照管 ▾</summary><div class="gf-actions" style="margin-top:6px">   <!-- v33（E94）：补折叠记忆——原行动后重渲染即收回 -->
             <button class="btn btn-sm" data-action="act-beast-pat" data-uid="${b.uid}">抚 摸</button>
@@ -782,7 +786,7 @@ const UI = {
     }).join('');
     const buildsCard = `
     <div class="card">
-      <div class="card-title">✦ 洞府营造 <span class="tag">v19</span></div>
+      <div class="card-title">✦ 洞府营造</div>
       <div class="card-desc">聚灵阵之外，洞府亦可大兴土木——灵兽窝、演武场、藏经室，各至三阶。</div>
       ${buildRows}
     </div>`;
@@ -1034,6 +1038,7 @@ const UI = {
       const srole = (GameData.STORY_ROLES || {})[d.id];
       if (srole) tags.push(`<span class="tag magic" title="${Utils.esc(srole.role)}">主线 · ${Utils.esc(srole.arc)}</span>`);
       if (d.kin && d.kin.length) tags.push(`<span class="tag">血亲：${d.kin.map(k => (NpcSys.def(k) || {}).name).filter(Boolean).join('、')}</span>`);
+      if (s.grudge && s.alive && NpcSys.canShowdown(p, d.id)) tags.push('<span class="tag danger" title="恩怨已深、境界相当——可约战雷台做个了断">可约战了断</span>');   // v37（E248）：门槛放宽后的可见提示
       const his = s.realmIdx * 4 + s.layer;
       const powerText = !s.alive ? '已殒身'
         : his > myPow + 3 ? '远胜于你' : his > myPow ? '略胜于你' : his === myPow ? '与你相当' : '不及你';
@@ -1051,7 +1056,9 @@ const UI = {
         const away = NpcSys.isAway(p, d.id);
         const awayAttr = away ? 'disabled title="行游在外，旬末方归"' : '';
         const main = [
-          `<button class="btn btn-sm" data-action="npc-befriend" data-npc="${d.id}" ${awayAttr}>结交（${Utils.fmtNum(NpcSys.befriendCost(p, d.id))}灵石）</button>`,
+          s.befriended
+            ? `<button class="btn btn-sm" disabled title="尔等早已结识——情谊当以赠礼与论道温养">已结识</button>`   // v37（E240）：结交一次性，按钮转已结识态
+            : `<button class="btn btn-sm" data-action="npc-befriend" data-npc="${d.id}" ${awayAttr}>结交（${Utils.fmtNum(NpcSys.befriendCost(p, d.id))}灵石）</button>`,
           s.met ? `<button class="btn btn-sm" data-action="npc-gift" data-npc="${d.id}" ${awayAttr}>赠礼（${Utils.fmtNum(Math.round(30 * NpcSys.socialEco(p, s)))}灵石）</button>` : '',
           s.met && s.rel >= 30 ? `<button class="btn btn-sm" data-action="npc-discuss" data-npc="${d.id}" ${awayAttr}>论道</button>` : '',
           PersonalSys.next(p, d.id) ? `<button class="btn btn-sm btn-primary" data-action="npc-line" data-npc="${d.id}" title="${Utils.esc((GameData.PERSONAL[d.id].acts[(p.personal[d.id] || 0)] || {}).brief || '')}">续谈 · ${Utils.esc(GameData.PERSONAL[d.id].arc)}</button>` : '',
@@ -1194,12 +1201,17 @@ const UI = {
     return `
       <div class="card">
         <div class="card-title">✦ 万宝坊市 <span style="font-size:12px;color:var(--text-dim)">${st.shopDiscount ? '万宝商会 · 九二折 · ' : ''}${(typeof RepSys !== 'undefined' && RepSys.priceMul && RepSys.priceMul(p) !== 1) ? `声望买价 ×${RepSys.priceMul(p)} · ` : ''}距市集刷新 ${WorldSys.marketDaysLeft(p)} 日 · 当前灵石：${Bag.stonesText()}</span></div>
-        <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。面额折算总额见顶栏；灵石兑换四键收进下方折叠（v32 E8：上/中品自此只是背景设定）。</div>
+        <div class="tip-line" style="margin:0 0 6px">· 坊市每三十日换一茬新货，市价随手气起伏（±两成）。<span style="color:var(--danger)">涨</span>者宜缓买，<span style="color:var(--ok)">跌</span>者可趁低。面额折算总额见顶栏；上/中品灵石仅作大宗存储之用，兑换诸键收进下方折叠。</div>
         <details class="fold"><summary style="cursor:pointer;color:var(--text-faint)">灵石兑换 ▾</summary><div class="card-tags" style="margin-top:6px">
           <button class="btn btn-sm" data-action="act-convert" data-dir="up1">100下品 → 1中品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="down1">1中品 → 100下品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="up2">100中品 → 1上品</button>
           <button class="btn btn-sm" data-action="act-convert" data-dir="down2">1上品 → 100中品</button>
+          <button class="btn btn-sm" data-action="act-convert-multi" data-dir="up1" title="连兑十次，余额不足自动停">↑×10</button>
+          <button class="btn btn-sm" data-action="act-convert-multi" data-dir="down1" title="连兑十次，余额不足自动停">↓×10</button>
+          <button class="btn btn-sm" data-action="act-convert-multi" data-dir="up2" title="连兑十次，余额不足自动停">↑↑×10</button>
+          <button class="btn btn-sm" data-action="act-convert-multi" data-dir="down2" title="连兑十次，余额不足自动停">↓↓×10</button>
+          <button class="btn btn-sm btn-primary" data-action="act-convert-all" title="低→中→高一兑到底，零头自留">全 兑</button>
         </div></details>
         ${group('pill', '丹药', true)}
         ${group('artifact', '法器')}
@@ -1273,7 +1285,7 @@ const UI = {
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${this.gradeSpan(out.name, out.grade)}${out.set ? ' <span class="tag warn">套装件</span>' : ''}（成器率 ${rateEff}%${forgeLv ? `，含炼器室 +${forgeLv * 4}%` : ''}${useFrag ? ' · 残片折半' : ''} · <span title="v33 起开炉收工费：低阶断套利、高阶添沉淀">工费 ${Utils.fmtNum(fee)} 灵石</span>）</div>
+          <div class="gf-name">${this.gradeSpan(out.name, out.grade)}${out.set ? ' <span class="tag warn">套装件</span>' : ''}（成器率 ${rateEff}%${forgeLv ? `，含炼器室 +${forgeLv * 4}%` : ''}${useFrag ? ' · 残片折半' : ''} · <span title="开炉需付工费，材料愈贵工费愈高">工费 ${Utils.fmtNum(fee)} 灵石</span>）</div>
           <div class="gf-desc">${out.desc}<br>需 ${mats}</div>
         </div>
         <div class="gf-actions"><button class="btn btn-sm" data-action="act-forge" data-recipe="${r.id}" ${can ? '' : 'disabled'}>锻 造</button>${Bag.count('m_qipei') >= 6 ? `<button class="btn btn-sm btn-primary" data-action="act-forge-frag" data-recipe="${r.id}" title="耗 6 片残片入炉（材料不减）：成器率 +10%，成器必带一条后缀">残片入炉</button>` : ''}</div>   <!-- v32（E6） -->
@@ -1371,13 +1383,11 @@ const UI = {
       // v30 修瑕：面板口径与实得一致——原展示行漏计强化回炉（少报矿与灵石）
       const enh = (p.enhanced || {})[id] || 0;
       const oreBack = (def.grade || 0) + 1 + enh;
-      const GRADE_FALLBACK = [300, 800, 2000, 6000, 16000, 40000];
-      const baseVal = (def.price || 0) > 0 ? def.price : (GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500);
       const qihunGain = 2 + (def.grade || 0) * 2 + enh;   // v32 修瑕（E21）：熔铸面板补器魂产出行（原只有弹窗有，无法就地比价）
       return `
       <div class="shop-row">
         <div class="gf-info"><div class="gf-name">${this.gradeSpan(def.name, def.grade)} <span style="color:var(--text-faint)">×${n}</span>${enh ? ` <span class="tag tpl">心得 +${enh}</span>` : ''}</div>
-        <div class="gf-desc">可回炉得玄铁矿 ×${oreBack}/件、灵石 ${Utils.fmtNum(Math.max(10, Math.round(baseVal * 0.15 * (1 + enh * 0.2))))}/件、<b>器魂 ×${qihunGain}/件</b>${(def.price || 0) <= 0 ? '（稀有物按品阶兜底计价）' : ''}${enh ? '（含祭炼心得回炉）' : ''}。</div></div>
+        <div class="gf-desc">可回炉得玄铁矿 ×${oreBack}/件、灵石 ${Utils.fmtNum(ForgeSys.salvageStones(def, enh))}/件、<b>器魂 ×${qihunGain}/件</b>${(def.price || 0) <= 0 ? '（稀有物按品阶兜底计价）' : ''}${enh ? '（含祭炼心得回炉）' : ''}。</div></div>
         <div class="gf-actions"><button class="btn btn-sm" data-action="act-salvage" data-item="${id}">分 解</button></div>
       </div>`;
     }).join('');
@@ -1413,9 +1423,11 @@ const UI = {
     const show = t => {
       const chain = t && t.chain ? (CHAIN_MUL[t.chain] || 1) : 1;
       const drill = drillOn ? 1.5 : 1;
-      let base = r.stones;
-      if (t && t.type === 'collect') base = Math.max(base, BountySys.collectFloor(t));   // v35（E144）：兜底走单源 collectFloor（原预览漏乘 ×2，显示腰斩）
-      return { stones: Math.round(Math.round(Math.round(base * repBonus) * drill) * chain), contrib: Math.round(Math.round(Math.round(r.contrib * repBonus) * drill) * chain) };
+      // v37（E266）：预览与实发同口径——连锁只乘基准赏格，收集兜底 floor 恒为下限不参与乘算
+      //（v35（E144）兜底走单源 collectFloor 语义保留）
+      const core = Math.round(Math.round(r.stones * repBonus) * drill);
+      const floorPart = (t && t.type === 'collect') ? BountySys.collectFloor(t) : 0;
+      return { stones: Math.max(Math.round(core * chain), floorPart), contrib: Math.round(Math.round(Math.round(r.contrib * repBonus) * drill) * chain) };
     };
     const bountyRows = B.list.map((t, i) => {
       if (!t) return `
@@ -1446,7 +1458,7 @@ const UI = {
     return `
       <div class="card">
         <div class="card-title">✦ 悬赏使命 <span style="font-size:12px;color:var(--text-dim)">接榜 · 践诺 · 领赏</span></div>
-        <div class="tip-line" style="margin:0 0 6px">· 悬赏${this.FACTS.bountyDays}日一换，达成后记得及时领赏；猎杀类目标游历时自动计入。</div>
+        <div class="tip-line" style="margin:0 0 6px">· 悬赏${this.FACTS.bountyDays}日一换，达成后记得及时领赏；猎杀类目标游历时自动计入。<br>· 江湖赏格（灵石向+连锁）归此——宗门差事只余修行/历练/问签，两板各司其职。</div>
         ${bountySection}
       </div>`;
   },
@@ -1456,7 +1468,7 @@ const UI = {
     // v13 黑市（每月前三日开市）
     const blackSection = BlackSys.isOpen(p) ? `
       <div class="shop-section-title">◈ 暗巷黑市 <span class="tag warn">开市中 · 余 ${BlackSys.daysLeft(p)} 日</span></div>
-      <div class="tip-line" style="margin:0 0 6px">· 黑市奇货稀罕，价钱却贵六成；每月初三开市三日。<br>· 巷角的「来路不明之物」，福缘高者捡漏，福缘低者破财。</div>
+      <div class="tip-line" style="margin:0 0 6px">· 黑市奇货稀罕，价钱却贵六成；${this.FACTS.blackOpen}。<br>· 巷角的「来路不明之物」，福缘高者捡漏，福缘低者破财。</div>
       ${BlackSys.goods(p).map(id => {
         const def = GameData.ITEMS[id];
         const price = BlackSys.price(p, id);
@@ -1479,7 +1491,7 @@ const UI = {
         <div class="gf-actions"><button class="btn btn-sm btn-danger" data-action="act-black-mystery">赌一手</button></div>
       </div>` : `
       <div class="shop-section-title">◈ 暗巷黑市 <span class="tag">闭市</span></div>
-      <div class="tip-line" style="margin:0 0 6px">· 每月初三开市三日——如今巷口空空，唯有野猫。</div>`;
+      <div class="tip-line" style="margin:0 0 6px">· ${this.FACTS.blackOpen}——如今巷口空空，唯有野猫。</div>`;
     // v19 拍卖行
     const lot = AuctionSys.state(p);
     const isMystery = lot.item === 'mystery';
@@ -1538,7 +1550,7 @@ const UI = {
       const done = t.progress >= t.need;
       let btn = '';
       if (done) btn = `<button class="btn btn-sm btn-primary" data-action="act-task-claim" data-i="${i}" ${claimLeft != null && claimLeft <= 0 ? 'disabled title="今日赏格已领满"' : ''}>领取奖励</button>`;
-      else if (t.type === 'collect') btn = `<button class="btn btn-sm" data-action="act-task-submit" data-i="${i}">上交（持有${Bag.count(t.target)}）</button>`;
+      // v37（E242）：collect 上交分支随宗门采集差事一并删除——生死状（kill·danger）接状即战、击杀推进
       else if (t.danger) btn = `<button class="btn btn-sm btn-danger" data-action="act-danger-go" data-i="${i}">接生死状</button>`;
       const dangerTag = t.danger ? ' <span class="tag danger">高危</span>' : '';
       const hint = !done && !btn && TYPE_HINTS[t.type] ? `<span style="color:var(--text-faint);font-size:12px">（${TYPE_HINTS[t.type]}）</span>` : '';
@@ -1551,7 +1563,7 @@ const UI = {
         <div class="gf-actions">${btn}</div>
       </div>`;
     }).join('');
-    const claimNote = claimLeft != null ? `<div style="color:var(--text-faint);font-size:12px;margin:4px 0 10px">今日赏格余量 ${claimLeft}/${(typeof SectSys !== 'undefined' && SectSys.CLAIM_DAILY) || 6} 桩（v35 起：贡献是门中俸例，非印钞机——每日领赏六桩为限）</div>` : '';
+    const claimNote = claimLeft != null ? `<div style="color:var(--text-faint);font-size:12px;margin:4px 0 10px">今日赏格余量 ${claimLeft}/${(typeof SectSys !== 'undefined' && SectSys.CLAIM_DAILY) || 6} 桩（贡献乃门中俸例，每日领赏以六桩为限）</div>` : '';
     const exRows = GameData.SECT_EXCHANGE.map((row, i) => {
       // v30 特殊兑换行（贡献换声望/器魂）：无 ITEMS 条目，走专用文案
       if (row.special) {
@@ -1570,15 +1582,18 @@ const UI = {
       const def = GameData.ITEMS[row.item];
       const known = def.type === 'gongfa' && p.gongfa[row.item];
       const afford = p.sect.contrib >= row.cost;
+      // v37（E263）：境界门槛置灰显门槛——兑换列表如实显示「须至 X 期」，与 sect.exchange 运行时拦截同源
+      const locked = row.minRealm != null && p.realmIdx < row.minRealm;
+      const lockTag = locked ? ` <span class="tag danger">须至${GameData.REALM_NAMES[row.minRealm]}期</span>` : '';
       return `
       <div class="shop-row">
         <div class="gf-info">
-          <div class="gf-name">${this.gradeSpan(def.name, def.grade)}${row.qty > 1 ? ` ×${row.qty}` : ''}${known ? ' <span style="color:var(--text-faint);font-size:12px">（已修习）</span>' : ''}</div>
+          <div class="gf-name">${this.gradeSpan(def.name, def.grade)}${row.qty > 1 ? ` ×${row.qty}` : ''}${known ? ' <span style="color:var(--text-faint);font-size:12px">（已修习）</span>' : ''}${lockTag}</div>
           <div class="gf-desc">${def.desc}</div>
         </div>
         <div class="gf-actions">
           <span class="price ${afford ? '' : 'lack'}">${row.cost}贡献</span>
-          <button class="btn btn-sm" data-action="act-exchange" data-i="${i}" ${known ? 'disabled' : ''}>兑换</button>
+          <button class="btn btn-sm" data-action="act-exchange" data-i="${i}" ${known || locked ? 'disabled' : ''} ${locked ? `title="此丹非小境界可承——须至${GameData.REALM_NAMES[row.minRealm]}期方可兑换"` : ''}>兑换</button>
         </div>
       </div>`;
     }).join('');
@@ -1623,7 +1638,7 @@ const UI = {
         ${facRows}
       </div>`;
     }
-    // v22 宗门大比：每五年一届，三轮车轮战
+    // v22 宗门大比：每 TOURNEY_EVERY 年一届（v36 E213 起为 3 年），三轮车轮战
     const T = p.sect.tourney;
     const tourneyCard = T ? `
       <div class="card card-trib">
@@ -1637,7 +1652,7 @@ const UI = {
     return `
       <div class="card">
         <div class="card-title">✦ ${sect.name} <span class="tag safe">${sect.bonusText}</span>${elderBtn}</div>
-        <div class="card-desc">当前贡献：<b class="hl">${Utils.fmtNum(p.sect.contrib)}</b> 点。完成宗门任务可获得贡献与灵石。${(() => {
+        <div class="card-desc">当前贡献：<b class="hl">${Utils.fmtNum(p.sect.contrib)}</b> 点。完成宗门任务可获得贡献与灵石。<br>· 门中差事只留<b>修行/历练/问签</b>三门（供养向）；讨伐与采集归<b>悬赏板</b>（江湖赏格向）${p.sect.faction ? '；派系弟子另有<b>生死状</b>特派' : ''}。${(() => {
           // v29：职位线可视化——RANKS 加成真实生效却从未展示，玩家不知晋升为何物、长老令为何灰着
           const rk = SectSys.rank(p);
           const nxt = SectSys.rankNext(p);
@@ -2082,7 +2097,7 @@ const UI = {
       <details class="fold"><summary>✦ 修行与境界</summary>
         <div class="tip-line">· 十境三十六层：练气→筑基→金丹→元婴→化神→炼虚→合体→大乘→渡劫→真仙，每境四层。</div>
         <div class="tip-line">· 每层修为攒满即「圆满」，可冲关下一境；金丹起冲关引天劫，成败皆有道果（劫前记得存档）。</div>
-        <div class="tip-line">· 闭关 30 日 = 一轮大修炼（耗灵石、清丹毒）；「聚灵加速」日限一次，当日修炼 ×1.5。</div>
+        <div class="tip-line">· 闭关 30 日 = 一轮大修炼（耗灵石、清丹毒）；「聚灵加速」点燃后 3 日内修炼 ×1.5，窗口内不重燃。</div>
         <div class="tip-line">· 大道六择一（剑/丹/符/体/阵/魔）：剑修渡劫 ×0.77、体修 ×1.4，各道有专属行为加成，终身可转（跌一大境界）。</div>
         <div class="tip-line">· 心魔满百必劫（丹毒反噬/渡劫失利所积）；孽障满百可斩三尸（清孽障，散修为）。</div>
         <div class="tip-line">· 渡劫失利不死——可兵解转世重开一世：印记全属性 +1%/枚，传承树逐层解锁。</div>
@@ -2103,7 +2118,7 @@ const UI = {
       <details class="fold"><summary>✦ 营生与经济</summary>
         <div class="tip-line">· 洞府灵田自种自收（离线亦生长）；种子在坊市「灵田种子」区；一键行权可代收代种。</div>
         <div class="tip-line">· 悬赏板${this.FACTS.bountyDays}日一换，猎杀目标游历自动计入；宗门任务同源——贡献换功法秘宝。</div>
-        <div class="tip-line">· 奇市：黑市每月初三开市三日（贵六成但货奇）；拍卖行每六十日一件稀有拍品。</div>
+        <div class="tip-line">· 奇市：黑市${this.FACTS.blackOpen}（贵六成但货奇）；拍卖行每六十日一件稀有拍品。</div>
         <div class="tip-line">· 闲置法器可在祭炼堂「熔铸回收」分解成玄铁矿与灵石——天级神兵也按品阶兜底计价。</div>
         <div class="tip-line">· 灵田灵兽寻宝有「归来」红点提醒；奇市开市、拍期将止也会在页签上亮灯。</div>
       </details>

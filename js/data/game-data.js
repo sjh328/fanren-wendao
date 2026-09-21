@@ -525,13 +525,15 @@ const GameData = {
       bonusText: '宗门加成：修炼效率 +8%，闪避 +3%', bonus: { cult: 8, dodge: 3 } },
   ],
 
-  /* ---- v30 宗门特色差事：按宗门改换任务名目与文案（机制沿用击杀/采集/修行三式） ---- */
+  /* ---- v30 宗门特色差事：按宗门改换任务名目与文案 ----
+   * v37（E242）：删 kill/collect 键——讨伐/采集差事归悬赏板，宗门只余修行/历练/问签三门，
+   * 生死状（danger）不走 flavor 名目，死配置一并清 */
   SECT_QUEST_FLAVOR: {
-    qingyun:  { kill: '剑试诸锋', collect: '采铸剑材', cult: '参悟剑心', explore: '游历砺剑', sign: '卜问剑程' },
-    danxia:   { kill: '驱护药庐', collect: '采药入炉', cult: '丹心静修', explore: '寻方问药', sign: '药王签愿' },
-    wanbao:   { kill: '护镖清道', collect: '代收购料', cult: '持筹握算', explore: '踏勘商路', sign: '开市问吉' },
-    panyan:   { kill: '护矿除妖', collect: '采铸矿材', cult: '负重砺体', explore: '踏山探脉', sign: '山神问路' },
-    zhoutian: { kill: '清除星野', collect: '采集星砂', cult: '观星定心', explore: '夜测星轨', sign: '星签问天' },
+    qingyun:  { cult: '参悟剑心', explore: '游历砺剑', sign: '卜问剑程' },
+    danxia:   { cult: '丹心静修', explore: '寻方问药', sign: '药王签愿' },
+    wanbao:   { cult: '持筹握算', explore: '踏勘商路', sign: '开市问吉' },
+    panyan:   { cult: '负重砺体', explore: '踏山探脉', sign: '山神问路' },
+    zhoutian: { cult: '观星定心', explore: '夜测星轨', sign: '星签问天' },
   },
 
   /** 宗门贡献兑换列表 */
@@ -548,14 +550,18 @@ const GameData = {
     { item: '_rep_gift',      cost: 2000, special: 'rep', qty: 25 },
     { item: '_qihun_pill',    cost: 1200, special: 'qihun', qty: 10 },
     { item: 'gf_zixiao',      cost: 9000 },
-    { item: 'pill_dujie',     cost: 8000 },   // v30：宗门兑换补渡劫丹
-    { item: 'pill_taichu',    cost: 5000 },
+    /* v37（E263）：宗门兑丹卖店环封堵——四行补 minRealm 对齐坊市上架境（dujie 3 / taichu 4 / yuanshen 5 / zaohua 6），
+     * cost 按「卖值/贡献」丹药族离散 ≤3× 重锚（price-audit 第四路锚）：dujie 8000→22500（22.5→8.0）、
+     * taichu 5000→13500（18.9→7.0）；yuanshen 8.63 / zaohua 7.88 现值已落 6~9 带，仅补门槛。
+     * 重锚后族内 max/min = 9.0(jiuzhuan)/5.5(dahuan) ≈ 1.64 ≤3——断「贡献兑渡劫丹卖店 ×16.7」套利主窗口 */
+    { item: 'pill_dujie',     cost: 22500, minRealm: 3 },
+    { item: 'pill_taichu',    cost: 13500, minRealm: 4 },
     /* v35（E129）：仙晶兑换 cost 800→8000——原 2 枚卖店 45,000 灵石（面值/贡献 125，同表其余 9~50），
      * 构成「灵石→材料→贡献→灵石」×6 印钞环；对齐 pill_taichu 档后汇率回落 12.5 */
     { item: 'm_xianjing',     cost: 8000, qty: 2 },
     { item: 'gf_jianxin',     cost: 30000 },
     { item: 'gf_hongmeng',    cost: 30000 },
-    { item: 'pill_zaohua',    cost: 20000 },
+    { item: 'pill_zaohua',    cost: 20000, minRealm: 6 },
     /* ---- v13 新增兑换 ---- */
     { item: 'gf_hansha',      cost: 900 },
     { item: 'gf_yulin',       cost: 900 },
@@ -568,7 +574,7 @@ const GameData = {
     { item: 'gf_zhoutian',    cost: 3200 },
     { item: 'gf_xuesha',      cost: 3200 },
     { item: 'pill_dahuan',    cost: 900 },
-    { item: 'pill_yuanshen',  cost: 6000 },
+    { item: 'pill_yuanshen',  cost: 6000, minRealm: 5 },
     { item: 's_xt_jian',      cost: 20000 },
     { item: 's_xt_jia',       cost: 20000 },
     { item: 's_xt_pei',       cost: 20000 },
@@ -608,12 +614,24 @@ const GameData = {
 
   /* ---------- v13 套装（集齐 pieces 中全部装备于身时触发 bonus） ---------- */
   SETS: {
-    xuantian: { name: '玄天套装', pieces: ['s_xt_jian', 's_xt_jia', 's_xt_pei'], bonus: { defPct: 15, hpPct: 10 }, text: '守御之道：防御 +15%，气血 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
+    /* v37（E249）：tech = 套装炼化三阶解锁的「套装技」（机制技，成套在身时生效；消费端唯一漏斗） */
+    xuantian: { name: '玄天套装', pieces: ['s_xt_jian', 's_xt_jia', 's_xt_pei'], bonus: { defPct: 15, hpPct: 10 }, tech: 'zhenyuanOnHit', text: '守御之道：防御 +15%，气血 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【磐岩之意】——受击回真元 5%' },
     chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, text: '杀伐之道：攻击 +15%，暴击 +5%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
     /* ---- v19 新增套装 ---- */
-    xuehe:    { name: '血河套装', pieces: ['s_hj_sha', 's_hj_pao', 's_hj_ling'], bonus: { atkPct: 12, crit: 4 }, text: '血河遗锋：攻击 +12%，暴击 +4%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
+    xuehe:    { name: '血河套装', pieces: ['s_hj_sha', 's_hj_pao', 's_hj_ling'], bonus: { atkPct: 12, crit: 4 }, tech: 'killAtk', text: '血河遗锋：攻击 +12%，暴击 +4%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【血河叠浪】——击杀叠攻 3%（至多五层）' },
     xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, text: '仙缘天成：攻击、防御、气血俱 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
   },
+
+  /* ---- v37（E249）：套装技名录（炼化三阶解锁；名称与效果单源，ui/forge 引用） ---- */
+  SET_TECHS: {
+    zhenyuanOnHit: { name: '磐岩之意', desc: '受击回复 5% 真元上限（累积进位，真元未满时生效）' },
+    killAtk:       { name: '血河叠浪', desc: '每次击杀叠 3% 攻击，战斗内至多五层' },
+  },
+
+  /* ---- v37（E254）：品阶兜底价单源——0 价稀有物（天级/仙级/秘境专属/套装件）按品阶的估值底价。
+   *  此前四份双写（auction 古匣估值 / bag 分解 / forge 工费 / ui 分解面板）漂移即错价，上提归一；
+   *  分解回炉灵石公式同批单源化（ForgeSys.salvageStones） ---- */
+  GRADE_FALLBACK: [300, 800, 2000, 6000, 16000, 40000],
 
   /* ---------- v19 道韵协同：功法双双修至三层以上，共鸣生韵 ---------- */
   DAO_YUN: [
@@ -1718,7 +1736,7 @@ c1_end: { id: 'c1_end', title: '第一章 · 终 · 入世', scenes: [
     { text: '带着他的牵挂——查清真相，但不让仇恨吞掉自己', value: 'clarity', flag: 'k1_promise' },
   ], pick: (v) => {
     const p = Game.player;
-    if (v === 'vengeance') { p.insight = Math.min(100, (p.insight || 0) + 6); return ['你在坟前立誓：血债血偿。\n一股戾气沉入丹田，化作道途第一缕凶悍的真意。（突破感悟 +6）']; }
+    if (v === 'vengeance') { Cultivate.addInsight(p, 6, false); return ['你在坟前立誓：血债血偿。\n一股戾气沉入丹田，化作道途第一缕凶悍的真意。（突破感悟 +6）']; }
     if (v === 'caution') { p.attrs.luck = Math.min(10, p.attrs.luck + 1); return ['你记住了老人的告诫：人心最靠不住。\n从此你的眼睛多了几分审慎——这种审慎，就是福缘。（福缘 +1）']; }
     KarmaSys.addFortune(3); return ['你不想让仇恨吃掉自己——查清真相，然后好好活着。\n这份澄明，让天地都轻快了几分。（气运 +3）'];
   } },
@@ -1770,7 +1788,7 @@ c2_end: { id: 'c2_end', title: '第二章 · 终 · 血绘残图', scenes: [
     { text: '牢记于心，再以巨石掩回原样，不惊动任何人', value: 'memorize', flag: 'k2_map_method' },
   ], pick: (v) => {
     const p = Game.player;
-    if (v === 'copy') { p.insight = Math.min(100, (p.insight || 0) + 5); Bag.addItem('m_gupian', 1); return ['你以灵墨拓下血图，指尖抚过河纹时，残玉微微一颤，似在应和。（突破感悟 +5，上古法宝碎片 ×1）']; }
+    if (v === 'copy') { Cultivate.addInsight(p, 5, false); Bag.addItem('m_gupian', 1); return ['你以灵墨拓下血图，指尖抚过河纹时，残玉微微一颤，似在应和。（突破感悟 +5，上古法宝碎片 ×1）']; }
     if (v === 'take') { Bag.addStones(Math.round(120 * GameData.stoneEco(p.realmIdx))); Bag.addItem('m_gupian', 1); return ['你凿下石壁，以破布裹好背走。乱世之中，实物在手，胜过千般记忆。（灵石若干，上古法宝碎片 ×1）']; }
     KarmaSys.addFortune(4); return ['你把整幅图刻进记忆，又搬来巨石掩住石壁——让它继续沉睡。\n多一分谨慎，多一分气运。（气运 +4）'];
   } },
@@ -1818,9 +1836,9 @@ c3_end: { id: 'c3_end', title: '第三章 · 终 · 玄影夜访', scenes: [
     { text: '沉默不语，只把今夜每一个字记进心里', value: 'silent', flag: 'k3_defy_response' },
   ], pick: (v) => {
     const p = Game.player;
-    if (v === 'defy') { p.insight = Math.min(100, (p.insight || 0) + 6); return ['你对窗外冷冷吐出八个字：「想要玉，自己来拿。」\n那瞬息的死寂之后，一声极轻的笑散在夜里。道心愈厉。（突破感悟 +6）']; }
+    if (v === 'defy') { Cultivate.addInsight(p, 6, false); return ['你对窗外冷冷吐出八个字：「想要玉，自己来拿。」\n那瞬息的死寂之后，一声极轻的笑散在夜里。道心愈厉。（突破感悟 +6）']; }
     if (v === 'feign') { KarmaSys.addFortune(3); Bag.addStones(Math.round(80 * GameData.stoneEco(p.realmIdx))); return ['你隔窗应了一声「容我想想」——先稳住他，再谋后手。\n与虎谋皮者，须比虎更有耐心。（气运 +3，灵石若干）']; }
-    p.insight = Math.min(100, (p.insight || 0) + 3); return ['你一言不发，只把今夜的每一个字刻进识海。\n沉默不是怯懦，是把刀藏进鞘里。（突破感悟 +3）'];
+    Cultivate.addInsight(p, 3, false); return ['你一言不发，只把今夜的每一个字刻进识海。\n沉默不是怯懦，是把刀藏进鞘里。（突破感悟 +3）'];
   } },
   { t: 'narr', text: '玄影客。掘龙脉。血河故道。\n线索一环扣一环——而你知道，真正的博弈，才刚刚开场。' },
 ] },
@@ -1871,9 +1889,9 @@ c4_end: { id: 'c4_end', title: '第四章 · 终 · 道心之答', scenes: [
     { text: '先问清因由。冤有头债有主，不杀无辜之人', value: 'mercy', flag: 'k4_dilemma_answer' },
   ], pick: (v) => {
     const p = Game.player;
-    if (v === 'blade') { p.insight = Math.min(100, (p.insight || 0) + 6); return ['你选了最锋利的那条路。\n刀意自道心出，从此你的每一剑都带着答案。（突破感悟 +6）']; }
+    if (v === 'blade') { Cultivate.addInsight(p, 6, false); return ['你选了最锋利的那条路。\n刀意自道心出，从此你的每一剑都带着答案。（突破感悟 +6）']; }
     if (v === 'justice') { KarmaSys.addFortune(5); return ['你要的不是他的命，是他的罪孽暴露在天日之下。\n这份坦荡，天必佑之。（气运 +5）']; }
-    p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(2); return ['刀起刀落之前，先给他一个把话说完的机会。\n谨慎即是慈悲，亦是自保。（突破感悟 +3，气运 +2）'];
+    Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(2); return ['刀起刀落之前，先给他一个把话说完的机会。\n谨慎即是慈悲，亦是自保。（突破感悟 +3，气运 +2）'];
   } },
   { t: 'narr', text: '道心之问已有了答案。你摸了摸怀中残玉——\n血河宗之事，你想查明白了。为了老人，也为了自己。' },
 ] },
@@ -1922,9 +1940,9 @@ c5_end: { id: 'c5_end', title: '第五章 · 终 · 认与不认', scenes: [
     { text: '不认身份，只认利害——以他的执念为刃，反制于他', value: 'leverage', flag: 'k5_past_accept' },
   ], pick: (v) => {
     const p = Game.player;
-    if (v === 'accept') { p.insight = Math.min(100, (p.insight || 0) + 8); return ['你在识海朝那缕真灵伸出手：「债我认，怨我接。\n但从今往后，这笔账由我来讨。」识海金光大涨。（突破感悟 +8）']; }
+    if (v === 'accept') { Cultivate.addInsight(p, 8, false); return ['你在识海朝那缕真灵伸出手：「债我认，怨我接。\n但从今往后，这笔账由我来讨。」识海金光大涨。（突破感悟 +8）']; }
     if (v === 'sever') { KarmaSys.addFortune(6); return ['「前世是前世，我是我。」你斩断记忆的丝线，只取其警醒。\n道心澄明，天地开阔。（气运 +6）']; }
-    p.insight = Math.min(100, (p.insight || 0) + 4); return ['身份可以不认，用处不能不要。\n前世真灵的记忆，就是宗主的命门地图。（突破感悟 +4）'];
+    Cultivate.addInsight(p, 4, false); return ['身份可以不认，用处不能不要。\n前世真灵的记忆，就是宗主的命门地图。（突破感悟 +4）'];
   } },
   { t: 'narr', text: '残玉在你掌心微微发烫。《血河真解》的目录在识海里缓缓展开——其本体，就在宗主手中。下一战的沙盘，已然铺开。' },
 ] },
@@ -1964,9 +1982,9 @@ c6_end: { id: 'c6_end', title: '第六章 · 终 · 五碎片退敌', scenes: [
     { text: '不为已甚——溃散即可，我要的是本尊', value: 'spare', flag: 'k6_clone_fate' },
   ], pick: (v) => {
     const p = Game.player;
-    if (v === 'slay') { p.insight = Math.min(100, (p.insight || 0) + 6); Bag.addItem('m_gupian', 1); return ['光柱绞落，分身溃作齑粉——一缕晶粹的魂晶落入你掌心。\n杀伐果断，道心愈厉。（突破感悟 +6，上古法宝碎片 ×1）']; }
+    if (v === 'slay') { Cultivate.addInsight(p, 6, false); Bag.addItem('m_gupian', 1); return ['光柱绞落，分身溃作齑粉——一缕晶粹的魂晶落入你掌心。\n杀伐果断，道心愈厉。（突破感悟 +6，上古法宝碎片 ×1）']; }
     if (v === 'interrogate') { KarmaSys.addFortune(4); return ['你以阵压魂，逼出一句真言：「血河故道，入水三千丈，问渡船人。」\n分身溃散。（气运 +4）']; }
-    p.insight = Math.min(100, (p.insight || 0) + 3); return ['你收了光柱，任分身溃散——「回去告诉你的真身，我在血河故道等他。」\n不逞一时之勇，直取要害。（突破感悟 +3）'];
+    Cultivate.addInsight(p, 3, false); return ['你收了光柱，任分身溃散——「回去告诉你的真身，我在血河故道等他。」\n不逞一时之勇，直取要害。（突破感悟 +3）'];
   } },
   { t: 'narr', text: '杀意暂时退去。\n你知道，分身只是开胃菜——本尊出关之日，才是真正的死局。而你要在那天之前，变得比死局更强。' },
   { t: 'narr', text: '夜色褪尽，东方既白。\n血河故道——本尊沉潜三百年之地。你把这个地名一笔一划，刻进了心里。\n想破那盘三百年前的死局，先得变强，还得找到能带你入水的人。\n路还长——但方向，已经有了。' },
@@ -2021,9 +2039,9 @@ c7_end: { id: 'c7_end', title: '第七章 · 终 · 落子之选', scenes: [
     { text: '借刀——把名单递给他的政敌，坐山观虎斗', value: 'blade', flag: 'k7_route' },
   ], pick: (v) => {
     const p = Game.player;
-    if (v === 'open') { p.insight = Math.min(100, (p.insight || 0) + 6); return ['你决定赴会。\n既然躲不过，就堂堂正正走进那座大阵——正气在胸，何惧鸿门。（突破感悟 +6）']; }
+    if (v === 'open') { Cultivate.addInsight(p, 6, false); return ['你决定赴会。\n既然躲不过，就堂堂正正走进那座大阵——正气在胸，何惧鸿门。（突破感悟 +6）']; }
     if (v === 'dark') { KarmaSys.addFortune(5); return ['你按下玉帖，转身去查黑玉令。\n高手的对决从不在明面上——先断其爪，再扼其喉。（气运 +5）']; }
-    p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(2); return ['你把名单誊抄三份，送进三家门派。\n让巨人们先互相咬起来，你在收网。（突破感悟 +4，气运 +2）'];
+    Cultivate.addInsight(p, 4, false); KarmaSys.addFortune(2); return ['你把名单誊抄三份，送进三家门派。\n让巨人们先互相咬起来，你在收网。（突破感悟 +4，气运 +2）'];
   } },
   { t: 'narr', reqChoice: { key: 'c7_end', oneOf: ['open'] }, text: '丹会当日，茶烟袅袅。玄玑真人隔着一张案，把三百七十一口说成「大势」，把黑玉令说成「上头的意思」，说得滴水不漏。\n你一句不驳，只在终席时把名单轻轻推了过去。老人捧着名单的手抖了一下——「小友，这盏茶老夫换了三百年的茶叶，今日才算烫嘴。」' },
   { t: 'narr', reqChoice: { key: 'c7_end', oneOf: ['dark'] }, text: '你按下玉帖，转身去查黑玉令。烟雨楼七日不熄灯——柳含烟把最后一页暗账推到你面前：九笔灵石，笔笔绕经太衍宗的库房。\n令是假的，可买令的银子是真的。你走出雨巷的那一夜，山门深处，一封自请彻查旧案的折子，连夜递进了祖师堂。' },
@@ -2075,8 +2093,8 @@ c8_end: { id: 'c8_end', title: '第八章 · 终 · 决战前夜', scenes: [
   ], pick: (v) => {
     const p = Game.player;
     if (v === 'together') { KarmaSys.addFortune(6); return ['亲友把盏，齐声应诺。\n这一夜无人在意胜负——道途最贵，是有人与你同担。（气运 +6）']; }
-    if (v === 'entrust') { p.insight = Math.min(100, (p.insight || 0) + 5); return ['你把残玉的一半放在至交掌心：「若我不归，替我把它带到血河故道。」\n道心因托付而愈定。（突破感悟 +5）']; }
-    p.insight = Math.min(100, (p.insight || 0) + 8); return ['你婉拒了所有同行者——有些因果，只能一个人去结。\n独行者，道心至坚。（突破感悟 +8）'];
+    if (v === 'entrust') { Cultivate.addInsight(p, 5, false); return ['你把残玉的一半放在至交掌心：「若我不归，替我把它带到血河故道。」\n道心因托付而愈定。（突破感悟 +5）']; }
+    Cultivate.addInsight(p, 8, false); return ['你婉拒了所有同行者——有些因果，只能一个人去结。\n独行者，道心至坚。（突破感悟 +8）'];
   } },
   { t: 'narr', text: '残玉忽然安静下来。\n它感应到了什么。决战之地，已被选定——你的飞升雷台。' },
 ] },
@@ -2129,8 +2147,8 @@ c9_end: { id: 'c9_end', title: '终章 · 雷海了断', scenes: [
   ], pick: (v) => {
     const p = Game.player;
     if (v === 'redeem') { KarmaSys.addFortune(10); return ['你收了剑，目送那缕残魂消散在天光里。\n雷散，云开。杀伐止于慈悲——这是比飞升更大的道行。（气运 +10）']; }
-    if (v === 'execute') { p.insight = Math.min(100, (p.insight || 0) + 6); return ['剑光如练，斩落残魂。\n「这一剑，替采药老人，替三百七十一口，也替前世的我。」——恩怨两清。（突破感悟 +6）']; }
-    KarmaSys.addFortune(4); p.insight = Math.min(100, (p.insight || 0) + 4); return ['你转身踏上雷台，不再回头。\n劫火焚尽万物，也焚尽了因果。（气运 +4，突破感悟 +4）'];
+    if (v === 'execute') { Cultivate.addInsight(p, 6, false); return ['剑光如练，斩落残魂。\n「这一剑，替采药老人，替三百七十一口，也替前世的我。」——恩怨两清。（突破感悟 +6）']; }
+    KarmaSys.addFortune(4); Cultivate.addInsight(p, 4, false); return ['你转身踏上雷台，不再回头。\n劫火焚尽万物，也焚尽了因果。（气运 +4，突破感悟 +4）'];
   } },
   { t: 'narr', req: ['k8_together'], reqChoice: { key: 'c9_end', oneOf: ['redeem'] }, text: '雷散，云开。你踏着最后一级雷光走下雷台——台下的人海里，不多不少，全是你要见的人。\n你的道侣第一个跑上来，一巴掌拍在你肩上，手却在抖：「酒呢？说好的最好喝的酒——两世的账，今日一并还。」' },
   { t: 'dialog', who: '@c_n23', req: ['k8_together'], reqChoice: { key: 'c9_end', oneOf: ['redeem'] }, title: '雷台之下 · 人海', text: '老酒鬼不知何时也混在人堆里，把酒葫芦抛给你：「河里那壶，老朽替你倒了——往后想喝，自己来。\n这条渡船，从今往后，只渡活人。」' },
@@ -2208,9 +2226,9 @@ pl_n1_a1: { id: 'pl_n1_a1', title: '剑冢心猿 · 第一幕 · 断剑', scenes
       { text: '默默递上伤药——江湖人懂的江湖话', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['你们连夜下山，寻访一位封炉多年的铸剑师。\n炉火重开那一夜，铁屑纷飞如雪。你在飞溅的火星里看见一件事：修剑，先得肯低头求人。（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 2); KarmaSys.addFortune(1); return ['他捏着剑身沉默半晌，忽然道：「你说得轻巧。」\n可他终究把剑横在膝上看了一夜。肯看，就肯认。（感悟 +2，气运 +1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['他接过药瓶，愣了愣，收进袖中。\n有些安慰不必说出口。他后来在剑鞘内壁刻了两个小字：谢药。（气运 +2，感悟 +1）'];
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['你们连夜下山，寻访一位封炉多年的铸剑师。\n炉火重开那一夜，铁屑纷飞如雪。你在飞溅的火星里看见一件事：修剑，先得肯低头求人。（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 2, false); KarmaSys.addFortune(1); return ['他捏着剑身沉默半晌，忽然道：「你说得轻巧。」\n可他终究把剑横在膝上看了一夜。肯看，就肯认。（感悟 +2，气运 +1）']; }
+      Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['他接过药瓶，愣了愣，收进袖中。\n有些安慰不必说出口。他后来在剑鞘内壁刻了两个小字：谢药。（气运 +2，感悟 +1）'];
     } },
     { t: 'narr', text: '当夜你路过崖边，见他把断剑横在膝上，坐了整整一夜。\n天亮时崩口还在，他看它的眼神却变了——不再像看一道伤口，像看一个债主。\n他知道该还什么了。' },
   ] },
@@ -2224,9 +2242,9 @@ pl_n1_a2: { id: 'pl_n1_a2', title: '剑冢心猿 · 第二幕 · 剑心之问', 
       { text: '先查明，再落剑。冤有头，债有主', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他盯着剑锋看了很久：「好。那就先把这个『该』字磨利。\n从今日起，我的每一剑都比今天更直。」（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['他沉默良久，把剑归鞘：「守住的人，才配问那一剑。\n这句收进我的剑心里了。」（气运 +2，感悟 +1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他点头，一字一顿：「先查明，再落剑。剑不能被人当刀使——第二次不能。\n这一问，问剑，答的是心。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['他盯着剑锋看了很久：「好。那就先把这个『该』字磨利。\n从今日起，我的每一剑都比今天更直。」（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['他沉默良久，把剑归鞘：「守住的人，才配问那一剑。\n这句收进我的剑心里了。」（气运 +2，感悟 +1）']; }
+      Cultivate.addInsight(p, 4, false); return ['他点头，一字一顿：「先查明，再落剑。剑不能被人当刀使——第二次不能。\n这一问，问剑，答的是心。」（感悟 +4）'];
     } },
     { t: 'narr', text: '下山的路上他没有回头。\n你只看见他的背影站得极直，像一柄插在鞘里三十年的剑，终于听见了自己的名字。' },
   ] },
@@ -2242,8 +2260,8 @@ pl_n1_a3: { id: 'pl_n1_a3', title: '剑冢心猿 · 第三幕 · 万剑归一', 
     ], pick: (v) => {
       const p = Game.player;
       if (v === 'a') { KarmaSys.addFortune(3); return ['他以断剑指天为誓。鸣声骤然拔高，万剑齐震，如受敕令。\n有此一诺同行，前路风雨都轻了几分。（气运 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他摇头笑了，二十年来第一次：「剑心不是守住的东西，是拿来用的。\n不过——谢了。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['你没有开口。可断剑的鸣声穿过你胸口的那一刻，你听见了你自己的剑心——\n它在替你回答：放不下，就去扛。（感悟 +4）'];
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['他摇头笑了，二十年来第一次：「剑心不是守住的东西，是拿来用的。\n不过——谢了。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['你没有开口。可断剑的鸣声穿过你胸口的那一刻，你听见了你自己的剑心——\n它在替你回答：放不下，就去扛。（感悟 +4）'];
     } },
     { t: 'narr', text: '出剑冢时天光大亮。\n断剑归鞘，鞘中鸣声不止，像一颗终于肯跳的心脏。他在崖头留下半句话：「青锋有缺口——\n道，无。」' },
   ] },
@@ -2259,9 +2277,9 @@ pl_n2_a1: { id: 'pl_n2_a1', title: '药炉心事 · 第一幕 · 半张药方', 
       { text: '先请她讲清「欠一副药」的旧账', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她双手接过方子，郑重得像接一道法旨。\n施恩不图报的账，往往报得最迟，也最重。（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['你们以方换方，各抄一份，约定拼全为止。\n她说：「账要两家人一起认，药才能配齐。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['她讲了一个时辰。三百年前药堂与丹谷的往来、那场大火、失散的师承——全对上了你怀中残玉的来历。\n方子没拼全，账先拼全了一半。（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她双手接过方子，郑重得像接一道法旨。\n施恩不图报的账，往往报得最迟，也最重。（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['你们以方换方，各抄一份，约定拼全为止。\n她说：「账要两家人一起认，药才能配齐。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['她讲了一个时辰。三百年前药堂与丹谷的往来、那场大火、失散的师承——全对上了你怀中残玉的来历。\n方子没拼全，账先拼全了一半。（感悟 +4）'];
     } },
     { t: 'narr', text: '她把那半张方子收进袖中最贴身的一层。\n炉上的药沸了，她没有回头，但那炉火比平日旺了三分——像是替谁争了一口气。' },
   ] },
@@ -2275,9 +2293,9 @@ pl_n2_a2: { id: 'pl_n2_a2', title: '药炉心事 · 第二幕 · 谷中旧例', 
       { text: '等血河旧案水落石出，一并昭告', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她说：「好，家丑自己揭，总好过被人揭。」\n三日后山门外贴出抄本，骂声与敬声齐飞。敢自己揭锅的门派，反而没人敢踩。（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她连夜封册，走了九宗联席的正门。\n「账要放在光底下对，谣言才没处钻。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['她把单子重新压回夹层，指尖发白：「好。等真相齐了，一次说清。\n——但你得答应我，齐的那一天，别太久。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她说：「好，家丑自己揭，总好过被人揭。」\n三日后山门外贴出抄本，骂声与敬声齐飞。敢自己揭锅的门派，反而没人敢踩。（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['她连夜封册，走了九宗联席的正门。\n「账要放在光底下对，谣言才没处钻。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['她把单子重新压回夹层，指尖发白：「好。等真相齐了，一次说清。\n——但你得答应我，齐的那一天，别太久。」（感悟 +4）'];
     } },
     { t: 'narr', text: '藏账阁的灯亮到三更。\n她给历代谷主的名讳前各添了一炷香，轻声说：「不是要你们认罪，是要你们的后人——\n从今往后，配药配得干净。」' },
   ] },
@@ -2291,8 +2309,8 @@ pl_n2_a3: { id: 'pl_n2_a3', title: '药炉心事 · 第三幕 · 回春之约', 
       { text: '带一粒去陈拾坟前——告知方子传下去了', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['药入喉，一线暖意断处重续。她盯着你的气色看了半炷香，长出一口气：「成了。\n三百年的方子，活了。」（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她把蜡丸供在药庐最高一格，与半张方子并排。\n「留个证。往后再有药堂的传人进门，让TA看看——账清了。」（气运 +2，感悟 +1）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['药入喉，一线暖意断处重续。她盯着你的气色看了半炷香，长出一口气：「成了。\n三百年的方子，活了。」（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她把蜡丸供在药庐最高一格，与半张方子并排。\n「留个证。往后再有药堂的传人进门，让TA看看——账清了。」（气运 +2，感悟 +1）']; }
       KarmaSys.addFortune(3); return ['你在坟前把蜡丸埋进土里，坟头那株野药草开了一朵小花。\n她对着坟拜了三拜：「陈老先生，丹霞谷还药来了。」（气运 +3）'];
     } },
     { t: 'narr', text: '封口时她提笔写了一张小签：「回春续断散 · 陈拾方 · 丹霞谷谨制」。\n从此丹霞谷的药单上，多了一个失传三百年的名字。\n药香满谷，像有人终于睡了个好觉。' },
@@ -2308,9 +2326,9 @@ pl_n3_a1: { id: 'pl_n3_a1', title: '刀笔春秋 · 第一幕 · 一页旧榜', 
       { text: '问他：为何偏偏是你来翻这册死账', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 2); KarmaSys.addFortune(2); return ['他把账纸折成方胜，郑重放进你掌心：「拿好。当年写这页账的人，等一个会翻账的人，等了三百年。」\n纸轻，压手。（感悟 +2，气运 +2）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他愣了愣，抚掌而笑：「对，对！字在人心，纸在火里——这才是读书人的稳妥。」\n当夜他抄了三份，分藏三处。藏完最后一处，他长出一口气，像卸下了什么。（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他沉默半晌：「因为三百年了，只有你真的去翻。\n读书人图什么？图的就是有人肯读。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 2, false); KarmaSys.addFortune(2); return ['他把账纸折成方胜，郑重放进你掌心：「拿好。当年写这页账的人，等一个会翻账的人，等了三百年。」\n纸轻，压手。（感悟 +2，气运 +2）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['他愣了愣，抚掌而笑：「对，对！字在人心，纸在火里——这才是读书人的稳妥。」\n当夜他抄了三份，分藏三处。藏完最后一处，他长出一口气，像卸下了什么。（感悟 +4）']; }
+      Cultivate.addInsight(p, 3, false); return ['他沉默半晌：「因为三百年了，只有你真的去翻。\n读书人图什么？图的就是有人肯读。」（感悟 +3）'];
     } },
     { t: 'narr', text: '临别时他把摊子上的书拢了拢，忽然道：「我屡试不第，才去问道。如今才懂——\n不是我没考上，是考场太小，装不下要写的文章。」' },
   ] },
@@ -2324,9 +2342,9 @@ pl_n3_a2: { id: 'pl_n3_a2', title: '刀笔春秋 · 第二幕 · 焚稿', scenes
       { text: '「把残页公之于众——三百年了，该见光了」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他握笔的手第一次稳了：「好。你查案，我修史——咱们各证一半，两下合璧。」\n那支秃笔在灯下微微发亮，像终于等到了它的墨。（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 2); KarmaSys.addFortune(3); return ['他长揖到地：「先生一言，解了苏家三代的心结。」\n当夜他把秃笔供进箱底，睡了一个整觉——三百年来的第一个。（感悟 +2，气运 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他摇头，眼里却有光：「公开太急。半行字换不来公道，只换来灭口。\n等案子见光那日，我把它裱进正文里——一字不差。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['他握笔的手第一次稳了：「好。你查案，我修史——咱们各证一半，两下合璧。」\n那支秃笔在灯下微微发亮，像终于等到了它的墨。（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 2, false); KarmaSys.addFortune(3); return ['他长揖到地：「先生一言，解了苏家三代的心结。」\n当夜他把秃笔供进箱底，睡了一个整觉——三百年来的第一个。（感悟 +2，气运 +3）']; }
+      Cultivate.addInsight(p, 3, false); return ['他摇头，眼里却有光：「公开太急。半行字换不来公道，只换来灭口。\n等案子见光那日，我把它裱进正文里——一字不差。」（感悟 +3）'];
     } },
     { t: 'narr', text: '你走时回头望了一眼。\n补史斋的灯还亮着，窗纸上他伏案的影子，像一座搁了三百年终于重新开工的碑。' },
   ] },
@@ -2340,9 +2358,9 @@ pl_n3_a3: { id: 'pl_n3_a3', title: '刀笔春秋 · 第三幕 · 刀笔归鞘', 
       { text: '「写上：他只是个不肯放下药锄的采药人」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 5); return ['他一笔一划录下，掷笔长揖：「好一句心安。这一卷，成了。」\n灯花爆了一声，像谁在三百年前松了一口气。（感悟 +5）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(3); return ['他怔了怔，眼眶微热：「是老朽着相了。史里没有主角，只有人。」\n他依言改了传主一栏——写的是三百七十一，与九千九百九十九。（感悟 +3，气运 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他录罢，郑重收笔入匣：「药锄比刀好。刀开杀戒，锄开生门。」\n秃笔归鞘，史稿归箱。补史斋的灯，这一夜亮到了天明。（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 5, false); return ['他一笔一划录下，掷笔长揖：「好一句心安。这一卷，成了。」\n灯花爆了一声，像谁在三百年前松了一口气。（感悟 +5）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(3); return ['他怔了怔，眼眶微热：「是老朽着相了。史里没有主角，只有人。」\n他依言改了传主一栏——写的是三百七十一，与九千九百九十九。（感悟 +3，气运 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['他录罢，郑重收笔入匣：「药锄比刀好。刀开杀戒，锄开生门。」\n秃笔归鞘，史稿归箱。补史斋的灯，这一夜亮到了天明。（感悟 +4）'];
     } },
     { t: 'narr', text: '离开补史斋时，他送你到巷口。\n身后斋内，樟木箱第一次敞着盖——写了三百年才敢写的东西，从此不必再藏。\n「往后史馆里的晚生们翻到这一卷，」他朝你抱拳，「他们会知道，真相这东西，只要有人肯接着写，就断不了根。」' },
   ] },
@@ -2358,9 +2376,9 @@ pl_n11_a1: { id: 'pl_n11_a1', title: '医者仁心 · 第一幕 · 一枚银针'
       { text: '「这针我收下。他日必以医道还你」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 2); KarmaSys.addFortune(2); return ['她摇头笑了：「教过。徒儿们后来都去了大医馆——也好，各人有各人的道。\n我这道，就留在棚子里。」（感悟 +2，气运 +2）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她点头，神色郑重起来：「救命不分缘由。那我多教你一手止血的——战场上，止血比针法金贵。」\n她又留棚中半个时辰，倾囊相授。（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 2); return ['她收拾药箱，头也不抬：「不必还我。\n——还给下一个你遇见的伤者，就算还清了。」（感悟 +2）'];
+      if (v === 'a') { Cultivate.addInsight(p, 2, false); KarmaSys.addFortune(2); return ['她摇头笑了：「教过。徒儿们后来都去了大医馆——也好，各人有各人的道。\n我这道，就留在棚子里。」（感悟 +2，气运 +2）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['她点头，神色郑重起来：「救命不分缘由。那我多教你一手止血的——战场上，止血比针法金贵。」\n她又留棚中半个时辰，倾囊相授。（感悟 +3）']; }
+      Cultivate.addInsight(p, 2, false); return ['她收拾药箱，头也不抬：「不必还我。\n——还给下一个你遇见的伤者，就算还清了。」（感悟 +2）'];
     } },
     { t: 'narr', text: '你帮着把最后一排病人送走，日头已经西斜。\n她背着药箱立在棚口，忽然道：「医道即道心。针下稳不稳，不看手，看心——心里乱，针就歪。\n你今日手很稳。」' },
   ] },
@@ -2374,9 +2392,9 @@ pl_n11_a2: { id: 'pl_n11_a2', title: '医者仁心 · 第二幕 · 瘟村镇', s
       { text: '交给你来周旋，她只管医人', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(2); return ['井壁的腐血在千人注视下无所遁形。镇老当街焚了驱邪符，向她长揖。\n她只说了一句：「烧符的火，替孩子们烧点姜汤罢。」（感悟 +3，气运 +2）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['你们把井淘了三遍，药施到最后一户。疫情退时，流言也退了——病人不说，看病人的人自然也就不说。\n她笑：「清者自清？不，是愈者自愈。」（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['你在镇老们中间斡旋一日一夜，她足不出柴房医了四十人。\n临行她替你理了理风尘：「你管人心，我管人命——这搭配，不错。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(2); return ['井壁的腐血在千人注视下无所遁形。镇老当街焚了驱邪符，向她长揖。\n她只说了一句：「烧符的火，替孩子们烧点姜汤罢。」（感悟 +3，气运 +2）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['你们把井淘了三遍，药施到最后一户。疫情退时，流言也退了——病人不说，看病人的人自然也就不说。\n她笑：「清者自清？不，是愈者自愈。」（感悟 +4）']; }
+      Cultivate.addInsight(p, 3, false); return ['你在镇老们中间斡旋一日一夜，她足不出柴房医了四十人。\n临行她替你理了理风尘：「你管人心，我管人命——这搭配，不错。」（感悟 +3）'];
     } },
     { t: 'narr', text: '出村那日，全镇送到官道尽头。\n有个痊愈的孩子追着塞给她一枝野花。她把花别在药箱上，走出很远才轻声说：「你看，这世道，究竟还是治得好。」' },
   ] },
@@ -2390,9 +2408,9 @@ pl_n11_a3: { id: 'pl_n11_a3', title: '医者仁心 · 第三幕 · 医者自医'
       { text: '「这一针，我陪你一起学。你行针，我护法」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(3); return ['针入气海，十年郁结随一缕黑血尽数化开。她跪坐坟前，泪落如雨，笑声也是真的。\n「师父，弟子出师了。」——山风过处，松涛如答。（感悟 +4，气运 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['你们采石立碑，凿下师承名讳。碑成那一刻，她朝碑拜了三拜，转身落针——针稳如山。\n「有碑有据，弟子今日归位。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['你以灵力为她护法，她行针如飞。一炷香后，两世郁结尽去。\n她收针而笑：「好——原来「自医」这一针，也是要有人陪的。师父没教这个，你教了。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); KarmaSys.addFortune(3); return ['针入气海，十年郁结随一缕黑血尽数化开。她跪坐坟前，泪落如雨，笑声也是真的。\n「师父，弟子出师了。」——山风过处，松涛如答。（感悟 +4，气运 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['你们采石立碑，凿下师承名讳。碑成那一刻，她朝碑拜了三拜，转身落针——针稳如山。\n「有碑有据，弟子今日归位。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['你以灵力为她护法，她行针如飞。一炷香后，两世郁结尽去。\n她收针而笑：「好——原来「自医」这一针，也是要有人陪的。师父没教这个，你教了。」（感悟 +4）'];
     } },
     { t: 'narr', text: '下山时，她把那枚缠红线的旧针郑重收进药箱最里层，另取出一枚新针，递到你手里。\n「上回那枚是救急用的。这一枚——」她按住你的手，「是「回头」用的。往后再高的山、再远的道，记得回头看看自己。\n医者如是，修士亦如是。」' },
   ] },
@@ -2408,9 +2426,9 @@ pl_n5_a1: { id: 'pl_n5_a1', title: '烟雨账簿 · 第一幕 · 一条消息', 
       { text: '先要她交底：烟雨楼三百年前替谁记的账', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['你按下指印。她把合契吹干，笑意不达眼底：「成交。\n放心，我的规矩比正道的良心可靠——我从不卖合伙人。」（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她挑眉：「行啊，防我一手也好。」\n两清的买卖最长久——这份清醒，日后救过你们两人的命。（气运 +2，感悟 +1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['她收起扇子，第一次正眼看你：「问得好。三百年前，烟雨楼替一家烧掉的宗门记过善后账。\n记完了，账房先生就『死』了。想知道他死在哪一页——合伙。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['你按下指印。她把合契吹干，笑意不达眼底：「成交。\n放心，我的规矩比正道的良心可靠——我从不卖合伙人。」（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她挑眉：「行啊，防我一手也好。」\n两清的买卖最长久——这份清醒，日后救过你们两人的命。（气运 +2，感悟 +1）']; }
+      Cultivate.addInsight(p, 4, false); return ['她收起扇子，第一次正眼看你：「问得好。三百年前，烟雨楼替一家烧掉的宗门记过善后账。\n记完了，账房先生就『死』了。想知道他死在哪一页——合伙。」（感悟 +4）'];
     } },
     { t: 'narr', text: '她送你到楼梯口，忽然又摇起扇子：「丑话说完了，说句体己的——\n这一单查出什么，都不许烧账。烟雨楼三百年的规矩：账可以烂，不能断。」' },
   ] },
@@ -2424,8 +2442,8 @@ pl_n5_a2: { id: 'pl_n5_a2', title: '烟雨账簿 · 第二幕 · 黑玉流向', 
       { text: '原件封存——这半张网，现在掀不得', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['你们抄本分执，各查一半。她说：「九个人里总有一个还活着，或者还有后人。\n查到谁，先别惊动——网收不收得拢，就看第一针扎在哪。」（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她盘了三夜账，脸色一次比一次白：「源头摸到了边。\n那本暗账的封皮上，盖着半枚河纹。剩下的边，你比我近。」（气运 +2，感悟 +1）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['你们抄本分执，各查一半。她说：「九个人里总有一个还活着，或者还有后人。\n查到谁，先别惊动——网收不收得拢，就看第一针扎在哪。」（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她盘了三夜账，脸色一次比一次白：「源头摸到了边。\n那本暗账的封皮上，盖着半枚河纹。剩下的边，你比我近。」（气运 +2，感悟 +1）']; }
       KarmaSys.addFortune(3); return ['她依言把残页分藏三处：「懂行。查账查到一半死人，最常见。\n留网不收，留的是命。」（气运 +3）'];
     } },
     { t: 'narr', text: '收拾残页时，她忽然说了一句不像她风格的话：「干我们这行，账比人活得长。\n等真收网那天——记得叫上我。我倒要看看，那支笔最后落在谁手里。」' },
@@ -2440,9 +2458,9 @@ pl_n5_a3: { id: 'pl_n5_a3', title: '烟雨账簿 · 第三幕 · 烟雨收网', 
       { text: '先问她：那位账房先生，如今在哪儿', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她把你的手按在匣盖上：「一言为定。收网那日，我要亲手拨最后一颗算盘珠。」（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['两份账页在棋盘上严丝合缝。她盯着那个完整的环看了很久，忽然笑出声：「原来如此。\n这局棋，从头到尾只有一颗子——你。」（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['她望着窗外的雨：「坟头朝东，烟雨楼后山。他『死』后守了这座楼三十年，教出了我师父。\n你要谢，就去给他烧一页写完的账。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她把你的手按在匣盖上：「一言为定。收网那日，我要亲手拨最后一颗算盘珠。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['两份账页在棋盘上严丝合缝。她盯着那个完整的环看了很久，忽然笑出声：「原来如此。\n这局棋，从头到尾只有一颗子——你。」（感悟 +4）']; }
+      Cultivate.addInsight(p, 3, false); return ['她望着窗外的雨：「坟头朝东，烟雨楼后山。他『死』后守了这座楼三十年，教出了我师父。\n你要谢，就去给他烧一页写完的账。」（感悟 +3）'];
     } },
     { t: 'narr', text: '你抱着匣子下楼，雨停了。\n她倚着栏杆自言自语：「等收了网，烟雨楼就不记这一册了。\n记了三百年——也该散了。」' },
   ] },
@@ -2458,9 +2476,9 @@ pl_n6_a1: { id: 'pl_n6_a1', title: '扛山之义 · 第一幕 · 半路兄弟', 
       { text: '与他拆招互搏，把「落地没根」补上', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['那夜他喝了三坛，说了十遍「兄弟」。\n酒肉穿肠过，交情心底留。（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他咬着布条让你缝了七针，一声没吭，末了咧嘴：「手艺不赖。\n兄弟，你这药敷得比俺师父的拳头温柔多了。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他当你是自己人，体功诀倾囊相授——笨法子，死功夫，桩桩见效。\n你学的是招，懂的是理：所谓根基，就是肯往地下扎的那股劲。（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['那夜他喝了三坛，说了十遍「兄弟」。\n酒肉穿肠过，交情心底留。（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['他咬着布条让你缝了七针，一声没吭，末了咧嘴：「手艺不赖。\n兄弟，你这药敷得比俺师父的拳头温柔多了。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['他当你是自己人，体功诀倾囊相授——笨法子，死功夫，桩桩见效。\n你学的是招，懂的是理：所谓根基，就是肯往地下扎的那股劲。（感悟 +4）'];
     } },
     { t: 'narr', text: '镇口的酒旗在风里晃。\n江湖上认识一天就敢替人挡刀的人不多。\n你运气不坏——遇上了一个。' },
   ] },
@@ -2474,9 +2492,9 @@ pl_n6_a2: { id: 'pl_n6_a2', title: '扛山之义 · 第二幕 · 笨人的道', 
       { text: '「长生另说。你这十年，活得比谁都真。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他「嗷」了一嗓子，把体功牌拍在胸口：「成！这话俺刻牌上！」\n道心这东西，有时就是别人一句话，自己走了十年。（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['他愣了半天，忽然咧嘴傻笑，指天指地又指自己。\n那晚他睡得打雷一样响。第二天，他背东西抢着走在下坡的那一侧。（气运 +2，感悟 +1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他半天没说话，火光照着一张通红的脸。\n末了把体功牌揣回怀里，声音闷闷的：「……兄弟，这话俺得想三年。\n三年后俺给你答案。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['他「嗷」了一嗓子，把体功牌拍在胸口：「成！这话俺刻牌上！」\n道心这东西，有时就是别人一句话，自己走了十年。（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['他愣了半天，忽然咧嘴傻笑，指天指地又指自己。\n那晚他睡得打雷一样响。第二天，他背东西抢着走在下坡的那一侧。（气运 +2，感悟 +1）']; }
+      Cultivate.addInsight(p, 4, false); return ['他半天没说话，火光照着一张通红的脸。\n末了把体功牌揣回怀里，声音闷闷的：「……兄弟，这话俺得想三年。\n三年后俺给你答案。」（感悟 +4）'];
     } },
     { t: 'narr', text: '天亮各自赶路，他站在岔口冲你挥手，嗓门传出去二里地：\n「往后谁问你修的什么道，就说——修的『不拐弯』！」\n你说不出为什么，眼眶竟有点热。' },
   ] },
@@ -2490,8 +2508,8 @@ pl_n6_a3: { id: 'pl_n6_a3', title: '扛山之义 · 第三幕 · 扛山之人', 
       { text: '把残玉贴上他的后颈——玉微微发热，毒瘴让路', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['你从他背后数到三百零七。他每答一声「到了」，脚下的血印就深一分。\n后来你说，那三百零七声，比任何功法都养气。（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['真气顺着草绳渡过去，他闷哼一声：「邪门！腿不沉了！」\n两个人分一副担子，山都要让路。（气运 +2，感悟 +1）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['你从他背后数到三百零七。他每答一声「到了」，脚下的血印就深一分。\n后来你说，那三百零七声，比任何功法都养气。（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['真气顺着草绳渡过去，他闷哼一声：「邪门！腿不沉了！」\n两个人分一副担子，山都要让路。（气运 +2，感悟 +1）']; }
       KarmaSys.addFortune(3); return ['玉温透过衣领，周围的瘴气竟真的退开一线，像水让开石头。\n他扭头看了一眼，只说了三个字：「好宝贝。」（气运 +3）'];
     } },
     { t: 'narr', text: '出泽那刻，天光刺眼。\n他把你放在干地上，自己一屁股坐进泥里直喘，忽然放声大笑：\n「三百零七步！兄弟——往后你的路，俺搭一脚！」' },
@@ -2508,9 +2526,9 @@ pl_n9_a1: { id: 'pl_n9_a1', title: '焚符之悔 · 第一幕 · 烧掉的符', 
       { text: '什么也不问，陪他坐到火尽', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['火旺起来，烤得人脸疼。他抽了抽鼻子，忽然说：「三百年了，头一回有人陪老头子烤火。」\n悔这个东西，一个人捂着会捂成毒。（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他握火钳的手停了停：「你迟早会拿着一样东西来问我这个问题。\n到那天，老头子一并答你。」（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['你们坐到火尽，一言未发。\n起身时他往你手里塞了个暖手的炭囊：「冬至寒。明年这时候，你再来。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['火旺起来，烤得人脸疼。他抽了抽鼻子，忽然说：「三百年了，头一回有人陪老头子烤火。」\n悔这个东西，一个人捂着会捂成毒。（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['他握火钳的手停了停：「你迟早会拿着一样东西来问我这个问题。\n到那天，老头子一并答你。」（感悟 +4）']; }
+      Cultivate.addInsight(p, 3, false); return ['你们坐到火尽，一言未发。\n起身时他往你手里塞了个暖手的炭囊：「冬至寒。明年这时候，你再来。」（感悟 +3）'];
     } },
     { t: 'narr', text: '火光把他脸上的皱纹照成沟壑。\n灰烬飞起来，他喃喃道：「今年这张，烧完了。明年的，是最后一张。\n老头子的账——快还完了。」' },
   ] },
@@ -2524,9 +2542,9 @@ pl_n9_a2: { id: 'pl_n9_a2', title: '焚符之悔 · 第二幕 · 符出谁手', 
       { text: '「把第七张画完。我带你去认账。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['他背对着你摇头，肩膀却在抖：「背了三百年，背出习惯来了。\n不过——今晚这句话，老头子收下了。」（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他闭上眼，三百年前的隐市在皱纹里活了过来。斗笠、水腥味、袖口的河纹……\n你一条条记下——这条线，通向水底。（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他猛地回头，浑浊的眼睛亮了一下：「画完它……对，画完它。\n用姜家的笔，画一张干净的——把那六张脏的，一笔一笔抵回来。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['他背对着你摇头，肩膀却在抖：「背了三百年，背出习惯来了。\n不过——今晚这句话，老头子收下了。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['他闭上眼，三百年前的隐市在皱纹里活了过来。斗笠、水腥味、袖口的河纹……\n你一条条记下——这条线，通向水底。（感悟 +4）']; }
+      Cultivate.addInsight(p, 3, false); return ['他猛地回头，浑浊的眼睛亮了一下：「画完它……对，画完它。\n用姜家的笔，画一张干净的——把那六张脏的，一笔一笔抵回来。」（感悟 +3）'];
     } },
     { t: 'narr', text: '夜里他从枕函底下摸出一本符册，封皮烧去了半边。\n「当年七张的底稿，我一直留着。留着，就是等今天。\n小娃娃——你的玉，别再让我看第二回这样的东西。」' },
   ] },
@@ -2541,9 +2559,9 @@ pl_n9_a3: { id: 'pl_n9_a3', title: '焚符之悔 · 第三幕 · 最后一笔', 
       { text: '烧掉那本底稿，灰入河——债清了，稿不必留', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['他还礼还到一半就别开了脸：「折煞老头子了……\n可这礼，受得起。」（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他悬腕良久，落下一个极小的「姜」字，笔锋竟比符文还稳。\n「留名了。往后再有人提姜暮寒，就说他画的最后一张符，是干净的。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['符册入火，火头青碧。灰烬随河水漂远，他站在河边看了很久，忽然笑出声。\n压了三百年的背，直了。（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['他还礼还到一半就别开了脸：「折煞老头子了……\n可这礼，受得起。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['他悬腕良久，落下一个极小的「姜」字，笔锋竟比符文还稳。\n「留名了。往后再有人提姜暮寒，就说他画的最后一张符，是干净的。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['符册入火，火头青碧。灰烬随河水漂远，他站在河边看了很久，忽然笑出声。\n压了三百年的背，直了。（感悟 +4）'];
     } },
     { t: 'narr', text: '离开隐市时，身后传来久违的吆喝：\n「符箓——新到的符箓——」\n老叟的嗓门亮得不像个还完债的人。那年冬至，他的火盆，第一次没有点。' },
   ] },
@@ -2559,9 +2577,9 @@ pl_n13_a1: { id: 'pl_n13_a1', title: '月下旧盟 · 第一幕 · 月下逢', s
       { text: '「麻烦多大？」——先掂量，再谈价钱', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她怔了怔，随即笑出声，笑得比哪次都真：「胆子不小。\n好——这单我接了。价钱月圆再谈。」（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她挑眉：「跟魔道谈价，居然不脸红。行，就冲这份镇定——\n第一眼，免费。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['她竖起三根手指：「多大？大到整个暗市听见『血河』两个字都要闭门。\n但再大的麻烦，也大不过三百年——我陪你去看看它到底有多大。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她怔了怔，随即笑出声，笑得比哪次都真：「胆子不小。\n好——这单我接了。价钱月圆再谈。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['她挑眉：「跟魔道谈价，居然不脸红。行，就冲这份镇定——\n第一眼，免费。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['她竖起三根手指：「多大？大到整个暗市听见『血河』两个字都要闭门。\n但再大的麻烦，也大不过三百年——我陪你去看看它到底有多大。」（感悟 +4）'];
     } },
     { t: 'narr', text: '她重新笑起来，可眼睛没笑。\n「月圆之后，跟我走一趟。去个地方，认认门——\n」她飘上檐角，「认完那扇门，你就知道你的玉有多烫了。」' },
   ] },
@@ -2576,9 +2594,9 @@ pl_n13_a2: { id: 'pl_n13_a2', title: '月下旧盟 · 第二幕 · 暗市带路'
       { text: '低声问她——为何对药堂的东西如此熟稔', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她替你压价三句，分文不多。出暗市后她瞥了那灯一眼：「买盏破灯。\n——账记得倒干净。」（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['你把摊主的口音、疤位、收货的手势一一记下。她似笑非笑地扫你一眼：「学会不掏钱了？\n开窍。这条街上，眼睛比手好使。」（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['她沉默了一瞬：「三百年前，药堂的老执事替我娘看过病，没收钱。\n这条街上我记得的干净东西，就这一件。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她替你压价三句，分文不多。出暗市后她瞥了那灯一眼：「买盏破灯。\n——账记得倒干净。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['你把摊主的口音、疤位、收货的手势一一记下。她似笑非笑地扫你一眼：「学会不掏钱了？\n开窍。这条街上，眼睛比手好使。」（感悟 +4）']; }
+      Cultivate.addInsight(p, 3, false); return ['她沉默了一瞬：「三百年前，药堂的老执事替我娘看过病，没收钱。\n这条街上我记得的干净东西，就这一件。」（感悟 +3）'];
     } },
     { t: 'narr', text: '出暗市时，她把一枚骨哨丢进你手里。\n「哨响三声，我到。\n这条街上认识你的人越少，你活得越久。」' },
   ] },
@@ -2593,9 +2611,9 @@ pl_n13_a3: { id: 'pl_n13_a3', title: '月下旧盟 · 第三幕 · 旧盟清算'
       { text: '「同路不必立契。走到哪，算哪。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['新契只有两行名字。她看了半天：「比旧的短多了。\n短的账，好记。」（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她挑眉：「嫌魔道的钱脏？」\n顿了顿，又笑，「……不，你是嫌它重。行，这份情我记下了——情比钱贵。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['她愣了很久，忽然把烧剩的半角盟书抛进河里：「三百年了，头一回有人不要我立字据。\n你胆子真大。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['新契只有两行名字。她看了半天：「比旧的短多了。\n短的账，好记。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['她挑眉：「嫌魔道的钱脏？」\n顿了顿，又笑，「……不，你是嫌它重。行，这份情我记下了——情比钱贵。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['她愣了很久，忽然把烧剩的半角盟书抛进河里：「三百年了，头一回有人不要我立字据。\n你胆子真大。」（感悟 +4）'];
     } },
     { t: 'narr', text: '断桥下暗河水声不歇。\n她抱臂靠着栏杆，月光第一次没被她的影子挡住：\n「旧账烧完，新账开始记。第一笔——云无月，欠月色一场。\n欠你多少，看你往后怎么记。」' },
   ] },
@@ -2611,9 +2629,9 @@ pl_n17_a1: { id: 'pl_n17_a1', title: '星轨之约 · 第一幕 · 星轨异常'
       { text: '请她推演故道星轨的「醒日」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['你把陈拾、残玉、玄影客一一道来。她听完，在星图背面添了一行小字：「星轨不欺，人自欺。\n自今日起，此星与你同录。」（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她也不点破，只把星图折好递给你一半：「各守各的底。\n天上的事，急不来。」（气运 +2，感悟 +1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['她推演一夜，晨光里吐出四个字：「醒日未定。\n但它每夜都在挣——你怕不怕？它挣开那日，就是你必须到场的日子。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['你把陈拾、残玉、玄影客一一道来。她听完，在星图背面添了一行小字：「星轨不欺，人自欺。\n自今日起，此星与你同录。」（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她也不点破，只把星图折好递给你一半：「各守各的底。\n天上的事，急不来。」（气运 +2，感悟 +1）']; }
+      Cultivate.addInsight(p, 3, false); return ['她推演一夜，晨光里吐出四个字：「醒日未定。\n但它每夜都在挣——你怕不怕？它挣开那日，就是你必须到场的日子。」（感悟 +3）'];
     } },
     { t: 'narr', text: '她收起星图，指尖在「故道」二字上停了很久。\n「星轨不骗人，骗人的是人。\n这句话你记住——比记住我的星图有用。」' },
   ] },
@@ -2627,9 +2645,9 @@ pl_n17_a2: { id: 'pl_n17_a2', title: '星轨之约 · 第二幕 · 塔顶档案'
       { text: '手记只存半页——请她追索缺失的后半', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['她笔尖一顿，在星图故道的位置重重一点：「星轨每夜被拉回去一次——拉的不是一个死人。\n死人不需要呼吸。你这一解，解到了骨头上。」（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她沉吟：「藏物……倒走的一瞬里，一件东西从『明夜』回到了『昨夜』。\n那么它此刻就在水底，比我们所有人都『早』三百年。」（感悟 +3）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['塔底翻出三箱旧档，烧毁的边角与你袖中残玉的断口形状相合。\n「先辈烧掉后半页——是不想让它落在错的人手里。现在，它落对了。」（气运 +2，感悟 +1）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['她笔尖一顿，在星图故道的位置重重一点：「星轨每夜被拉回去一次——拉的不是一个死人。\n死人不需要呼吸。你这一解，解到了骨头上。」（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['她沉吟：「藏物……倒走的一瞬里，一件东西从『明夜』回到了『昨夜』。\n那么它此刻就在水底，比我们所有人都『早』三百年。」（感悟 +3）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['塔底翻出三箱旧档，烧毁的边角与你袖中残玉的断口形状相合。\n「先辈烧掉后半页——是不想让它落在错的人手里。现在，它落对了。」（气运 +2，感悟 +1）']; }
     } },
     { t: 'narr', text: '合上手记时，塔外夜风穿廊，星图猎猎作响。\n她把先辈的名讳擦净，轻声道：「三百年前我们的先辈看见了，不敢写全。\n我们这一代——把它写全。」' },
   ] },
@@ -2643,9 +2661,9 @@ pl_n17_a3: { id: 'pl_n17_a3', title: '星轨之约 · 第三幕 · 护阵之约'
       { text: '什么也不说，与她一起收最后一面旗', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她受了半礼，还了半礼：「阵在人在。\n——记住了，这四个字周天阁说出口，就没有收回的道理。」（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她怔了一下，随即别开脸：「问阵的事，别问阵师。\n……怕。所以才来。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['你们一人一半，把最后一面旗稳稳夯进土里。她拍去手上的泥，难得地笑了一下：\n「旗是我们一起插的。那么雷——也落不到不该落的地方。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她受了半礼，还了半礼：「阵在人在。\n——记住了，这四个字周天阁说出口，就没有收回的道理。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['她怔了一下，随即别开脸：「问阵的事，别问阵师。\n……怕。所以才来。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['你们一人一半，把最后一面旗稳稳夯进土里。她拍去手上的泥，难得地笑了一下：\n「旗是我们一起插的。那么雷——也落不到不该落的地方。」（感悟 +4）'];
     } },
     { t: 'narr', text: '下山时回望，雷台之星高悬，与故道上空那颗「钉死」的星遥遥相对。\n她的话随夜风散上来：\n「一颗在等你，一颗在陪你。\n去——把这两颗星，摘成一颗。」' },
   ] },
@@ -2661,9 +2679,9 @@ pl_n22_a1: { id: 'pl_n22_a1', title: '罗刹洗名 · 第一幕 · 试探', scen
       { text: '「河纹认你。你打算拿它换什么价？」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她盯了你三息，忽然抚掌大笑：「三百年来，第一批不跑的人。」\n敢在血罗刹面前喝茶的胆子，本身就是一种通行证。（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['满棚骤静。她脸上的笑一点点淡下去，指尖的寒气却散了：「……你查到哪儿了。」\n这一问，把你们从试探，推成了同谋。（感悟 +4）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她笑吟吟地支起下巴：「跟魔道女修谈价？胆色可嘉。\n这一眼免费。下一眼——看你值多少。」（气运 +2，感悟 +1）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['她盯了你三息，忽然抚掌大笑：「三百年来，第一批不跑的人。」\n敢在血罗刹面前喝茶的胆子，本身就是一种通行证。（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['满棚骤静。她脸上的笑一点点淡下去，指尖的寒气却散了：「……你查到哪儿了。」\n这一问，把你们从试探，推成了同谋。（感悟 +4）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她笑吟吟地支起下巴：「跟魔道女修谈价？胆色可嘉。\n这一眼免费。下一眼——看你值多少。」（气运 +2，感悟 +1）']; }
     } },
     { t: 'narr', text: '雨停时她起身，红衣竟没沾一个雨点。\n走到棚口她回头，眉眼弯弯：\n「别去查我。\n先去查——你袖子里那个东西。」' },
   ] },
@@ -2677,9 +2695,9 @@ pl_n22_a2: { id: 'pl_n22_a2', title: '罗刹洗名 · 第二幕 · 第一份名�
       { text: '「卖出去的十一个名字，钱你都退了？」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['她眼中第一次露出一点近乎赞许的东西：「放长线……你比九宗那些官老爷聪明。\n盯死他们。名单上有三个会武功的，我替你盯。」（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她把油布推过来：「明刀明枪好啊。就是记住——联席开印之前，一个都不能惊动。\n这四十七个人里，有三个的保举状，还压在九宗某位大人物的匣子里。」（感悟 +3）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['她数着指尖笑：「退了七个。有四个的买主，是我惹不起的。\n你看，赎罪也有行情——我把行情里能做的都做了。」（气运 +2，感悟 +1）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['她眼中第一次露出一点近乎赞许的东西：「放长线……你比九宗那些官老爷聪明。\n盯死他们。名单上有三个会武功的，我替你盯。」（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['她把油布推过来：「明刀明枪好啊。就是记住——联席开印之前，一个都不能惊动。\n这四十七个人里，有三个的保举状，还压在九宗某位大人物的匣子里。」（感悟 +3）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['她数着指尖笑：「退了七个。有四个的买主，是我惹不起的。\n你看，赎罪也有行情——我把行情里能做的都做了。」（气运 +2，感悟 +1）']; }
     } },
     { t: 'narr', text: '她把油布放进你手里，指尖冰凉。\n「记住。这份名单上没有好人，我更不是。\n但今晚之后，它在你手里——就不只是一批杀人的货了。」' },
   ] },
@@ -2694,9 +2712,9 @@ pl_n22_a3: { id: 'pl_n22_a3', title: '罗刹洗名 · 第三幕 · 赎罪之名'
       { text: '什么也不说，陪她看到火尽', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['沙压火头，灰烬缓缓沉进河滩。她低声道：「三百年，这张纸头一回有了落脚的地方。\n……多谢。」（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她望着河水，半晌，轻轻吐出两个字：「随你。\n——这答案，够胆吧？」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['火尽，天边泛白。她站起身，像卸下了三百斤的东西。\n「你一句话没说。比说什么都好。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['沙压火头，灰烬缓缓沉进河滩。她低声道：「三百年，这张纸头一回有了落脚的地方。\n……多谢。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['她望着河水，半晌，轻轻吐出两个字：「随你。\n——这答案，够胆吧？」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['火尽，天边泛白。她站起身，像卸下了三百斤的东西。\n「你一句话没说。比说什么都好。」（感悟 +4）'];
     } },
     { t: 'narr', text: '灰烬被河水带走，一点不剩。\n她撕下红衣的一角，系在河滩老树的枝上，像一面极小的旗。\n「旧名葬这儿了。\n新名字——等血河的水清了再取。」' },
   ] },
@@ -2712,9 +2730,9 @@ pl_n23_a1: { id: 'pl_n23_a1', title: '渡船归人 · 第一幕 · 酒里有人'
       { text: '屈指敲船底回他三下——船家暗语，问的是「渡谁」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他翻了个身，把脸埋进臂弯里，声音闷得像从水底冒上来：\n「渡船要有岸。他们的岸——沉了。」（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['他乐了，一骨碌坐起来跟你抢葫芦：「有胆！\n后半夜你做个梦，梦见有人朝你作揖——别躲，受了它。」（气运 +2，感悟 +1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['三声回敲，他猛地坐直，醉意褪了一半：「行家。\n渡谁？渡……跟你怀里那块玉，认识的那些人。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['他翻了个身，把脸埋进臂弯里，声音闷得像从水底冒上来：\n「渡船要有岸。他们的岸——沉了。」（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['他乐了，一骨碌坐起来跟你抢葫芦：「有胆！\n后半夜你做个梦，梦见有人朝你作揖——别躲，受了它。」（气运 +2，感悟 +1）']; }
+      Cultivate.addInsight(p, 3, false); return ['三声回敲，他猛地坐直，醉意褪了一半：「行家。\n渡谁？渡……跟你怀里那块玉，认识的那些人。」（感悟 +3）'];
     } },
     { t: 'narr', text: '那夜的河面无风。\n水声却像有人贴着船板，一声一声，数你的心跳。\n鼾声里，他含混吐出两个字：「……等着。」' },
   ] },
@@ -2728,9 +2746,9 @@ pl_n23_a2: { id: 'pl_n23_a2', title: '渡船归人 · 第二幕 · 疯话与真�
       { text: '「水底那三百个声音——他们要渡去哪儿？」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他闭上眼：「我猜的。所以我疯了——猜错和做错之间，隔着我整条命。\n你要替我去看一眼。看清了，回来告诉我。」（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他把船板上的图重新誊在一张桑皮纸上，折成船形递给你：「图给你，船留着。\n哪天你要下水，记得回来找我——舵我熟，风，我说了不算。」（感悟 +3）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['他往河心指了指：「渡去该去的地方。可河水浑，他们认不得路。\n得有人举灯。灯……你怀里就有。」（气运 +2，感悟 +1）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['他闭上眼：「我猜的。所以我疯了——猜错和做错之间，隔着我整条命。\n你要替我去看一眼。看清了，回来告诉我。」（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['他把船板上的图重新誊在一张桑皮纸上，折成船形递给你：「图给你，船留着。\n哪天你要下水，记得回来找我——舵我熟，风，我说了不算。」（感悟 +3）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['他往河心指了指：「渡去该去的地方。可河水浑，他们认不得路。\n得有人举灯。灯……你怀里就有。」（气运 +2，感悟 +1）']; }
     } },
     { t: 'narr', text: '他把炭笔别回耳后，忽然清醒得吓人：\n「小娃娃，疯是老头子自己挑的壳。\n壳里有个人，守了三百年渡口——他不是不想赎罪，他是不知道，赎给谁看。」' },
   ] },
@@ -2745,8 +2763,8 @@ pl_n23_a3: { id: 'pl_n23_a3', title: '渡船归人 · 第三幕 · 渡人渡己'
     ], pick: (v) => {
       const p = Game.player;
       if (v === 'a') { KarmaSys.addFortune(3); return ['酒入河，水面荡开三圈涟漪，一圈追着一圈。他眯眼听了半晌，咧嘴一笑：\n「都应了。开船有底了。」（气运 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他一个名字一个名字地讲：扎红头巾的伙夫、爱唱曲的二师兄、总赊账的渔家女……讲到天亮，一个没落。\n「你看，我哪是疯。我是怕忘了。」（感悟 +3）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['土入水中，他愣了愣，忽然朝上游方向端起碗：「药堂的老伙计？\n好啊——三百年了，可算凑齐一船人。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['他一个名字一个名字地讲：扎红头巾的伙夫、爱唱曲的二师兄、总赊账的渔家女……讲到天亮，一个没落。\n「你看，我哪是疯。我是怕忘了。」（感悟 +3）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['土入水中，他愣了愣，忽然朝上游方向端起碗：「药堂的老伙计？\n好啊——三百年了，可算凑齐一船人。」（气运 +2，感悟 +1）']; }
     } },
     { t: 'narr', text: '天将亮，他躺在船头，酒葫芦抱在怀里，像抱着一个孩子。\n「等着」变成了「来了」。\n河水拍岸，一声一声，像谁在答「到」。' },
   ] },
@@ -2762,9 +2780,9 @@ pl_n24_a1: { id: 'pl_n24_a1', title: '归雁不归 · 第一幕 · 路见不平'
       { text: '劝药商把谢礼换成伤药，分给沿途村落', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 2); Bag.addStones(100); return ['药商千恩万谢地留下谢礼。他掂了掂，分你一半：「该拿的拿，别矫情。\n侠不是穷字写出来的。」（感悟 +2，灵石 +100）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['三招过后他收剑，认真拱手：「雁不能总飞——总有一落。这一落，我欠你。\n你这一指，比我师父教得直。」（感悟 +4）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['伤药一路发下去，他看着村子里的娃分药，忽然道：「这法子好。\n刀救得了一时，药救得了一路。」（感悟 +3）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 2, false); Bag.addStones(100); return ['药商千恩万谢地留下谢礼。他掂了掂，分你一半：「该拿的拿，别矫情。\n侠不是穷字写出来的。」（感悟 +2，灵石 +100）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['三招过后他收剑，认真拱手：「雁不能总飞——总有一落。这一落，我欠你。\n你这一指，比我师父教得直。」（感悟 +4）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 3, false); return ['伤药一路发下去，他看着村子里的娃分药，忽然道：「这法子好。\n刀救得了一时，药救得了一路。」（感悟 +3）']; }
     } },
     { t: 'narr', text: '暮色里赶路，雁阵过顶。\n他仰头看了很久，忽然没头没尾地说了一句：\n「年年雁归。」\n你没接话。有些话，接了就断了。' },
   ] },
@@ -2778,9 +2796,9 @@ pl_n24_a2: { id: 'pl_n24_a2', title: '归雁不归 · 第二幕 · 归乡之忌'
       { text: '把陈拾的故事讲给他听——两个活口，一场夜', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他霍然抬头：「……对。船是死的，船上的东西才是活的。\n我躲的从来不是村，是它。那就更该回去——把它的根看清楚。」（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他沉默了很久，一个名字一个名字往外报，报得极慢，一个没错。\n「七十四个。都在。」他合上手，「好——都还在。」（感悟 +3）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['陈拾守了三百年的玉，他听了整整一夜。天亮时他说：「两个活口，两盏灯。\n你替你的守了三百年——我也该提灯回去了。」（气运 +2，感悟 +1）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['他霍然抬头：「……对。船是死的，船上的东西才是活的。\n我躲的从来不是村，是它。那就更该回去——把它的根看清楚。」（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['他沉默了很久，一个名字一个名字往外报，报得极慢，一个没错。\n「七十四个。都在。」他合上手，「好——都还在。」（感悟 +3）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['陈拾守了三百年的玉，他听了整整一夜。天亮时他说：「两个活口，两盏灯。\n你替你的守了三百年——我也该提灯回去了。」（气运 +2，感悟 +1）']; }
     } },
     { t: 'narr', text: '火快熄时，他从怀里摸出一枚磨得发亮的旧铜钱——村口老桥的桥心钱。\n「村没了，钱还在。\n带它走了三百年江湖——就当，替全村看的世道。」' },
   ] },
@@ -2794,9 +2812,9 @@ pl_n24_a3: { id: 'pl_n24_a3', title: '归雁不归 · 第三幕 · 雁回之时'
       { text: '「灯点完，河也就该清了。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 1); KarmaSys.addFortune(2); return ['他大笑出声，笑声惊起满崖宿鸟：「好一句雁比人守时！\n——兄弟，就冲这句，这条命我记你账上了。」（气运 +2，感悟 +1）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他别过脸去，好一会儿才瓮声瓮气地说：「……行。你点双数。\n三百年了，头一回有人肯跟我分这活。」（感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他望向故道的方向，重重点头：「灯点完，河清了，船也就白了。\n白船渡人，不渡刀。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 1, false); KarmaSys.addFortune(2); return ['他大笑出声，笑声惊起满崖宿鸟：「好一句雁比人守时！\n——兄弟，就冲这句，这条命我记你账上了。」（气运 +2，感悟 +1）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['他别过脸去，好一会儿才瓮声瓮气地说：「……行。你点双数。\n三百年了，头一回有人肯跟我分这活。」（感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['他望向故道的方向，重重点头：「灯点完，河清了，船也就白了。\n白船渡人，不渡刀。」（感悟 +4）'];
     } },
     { t: 'narr', text: '起风了，雁鸣掠过头顶，一声追着一声。\n他仰头笑骂：「催什么，这就走！」\n这一次，雁阵往南，他也往南。\n归雁——归人。' },
   ] },
@@ -2811,9 +2829,9 @@ pl_n4_a1: { id: 'pl_n4_a1', title: '刀与酒 · 第一幕 · 一坛酒', scenes
       { text: '刀没有头。有头的不是刀，是人心', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他嗤笑一声：「那样的人，睡觉得睁着眼。不值。」\n酒见底了，他却把坛子塞给了你。（感悟 +3）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['火堆噼啪炸了个星。他半晌没说话，末了冒出一句：「……你这话，够我喝三年。」（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(1); return ['他握刀的手紧了紧：「快到没人值得——那我这些年，都在跟什么动刀？」\n这一夜他没再说话。（感悟 +3，气运 +1）'];
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['他嗤笑一声：「那样的人，睡觉得睁着眼。不值。」\n酒见底了，他却把坛子塞给了你。（感悟 +3）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 4, false); return ['火堆噼啪炸了个星。他半晌没说话，末了冒出一句：「……你这话，够我喝三年。」（感悟 +4）']; }
+      Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(1); return ['他握刀的手紧了紧：「快到没人值得——那我这些年，都在跟什么动刀？」\n这一夜他没再说话。（感悟 +3，气运 +1）'];
     } },
     { t: 'narr', text: '雨停时他已经不在了。\n火堆边留着半坛酒，和地上用刀尖刻的两个字：后会有期。\n刀客的字，和刀一样利落。' },
   ] },
@@ -2827,9 +2845,9 @@ pl_n4_a2: { id: 'pl_n4_a2', title: '刀与酒 · 第二幕 · 刀下之名', sce
       { text: '一言不发，与他并肩葬了那三人', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 5); return ['他愣了愣：「你不嫌晦气？」\n「名字而已。」你收进怀里。他别过脸去——刀客的脸红起来，比刀光还难得。（感悟 +5）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 5); return ['三个坑挖完，天全黑了。他拍掉手上的土：「跟我那些仇家，学一手。」\n这话从他嘴里说出来，算是天大的抬举。（感悟 +5）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(2); return ['他把布收回去，沉默很久：「活人……我这刀，怕是改不了了。」\n「但这句话，我记下了。」（感悟 +4，气运 +2）'];
+      if (v === 'a') { Cultivate.addInsight(p, 5, false); return ['他愣了愣：「你不嫌晦气？」\n「名字而已。」你收进怀里。他别过脸去——刀客的脸红起来，比刀光还难得。（感悟 +5）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 5, false); return ['三个坑挖完，天全黑了。他拍掉手上的土：「跟我那些仇家，学一手。」\n这话从他嘴里说出来，算是天大的抬举。（感悟 +5）']; }
+      Cultivate.addInsight(p, 4, false); KarmaSys.addFortune(2); return ['他把布收回去，沉默很久：「活人……我这刀，怕是改不了了。」\n「但这句话，我记下了。」（感悟 +4，气运 +2）'];
     } },
   ] },
 pl_n4_a3: { id: 'pl_n4_a3', title: '刀与酒 · 第三幕 · 收刀', scenes: [
@@ -2841,9 +2859,9 @@ pl_n4_a3: { id: 'pl_n4_a3', title: '刀与酒 · 第三幕 · 收刀', scenes: [
       { text: '递过酒葫芦：「先喝了这碗，再想」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 7); return ['他转身，眼里那点戾气终于化开了。「刀随我……那我得先弄明白，我是个什么东西。」\n这一问，比五年寻仇都难。（感悟 +7）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 6); KarmaSys.addFortune(2); return ['「挂起来的刀……」他咀嚼着这三个字，忽然笑了，「也行。总比生锈在血里强。」（感悟 +6，气运 +2）']; }
-      KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 6); return ['他接过葫芦，一饮而尽，把空葫芦系上了刀鞘。\n「从今日起，这刀护人，不杀人。酒——管够。」（感悟 +6，气运 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 7, false); return ['他转身，眼里那点戾气终于化开了。「刀随我……那我得先弄明白，我是个什么东西。」\n这一问，比五年寻仇都难。（感悟 +7）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 6, false); KarmaSys.addFortune(2); return ['「挂起来的刀……」他咀嚼着这三个字，忽然笑了，「也行。总比生锈在血里强。」（感悟 +6，气运 +2）']; }
+      KarmaSys.addFortune(3); Cultivate.addInsight(p, 6, false); return ['他接过葫芦，一饮而尽，把空葫芦系上了刀鞘。\n「从今日起，这刀护人，不杀人。酒——管够。」（感悟 +6，气运 +3）'];
     } },
     { t: 'narr', text: '下山的路上，他的刀第一次归了鞘。\n鞘上系着个晃晃荡荡的酒葫芦，叮当作响，像换了一副心肠。\n刀客有了想回去的地方，刀就成了护身的家伙。' },
   ] },
@@ -2858,9 +2876,9 @@ pl_n7_a1: { id: 'pl_n7_a1', title: '雪衣旧曲 · 第一幕 · 断弦', scenes
       { text: '什么也不说，替她把断弦收进琴匣', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['她的手停住了，许久，轻轻「嗯」了一声。\n「后半段……还没写完。写曲的人，先走了。」（感悟 +4）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(2); return ['她看着你收弦的动作，眼底那层霜化了一角。\n「……你手很轻。」这算是她说过最长的话。（感悟 +3，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['「换弦容易。」她摇头，「续曲难。」\n但她终究还是重新调了音。月色里，断了的地方，被她生生接了下去。（感悟 +3）'];
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['她的手停住了，许久，轻轻「嗯」了一声。\n「后半段……还没写完。写曲的人，先走了。」（感悟 +4）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(2); return ['她看着你收弦的动作，眼底那层霜化了一角。\n「……你手很轻。」这算是她说过最长的话。（感悟 +3，气运 +2）']; }
+      Cultivate.addInsight(p, 3, false); return ['「换弦容易。」她摇头，「续曲难。」\n但她终究还是重新调了音。月色里，断了的地方，被她生生接了下去。（感悟 +3）'];
     } },
   ] },
 pl_n7_a2: { id: 'pl_n7_a2', title: '雪衣旧曲 · 第二幕 · 《雪衣》本意', scenes: [
@@ -2872,9 +2890,9 @@ pl_n7_a2: { id: 'pl_n7_a2', title: '雪衣旧曲 · 第二幕 · 《雪衣》本
       { text: '「带我去她雪葬的地方。曲子该回家写完」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 5); return ['她怔住，指尖发颤。「替她活下去的那部分……」\n那一夜她没睡，琴声到天明——后半段的第一句，落弦了。（感悟 +5）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 5); KarmaSys.addFortune(2); return ['她抱着琴，点了点头：「好。曲子该回家。」\n你替她背了琴囊。雪路上，她的话比过去十年加起来都多。（感悟 +5，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['「留着……」她低声重复，眼圈红了，「原来留着，也是一种弹法。」\n这一夜琴声很轻，像怕吵醒谁。（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 5, false); return ['她怔住，指尖发颤。「替她活下去的那部分……」\n那一夜她没睡，琴声到天明——后半段的第一句，落弦了。（感悟 +5）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 5, false); KarmaSys.addFortune(2); return ['她抱着琴，点了点头：「好。曲子该回家。」\n你替她背了琴囊。雪路上，她的话比过去十年加起来都多。（感悟 +5，气运 +2）']; }
+      Cultivate.addInsight(p, 4, false); return ['「留着……」她低声重复，眼圈红了，「原来留着，也是一种弹法。」\n这一夜琴声很轻，像怕吵醒谁。（感悟 +4）'];
     } },
   ] },
 pl_n7_a3: { id: 'pl_n7_a3', title: '雪衣旧曲 · 第三幕 · 一曲终了', scenes: [
@@ -2887,9 +2905,9 @@ pl_n7_a3: { id: 'pl_n7_a3', title: '雪衣旧曲 · 第三幕 · 一曲终了', 
       { text: '「她叫什么，就叫什么。让名字活着」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 6); return ['她眼睛一亮：「对。缺的那三分补上了，才配叫全了《雪衣》。」\n琴囊一背，下山时她的背挺得笔直。（感悟 +6）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 6); KarmaSys.addFortune(2); return ['「雪衣。」她轻声念了一遍，像应了一声「在」。\n名在，曲在，人就没走远。（感悟 +6，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['她想了想，笑了：「那叫《归雪》。」\n旧人归雪，活人归人间——这名字，两全。（感悟 +5）'];
+      if (v === 'a') { Cultivate.addInsight(p, 6, false); return ['她眼睛一亮：「对。缺的那三分补上了，才配叫全了《雪衣》。」\n琴囊一背，下山时她的背挺得笔直。（感悟 +6）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 6, false); KarmaSys.addFortune(2); return ['「雪衣。」她轻声念了一遍，像应了一声「在」。\n名在，曲在，人就没走远。（感悟 +6，气运 +2）']; }
+      Cultivate.addInsight(p, 5, false); return ['她想了想，笑了：「那叫《归雪》。」\n旧人归雪，活人归人间——这名字，两全。（感悟 +5）'];
     } },
     { t: 'narr', text: '下山时她把那根断弦送了你。\n弦已续好，接口处缠得极细。\n「断过的东西接上了，比原结实的更结实——」她说，「人也是。」' },
   ] },
@@ -2904,9 +2922,9 @@ pl_n10_a1: { id: 'pl_n10_a1', title: '百年一阵 · 第一幕 · 空阵眼', s
       { text: '「什么都不缺。缺的是个守阵的人」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他猛地看你，眼中精光一闪：「……百年了，头一个说到点子上的。」\n「阵眼是空的，是因为守阵的人，还没来。」（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(2); return ['他笑容一滞，缓缓道：「好眼力。所以放不得——放了它，此阵成，我阵亡。」\n（感悟 +3，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他摇头，又点头：「是，也不是。」\n谜没揭开，但他陪你坐到了日落。（感悟 +3）'];
+      if (v === 'c') { Cultivate.addInsight(p, 4, false); return ['他猛地看你，眼中精光一闪：「……百年了，头一个说到点子上的。」\n「阵眼是空的，是因为守阵的人，还没来。」（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(2); return ['他笑容一滞，缓缓道：「好眼力。所以放不得——放了它，此阵成，我阵亡。」\n（感悟 +3，气运 +2）']; }
+      Cultivate.addInsight(p, 3, false); return ['他摇头，又点头：「是，也不是。」\n谜没揭开，但他陪你坐到了日落。（感悟 +3）'];
     } },
   ] },
 /* ============ v30 个人线补全 · 秦重楼（秤心） ============ */
@@ -2920,9 +2938,9 @@ pl_n8_a1: { id: 'pl_n8_a1', title: '秤心 · 第一幕 · 缺角的算盘', sce
       { text: '「把它记在账上，让商会后人都看见。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他拨算盘的手停了：「分开记……好一个分开记。」\n灵石之账与人心之账，从这一夜起各归各册。（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他沉吟半晌：「找人？二十年了，人早不知去向。」\n但他还是让商会发了寻人帖——账未清，心不安。（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); Bag.addStones(50); return ['「记账？」他笑了，「商会秘账岂能示人——」话到一半，他自己顿住了。\n当夜，账房多了一册新账，首页记的就是这三枚灵石。（感悟 +3，灵石 +50）'];
+      if (v === 'a') { Cultivate.addInsight(p, 3, false); return ['他拨算盘的手停了：「分开记……好一个分开记。」\n灵石之账与人心之账，从这一夜起各归各册。（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['他沉吟半晌：「找人？二十年了，人早不知去向。」\n但他还是让商会发了寻人帖——账未清，心不安。（感悟 +4）']; }
+      Cultivate.addInsight(p, 3, false); Bag.addStones(50); return ['「记账？」他笑了，「商会秘账岂能示人——」话到一半，他自己顿住了。\n当夜，账房多了一册新账，首页记的就是这三枚灵石。（感悟 +3，灵石 +50）'];
     } },
   ] },
 pl_n8_a2: { id: 'pl_n8_a2', title: '秤心 · 第二幕 · 压舱石', scenes: [
@@ -2935,9 +2953,9 @@ pl_n8_a2: { id: 'pl_n8_a2', title: '秤心 · 第二幕 · 压舱石', scenes: [
       { text: '「这石头，我想求一块压我的船。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他抚掌大笑：「正是！商会传到我这代，靠的不是货，是字据上的信。」\n当夜他赠你一枚商戳：「凭此，万宝商会永远给你个公道价。」（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(2); return ['他神色一肃：「还不清，就用余生慢慢还——债主肯等，是恩；不肯等，是债。两样都受着。」\n天平在他心里，从未歪过。（感悟 +4，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他愣了愣，随即把那块压舱石塞进你怀里：「拿去——石头无灵，压的是人心。\n愿你此生船满，心不空。」（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['他抚掌大笑：「正是！商会传到我这代，靠的不是货，是字据上的信。」\n当夜他赠你一枚商戳：「凭此，万宝商会永远给你个公道价。」（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); KarmaSys.addFortune(2); return ['他神色一肃：「还不清，就用余生慢慢还——债主肯等，是恩；不肯等，是债。两样都受着。」\n天平在他心里，从未歪过。（感悟 +4，气运 +2）']; }
+      Cultivate.addInsight(p, 3, false); return ['他愣了愣，随即把那块压舱石塞进你怀里：「拿去——石头无灵，压的是人心。\n愿你此生船满，心不空。」（感悟 +3）'];
     } },
   ] },
 pl_n8_a3: { id: 'pl_n8_a3', title: '秤心 · 第三幕 · 秤平斗满', scenes: [
@@ -2950,9 +2968,9 @@ pl_n8_a3: { id: 'pl_n8_a3', title: '秤心 · 第三幕 · 秤平斗满', scenes
       { text: '「秤平斗满。往后教徒弟，把这一课也传下去。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { KarmaSys.addFortune(4); p.insight = Math.min(100, (p.insight || 0) + 6); return ['满堂哗然，他却在众目睽睽下郑重一揖：「多谢你替我记得。」\n当众认亏，是商人最大的体面。（气运 +4，感悟 +6）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 5); Bag.addItem('m_gupian', 1); return ['他把秤递给徒弟，把另一只手按在你肩上：「好——秤心传心，心账代代有人记。」\n他赠你一块上古碎片作谢礼。（感悟 +5，碎片 ×1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['他朗声大笑：「有你这句话，我这秤没白传！」\n笑声里二十年的心账，终于平了。（感悟 +5）'];
+      if (v === 'b') { KarmaSys.addFortune(4); Cultivate.addInsight(p, 6, false); return ['满堂哗然，他却在众目睽睽下郑重一揖：「多谢你替我记得。」\n当众认亏，是商人最大的体面。（气运 +4，感悟 +6）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 5, false); Bag.addItem('m_gupian', 1); return ['他把秤递给徒弟，把另一只手按在你肩上：「好——秤心传心，心账代代有人记。」\n他赠你一块上古碎片作谢礼。（感悟 +5，碎片 ×1）']; }
+      Cultivate.addInsight(p, 5, false); return ['他朗声大笑：「有你这句话，我这秤没白传！」\n笑声里二十年的心账，终于平了。（感悟 +5）'];
     } },
     { t: 'narr', text: '退位礼散，他邀你看了最后一眼账房。\n灯下那册新账摊开着，三枚灵石那一行，墨迹已经发旧。\n他提笔，在末尾添了一行小字：「心账已平，传诸后人。」' },
   ] },
@@ -2968,9 +2986,9 @@ pl_n16_a1: { id: 'pl_n16_a1', title: '裂山 · 第一幕 · 力从何处来', s
       { text: '「力从收着来。能收住的拳，才是真重。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他怔了半天，慢慢握拳再缓缓松开：「收着……娘以前纳鞋底，线拉太紧就断。」\n第二日演武场，他一拳只碎了半块磨盘——可碎石纹路笔直如刀切。（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(2); return ['他挠头想了半天：「护谷？护师父？护……师弟们的酒？」\n笑着笑着忽然收声：「护住他们，我的力好像就不抖了。」（感悟 +3，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他二话不说扎马步扎了一夜。清晨你再看，双脚下的青石板凹了两个脚印。\n「还差得远！」他咧嘴一笑，「但脚下有根了！」（感悟 +3）'];
+      if (v === 'c') { Cultivate.addInsight(p, 4, false); return ['他怔了半天，慢慢握拳再缓缓松开：「收着……娘以前纳鞋底，线拉太紧就断。」\n第二日演武场，他一拳只碎了半块磨盘——可碎石纹路笔直如刀切。（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(2); return ['他挠头想了半天：「护谷？护师父？护……师弟们的酒？」\n笑着笑着忽然收声：「护住他们，我的力好像就不抖了。」（感悟 +3，气运 +2）']; }
+      Cultivate.addInsight(p, 3, false); return ['他二话不说扎马步扎了一夜。清晨你再看，双脚下的青石板凹了两个脚印。\n「还差得远！」他咧嘴一笑，「但脚下有根了！」（感悟 +3）'];
     } },
   ] },
 pl_n16_a2: { id: 'pl_n16_a2', title: '裂山 · 第二幕 · 最重一击', scenes: [
@@ -2983,9 +3001,9 @@ pl_n16_a2: { id: 'pl_n16_a2', title: '裂山 · 第二幕 · 最重一击', scen
       { text: '「这最重一击，你打在自己身上了。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); Bag.addItem('pill_liaoshang', 2); return ['你一句话没说，真气渡过去护住他心脉。他也不说话，由着你渡。\n半晌，他瓮声瓮气：「……谢了。明年的酒钱，我包了。」（感悟 +3，疗伤丹 ×2）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他仰头望着塌下来的岩壁，忽然笑了：「对啊……最重的一击，从来是打自己的。\n那我下回，学着轻点儿。」（感悟 +4）']; }
-      KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 3); return ['「命金贵，灵犬也金贵——它们全是家里等着的人。」他梗着脖子，「这条理，师父讲了一百遍，我今日才真懂。」\n（气运 +3，感悟 +3）'];
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); Bag.addItem('pill_liaoshang', 2); return ['你一句话没说，真气渡过去护住他心脉。他也不说话，由着你渡。\n半晌，他瓮声瓮气：「……谢了。明年的酒钱，我包了。」（感悟 +3，疗伤丹 ×2）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 4, false); return ['他仰头望着塌下来的岩壁，忽然笑了：「对啊……最重的一击，从来是打自己的。\n那我下回，学着轻点儿。」（感悟 +4）']; }
+      KarmaSys.addFortune(3); Cultivate.addInsight(p, 3, false); return ['「命金贵，灵犬也金贵——它们全是家里等着的人。」他梗着脖子，「这条理，师父讲了一百遍，我今日才真懂。」\n（气运 +3，感悟 +3）'];
     } },
   ] },
 pl_n16_a3: { id: 'pl_n16_a3', title: '裂山 · 第三幕 · 心不可裂', scenes: [
@@ -2998,9 +3016,9 @@ pl_n16_a3: { id: 'pl_n16_a3', title: '裂山 · 第三幕 · 心不可裂', scen
       { text: '「我背一段，你背一段。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(2); return ['一块裂岩，两个活人，一段一段往崖顶挪。到了顶，他把你和岩一起放下，仰天大笑。\n「这一路背的不是山——是并肩！」（感悟 +4，气运 +2）']; }
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他扛起裂岩一口气登顶，把岩立在礼台上。第二年春天，岩缝里真的开出一丛不知名的花。\n他逢人便讲：看，缝里长出来的。（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['他两手空空登了顶。长老皱眉，他却拜得坦荡：「弟子今日背的东西，秤不出斤两。」\n满谷长老竟无人再问。（感悟 +5）'];
+      if (v === 'c') { Cultivate.addInsight(p, 4, false); KarmaSys.addFortune(2); return ['一块裂岩，两个活人，一段一段往崖顶挪。到了顶，他把你和岩一起放下，仰天大笑。\n「这一路背的不是山——是并肩！」（感悟 +4，气运 +2）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['他扛起裂岩一口气登顶，把岩立在礼台上。第二年春天，岩缝里真的开出一丛不知名的花。\n他逢人便讲：看，缝里长出来的。（感悟 +4）']; }
+      Cultivate.addInsight(p, 5, false); return ['他两手空空登了顶。长老皱眉，他却拜得坦荡：「弟子今日背的东西，秤不出斤两。」\n满谷长老竟无人再问。（感悟 +5）'];
     } },
   ] },
 
@@ -3015,9 +3033,9 @@ pl_n18_a1: { id: 'pl_n18_a1', title: '书剑 · 第一幕 · 批注里的剑', s
       { text: '「把批注誊一份给我。你的文章，我读定了。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他执笔的手稳了：「……知己。」\n那一夜藏经阁的灯亮到天明，批注又添了七条。（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); Bag.addItem('tal_pozhen', 1); return ['三招拆完，他输了，笑得却极畅快：「纸上千言，不如手上一败！」\n他回赠你一枚亲手画的破阵符：「败仗送你，礼轻文重。」（感悟 +3，破阵符 ×1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他郑重其事誊了一份，卷尾题字：「以书会友，以剑证心。」\n（感悟 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['他执笔的手稳了：「……知己。」\n那一夜藏经阁的灯亮到天明，批注又添了七条。（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); Bag.addItem('tal_pozhen', 1); return ['三招拆完，他输了，笑得却极畅快：「纸上千言，不如手上一败！」\n他回赠你一枚亲手画的破阵符：「败仗送你，礼轻文重。」（感悟 +3，破阵符 ×1）']; }
+      Cultivate.addInsight(p, 3, false); return ['他郑重其事誊了一份，卷尾题字：「以书会友，以剑证心。」\n（感悟 +3）'];
     } },
   ] },
 pl_n18_a2: { id: 'pl_n18_a2', title: '书剑 · 第二幕 · 焚稿', scenes: [
@@ -3029,9 +3047,9 @@ pl_n18_a2: { id: 'pl_n18_a2', title: '书剑 · 第二幕 · 焚稿', scenes: [
       { text: '「一页页拆开：对的那几式留着，错的烧掉。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他把书投进火里，双手合十拜了三拜。\n三日后，门中弟子传阅起一册没有书名的批注——只讲剑理，不题来历。书死了，文脉没死。（感悟 +4）']; }
-      if (v === 'b') { KarmaSys.addFortune(4); p.insight = Math.min(100, (p.insight || 0) + 5); return ['他震动了：「……你知道这意味着什么吗？」\n你们一起受了门规戒罚。抄没的剑典封入库房，他受罚回来第一句话是：「值得。」（气运 +4，感悟 +5）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); Bag.addStones(200); return ['拆书那天他手一直在抖。留下的几页被他重新装订成册，题名《归鸿残卷》。\n「烧掉的是错，留下的是人。」（感悟 +3，灵石 +200）'];
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['他把书投进火里，双手合十拜了三拜。\n三日后，门中弟子传阅起一册没有书名的批注——只讲剑理，不题来历。书死了，文脉没死。（感悟 +4）']; }
+      if (v === 'b') { KarmaSys.addFortune(4); Cultivate.addInsight(p, 5, false); return ['他震动了：「……你知道这意味着什么吗？」\n你们一起受了门规戒罚。抄没的剑典封入库房，他受罚回来第一句话是：「值得。」（气运 +4，感悟 +5）']; }
+      Cultivate.addInsight(p, 3, false); Bag.addStones(200); return ['拆书那天他手一直在抖。留下的几页被他重新装订成册，题名《归鸿残卷》。\n「烧掉的是错，留下的是人。」（感悟 +3，灵石 +200）'];
     } },
   ] },
 pl_n18_a3: { id: 'pl_n18_a3', title: '书剑 · 第三幕 · 文脉剑脉', scenes: [
@@ -3044,9 +3062,9 @@ pl_n18_a3: { id: 'pl_n18_a3', title: '书剑 · 第三幕 · 文脉剑脉', scen
       { text: '把你的剑借他一程：「书剑同行，路上壮胆。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 6); return ['他深深一揖，起身时眼眶微红：「有此一诺，笔下有神。」\n多年后《剑心笺注》风行修界，卷首只题两个字：信人。（气运 +3，感悟 +6）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 5); Bag.addItem('m_gupian', 1); return ['他怔了怔，随即释然大笑：「残卷好啊——残卷才轮得到后来人提笔！」\n他把随身的剑穗解下来赠你，权当谢礼。（感悟 +5，碎片 ×1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['他捧着你的剑，郑重还了个剑宗的礼。半年后剑还回来，剑柄上多了一圈新缠的书绳。\n「借剑一程，记剑一生。」（感悟 +5）'];
+      if (v === 'a') { KarmaSys.addFortune(3); Cultivate.addInsight(p, 6, false); return ['他深深一揖，起身时眼眶微红：「有此一诺，笔下有神。」\n多年后《剑心笺注》风行修界，卷首只题两个字：信人。（气运 +3，感悟 +6）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 5, false); Bag.addItem('m_gupian', 1); return ['他怔了怔，随即释然大笑：「残卷好啊——残卷才轮得到后来人提笔！」\n他把随身的剑穗解下来赠你，权当谢礼。（感悟 +5，碎片 ×1）']; }
+      Cultivate.addInsight(p, 5, false); return ['他捧着你的剑，郑重还了个剑宗的礼。半年后剑还回来，剑柄上多了一圈新缠的书绳。\n「借剑一程，记剑一生。」（感悟 +5）'];
     } },
   ] },
 
@@ -3061,9 +3079,9 @@ pl_n19_a1: { id: 'pl_n19_a1', title: '成色 · 第一幕 · 十成成色', scen
       { text: '「赝品也费了人心思——退回去，附一句实话。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他一拍案：「好！秤歪一次，后头就次次歪。」\n他当着大客户的面认了赔。客户拂袖而去，他却像卸下了千斤担。（感悟 +4）']; }
-      if (v === 'c') { KarmaSys.addFortune(2); p.insight = Math.min(100, (p.insight || 0) + 3); return ['他提笔写了句实话附在退货单上：「货假，人心不可假。」\n半月后那上家竟登门致歉——世上还是实诚人经得起处。（气运 +2，感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['「烧火？」他咀嚼着这两个字，「对，火候到了，人自己会露成色。」\n他把玉瓶锁进了柜底，说是留着「烧火」。（感悟 +3）'];
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['他一拍案：「好！秤歪一次，后头就次次歪。」\n他当着大客户的面认了赔。客户拂袖而去，他却像卸下了千斤担。（感悟 +4）']; }
+      if (v === 'c') { KarmaSys.addFortune(2); Cultivate.addInsight(p, 3, false); return ['他提笔写了句实话附在退货单上：「货假，人心不可假。」\n半月后那上家竟登门致歉——世上还是实诚人经得起处。（气运 +2，感悟 +3）']; }
+      Cultivate.addInsight(p, 3, false); return ['「烧火？」他咀嚼着这两个字，「对，火候到了，人自己会露成色。」\n他把玉瓶锁进了柜底，说是留着「烧火」。（感悟 +3）'];
     } },
   ] },
 pl_n19_a2: { id: 'pl_n19_a2', title: '成色 · 第二幕 · 亏一单', scenes: [
@@ -3076,9 +3094,9 @@ pl_n19_a2: { id: 'pl_n19_a2', title: '成色 · 第二幕 · 亏一单', scenes:
       { text: '「我入一半。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 3); Bag.spendStones(Math.round(200 * GameData.stoneEco(Math.min(4, p.realmIdx)))); return ['他愣住，随即红了眼眶：「你——罢了！这一单有你一半，天塌了也算两头扛！」\n你入的股钱一分没回来。可从那天起，你在坊市办事，处处有人肯让三分。（感悟 +3）']; }
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他拨算盘的手停了：「……对。守约的名声传开，下回人家有紧俏货，头一个想到我。」\n他照约收完了货。次年行情回涨，那批灵材成了商会最厚的一笔。（感悟 +4）']; }
-      KarmaSys.addFortune(2); p.insight = Math.min(100, (p.insight || 0) + 3); return ['「招牌的本钱——」他咀嚼着，把这句话写进了账本扉页。\n那一单他赔得干净利落。坊市里从此多了一句行话：金算盘的秤，压不弯。（气运 +2，感悟 +3）'];
+      if (v === 'c') { Cultivate.addInsight(p, 3, false); Bag.spendStones(Math.round(200 * GameData.stoneEco(Math.min(4, p.realmIdx)))); return ['他愣住，随即红了眼眶：「你——罢了！这一单有你一半，天塌了也算两头扛！」\n你入的股钱一分没回来。可从那天起，你在坊市办事，处处有人肯让三分。（感悟 +3）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); return ['他拨算盘的手停了：「……对。守约的名声传开，下回人家有紧俏货，头一个想到我。」\n他照约收完了货。次年行情回涨，那批灵材成了商会最厚的一笔。（感悟 +4）']; }
+      KarmaSys.addFortune(2); Cultivate.addInsight(p, 3, false); return ['「招牌的本钱——」他咀嚼着，把这句话写进了账本扉页。\n那一单他赔得干净利落。坊市里从此多了一句行话：金算盘的秤，压不弯。（气运 +2，感悟 +3）'];
     } },
   ] },
 pl_n19_a3: { id: 'pl_n19_a3', title: '成色 · 第三幕 · 人比货贵', scenes: [
@@ -3091,9 +3109,9 @@ pl_n19_a3: { id: 'pl_n19_a3', title: '成色 · 第三幕 · 人比货贵', scen
       { text: '「再加一条：赝品明说，价钱照公道。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'c') { KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 5); return ['他一拍桌子，面汤都跳了起来：「妙！第四条我再加半句——退货不问缘由！」\n四条规矩钉上墙那天，坊市里不知道多少人偷偷叫好。（气运 +3，感悟 +5）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 5); Bag.addItem('pill_peiyuan', 1); return ['他大笑：「傻就傻！傻药才治得了商会百年的精明病。」\n他把培元丹推给你：「大管事谢礼。别推——推就是看不起我这碗阳春面。」（感悟 +5，培元丹 ×1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['「活招牌……」他把这三个字咂摸了一遍，郑重记下。\n多年后商会果然立稳了这三条，坊市老人说：规矩是花千树立的，话是你说的。（感悟 +4）'];
+      if (v === 'c') { KarmaSys.addFortune(3); Cultivate.addInsight(p, 5, false); return ['他一拍桌子，面汤都跳了起来：「妙！第四条我再加半句——退货不问缘由！」\n四条规矩钉上墙那天，坊市里不知道多少人偷偷叫好。（气运 +3，感悟 +5）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 5, false); Bag.addItem('pill_peiyuan', 1); return ['他大笑：「傻就傻！傻药才治得了商会百年的精明病。」\n他把培元丹推给你：「大管事谢礼。别推——推就是看不起我这碗阳春面。」（感悟 +5，培元丹 ×1）']; }
+      Cultivate.addInsight(p, 4, false); return ['「活招牌……」他把这三个字咂摸了一遍，郑重记下。\n多年后商会果然立稳了这三条，坊市老人说：规矩是花千树立的，话是你说的。（感悟 +4）'];
     } },
     { t: 'narr', text: '两碗面见了底。\n他把碗一推：「成行了吧——人比货贵，面比席香。」\n那天的阳春面，是你此生吃过最贵的一顿。' },
   ] },
@@ -3109,9 +3127,9 @@ pl_n20_a1: { id: 'pl_n20_a1', title: '顽石 · 第一幕 · 认死理', scenes:
       { text: '「守碑不如问碑：拜三拜，问问师祖。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['你们借来拓印的工具，折腾了整整三日。碑底剥落的苔层下，拓出四个残字：「磐石……不移」。\n他捧着拓片看了半宿，忽然抹了把脸：「俺守对了。」（感悟 +4）']; }
-      if (v === 'a') { KarmaSys.addFortune(2); p.insight = Math.min(100, (p.insight || 0) + 3); return ['他咧开嘴笑，像块晒暖的石头：「对头！死理认到底，就是活道理！」\n他硬塞给你一张新编的草垫：「俺自己编的，坐得舒服。」（气运 +2，感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他真拜了三拜，拜完一拍大腿：「问得对！碑不说话，可俺心里踏实了——守着，就是答。」\n（感悟 +3）'];
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['你们借来拓印的工具，折腾了整整三日。碑底剥落的苔层下，拓出四个残字：「磐石……不移」。\n他捧着拓片看了半宿，忽然抹了把脸：「俺守对了。」（感悟 +4）']; }
+      if (v === 'a') { KarmaSys.addFortune(2); Cultivate.addInsight(p, 3, false); return ['他咧开嘴笑，像块晒暖的石头：「对头！死理认到底，就是活道理！」\n他硬塞给你一张新编的草垫：「俺自己编的，坐得舒服。」（气运 +2，感悟 +3）']; }
+      Cultivate.addInsight(p, 3, false); return ['他真拜了三拜，拜完一拍大腿：「问得对！碑不说话，可俺心里踏实了——守着，就是答。」\n（感悟 +3）'];
     } },
   ] },
 pl_n20_a2: { id: 'pl_n20_a2', title: '顽石 · 第二幕 · 碑下旧誓', scenes: [
@@ -3124,9 +3142,9 @@ pl_n20_a2: { id: 'pl_n20_a2', title: '顽石 · 第二幕 · 碑下旧誓', scen
       { text: '「抄一份入谷史，原本放回碑座重埋。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(2); return ['手记里只有一句话：「磐石之谷，人心为基。碑是死的，人是活的。」\n念完，满谷寂静。他朝着碑座方向，结结实实磕了一个头。（感悟 +4，气运 +2）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); Bag.addItem('m_xuantie', 5); return ['他把灵石全数入了谷库，手记却抱着不肯撒手。\n「四十年……总算听着师祖说话了。」他回赠你一把玄铁，说是匣底的压匣石。（感悟 +4，玄铁矿 ×5）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['他挑了第三条：「师祖的理，让后人接着守。」\n新界碑立起那天，谷里弟子一人添了一块基石——碑比从前高了一丈。（感悟 +5）'];
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); KarmaSys.addFortune(2); return ['手记里只有一句话：「磐石之谷，人心为基。碑是死的，人是活的。」\n念完，满谷寂静。他朝着碑座方向，结结实实磕了一个头。（感悟 +4，气运 +2）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); Bag.addItem('m_xuantie', 5); return ['他把灵石全数入了谷库，手记却抱着不肯撒手。\n「四十年……总算听着师祖说话了。」他回赠你一把玄铁，说是匣底的压匣石。（感悟 +4，玄铁矿 ×5）']; }
+      Cultivate.addInsight(p, 5, false); return ['他挑了第三条：「师祖的理，让后人接着守。」\n新界碑立起那天，谷里弟子一人添了一块基石——碑比从前高了一丈。（感悟 +5）'];
     } },
   ] },
 pl_n20_a3: { id: 'pl_n20_a3', title: '顽石 · 第三幕 · 顽石点头', scenes: [
@@ -3139,9 +3157,9 @@ pl_n20_a3: { id: 'pl_n20_a3', title: '顽石 · 第三幕 · 顽石点头', scen
       { text: '「你只管认，我来讲理。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他把当年错认的三块石头全搬了出来，讲得孩子们前仰后合。\n「错认不怕，」他总结得笨拙又郑重，「就怕不敢再认。」——满堂寂静，这话他要记一辈子。（感悟 +4）']; }
-      if (v === 'c') { KarmaSys.addFortune(2); p.insight = Math.min(100, (p.insight || 0) + 4); return ['一人讲理，一人示物，竟成了谷里最受欢迎的一课。\n课后他非要谢你，把攒了多年的灵石硬塞一半给你。（气运 +2，感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['孩子们一拥而上摸石头。有个女娃忽然指着一块喊：「这块烫手！」——底下真是一条小灵脉。\n他愣了半天，忽然老泪纵横：「石头点头了……石头会点头啊！」（感悟 +5）'];
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['他把当年错认的三块石头全搬了出来，讲得孩子们前仰后合。\n「错认不怕，」他总结得笨拙又郑重，「就怕不敢再认。」——满堂寂静，这话他要记一辈子。（感悟 +4）']; }
+      if (v === 'c') { KarmaSys.addFortune(2); Cultivate.addInsight(p, 4, false); return ['一人讲理，一人示物，竟成了谷里最受欢迎的一课。\n课后他非要谢你，把攒了多年的灵石硬塞一半给你。（气运 +2，感悟 +4）']; }
+      Cultivate.addInsight(p, 5, false); return ['孩子们一拥而上摸石头。有个女娃忽然指着一块喊：「这块烫手！」——底下真是一条小灵脉。\n他愣了半天，忽然老泪纵横：「石头点头了……石头会点头啊！」（感悟 +5）'];
     } },
     { t: 'narr', text: '开课之后，谷口那块界碑旁多了一块小木牌，是孩子们的字：\n「石爷爷的课，比石头还结实。」\n顽石真人每回路过，都要装作没看见——再偷偷看一眼。' },
   ] },
@@ -3157,9 +3175,9 @@ pl_n21_a1: { id: 'pl_n21_a1', title: '星数 · 第一幕 · 算不出的一卦'
       { text: '「空白不是算不出——是你不敢往下算。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他执子之手悬在半空，许久，忽然朗声大笑：「对啊——我那年二十岁，答得太快了！」\n三百年心结，一夜松了大半。（感悟 +4）']; }
-      if (v === 'a') { KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 3); return ['他缓缓点头：「走在天数前头……好。」\n他把星图上那处空白描成了一颗虚星：「就当你说的这一颗。」（气运 +3，感悟 +3）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他背影一僵，随即苦笑：「观星老人，怕的从来不是算不出天——是算出了自己不肯认的答案。」\n空白依旧，心却亮了。（感悟 +4）'];
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['他执子之手悬在半空，许久，忽然朗声大笑：「对啊——我那年二十岁，答得太快了！」\n三百年心结，一夜松了大半。（感悟 +4）']; }
+      if (v === 'a') { KarmaSys.addFortune(3); Cultivate.addInsight(p, 3, false); return ['他缓缓点头：「走在天数前头……好。」\n他把星图上那处空白描成了一颗虚星：「就当你说的这一颗。」（气运 +3，感悟 +3）']; }
+      Cultivate.addInsight(p, 4, false); return ['他背影一僵，随即苦笑：「观星老人，怕的从来不是算不出天——是算出了自己不肯认的答案。」\n空白依旧，心却亮了。（感悟 +4）'];
     } },
   ] },
 pl_n21_a2: { id: 'pl_n21_a2', title: '星数 · 第二幕 · 人算', scenes: [
@@ -3172,9 +3190,9 @@ pl_n21_a2: { id: 'pl_n21_a2', title: '星数 · 第二幕 · 人算', scenes: [
       { text: '「星轨由天，人算由人——你定要换十年，我替你把好这十年。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 4); Bag.addItem('m_gupian', 1); return ['百日之间，你夜夜登台记星，一百张星图一日不落。\n他出阵那日，接图的手抖了：「好……好。三百年来，头一回有人替我看星。」（感悟 +4，碎片 ×1）']; }
-      if (v === 'b') { KarmaSys.addFortune(4); p.insight = Math.min(100, (p.insight || 0) + 5); return ['他默许了。两人枯坐百日，出阵时皆形容枯槁，相视一笑。\n「劫轻一半？」他摇头，「情分重一倍。」（气运 +4，感悟 +5）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['他深深看你一眼：「好一个『人算由人』——师父当年要的答案，你替我答出来了。」\n百日之后他出阵，周天阁十年无恙。（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 4, false); Bag.addItem('m_gupian', 1); return ['百日之间，你夜夜登台记星，一百张星图一日不落。\n他出阵那日，接图的手抖了：「好……好。三百年来，头一回有人替我看星。」（感悟 +4，碎片 ×1）']; }
+      if (v === 'b') { KarmaSys.addFortune(4); Cultivate.addInsight(p, 5, false); return ['他默许了。两人枯坐百日，出阵时皆形容枯槁，相视一笑。\n「劫轻一半？」他摇头，「情分重一倍。」（气运 +4，感悟 +5）']; }
+      Cultivate.addInsight(p, 4, false); return ['他深深看你一眼：「好一个『人算由人』——师父当年要的答案，你替我答出来了。」\n百日之后他出阵，周天阁十年无恙。（感悟 +4）'];
     } },
   ] },
 pl_n21_a3: { id: 'pl_n21_a3', title: '星数 · 第三幕 · 留白', scenes: [
@@ -3187,9 +3205,9 @@ pl_n21_a3: { id: 'pl_n21_a3', title: '星数 · 第三幕 · 留白', scenes: [
       { text: '不落。把笔还他——「这一笔，留给三百年后来的人。」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'c') { KarmaSys.addFortune(4); p.insight = Math.min(100, (p.insight || 0) + 6); return ['他接过笔，久久无言，最后郑重收起：「留白留得最好——原来这才是师父当年那句『改不得』的真意。」\n星图留白，气数自长。（气运 +4，感悟 +6）']; }
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 5); Bag.addItem('m_gupian', 1); return ['新星落定，光华隐隐。他抚掌长笑：「好！三百年的空白，等的就是这一笔！」\n他赠你一枚上古碎片：「星图有你，此台有你。」（感悟 +5，碎片 ×1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['星点落在观星台的位置。他望着那一小点墨，忽然眼眶微热：「原来在星图里，我也占一处天。」\n（感悟 +5）'];
+      if (v === 'c') { KarmaSys.addFortune(4); Cultivate.addInsight(p, 6, false); return ['他接过笔，久久无言，最后郑重收起：「留白留得最好——原来这才是师父当年那句『改不得』的真意。」\n星图留白，气数自长。（气运 +4，感悟 +6）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 5, false); Bag.addItem('m_gupian', 1); return ['新星落定，光华隐隐。他抚掌长笑：「好！三百年的空白，等的就是这一笔！」\n他赠你一枚上古碎片：「星图有你，此台有你。」（感悟 +5，碎片 ×1）']; }
+      Cultivate.addInsight(p, 5, false); return ['星点落在观星台的位置。他望着那一小点墨，忽然眼眶微热：「原来在星图里，我也占一处天。」\n（感悟 +5）'];
     } },
     { t: 'narr', text: '新图挂上了观星台的正壁。\n空白比旧图多了一处——他亲手新留的。边上题着一行小字：\n「星数可算，人心留白。」' },
   ] },
@@ -3211,9 +3229,9 @@ pl_n10_a2: { id: 'pl_n10_a2', title: '百年一阵 · 第二幕 · 阵失其人'
       { text: '敬他一碗酒，什么都别说', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 6); return ['他怔了很久，眼眶微红：「补上……对啊。阵转一日，他便守一日。」\n「老夫竟为一个『舍不得』，误了师弟一百年的守阵之功。」（感悟 +6）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 5); KarmaSys.addFortune(2); return ['「碑……」他望着那个空臼，长长一揖，「也好。就当老夫每日来上香。」（感悟 +5，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['你把酒洒在阵眼前。他看着酒痕渗进石臼，忽然老泪纵横。\n「他最爱喝这个……」（感悟 +5）'];
+      if (v === 'a') { Cultivate.addInsight(p, 6, false); return ['他怔了很久，眼眶微红：「补上……对啊。阵转一日，他便守一日。」\n「老夫竟为一个『舍不得』，误了师弟一百年的守阵之功。」（感悟 +6）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 5, false); KarmaSys.addFortune(2); return ['「碑……」他望着那个空臼，长长一揖，「也好。就当老夫每日来上香。」（感悟 +5，气运 +2）']; }
+      Cultivate.addInsight(p, 5, false); return ['你把酒洒在阵眼前。他看着酒痕渗进石臼，忽然老泪纵横。\n「他最爱喝这个……」（感悟 +5）'];
     } },
   ] },
 pl_n10_a3: { id: 'pl_n10_a3', title: '百年一阵 · 第三幕 · 落子', scenes: [
@@ -3225,9 +3243,9 @@ pl_n10_a3: { id: 'pl_n10_a3', title: '百年一阵 · 第三幕 · 落子', scen
       { text: '「等您百岁，咱们一起给这阵挪个家」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 7); return ['他大笑三声，笑出了眼泪：「好！好一个阵在人在！」\n百年阵光冲霄而起，山谷夜如白昼。（感悟 +7）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 7); KarmaSys.addFortune(2); return ['「去救人……」他喃喃重复，欣慰之色溢于言表，「师弟若在，也必说这句话。」（感悟 +7，气运 +2）']; }
-      KarmaSys.addFortune(3); p.insight = Math.min(100, (p.insight || 0) + 6); return ['他愣了愣，忽而笑骂：「你这小子——倒是把老夫的寿数也算进阵里了！」\n笑声里，眼角的泪没掉下来。（感悟 +6，气运 +3）'];
+      if (v === 'a') { Cultivate.addInsight(p, 7, false); return ['他大笑三声，笑出了眼泪：「好！好一个阵在人在！」\n百年阵光冲霄而起，山谷夜如白昼。（感悟 +7）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 7, false); KarmaSys.addFortune(2); return ['「去救人……」他喃喃重复，欣慰之色溢于言表，「师弟若在，也必说这句话。」（感悟 +7，气运 +2）']; }
+      KarmaSys.addFortune(3); Cultivate.addInsight(p, 6, false); return ['他愣了愣，忽而笑骂：「你这小子——倒是把老夫的寿数也算进阵里了！」\n笑声里，眼角的泪没掉下来。（感悟 +6，气运 +3）'];
     } },
     { t: 'narr', text: '下山时，整面山谷的阵光在你身后次第亮起。\n那不是阵在送你——\n是两个人，一百年的心愿，在为你照路。' },
   ] },
@@ -3242,9 +3260,9 @@ pl_n12_a1: { id: 'pl_n12_a1', title: '偷来的名字 · 第一幕 · 名帖', s
       { text: '把自己名字写在他帖背面：「凑一对」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他盯着帖背你的名字看了半晌，忽然笑了，笑得有点酸：「……你这人，专往人心里最软的地方递东西。」\n帖他收了，贴身收的。（感悟 +4）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); return ['他脸上的笑没了，眼神冷下来：「问价钱可以，问来历——加钱。」\n但他没走。坐回来时，字斟句酌：「改日。改日说。」（感悟 +4）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(1); return ['「谢了。」他低声说。声音很轻，不像是谢这句。（感悟 +3，气运 +1）'];
+      if (v === 'c') { Cultivate.addInsight(p, 4, false); return ['他盯着帖背你的名字看了半晌，忽然笑了，笑得有点酸：「……你这人，专往人心里最软的地方递东西。」\n帖他收了，贴身收的。（感悟 +4）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); return ['他脸上的笑没了，眼神冷下来：「问价钱可以，问来历——加钱。」\n但他没走。坐回来时，字斟句酌：「改日。改日说。」（感悟 +4）']; }
+      Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(1); return ['「谢了。」他低声说。声音很轻，不像是谢这句。（感悟 +3，气运 +1）'];
     } },
   ] },
 pl_n12_a2: { id: 'pl_n12_a2', title: '偷来的名字 · 第二幕 · 真名', scenes: [
@@ -3256,9 +3274,9 @@ pl_n12_a2: { id: 'pl_n12_a2', title: '偷来的名字 · 第二幕 · 真名', s
       { text: '「名字烧了可以再起——这回你自己起」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 5); return ['他盯着纸笔很久，最后画了个歪歪扭扭的小人，旁边写：这是我。\n落款处，第一次写了那个真名。（感悟 +5）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 5); KarmaSys.addFortune(2); return ['他愣住：「自己起？我这辈子，偷都偷得顺……自己的东西，反倒不会要了。」\n「那……容我想。想个配得上朋友的。」（感悟 +5，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['「记一次就丢一次。」他摆手，却把你的话听进去了——那晚走时，他回头说了两个字。\n很轻。你假装没听见。（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 5, false); return ['他盯着纸笔很久，最后画了个歪歪扭扭的小人，旁边写：这是我。\n落款处，第一次写了那个真名。（感悟 +5）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 5, false); KarmaSys.addFortune(2); return ['他愣住：「自己起？我这辈子，偷都偷得顺……自己的东西，反倒不会要了。」\n「那……容我想。想个配得上朋友的。」（感悟 +5，气运 +2）']; }
+      Cultivate.addInsight(p, 4, false); return ['「记一次就丢一次。」他摆手，却把你的话听进去了——那晚走时，他回头说了两个字。\n很轻。你假装没听见。（感悟 +4）'];
     } },
   ] },
 pl_n12_a3: { id: 'pl_n12_a3', title: '偷来的名字 · 第三幕 · 新帖', scenes: [
@@ -3270,9 +3288,9 @@ pl_n12_a3: { id: 'pl_n12_a3', title: '偷来的名字 · 第三幕 · 新帖', s
       { text: '「自己起。这回，谁都偷不着」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 7); return ['他喃喃念着：「谢归……归来的归。」\n他当场把名帖补全，笔锋竟稳得不像他。「成。往后再有人问——在下谢归。」（感悟 +7）']; }
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 6); KarmaSys.addFortune(2); return ['「平安……」他咂摸着这两个字，忽然红了眼眶，「大火那晚，我娘最后喊的就是这两个字。」\n名帖落定：谢平安。（感悟 +6，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 6); return ['「自己起……」他握着名帖站了很久，忽然咧嘴一笑：「成。想好了第一个告诉你——只告诉你。」\n（感悟 +6）'];
+      if (v === 'b') { Cultivate.addInsight(p, 7, false); return ['他喃喃念着：「谢归……归来的归。」\n他当场把名帖补全，笔锋竟稳得不像他。「成。往后再有人问——在下谢归。」（感悟 +7）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 6, false); KarmaSys.addFortune(2); return ['「平安……」他咂摸着这两个字，忽然红了眼眶，「大火那晚，我娘最后喊的就是这两个字。」\n名帖落定：谢平安。（感悟 +6，气运 +2）']; }
+      Cultivate.addInsight(p, 6, false); return ['「自己起……」他握着名帖站了很久，忽然咧嘴一笑：「成。想好了第一个告诉你——只告诉你。」\n（感悟 +6）'];
     } },
     { t: 'narr', text: '后来江湖上多了个用本名的盗修。\n手艺没变，可坊市里都传——\n这人偷东西，开始留钱了。' },
   ] },
@@ -3287,9 +3305,9 @@ pl_n14_a1: { id: 'pl_n14_a1', title: '走出影子 · 第一幕 · 哥哥的剑'
       { text: '「先弄清楚：你想用剑护住什么」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['她掰着手指想了半天：「护哥哥？他不用护。护门派？有人护着。」\n最后眼睛一亮：「护我自己玩得开心！」——歪理，但那是她自己的歪理。（感悟 +3）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(1); return ['「最不像哥的一式……」她比划半天，「大概是撒娇撒泼那一剑？门里没人那么使剑！」\n剑走偏锋，从今日始。（感悟 +3，气运 +1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['「练得比哥好再扔了？！」她眼睛瞪圆，随即咧嘴：「好志气！就这么办！」\n抄本她又要了回去——这回是自己想练。（感悟 +3）'];
+      if (v === 'c') { Cultivate.addInsight(p, 3, false); return ['她掰着手指想了半天：「护哥哥？他不用护。护门派？有人护着。」\n最后眼睛一亮：「护我自己玩得开心！」——歪理，但那是她自己的歪理。（感悟 +3）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(1); return ['「最不像哥的一式……」她比划半天，「大概是撒娇撒泼那一剑？门里没人那么使剑！」\n剑走偏锋，从今日始。（感悟 +3，气运 +1）']; }
+      Cultivate.addInsight(p, 3, false); return ['「练得比哥好再扔了？！」她眼睛瞪圆，随即咧嘴：「好志气！就这么办！」\n抄本她又要了回去——这回是自己想练。（感悟 +3）'];
     } },
   ] },
 pl_n14_a2: { id: 'pl_n14_a2', title: '走出影子 · 第二幕 · 走错的路', scenes: [
@@ -3301,9 +3319,9 @@ pl_n14_a2: { id: 'pl_n14_a2', title: '走出影子 · 第二幕 · 走错的路'
       { text: '把一册侠气剑的 rough 稿塞给她：「跪着也能看」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 5); return ['她瞪大眼：「你也罚？！」\n「没罚。就是想跪。」她「噗」地笑出声，眼泪跟着掉下来——笑出的那种。（感悟 +5）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 4); KarmaSys.addFortune(2); return ['次日，沈青崖真去了祠堂，只说了一句话：「我妹的剑，没有辱没青锋。」\n长老脸色变了三变。她出来时，走路带风。（感悟 +4，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['她把册子藏进袖中，冲你挤挤眼。\n三日后她出祠堂，剑谱倒背如流——跪着的时间，一点没白费。（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 5, false); return ['她瞪大眼：「你也罚？！」\n「没罚。就是想跪。」她「噗」地笑出声，眼泪跟着掉下来——笑出的那种。（感悟 +5）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 4, false); KarmaSys.addFortune(2); return ['次日，沈青崖真去了祠堂，只说了一句话：「我妹的剑，没有辱没青锋。」\n长老脸色变了三变。她出来时，走路带风。（感悟 +4，气运 +2）']; }
+      Cultivate.addInsight(p, 4, false); return ['她把册子藏进袖中，冲你挤挤眼。\n三日后她出祠堂，剑谱倒背如流——跪着的时间，一点没白费。（感悟 +4）'];
     } },
   ] },
 pl_n14_a3: { id: 'pl_n14_a3', title: '走出影子 · 第三幕 · 疏影剑', scenes: [
@@ -3316,9 +3334,9 @@ pl_n14_a3: { id: 'pl_n14_a3', title: '走出影子 · 第三幕 · 疏影剑', s
       { text: '「叫《下一个小师妹》——然后让他们再也这么叫不着」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 6); return ['她郑重点头，把剑举过头顶：「那后半套，我要想一辈子——每一式，都是我的。」\n风过处，疏影满场。（感悟 +6）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 5); KarmaSys.addFortune(2); return ['她笑弯了腰：「好名字！等他们再想说这话时——已经追不上了！」\n（感悟 +5，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['「疏影……」她轻轻念自己的名字，像第一次认识它。\n「好。剑随人名，人自己走。」（感悟 +5）'];
+      if (v === 'b') { Cultivate.addInsight(p, 6, false); return ['她郑重点头，把剑举过头顶：「那后半套，我要想一辈子——每一式，都是我的。」\n风过处，疏影满场。（感悟 +6）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 5, false); KarmaSys.addFortune(2); return ['她笑弯了腰：「好名字！等他们再想说这话时——已经追不上了！」\n（感悟 +5，气运 +2）']; }
+      Cultivate.addInsight(p, 5, false); return ['「疏影……」她轻轻念自己的名字，像第一次认识它。\n「好。剑随人名，人自己走。」（感悟 +5）'];
     } },
     { t: 'narr', text: '后来宗门剑碑上，多了一行新刻的小字：\n疏影剑，创剑者沈疏影。\n不是「沈青崖之妹」——是沈疏影。' },
   ] },
@@ -3333,9 +3351,9 @@ pl_n15_a1: { id: 'pl_n15_a1', title: '三条消息一条命 · 第一幕 · 免�
       { text: '掏三枚灵石按在桌上：「规矩不能破」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 3); return ['他愣了一下，随即咧嘴：「成，互相的。」\n那晚你们都没走夜路。后来才知道，那晚夜路上真出了事。（感悟 +3）']; }
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 3); KarmaSys.addFortune(1); return ['他盯着那三枚灵石看了半天，收了，声音低了三分：「……这条来路，改日酒里说。」（感悟 +3，气运 +1）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 3); return ['他犹豫再三，吐了半句：「有人在收购买消息的人……」话没说完就摆头，「算了算了，你知晓小心便好。」（感悟 +3）'];
+      if (v === 'b') { Cultivate.addInsight(p, 3, false); return ['他愣了一下，随即咧嘴：「成，互相的。」\n那晚你们都没走夜路。后来才知道，那晚夜路上真出了事。（感悟 +3）']; }
+      if (v === 'c') { Cultivate.addInsight(p, 3, false); KarmaSys.addFortune(1); return ['他盯着那三枚灵石看了半天，收了，声音低了三分：「……这条来路，改日酒里说。」（感悟 +3，气运 +1）']; }
+      Cultivate.addInsight(p, 3, false); return ['他犹豫再三，吐了半句：「有人在收购买消息的人……」话没说完就摆头，「算了算了，你知晓小心便好。」（感悟 +3）'];
     } },
   ] },
 pl_n15_a2: { id: 'pl_n15_a2', title: '三条消息一条命 · 第二幕 · 买来的死期', scenes: [
@@ -3347,9 +3365,9 @@ pl_n15_a2: { id: 'pl_n15_a2', title: '三条消息一条命 · 第二幕 · 买�
       { text: '「消息我记。命你自己给我好好留着」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 5); return ['他怔了怔，眼眶忽然热了：「作废……对啊，消息也能作废的。」\n那晚他喝到大醉，笑着哭，哭着笑。（感悟 +5）']; }
-      if (v === 'b') { p.insight = Math.min(100, (p.insight || 0) + 5); KarmaSys.addFortune(2); return ['「提前找他？」他一拍桌子：「对啊！我干这行的，天天替人打听仇家——怎么忘了自己也能打听！」\n（感悟 +5，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 4); return ['「留着……」他喃喃道，把那页天机折好，郑重放进你手里，「那这条命，就先寄存在你这。」（感悟 +4）'];
+      if (v === 'a') { Cultivate.addInsight(p, 5, false); return ['他怔了怔，眼眶忽然热了：「作废……对啊，消息也能作废的。」\n那晚他喝到大醉，笑着哭，哭着笑。（感悟 +5）']; }
+      if (v === 'b') { Cultivate.addInsight(p, 5, false); KarmaSys.addFortune(2); return ['「提前找他？」他一拍桌子：「对啊！我干这行的，天天替人打听仇家——怎么忘了自己也能打听！」\n（感悟 +5，气运 +2）']; }
+      Cultivate.addInsight(p, 4, false); return ['「留着……」他喃喃道，把那页天机折好，郑重放进你手里，「那这条命，就先寄存在你这。」（感悟 +4）'];
     } },
   ] },
 pl_n15_a3: { id: 'pl_n15_a3', title: '三条消息一条命 · 第三幕 · 改命的消息', scenes: [
@@ -3362,9 +3380,9 @@ pl_n15_a3: { id: 'pl_n15_a3', title: '三条消息一条命 · 第三幕 · 改�
       { text: '「记一条新的：今日之后，命是自己的」', value: 'c' },
     ], pick: (v) => {
       const p = Game.player;
-      if (v === 'c') { p.insight = Math.min(100, (p.insight || 0) + 6); return ['「命是自己的……」他一遍遍念着，用力点头，「好！这条，我拿命记着！」\n渡口的灯亮起来，照着他崭新的脸。（感悟 +6）']; }
-      if (v === 'a') { p.insight = Math.min(100, (p.insight || 0) + 6); KarmaSys.addFortune(2); return ['「改命了——哈哈，改命了！」他冲着河面喊了三遍，惊起一滩鸥鹭。（感悟 +6，气运 +2）']; }
-      p.insight = Math.min(100, (p.insight || 0) + 5); return ['「只报喜？」他苦笑，「干我们这行，报喜不报忧会饿死……」\n顿了顿，他又笑，「但你说的，我记下了。」（感悟 +5）'];
+      if (v === 'c') { Cultivate.addInsight(p, 6, false); return ['「命是自己的……」他一遍遍念着，用力点头，「好！这条，我拿命记着！」\n渡口的灯亮起来，照着他崭新的脸。（感悟 +6）']; }
+      if (v === 'a') { Cultivate.addInsight(p, 6, false); KarmaSys.addFortune(2); return ['「改命了——哈哈，改命了！」他冲着河面喊了三遍，惊起一滩鸥鹭。（感悟 +6，气运 +2）']; }
+      Cultivate.addInsight(p, 5, false); return ['「只报喜？」他苦笑，「干我们这行，报喜不报忧会饿死……」\n顿了顿，他又笑，「但你说的，我记下了。」（感悟 +5）'];
     } },
     { t: 'narr', text: '后来坊市的人发现，万事通的消息摊上多了块小木牌：\n「天机可改，命由己书。」\n落款没有名字，只画了个笑脸。' },
   ] },

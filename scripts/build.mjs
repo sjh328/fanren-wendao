@@ -4,7 +4,7 @@
 //   2. 拼接产物先过 node --check 语法校验，通过才允许写盘
 //   3. 覆盖前自动备份到 attic/game.js.pre-build
 // 开发流程：编辑 js/ 下模块 → node scripts/build.mjs → 刷新页面（index.html 引用不变）
-import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync, rmSync, readdirSync, statSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,6 +32,25 @@ if (!FORCE) {
 const missing = ORDER.filter(f => !existsSync(join(ROOT, f)));
 if (missing.length) {
   console.error('✗ 构建中止：以下模块缺失（绝不静默跳过）：\n  ' + missing.join('\n  '));
+  process.exit(1);
+}
+
+// ---- 1.5) v37（E259）反向校验：js/** 下存在而 modules.json 未登记的孤儿模块 → 拒建 ----
+// （正向「缺失即失败」之外的另一半：新增模块忘登记 = 拼接静默缺章，页面行为凭空少一块）
+const seen = new Set(ORDER);
+const orphans = [];
+(function walk(d) {
+  for (const f of readdirSync(d)) {
+    const p = join(d, f);
+    if (statSync(p).isDirectory()) walk(p);
+    else if (f.endsWith('.js')) {
+      const rel = p.slice(ROOT.length + 1).replace(/\\/g, '/');
+      if (!seen.has(rel)) orphans.push(rel);
+    }
+  }
+})(join(ROOT, 'js'));
+if (orphans.length) {
+  console.error('✗ 构建中止：以下 js 模块未登记进 scripts/modules.json（拼接会静默缺章）：\n  ' + orphans.join('\n  '));
   process.exit(1);
 }
 

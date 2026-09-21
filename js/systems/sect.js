@@ -67,33 +67,31 @@ const SectSys = {
   },
   genTask(p) {
     const realm = p.realmIdx;
-    // v30 补遗：差事五式——历练（任意地图探索）与问签（黄历求签）两类真钩子补齐每宗五条
-    // v32（F4）差事按宗门特色加权——剑宗多讨伐、丹/商多采集、磐岩多修行、周天多历练问签
-    const SECT_W = {
-      qingyun: { kill: 3, collect: 1, cult: 1, explore: 2, sign: 1 },
-      danxia:  { kill: 1, collect: 3, cult: 2, explore: 1, sign: 1 },
-      wanbao:  { kill: 1, collect: 3, cult: 1, explore: 2, sign: 2 },
-      panyan:  { kill: 2, collect: 2, cult: 3, explore: 1, sign: 1 },
-      zhoutian:{ kill: 1, collect: 1, cult: 2, explore: 3, sign: 2 },
+    // v37（E242）：差事/悬赏池互斥（轻方案）——宗门差事只余修行/历练/问签三门（门中供养，贡献向），
+    // 讨伐与采集归悬赏板（江湖赏格，灵石向+连锁），两板同构委托的重复感自此消除
+    const SECT_W = {   // v32（F4）按宗门特色加权；v37（E242）删 kill/collect 键——讨伐/采集不再自宗门生成，不留死配置
+      qingyun: { cult: 1, explore: 2, sign: 1 },
+      danxia:  { cult: 2, explore: 1, sign: 1 },
+      wanbao:  { cult: 1, explore: 2, sign: 2 },
+      panyan:  { cult: 3, explore: 1, sign: 1 },
+      zhoutian:{ cult: 2, explore: 3, sign: 2 },
     };
-    const type = Utils.pickWeighted((p.sect && SECT_W[p.sect.id]) || { kill: 1, collect: 1, cult: 1, explore: 1, sign: 1 });
+    // v37（E242）：生死状升格为宗门独占生成支（派系成员才可掷；战时概率大涨）——
+    // 原 wrapDanger 在普通 kill 任务上二次掷点，普通 kill 支一删它即断线；
+    // 掷点（chance(war?55:26)）与 elites 选取自 wrapDanger 原样前置搬入
+    if (p.sect && p.sect.faction && Utils.chance(WorldSys.warActive(p) ? 55 : 26)) {
+      const rp = realm * 4 + p.layer;
+      const elites = Object.entries(GameData.MONSTERS)
+        .filter(([, m]) => m.elite && m.power >= rp - 1 && m.power <= rp + 4).map(([id]) => id);
+      if (elites.length) {
+        const target = Utils.pick(elites);
+        return { type: 'kill', target, need: 1, progress: 0, danger: true, name: '高危 · 生死状', desc: `讨伐 ${GameData.MONSTERS[target].name}（敌对派系借刀杀人，赏格翻倍）` };
+      }
+    }
+    const type = Utils.pickWeighted((p.sect && SECT_W[p.sect.id]) || { cult: 1, explore: 1, sign: 1 });
     // v30 宗门特色差事：本宗名目替代通用名目（35%），机制不变、文案见宗门气象
     const flav = p.sect && GameData.SECT_QUEST_FLAVOR && GameData.SECT_QUEST_FLAVOR[p.sect.id];
     const flavorName = (flav && Utils.chance(35)) ? flav[type] : null;
-    if (type === 'kill') {
-      const pool = this.taskMonsters(realm * 4 + p.layer);
-      if (pool.length) {
-        const target = Utils.pick(pool);
-        const need = Utils.rand(3, 5);
-        return { type, target, need, progress: 0, name: flavorName || `讨伐 · ${GameData.MONSTERS[target].name}`, desc: flavorName ? `门中差事 · ${flavorName}：击杀 ${GameData.MONSTERS[target].name} ×${need}` : `击杀 ${GameData.MONSTERS[target].name} ×${need}` };
-      }
-    }
-    if (type === 'collect') {
-      const tier = Math.min(4, Math.floor(realm / 2) + 1);
-      const target = Utils.pick(GameData.matsByTier(tier));
-      const need = Utils.rand(3, 6);
-      return { type, target, need, progress: 0, name: flavorName || `采集 · ${GameData.ITEMS[target].name}`, desc: flavorName ? `门中差事 · ${flavorName}：上交 ${GameData.ITEMS[target].name} ×${need}` : `上交 ${GameData.ITEMS[target].name} ×${need}` };
-    }
     const need = Math.round(120 * GameData.eco(realm));
     if (type === 'explore') {
       const need2 = Utils.rand(3, 5);
@@ -115,9 +113,13 @@ const SectSys = {
   },
   /** 生成任务并按派系立场折算高危生死状 */
   newTask(p) { return this.wrapDanger(this.genTask(p), p); },
-  /** 敌对派系借刀杀人：派系成员偶接高危任务（战时概率大涨）；force 用于入派当日立威（无视原任务类型） */
+  /** 敌对派系借刀杀人：派系成员偶接高危任务（战时概率大涨）；force 用于入派当日立威（无视原任务类型）。
+   *  v37（E242）：普通 kill/collect 生成支已删——普通任务（cult/explore/sign）永非 kill，在此自然短路；
+   *  生死状改由 genTask 独占生成支直出（已带 danger=true，此處不再二次掷点改派目标）。
+   *  force 入派立威路径继续生效。 */
   wrapDanger(t, p, force = false) {
     if (!t || !p.sect || !p.sect.faction) return t;
+    if (t.danger && !force) return t;
     if (!force && (t.type !== 'kill' || !Utils.chance(WorldSys.warActive(p) ? 55 : 26))) return t;
     const rp = p.realmIdx * 4 + p.layer;
     const elites = Object.entries(GameData.MONSTERS)
@@ -137,18 +139,14 @@ const SectSys = {
     Log.add(`你焚香沐浴，正式拜入 <b>${sect.name}</b>！${sect.bonusText}。当前职位：<b>外门弟子</b>。`, 'system');
     Game.afterAction();
   },
-  submit(taskIdx) {
-    const p = Game.player;
-    const t = p.sect.tasks[taskIdx];
-    if (!t || t.type !== 'collect' || t.progress >= t.need) return;
-    const have = Bag.count(t.target);
-    if (have <= 0) { UI.toast('背包中没有所需材料'); return; }
-    const take = Math.min(have, t.need - t.progress);
-    Bag.removeItem(t.target, take);
-    t.progress += take;
-    Log.add(`你向宗门上交 ${GameData.ITEMS[t.target].name} ×${take}。`, 'info');
-    if (t.progress >= t.need) Log.add('任务已可领取奖励！', 'gain');
-    Game.afterAction();
+  /** v37（E242）：collect 提交流随生成支一并删除（submit 全函数移除）——采集悬赏归悬赏板，
+   *  宗门任务不再有上交环节；kill（生死状）经 onKill 推进、claim 领赏，两流皆保留 */
+  /** v37（E242）：差事改制读档播报——存量 collect/普通 kill 任务已在迁移步作废重掷，此处补一条可读日志 */
+  reformNotice(p) {
+    if (p && p.sect && p.sect._reform37) {
+      delete p.sect._reform37;
+      Log.add('门中差事已改制：讨伐与采集归悬赏行商，门中只留修行/历练/问签三门供养' + (p.sect.faction ? '（派系生死状特派照旧）' : '') + '。', 'system');
+    }
   },
   /** v35（E129）：差事领赏每日上限——贡献是货币而非印钞机（cult 类任务一次修炼即满、claim 后即换新
    *  且无限制，配合兑换环节可整日刷贡献）。6 桩/日，跨日重置 */
@@ -226,6 +224,13 @@ const SectSys = {
       return UI2.then(v => { if (v) apply(); });
     }
     const def = GameData.ITEMS[row.item];
+    // v37（E263）：境界门槛拦截——渡劫/太初/元神/造化四丹 minRealm 对齐坊市上架境。
+    // 兑丹卖店套利窗口本就集中在筑基~金丹初（低境卖值/贡献最高 16.7×），门槛即斩断主窗口；
+    // 兑换列表（ui.js）同步置灰显门槛，此处为运行时兜底
+    if (row.minRealm != null && p.realmIdx < row.minRealm) {
+      UI.toast(`此丹非小境界可承——须至${GameData.REALM_NAMES[row.minRealm]}期方可兑换`);
+      return;
+    }
     if (def.type === 'gongfa' && (p.gongfa[row.item] || p.bag[row.item])) { UI.toast('你已修习或已藏有此功法'); return; }   // v29 修瑕：补背包判重
     if (def.type === 'gongfa' && !DaoSys.canLearnGongfa(p, def)) return; // 体修难悟高阶法诀
     if (p.sect.contrib < row.cost) { UI.toast('贡献点不足'); return; }
@@ -413,6 +418,7 @@ const SectSys = {
       if (T.round >= 3) {
         p.flags = p.flags || {};
         p.flags.tourneyChamp = (p.flags.tourneyChamp || 0) + 1;
+        p.rankHonor = (p.rankHonor || 0) + 1;   // v37（E244）：魁首折算天骄榜功勋 +1——排名成为可运营资产
         KarmaSys.addFortune(8, true);
         Log.add('<b>三轮全胜，大比魁首！</b>掌门亲授魁首玉佩，门中扬名——气运 +8。（生涯魁首 ' + p.flags.tourneyChamp + ' 次）', 'realm');
         Story.chron('宗门大比 · 魁首');

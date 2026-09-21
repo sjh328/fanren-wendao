@@ -230,6 +230,7 @@ const Game = {
     this.enterGame();
     Log.clear();
     Log.add(`光阴倒流，你回到了 <b>${Time.label(this.player)}</b> 的这一刻。（读档成功）`, 'system');
+    SectSys.reformNotice(this.player);   // v37（E242）：差事改制读档播报（迁移步作废重掷后的补记）
     UI.renderAll();
     return true;
   },
@@ -243,6 +244,7 @@ const Game = {
     UI.renderAll();
     Save.autoSave();
     Log.add('因果倒卷，时光回流——你回到了引动天劫之前的那一刻。', 'system');
+    SectSys.reformNotice(this.player);   // v37（E242）：差事改制播报（bak 回退路径同样可能带旧任务）
     return true;
   },
 
@@ -272,16 +274,28 @@ const Game = {
     // v30 修瑕：折算剔除聚灵加速（rushDay 只是在线单日增益，曾把整段离线一并放大五成）
     // v34（A4）：效率 0.4→0.6——在线挂机每 0.28s 推 3 日，旧参数下挂夜 8 小时只得 12 有效日，
     // 「回家礼物」薄得近乎羞辱；0.6×120 日后长离线有实感，仍显著低于在线效率，无刷点
-    let offlineExp = 0;
+    let offlineExp = 0, offlineBase = 0, offlineRushBonus = 0;   // v37（E277）：基础/聚灵两段拆账
     if (!p.dead) {   // v35（E196）：原 `p.realmIdx >= 0 &&` 恒真死条件删除（realmIdx 已被 migrate/create 钳制 0..9）
       try {
         const st = Stat.compute(p);
         const rushDayBak = p.rushDay; p.rushDay = null;
         const perRound = Cultivate.baseGain(p) * (1 + st.cultPct / 100);
         p.rushDay = rushDayBak;
-        offlineExp = Math.round(perRound / 3 * 0.6 * realDays);
+        // v37（E277）：聚灵窗口补乘——点燃后关游戏，离线日落在 3 日窗口内的部分按 ×1.5 计
+        //（v30 起整段剔除 rushDay，已付费的窗口日被离线整段烧光）。窗口剩余日 = rushDay+3 − 起始日，
+        // 与离线段取交集；rushMul 为全段加权乘数（窗口日 ×1.5、其余 ×1）。
+        // 跨批契约（B8 E253 门禁锚）：OFFLINE_EFF/rushMul 两个具名常量与可抽取表达式形态勿改
+        const OFFLINE_EFF = 0.6;   // 离线折算效率（v34 A4 定档 0.6，不随本版上调）
+        let rushMul = 1;
+        if (p.rushDay != null) {
+          const rushLeft = Utils.clamp(p.rushDay + 3 - Math.floor(p.day || 0), 0, realDays);
+          if (rushLeft > 0) rushMul = (realDays + 0.5 * rushLeft) / realDays;
+        }
+        offlineExp = Math.round(perRound / 3 * OFFLINE_EFF * rushMul * realDays);
+        offlineBase = Math.round(perRound / 3 * OFFLINE_EFF * realDays);
+        offlineRushBonus = Math.max(0, offlineExp - offlineBase);
         if (offlineExp > 0) Cultivate.addExp(p, offlineExp);
-      } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; }
+      } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; offlineBase = 0; offlineRushBonus = 0; }
     }
     // 时间照常流逝（逐日回放，跨年/寿元/世界线照常结算；寿元尽则照常坐化）
     // v27：逐日补结日更系统（auto 模式——节庆自动从简、灵泉只入账不刷屏）
@@ -302,13 +316,18 @@ const Game = {
     }
     if (springOn && !p.dead) Log.add('【灵泉】离线的日子里，洞府灵泉照常日日涌出灵石，皆已收入储物袋。', 'gain');
     if (offlineExp > 0) {
-      Log.add(`离山的日子你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（按普通修炼六成效率折算，不计闭关加成，共 ${realDays} 日）。`, 'gain');   // v36（E217）：口径如实——闭关流实得约 37% 的落差从暗亏变明示（折算基数维持普通修炼，E217 提案明确不采纳）
+      // v37（E277）：口径引 UI.FACTS 单源拼串；聚灵加护段随补乘明示
+      Log.add(`离山的日子你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（按${UI.FACTS.offlineEff}效率折算，不计闭关加成，共 ${realDays} 日${offlineRushBonus > 0 ? `；聚灵加护 +${Utils.fmtNum(offlineRushBonus)}` : ''}）。`, 'gain');   // v36（E217）：口径如实——闭关流实得落差从暗亏变明示
     }
     // v34（E1）：离线小结——回家一份四行账的「仪式」，收益不再藏在默认折叠的日志红点后
     if (!p.dead && realDays >= 1 && (offlineExp > 0 || aggSnap.spring || aggSnap.disciple || aggSnap.xianVisit)) {
       const rows = [
         [`离线时长`, `${realDays} 日`],
-        ...(offlineExp > 0 ? [[`修行精进`, `<b class="hl">+${Utils.fmtNum(offlineExp)}</b> 修为`]] : []),
+        // v37（E277）：小结拆「基础/聚灵加护」两段——窗口补乘的收益明示
+        ...(offlineExp > 0 ? (offlineRushBonus > 0 ? [
+          [`修行精进（基础）`, `<b class="hl">+${Utils.fmtNum(offlineBase)}</b> 修为`],
+          [`聚灵加护`, `<b class="hl">+${Utils.fmtNum(offlineRushBonus)}</b> 修为`],
+        ] : [[`修行精进`, `<b class="hl">+${Utils.fmtNum(offlineExp)}</b> 修为`]]) : []),
         ...(aggSnap.spring ? [[`灵泉涌出`, `<b class="hl">${Utils.fmtNum(aggSnap.spring)}</b> 灵石`]] : []),
         ...(aggSnap.disciple ? [[`弟子历练`, `缴回灵石 ${Utils.fmtNum(aggSnap.disciple)}`]] : []),
         ...(aggSnap.xianVisit ? [[`仙界访客`, `到访 ${aggSnap.xianVisit} 次`]] : []),
@@ -356,6 +375,10 @@ const Game = {
     Meta.load();    // v6：装载本存档位的成就与图鉴
     AutoCult.abort();
     Save.snapshotAuto();   // v30：滚动快照——本次会话前的 auto 存一份 bak2
+    // v37（E268）：纯挂机长会话兜底——每 10 分钟滚动一次 bak2（注意 setInterval 参数 fn 在前；
+    // 句柄存 Game._snapTimer，exitToStart/删档时清理防多开泄漏）
+    if (this._snapTimer) clearInterval(this._snapTimer);
+    this._snapTimer = setInterval(() => Save.snapshotAuto(), 600000);
     this.computeOfflineProgress();  // v18：离线进度
     // v30 修瑕：离线逐日回放中寿元坐化时，不再闪一下游戏界面再弹回开始界面——坐化结算直接接住
     if (this.player && this.player.dead) { UI.renderStart(); return; }
@@ -363,6 +386,19 @@ const Game = {
     // 本层节点凭空消失只剩撤离（深入进度与门票沉没）。空 choices 且未卡死则重掷本层。
     if (this.player && this.player.dungeon && !this.player.dungeon.stuck && !(this.player.dungeon.choices || []).length) {
       DungeonSys.genChoices(this.player.dungeon);
+    }
+    // v37（E272）：章末演出中断补偿——「章末→下章开篇」连播间隙被中断时，下章开篇永久丢失。
+    // 读档后：当前章的开篇未 seen、且未达境界追认线（realmIdx < supR，追认章可直接看回顾），
+    // 则补播一次开篇（Story.play 只读链，E199 温书守卫防重入副作用；补播后补记 seen 防每次读档重播）
+    if (this.player && !this.player.dead) {
+      const q = this.player.quest = this.player.quest || { ch: 0, side: {} };
+      const def = QuestSys.CHAPTERS[q.ch];
+      const openId = def ? `c${q.ch + 1}_open` : null;
+      if (def && openId && GameData.STORIES[openId] && !Story.isSeen(openId) && this.player.realmIdx < (def.supR || 999)) {
+        Story.markSeen(openId);
+        Story.play(GameData.STORIES[openId], null, true);
+        Log.add('上一场章末演出似曾中断——开篇为你重演一遍（只读温书，不夺抉择）。', 'info');
+      }
     }
     document.getElementById('start-screen').classList.add('hidden');
     document.getElementById('game-screen').classList.remove('hidden');
@@ -374,6 +410,7 @@ const Game = {
   exitToStart() {
     UI.closeOverlays();   // 状态同步：清掉战斗 / 弹窗等覆盖层，避免遮罩滞留
     AutoCult.abort();   // v6
+    if (this._snapTimer) { clearInterval(this._snapTimer); this._snapTimer = null; }   // v37（E268）：滚动快照定时器随会话清理
     if (this.player && !this.player.dead) Save.autoSave(true);
     this.player = null;
     document.getElementById('game-screen').classList.add('hidden');
@@ -429,6 +466,9 @@ const Game = {
     if (p.dead) return;
     p.dead = true;
     Save.write('auto', p);   // 直接写盘：autoSave 会跳过已死亡角色，此处须落盘死亡标记
+    // v37（E238）：坐化演出——入弹窗前冷色全屏异象 + 低回钟磬（规格对齐突破/转世仪式）
+    UI.realmShow('灯火渐熄，天地忽远——尘世的一切，都成了很远的声音。', '#6b7a8f');
+    if (typeof Ambience !== 'undefined') Ambience.sfx('bell');
     Log.add('油尽灯枯，你的道途走到了尽头……', 'loss');
     // v29 天年：坐化不再是一堵墙——可兵解转世（寿满天年额外 +1 印记），就此终了亦可
     // v32 修瑕（E49）：ESC/点遮罩关闭弹窗原回落 undefined → 走「就此终了」毁灭项——
@@ -498,7 +538,10 @@ const Game = {
     'st-load': (d) => { Game.loadFrom(d.slot); },
     'st-delete': async (d) => {
       const ok = await UI.popup({ title: '删除存档', html: '此档一删，仙途尽消，确定吗？', options: [{ text: '删除', value: true }, { text: '取消', value: false }] });
-      if (ok) { Save.remove(d.slot); UI.renderStart(); }
+      if (ok) {
+        if (this._snapTimer) { clearInterval(this._snapTimer); this._snapTimer = null; }   // v37（E268）：删档随会话清理快照定时器
+        Save.remove(d.slot); UI.renderStart();
+      }
     },
     /* --- 标签页 / 背包 --- */
     'act-tab': (d) => {
@@ -585,7 +628,10 @@ const Game = {
     'act-buy': (d) => ShopSys.buy(d.item),
     'act-sell': (d) => ShopSys.sell(d.item, d.qty === 'all'),
     'act-convert': (d) => ShopSys.convert(d.dir),
+    'act-convert-multi': (d) => ShopSys.convertMulti(d.dir, 10),   // v37（E236）：×10 连兑（不足自停）
+    'act-convert-all': () => ShopSys.convertAll(),   // v37（E236）：全兑（低→中→高，零头自留）
     /* --- 宗门 --- */
+    'act-wenjian': () => RankSys.challengeAhead(),   // v37（E244）：天骄榜问剑夺位（日限一次，胜则榜序对调）
     'act-join': async (d) => {
       const sect = GameData.SECTS.find(s => s.id === d.sect);
       const ok = await UI.popup({
@@ -594,9 +640,15 @@ const Game = {
         options: [{ text: '焚香拜入', value: true, primary: true }, { text: '再想想', value: false }],
       });
       if (ok) SectSys.join(d.sect);
+      else {
+        // v37（E237）：拒绝拜入即熄灭散修红点（单键 sectDeclined；后续仍可从宗门页自行拜入）
+        Game.player.flags = Game.player.flags || {};
+        Game.player.flags.sectDeclined = true;
+        UI.toast('江湖路远，散修亦自有散修的活法');
+      }
     },
     'act-task-claim': (d) => SectSys.claim(Number(d.i)),
-    'act-task-submit': (d) => SectSys.submit(Number(d.i)),
+    // v37（E242）：act-task-submit 随宗门 collect 提交流一并删除（采集差事归悬赏板）
     'act-exchange': (d) => SectSys.exchange(Number(d.i)),
     /** v28 联动：宗门听讲一日——贡献 300 兑感悟 +8（日限一次；感悟满溢自动化作修为）
      *  v34（A2）：补 Time.add(1)——文案「听讲一日」此前却零时耗，白占同一天的修炼产出 */
@@ -729,7 +781,8 @@ const Game = {
     /* --- v13 洞府 / 灵兽 --- */
     'act-cave-up': () => CaveSys.upgrade(),
     'act-spirit-rush': () => CaveSys.spiritRush(),   // v20 聚灵加速
-    'act-wudao': () => Cultivate.wuDao(),   // v36（E219）：今日修行卡悟道行内直达（原确认弹窗保留）
+    // v37（E271）：act-wudao 重复键删除（保留修炼页首定义——同一 actions 字面量后键覆盖前键，
+    // 二者实现又完全相同，属「静默自愈」式重复；check-actions 重复键静态检测放 B8 防复发）
     'act-cave-plant': (d) => CaveSys.plant(Number(d.i)),
     'act-cave-harvest': (d) => CaveSys.harvest(Number(d.i)),
     'act-cave-water': (d) => CaveSys.water(Number(d.i)),
@@ -744,6 +797,7 @@ const Game = {
     'act-benming-feed': () => ForgeSys.feedBenming(),
     'act-xinmo': () => XinmoSys.start(),
     'act-beast-feed': (d) => BeastSys.feed(Number(d.uid)),
+    'act-beast-feed-multi': (d) => BeastSys.feedMulti(Number(d.uid)),   // v37（E235）：连喂五枚（不足/十阶自停）
     'act-beast-free': (d) => BeastSys.free(Number(d.uid)),
     /* --- v13 悬赏 / 黑市 --- */
     'act-bounty-submit': (d) => BountySys.submit(Number(d.i)),

@@ -153,7 +153,7 @@ console.log('===== SA 源码静态组 =====');
   {
     const exploreSwap = (() => { const a = explore.indexOf('Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambId)'); const b = explore.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
     const worldSwap = (() => { const a = world.indexOf("Battle.start(null, { enemy: en, weType: 'demon'"); const b = world.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
-    const npcSwap = (() => { const a = npc.indexOf("Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, mode: 'confront', showdown: true"); const b = npc.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
+    const npcSwap = (() => { const a = npc.indexOf("Battle.start(null, { enemy: this.buildEnemy(p, id, fury), npcId: id, mode: 'confront', showdown: true"); const b = npc.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
     const sectSwap = (() => { const s = R('systems/sect.js'); const a = s.indexOf("Battle.start(t.target, { mapName: '宗门生死状'"); const b = s.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
     exploreSwap && worldSwap && npcSwap && sectSwap ? pass('SA25 开战先于 afterAction（E143 节庆竞态）') : fail('SA25 竞态', `${exploreSwap}/${worldSwap}/${npcSwap}/${sectSwap}`);
   }
@@ -214,9 +214,9 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA49 闭关结算报告补仙元行（U5）') : fail('SA49 报告仙元', '');
   cult.includes("document.getElementById('dao-modal') && !document.getElementById('dao-modal').classList.contains('hidden')")
     ? pass('SA50 连续闭关守护链补 dao-modal（E152）') : fail('SA50 守护链', '');
-  cult.includes('p.insight = Math.min(100, (p.insight || 0) + 2);\n    Log.add(`你寻一处灵气充裕之地打坐调息')
+  cult.includes('this.addInsight(p, 2, true);\n    Log.add(`你寻一处灵气充裕之地打坐调息')
     && !cult.includes('gotIns')
-    ? pass('SA51 调息死守卫清理+口径注释（E159）') : fail('SA51 调息', '');
+    ? pass('SA51 调息死守卫清理+口径注释（E159；v37（E264）感悟收口 addInsight regen=true 单源）') : fail('SA51 调息', '');
 
   /* ---- F 沉浸感 ---- */
   ui.includes('_popupPrevFocus') && ui.includes('(btns.find(b => b.classList.contains(\'btn-primary\')) || btns[0] || null)?.focus();')
@@ -231,10 +231,10 @@ console.log('===== SA 源码静态组 =====');
     && ui.includes("layer + 1 >= 3 ? '圆满' : GameData.XIAN_LAYER_NAMES[layer + 1]")
     ? pass('SA56 仙阶晋层播报/按钮层名归位（E146）') : fail('SA56 仙阶播报', '');
   bounty.includes('collectFloor(t) {') && ui.includes('BountySys.collectFloor(t)')
-    ? pass('SA57 收集悬赏预览走单源 ×2 口径（E144）') : fail('SA57 悬赏预览', '');
-  dsign.includes('const broken = streak > 0 && last != null && (today - last > 3);')
+    ? pass('SA57 收集悬赏预览走单源 floor 口径（E144；v37（E266）系数 1.2、floor 不参与连锁乘算）') : fail('SA57 悬赏预览', '');
+  dsign.includes('const broken = streak > 0 && last != null && !(g <= 3 || g % 30 === 0);')
     && dsign.includes('连签计程自今日重新算起')
-    ? pass('SA58 连签断签判定+重置日志（E145）') : fail('SA58 断签', '');
+    ? pass('SA58 连签断签判定+重置日志（E145；v37（E241）断签判定与 30 日豁免同源）') : fail('SA58 断签', '');
   ui.includes('连签已断 · 今日重新计程')
     ? pass('SA59 断签卡标红可见（E188）') : fail('SA59 断签可见', '');
   forge.includes('gupianReady(p) {') && ui.includes('ForgeSys.gupianReady(p)') && guide.includes('ForgeSys.gupianReady(p)')

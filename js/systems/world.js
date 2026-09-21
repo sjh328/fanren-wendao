@@ -101,24 +101,25 @@ const WorldSys = {
         text = `<b>灵气潮汐</b>——天地灵机自行涨落，此后数年修炼事半功倍。`;
       }
     } else if (type === 'preach') {
-      w.preachUntil = y + 10;
-      text = `<b>圣地讲道</b>——道音涤荡神魂，此后十年天下修士<b>悟性倍增</b>。`;
+      // v37（E243）：时代时长重校——讲道 10→3 年（v34 实玩周目 5~6 年，半周目内应见 2~3 个时代轮换）
+      w.preachUntil = y + 3;
+      text = `<b>圣地讲道</b>——道音涤荡神魂，此后三年天下修士<b>悟性倍增</b>。`;
     } else if (type === 'ruins') {
-      w.ruinsUntil = y + 20;
-      text = `<b>上古秘境现世</b>——此后二十年秘宝频现，历练中的<b>宝箱与机缘遍地</b>。`;
+      w.ruinsUntil = y + 5;   // v37（E243）：秘境 20→5 年
+      text = `<b>上古秘境现世</b>——此后五年秘宝频现，历练中的<b>宝箱与机缘遍地</b>。`;
     } else if (type === 'war') {
-      w.warUntil = y + 30;
-      text = `<b>宗门大战</b>——此后三十年宗门悬赏暴涨，坊市<b>物价腾贵</b>。`;   // v33：priceMul 死字段写入删除（由 warActive 实时重算）
+      w.warUntil = y + 6;   // v37（E243）：大战 30→6 年（与灵疫同物价扰动却 30 年 vs 1 年，失衡归位）
+      text = `<b>宗门大战</b>——此后六年宗门悬赏暴涨，坊市<b>物价腾贵</b>。`;   // v33：priceMul 死字段写入删除（由 warActive/rebuildUntil 实时重算）
     } else if (type === 'lingchao') {
-      w.lingchaoUntil = y + 10;
-      text = `<b>灵潮涌动</b>——地脉灵潮奔涌，此后十年<b>修炼效率 +20%</b>。`;
+      w.lingchaoUntil = y + 3;   // v37（E243）：灵潮 10→3 年
+      text = `<b>灵潮涌动</b>——地脉灵潮奔涌，此后三年<b>修炼效率 +20%</b>。`;
     } else if (type === 'beastwave') {
       const candidates = GameData.MAPS.filter(m => m.id !== 'village');
       const map = Utils.pick(candidates);
       w.beastMaps = w.beastMaps || [];
-      w.beastMaps.push({ map: map.id, until: y + 15 });
+      w.beastMaps.push({ map: map.id, until: y + 5 });   // v37（E243）：兽潮 15→5 年
       ev.mapId = map.id;
-      text = `<b>兽潮</b>——妖王振臂，群兽出山！${map.name} 一带十五年<b>妖兽横行</b>：遇敌频密，猎杀所获亦厚。`;
+      text = `<b>兽潮</b>——妖王振臂，群兽出山！${map.name} 一带五年<b>妖兽横行</b>：遇敌频密，猎杀所获亦厚。`;
     } else if (type === 'xianmen') {
       text = `<b>仙门收徒大会</b>——诸宗联席考较英才，通过者可获<b>宗门秘传</b>。`;
     } else if (type === 'zhongbao') {
@@ -142,6 +143,13 @@ const WorldSys = {
     }
     w.history.push({ year: y, type });
     if (w.history.length > 8) w.history.shift();
+    // v37（E252）：覆写留痕——上一件大事尚未决断时，先按「观望未决」归档再覆写，不再无声蒸发
+    if (w.pending) {
+      const oldDef = GameData.WORLD_EVENTS.find(e => e.id === w.pending.type);
+      const oldName = oldDef ? oldDef.name : (w.pending.type || '旧事');
+      if (typeof Story !== 'undefined' && Story.chron) Story.chron(`第${w.pending.year}年大事「${oldName}」观望未决`);
+      Log.add(`第${w.pending.year}年的「${oldName}」不了了之——新的风云已起。`, 'info');
+    }
     w.pending = ev;
     const def = GameData.WORLD_EVENTS.find(e => e.id === type);
     Log.add(`【天下大事 · 第${y}年】${text}`, 'system');
@@ -200,7 +208,7 @@ const WorldSys = {
       // v20 灵潮涌动：静坐采灵（时段加成已在修炼中生效）
       const gain = Math.round(200 * GameData.eco(p.realmIdx));
       Cultivate.addExp(p, gain);
-      p.insight = Math.min(100, (p.insight || 0) + 8);
+      Cultivate.addInsight(p, 8, false);
       Time.add(10);
       Log.add(`你在灵潮最盛处吐纳十日，经脉尽润——修为 +${Utils.fmtNum(gain)}，突破感悟 +8。`, 'gain');
     } else if (ev.type === 'beastwave') {
@@ -250,7 +258,7 @@ const WorldSys = {
         Time.add(10);
         Log.add(`你趁夜捡拾了逃散门人遗落的细软——灵石 ${Utils.fmtNum(stones)}。夜风里仿佛有人哭。（孽障 +8）`, 'loss');
       } else {
-        p.insight = Math.min(100, (p.insight || 0) + 4);
+        Cultivate.addInsight(p, 4, false);
         Time.add(10);
         Log.add('你在高处看了三日火光，忽然明白：庙堂之倾，从来不在外敌。（感悟 +4）', 'info');
       }
@@ -267,7 +275,7 @@ const WorldSys = {
         ],
       });
       if (c2 === 'talk') {
-        p.insight = Math.min(100, (p.insight || 0) + 8);
+        Cultivate.addInsight(p, 8, false);
         const gain = Math.round(80 * GameData.eco(p.realmIdx));
         Cultivate.addExp(p, gain);
         Time.add(5);
@@ -314,24 +322,38 @@ const WorldSys = {
       }
     } else if (ev.type === 'xianmen') {
       // v20 仙门收徒大会：三题取一，答对得秘传
+      // v37（E251）：正解按年哈希轮换，成算（悟性）改作用于答对后的奖励品质第二层；primary 随正解走
       Time.add(5);
+      const year = WorldSys.year(p);
+      const correct = ['a', 'b', 'c'][Utils.hashStr('xianmen' + year) % 3];
+      const right = Utils.chance(Math.min(85, 40 + Stat.compOf(p) * 2));
       const ans = await UI.popup({
         title: '仙门收徒大会 · 大道之问',
         html: '考官居高声问：「修行路上，何为根本？」<br><br>甲：「戒律清规，守法不失。」<br>乙：「明悟本心，道法自然。」<br>丙：「广结善缘，借力而行。」',
-        options: [{ text: '选 甲', value: 'a' }, { text: '选 乙', value: 'b', primary: true }, { text: '选 丙', value: 'c' }],
+        options: [
+          { text: '选 甲', value: 'a', primary: correct === 'a' },
+          { text: '选 乙', value: 'b', primary: correct === 'b' },
+          { text: '选 丙', value: 'c', primary: correct === 'c' },
+        ],
       });
-      if (ans === 'b') {
+      if (ans === correct) {
+        if (!right) {
+          // v37（E251）：品质第二层——答对而成算不足，赏格折中（不再有「故意答错更优」的逆选择）
+          Cultivate.addInsight(p, 5, false);
+          Log.add('你的答语虽合题旨，阐述却未尽其妙——考官颔首，记名待来年。（突破感悟 +5）', 'gain');
+        } else {
         const pool = ['gf_lieyang', 'gf_xuantian', 'gf_jifeng', 'gf_tiangang', 'gf_hansha', 'gf_yulin', 'gf_feixian'].filter(id => !p.gongfa[id] && !p.bag[id]);
         if (pool.length) {
           const gf = Utils.pick(pool);
           Bag.addItem(gf, 1);
-          p.insight = Math.min(100, (p.insight || 0) + 10);
+          Cultivate.addInsight(p, 10, false);
           Log.add(`你以「明悟本心」作答，满堂喝彩——考官亲授【<b>${GameData.ITEMS[gf].name}</b>】一册！（突破感悟 +10）`, 'gain');
           UI.announce('✦ 收徒大会 · 技惊四座 ✦', 'gold');
         } else {
           const stones2 = Math.round(80 * GameData.stoneEco(p.realmIdx));
           Bag.addStones(stones2);
           Log.add(`你以「明悟本心」作答，考官抚须而笑——然所授之法你皆已修习，遂折为程仪灵石 ${Utils.fmtNum(stones2)}。`, 'gain');
+        }
         }
       } else {
         const stones3 = Math.round(30 * GameData.stoneEco(p.realmIdx));

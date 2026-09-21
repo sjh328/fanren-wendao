@@ -67,8 +67,13 @@ write(key, player) {
   snapshotAuto() {
     // v32 修瑕（G2）：滚动快照——原「每会话一次」使 bak2 恒停在会话开头，6 小时长会话崩溃
     // 只能回捞 6 小时前。改为每 10 分钟滚动一次（会话首次照旧），安全网贴身跟上。
+    // v37（E268）：首拍/滚动拍分治——实证 autoSave 每行动实时写盘，「写前调用」读到的 auto.meta.ts
+    // 几乎恒 <60s，原 60 秒新鲜度检查把滚动拍恒数拦截（接线等于没接）。现 60 秒检查只约束会话
+    // 首拍（first，保留 v30「跨会话快照上次会话」原始语义），滚动拍绕过；10 分钟节流与 E137
+    // 死档过滤保持不变
+    const first = !Game._snapAt;
     const now = Date.now();
-    if (Game._snapAt && now - Game._snapAt < 600000) return;
+    if (!first && now - Game._snapAt < 600000) return;
     Game._snapAt = now;
     try {
       const cur = this.read('auto');
@@ -76,7 +81,7 @@ write(key, player) {
       // v35（E137）修瑕：坐化收场的死档不再滚入 bak2——原无 dead 过滤，死档回捞时会把当前
       // 活档 auto 整体覆盖成死档（安全网自身成了销毁通道）
       if (cur.meta.dead) return;
-      if (Date.now() - cur.meta.ts < 60000) return;   // 刚写过的不算「上次会话」
+      if (first && Date.now() - cur.meta.ts < 60000) return;   // 首拍：刚写过的不算「上次会话」
       const prev = this.read('bak2');
       if (!prev || !prev.meta || (prev.meta.ts || 0) < cur.meta.ts) {
         const raw = JSON.stringify(cur);
@@ -99,6 +104,7 @@ write(key, player) {
   setThrottle(on) { this._thr = !!on; if (!on) this._lastAuto = 0; },
   autoSave(force = false) {
     if (!Game.player || Game.player.dead) return;
+    this.snapshotAuto();   // v37（E268）：写前滚动快照——10 分钟节流兜频率；60 秒检查只约束首拍
     const now = Date.now();
     if (!force && this._thr && now - (this._lastAuto || 0) < 2500) return;
     this._lastAuto = now;

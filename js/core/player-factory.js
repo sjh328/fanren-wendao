@@ -38,6 +38,10 @@ const PlayerFactory = {
       gongfa: { gf_tuna: { level: 1, exp: 0 } },
       equipped: { weapon: null, armor: null, accessory: null },
       poison: 0, insight: 0,
+      insightSrc: [],   // v37（E264）：感悟来源 FIFO 池 [{v, regen}]——与 insight 总量缓存双池（见 Cultivate.addInsight）
+      rankHonor: 0,       // v37（E244）：天骄榜功勋（问剑/魁首/雷台折算的榜序加分，小层等效）
+      pastXianyuan: 0,    // v37（E246）：携往生的仙元记档（转世时读入新身）
+      pendingFestival: null,   // v37（E247）：挂起待补办的互动节庆 { id, day }（读侧防御）
       /* —— 增量扩展字段（§19-22）：大道 / 气运 / 孽障 / 根基 / 斩三尸折损 —— */
       dao: null, fortune: 0, karma: 0,
       rootDeep: false, rootWeak: false, statLossPct: 0,
@@ -45,7 +49,7 @@ const PlayerFactory = {
       sect: null,
       counters: { battles: 0, wins: 0, explores: 0, killsElite: 0, defeats: 0, spars: 0, bossKills: 0,
         mapExplores: {}, dilemmas: 0, befriends: 0, crafts: 0, craftsOk: 0, pills: 0, learns: 0, gupianGot: 0, maxDepth: 0 },
-      flags: { tutorialDone: false, ascended: false },
+      flags: { tutorialDone: false, ascended: false, sectDeclined: false },   // v37（E237）：散修红点单键（拒宗后熄灭）
       xianjie: { idx: 0, layer: 0 },   // v31 仙界四阶：未入仙籍（白日飞升后开启）
       dead: false,
       /* —— 增量扩展字段（v3 §23-26）：世界 / NPC / 秘境 / 转世 —— */
@@ -253,6 +257,62 @@ const PlayerFactory = {
         for (const k of Object.keys(out.attrs)) out.attrs[k] = Utils.clamp(out.attrs[k], 0, 12);
         out.rushDay = isFinite(Number(out.rushDay)) ? Number(out.rushDay) : null;
         out._daoCultDay = isFinite(Number(out._daoCultDay)) ? Number(out._daoCultDay) : null;
+      },
+      // v37（E264）：感悟来源 FIFO 池——存量 p.insight > 0 折为再生池 [{v, regen:true}]（宽松过渡：
+      // 不追溯惩罚，存量一律按「再生感悟」记，悟道全额不受损；此后新入账经 Cultivate.addInsight
+      // 按真实来源归池——调息 regen=true，听讲/丹药/事件等 regen=false）。p.insight 保留为总量缓存。
+      // 须读【原始存档】p（v13/v16 同款先例）：out.insightSrc 已被 fresh 模板的 [] 覆盖
+      (out) => {
+        const v37ins = Utils.clamp(Math.floor(Number(p.insight)) || 0, 0, 100);
+        out.insight = v37ins;
+        out.insightSrc = v37ins > 0 ? [{ v: v37ins, regen: true }] : [];
+      },
+      // v37（E240/E242）：结交一次性 + 差事改制——
+      // · 存量 rel > 0 的 NPC 置 befriended（防旧档对高好感 NPC 重吃廉价结交通道，E240 迁移）；
+      // · 在途 collect 与普通 kill（非 danger）任务作废重掷（讨伐/采集归悬赏板的池互斥改制），
+      //   danger 生死状保留（type 不变可推进）；_reform37 旗标供 SectSys.reformNotice 读档补一条日志
+      (out) => {
+        for (const s of Object.values(out.npcs || {})) {
+          if (s && typeof s === 'object' && s.befriended == null) s.befriended = (s.rel || 0) > 0;   // 存量 rel>0 视为已结交，其余显式 false
+        }
+        if (out.sect && typeof out.sect === 'object' && out.sect.id && Array.isArray(out.sect.tasks)) {
+          let reformed = false;
+          const fresh = out.sect.tasks.map(t => {
+            if (t && typeof t === 'object' && !(t.type === 'kill' && t.danger)) { reformed = true; return SectSys.genTask(out); }
+            return t;
+          });
+          if (reformed) { out.sect.tasks = fresh; out.sect._reform37 = true; }
+        }
+        // v37（E267）：词缀留档旧形态（纯 affixes 对象）包一层 {affixes, stars}——双保险：
+        // restoreAffix 已兼容两形态，此处把存量归一为新形态落盘（洗出的★卸穿不再蒸发）
+        if (out.affixKept && typeof out.affixKept === 'object') {
+          for (const [id, kept] of Object.entries(out.affixKept)) {
+            if (kept && typeof kept === 'object' && !kept.affixes) out.affixKept[id] = { affixes: { ...kept }, stars: {} };
+          }
+        }
+      },
+      // v37（B3）：周目纵深——E243 时代时长重校迁移 + E244/E246/E247 新状态防御默认
+      (out) => {
+        // E243：讲道 10/秘境 20/大战 30/灵潮 10/兽潮 15 年 → 3/5/6/3/5 年。
+        // 存量档逐字段 min(原值, 当前年+新时长) 收缩（只缩不延长），_eraRecal37 防重入
+        if (out.world && typeof out.world === 'object' && !out.world._eraRecal37) {
+          const y = Math.floor((out.day || 0) / 365) + 1;
+          const caps = { preachUntil: 3, ruinsUntil: 5, warUntil: 6, lingchaoUntil: 3 };
+          for (const [k, d] of Object.entries(caps)) {
+            if (out.world[k]) out.world[k] = Math.min(out.world[k], y + d);
+          }
+          if (Array.isArray(out.world.beastMaps)) {
+            for (const b of out.world.beastMaps) { if (b && typeof b.until === 'number') b.until = Math.min(b.until, y + 5); }
+          }
+          out.world._eraRecal37 = true;
+        }
+        // E244/E246/E247：新状态默认（缺字段防御读）
+        out.rankHonor = Math.max(0, Math.floor(Number(out.rankHonor)) || 0);
+        out.pastXianyuan = Math.max(0, Math.floor(Number(out.pastXianyuan)) || 0);
+        out.pendingFestival = (out.pendingFestival && typeof out.pendingFestival === 'object' && out.pendingFestival.id) ? out.pendingFestival : null;
+        // v37（E237）：散修红点迁移——已过筑基仍未拜宗 = 事实拒宗，存量散修红点一次性熄灭
+        //（本步只对旧档跑一次：新档 create 自带 sectDeclined:false 且迁移起点跳过全部步骤）
+        if (!out.sect && (out.realmIdx || 0) >= 2 && out.flags) out.flags.sectDeclined = true;
       },
     ];
     // 基础：fresh 模板 + 展开合并

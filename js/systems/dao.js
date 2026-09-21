@@ -124,7 +124,7 @@ const DaoSys = {
       }
       if (dropped.length) Log.add(`旧道秘传随道基一同崩解：${dropped.map(id => (GameData.ITEMS[id] || {}).name || id).join('、')} 尽数散去。`, 'warn');
     }
-    p.realmIdx -= 1; p.layer = 0; p.exp = 0; p.insight = 0; p.dao = null;
+    p.realmIdx -= 1; p.layer = 0; p.exp = 0; p.insight = 0; p.insightSrc = []; p.dao = null;   // v37（E264）：感悟清零时来源 FIFO 池同步清空（双池一致）
     // v29 修瑕：转道名实相符——溢出折存/连败保底一并清去；自废道基折寿五年
     p.expOverflow = 0; p.breakStreak = 0;
     Time.cutLife(p, 5, '自废道基，逆转阴阳');

@@ -16,6 +16,7 @@ const NpcSys = {
         map: Utils.pick(mapIds),
         met: false,        // 是否打过照面
         grudge: false,     // 恩怨（连坐血亲）
+        befriended: false, // v37（E240）：结交一次性——礼数只行一回，此后情谊走赠礼/论道温养
         pastLife: false,   // 前世恩怨（转世专属剧情）
         mem: [],           // v19 记忆条目 [{d,t,x}]
       };
@@ -225,11 +226,13 @@ const NpcSys = {
     Log.add(`一道熟悉的身影快你一步——<b>${d.name}</b> 早候在此，将机缘掠了个干净，还朝你晃了晃手中之物！`, 'warn');
     return true;
   },
-  /** v20 雷台了断：宿敌关系恶化至极、且境界相当时，可约战雷台做个了断 */
+  /** v20 雷台了断：有宿怨且境界相当时，可约战雷台做个了断。
+   *  v37（E248）：删 rel≤-60 硬门改 rel≤-20——原门槛近乎不可达（rel 只能靠连环大恶砸穿），
+   *  复仇线形同虚设；狠度（rel 低于 -20 的部分）折算对方约战战力加成，「狠度进赔率不进门槛」 */
   canShowdown(p, id) {
     const s = this.state(p, id);
     if (!s || !s.grudge || !s.alive) return false;
-    if (s.rel > -60) return false;
+    if (s.rel > -20) return false;
     const myRp = p.realmIdx * 4 + p.layer;
     const hisRp = s.realmIdx * 4 + s.layer;
     return Math.abs(hisRp - myRp) <= 2;
@@ -238,16 +241,23 @@ const NpcSys = {
     const p = Game.player;
     const d = this.def(id);
     if (!this.canShowdown(p, id) || Battle.active) return;
+    const s = this.state(p, id);
+    // v37（E248）：狠度进赔率——rel 低于 -20 的部分每 10 点折算对方战力 +4%（封顶 +32%）
+    const fury = this.showdownFury(s);
     const ok = await UI.popup({
       title: `雷台了断 · ${d.name}`,
-      html: `你们之间的仇怨，已经到了不死不休的地步。<br>约战雷台，做个了断——<b>胜者可夺对方一件随身法宝</b>，恩怨就此两清。<br><span class="neg">若败，恩怨依旧，且伤势难免。</span>`,
+      html: `你们之间的仇怨已深。<br>约战雷台，做个了断——<b>胜者可夺对方一件随身法宝</b>，恩怨就此两清。<br>${fury > 0 ? `<span class="neg">仇怨愈狠，对方出手愈重（本战其战力 +${fury}%）。</span><br>` : ''}<span class="neg">若败，恩怨依旧，且伤势难免。</span>`,
       options: [{ text: '雷台相见', value: true, primary: true }, { text: '再等等', value: false }],
     });
     if (!ok) return;
-    Log.add(`你向 <b>${d.name}</b> 递上雷台战书——三百年恩怨，今日做个了断！`, 'warn');
+    Log.add(`你向 <b>${d.name}</b> 递上雷台战书——恩怨纠葛，今日做个了断！`, 'warn');
     Story.chron(`与 ${d.name} 约战雷台`);
-    Battle.start(null, { enemy: this.buildEnemy(p, id), npcId: id, mode: 'confront', showdown: true, mapName: '雷台' });
+    Battle.start(null, { enemy: this.buildEnemy(p, id, fury), npcId: id, mode: 'confront', showdown: true, mapName: '雷台' });
     Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
+  },
+  /** v37（E248）：雷台了断赔率——rel≤-20 起可约，低于 -20 的部分每 10 点对方战力 +4%，封顶 +32% */
+  showdownFury(s) {
+    return Utils.clamp(Math.floor(Math.max(0, -20 - (s.rel || 0)) / 10) * 4, 0, 32);
   },
   pickAmbusher(p) {
     const ids = Object.keys(p.npcs || {}).filter(id => p.npcs[id].grudge && p.npcs[id].alive);
@@ -303,12 +313,12 @@ const NpcSys = {
     const spd = Math.round(7 + rp * 0.9);
     return Math.round(atk * 2 + def * 1.5 + hp * 0.3 + spd * 1 + 8 * 2 + 5 * 1.5 + 8 * 0.5);
   },
-  buildEnemy(p, id) {
+  buildEnemy(p, id, fury = 0) {
     const d = this.def(id);
     const s = this.state(p, id);
     if (!d || !s) return buildMonster('m_zeiren');
     const rp = Utils.clamp(s.realmIdx * 4 + s.layer, 0, 60);
-    const mod = 0.92 + d.talent * 0.04;
+    const mod = (0.92 + d.talent * 0.04) * (1 + (fury || 0) / 100);   // v37（E248）：fury=雷台了断狠度加成（默认 0，其余调用不受影响）
     const realmIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
     // v18：NPC 按性情配专属技能（切磋/恩怨不再退化为普攻对轰）
     const temperSkills = {
@@ -402,6 +412,7 @@ const NpcSys = {
     KarmaSys.addKarma(2, true);   // v30：正当决斗只记微业——原 +8 与「散财化解零孽障」倒挂，玩家系统性规避了断
     Log.add(`一战之后，恩怨两清。${(this.def(id) || {}).name || ''} 收起敌意，与你相顾无言。（孽障 +2）`, 'system');
     if (showdown) {
+      p.rankHonor = (p.rankHonor || 0) + 1;   // v37（E244）：雷台了断胜局折算天骄榜功勋 +1
       // v36（E214）：彩头随境下限——grade 1~3 恒定成中高境分解货；r0~1 → 灵级起步、r2~3 → 玄级、
       // r4+ → 地级起步（与 betray 的 tier 换算 :474 同族口径）；grade 池上限维持 3——天级及以上
       // artifact 存量未盘点，不为彩头引入未验证资产；池空回落 gMin−1
@@ -430,6 +441,9 @@ const NpcSys = {
     const s = this.state(p, id);
     if (!d || !s || !s.alive) return;
     if (this.isAway(p, id)) { UI.toast(`${d.name} 行游在外，旬末方归`); return; }
+    // v37（E240）：结交一次性——原无日限无上限，+8~14/次可把社交阶梯整条买穿（24 人全扫
+    // 即可囤满好感轴）；礼数只行一回，此后情谊归赠礼/论道/切磋等温养互动
+    if (s.befriended) { UI.toast('尔等早已结识——情谊当以赠礼与论道温养'); return; }
     const cost = this.befriendCost(p, id);
     const ok = await UI.popup({
       title: `结交 · ${d.name}`,
@@ -441,6 +455,7 @@ const NpcSys = {
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴；v34（E120）：挪到确认成交后——原弹确认框前即解锁，「作罢」/灵石不足也录了图鉴（萍水未谋面却已入册，图鉴完成度虚增）
     s.met = true;
+    s.befriended = true;   // v37（E240）：结交印记——一次性通道就此关闭
     // v28 联动：声望先于人先——名望高者结交更受欢迎，恶名远扬者见面先减三分
     const rep = p.reputation || 0;
     const repAdj = rep >= 80 ? 5 : rep >= 30 ? 3 : rep < -30 ? -5 : rep < 0 ? -2 : 0;
@@ -513,6 +528,7 @@ const NpcSys = {
     s.met = true;
     this.addGrudge(p, id);
     this.mem(p, id, 'betray', '背刺夺宝');   // v19 记忆
+    if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 5, '背刺得手，午夜梦回');   // v37（E245）：背刺得手 +5——心魔新行为来源
     KarmaSys.addKarma(15, true);
     p.fortune = Math.max(0, (p.fortune || 0) - 15);
     Log.add(`你趁 ${d.name} 不备痛下杀手，夺其储物袋——灵石 ${Utils.fmtNum(loot)}${extra}！收益翻倍，然气运 -15、孽障 +15。`, 'gain');
@@ -703,7 +719,7 @@ const NpcSys = {
     const spots = [
       { name: '夜市灯河', act: '提灯逛一圈夜市', ok: () => { KarmaSys.addFortune(2); return '人间的灯火映在TA眼底——你忽然觉得，修行路上最难得的不是机缘，是有人陪你看灯火。（气运 +2）'; } },
       { name: '秘泉野浴', act: '寻一处无人的灵泉', ok: () => { p.hp = Stat.compute(p).maxHp; p.mp = Stat.compute(p).maxMp; return '灵泉洗去一路风尘，气血灵力尽复，连经脉都暖了几分。（状态尽复）'; } },
-      { name: '断崖论剑', act: '与TA印证一场', ok: () => { p.insight = Math.min(100, (p.insight || 0) + 4); s.rel = Utils.clamp(s.rel + 3, -100, 100); return '胜负不重要——重要的是TA接住了你每一剑。印证归来，彼此又懂了几分。（感悟 +4，交情 +3）'; } },
+      { name: '断崖论剑', act: '与TA印证一场', ok: () => { Cultivate.addInsight(p, 4, false); s.rel = Utils.clamp(s.rel + 3, -100, 100); return '胜负不重要——重要的是TA接住了你每一剑。印证归来，彼此又懂了几分。（感悟 +4，交情 +3）'; } },
     ];
     const spot = Utils.pick(spots);
     const ok = await UI.popup({
@@ -721,7 +737,7 @@ const NpcSys = {
   async companionWish(p, d, s) {
     const wishes = [
       { text: '寻一味灵药', need: { m_lingcao: 2 }, rel: 8, ok: () => KarmaSys.addFortune(1) },
-      { text: '听你说说外头的见闻', need: null, rel: 5, ok: () => { p.insight = Math.min(100, (p.insight || 0) + 3); } },
+      { text: '听你说说外头的见闻', need: null, rel: 5, ok: () => { Cultivate.addInsight(p, 3, false); } },
       { text: '陪TA饮一壶好茶', cost: Math.round(50 * this.socialEco(p, s)), rel: 6, ok: null },
     ];
     const w = Utils.pick(wishes);
@@ -764,7 +780,7 @@ const NpcSys = {
     if (!this.canLearnFrom(p, id)) return;
     const insight = 12 + s.realmIdx * 3;
     s.tutored = true;
-    p.insight = Math.min(100, (p.insight || 0) + insight);
+    Cultivate.addInsight(p, insight, false);   // v37（E264）：感悟增发收口单源（三胜倾囊=外源感悟）
     this.mem(p, id, 'chat', '三胜倾囊相授');
     Time.add(3);
     Log.add(`${d.name} 与你三度交手，终认你可堪造就——将压箱底的体悟倾囊相授！（突破感悟 +${insight}）`, 'gain');
@@ -794,7 +810,7 @@ const NpcSys = {
     const insight = tier.id === 'sworn' ? 4 : tier.id === 'bosom' ? 3 : 2;
     const gain = Math.round(Cultivate.baseGain(p) * (1.0 + d.talent * 0.08));   // v36（E197）：自随乘数——talent 1~5 → 1.08~1.4× baseGain，收益与 rel 解耦断「越论道越要论道」自增强环
     Cultivate.addExp(p, gain);
-    p.insight = Math.min(100, (p.insight || 0) + insight);
+    Cultivate.addInsight(p, insight, false);   // v37（E264）：感悟增发收口单源（论道=外源感悟）
     if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 4);
     s.rel = Utils.clamp(s.rel + 1, -100, 100);
     this.mem(p, id, 'chat', '席地论道');
@@ -831,7 +847,7 @@ const NpcSys = {
       this.mem(p, id, 'story', '前世遗物托付');
       if (choice === 'take') {
         Cultivate.addExp(p, gainExp);
-        p.insight = Math.min(100, (p.insight || 0) + 6);
+        Cultivate.addInsight(p, 6, false);
         s.rel = Utils.clamp(s.rel + 5, -100, 100);
         Log.add(`你接过前世遗物，一段封存的功法感悟涌入识海——${d.name} 默然颔首。（修为 +${Utils.fmtNum(gainExp)}，感悟 +6，交情 +5）`, 'gain');
       } else {

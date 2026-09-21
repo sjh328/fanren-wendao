@@ -98,7 +98,7 @@ const CaveSys = {
     // v28 联动：福缘深厚者，来访更频（气运每点 +0.5% 触发率）
     if (!Utils.chance(15 * (typeof KarmaSys !== 'undefined' && KarmaSys.goodEventMult ? KarmaSys.goodEventMult(p) : 1))) return;
     const events = [
-      { text: '一位散修前来拜访，与你论道半日，颇有收获。（感悟 +2）', fn: () => { p.insight = Math.min(100, (p.insight || 0) + 2); } },
+      { text: '一位散修前来拜访，与你论道半日，颇有收获。（感悟 +2）', fn: () => { Cultivate.addInsight(p, 2, false); } },
       { text: '一只灵鹤衔来一枚灵果，落在你的洞府门前。（灵芝 +1）', fn: () => { Bag.addItem('m_lingzhi', 1); } },
       { text: '一位同门前来切磋，点到为止，助你精进。', fn: () => { Cultivate.addExp(p, Math.round(20 * GameData.eco(p.realmIdx))); } },
       /* ---- v19 访客扩充 ---- */
@@ -244,6 +244,7 @@ const CaveSys = {
     const remaining = Math.max(0, (plot.days || 0) - grown);
     plot.days = grown + (remaining > 0 ? Math.max(1, Math.round(remaining * 0.9)) : 0);
     Log.add(`你以灵泉浇灌第 ${idx + 1} 田，作物生长加快了一分。`, 'info');
+    if (typeof Ambience !== 'undefined') Ambience.sfx('plant');   // v37（E232）：农事音
     Game.afterAction();
   },
   /** v20 接线：每日一次的虫害检查（此前为无调用方的死代码） */
@@ -339,6 +340,7 @@ const CaveSys = {
     const sd = GameData.ITEMS[seedId];
     plots[idx] = { seed: seedId, crop: sd.crop, days: sd.days, plantedDay: Math.floor(p.day) };
     Log.add(`你在第 ${idx + 1} 田播下了【${sd.name}】，${sd.days} 日后可收。`, 'info');
+    if (typeof Ambience !== 'undefined') Ambience.sfx('plant');   // v37（E232）：农事音（死音效 plant 接线）
     Game.afterAction();
   },
   /** 收获：进度按当前游戏日结算；过熟 20+ 日减半 */
@@ -360,6 +362,7 @@ const CaveSys = {
       Bag.addItem(plot.crop, qty);
       p.counters.harvests = (p.counters.harvests || 0) + 1;   // v20 成就计数
       Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}${typeof Art !== 'undefined' && Art.seasonOf(p) === 2 ? '（季秋丰收）' : ''}。`, 'gain');
+      if (typeof Ambience !== 'undefined') Ambience.sfx('plant');   // v37（E232）：农事音
     } else {
       Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】颗粒无收——虫害把收成啃了个精光。`, 'warn');
     }

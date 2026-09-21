@@ -17,6 +17,7 @@ const DungeonSys = {
     const nodeNames = { battle: '⚔ 战斗', treasure: '🎁 宝箱', fortune: '✨ 奇遇', trap: '⚠ 陷阱', npc: '🗣 遭遇', boss: '☠ 守关' };
     const info = D.choices.map((t, i) => `${i === 0 ? '左' : '右'}路：${nodeNames[t] || t}`).join(' | ');
     UI.toast(`窥探结果：${info}`);
+    if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 2, '窥探秘术，心事被暗处记下');   // v37（E245）：窥探符 +2——心魔新行为来源
     Log.add(`你以符箓为媒，灵光一闪窥得前路——${info}。`, 'info');
   },
   /** v29：秘境门票——按推荐境界灵石经济定价，入历一次一付
@@ -402,6 +403,11 @@ const DungeonSys = {
     if (!ok) return;
     Bag.removeItem('m_gupian', 9);
     Bag.addItem('z_benming', 1);
+    // v37（E239）：本命合成演出——规格压过灵兽蜕变（realmShow 全屏异象 + 专属音色 + 金色公告）
+    // v37（E232）：死音效 inherit 接线（与 E239 同点）
+    UI.realmShow('精血为引，古宝认主——自此神魂相合。', '#b89a5a');
+    if (typeof Ambience !== 'undefined') Ambience.sfx('inherit');
+    UI.announce('✦ 本命法宝 · 炼化功成 ✦', 'gold');
     Log.add('精血没入碎片，轰鸣声中，一件古朴法宝环绕周身——<b>本命法宝</b>炼化成了！（可在乾坤袋中装备）', 'gain');
     Game.afterAction();
   },

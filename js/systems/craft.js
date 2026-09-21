@@ -72,7 +72,7 @@ const CraftSys = {
     p.flags.recipeOk = p.flags.recipeOk || {};
     p.flags.recipeOk[r.id] = true;
     const insGain = p.sect && p.sect.faction === 'cangjing' ? Math.round(6 * 1.15) : 6;   // v36（E226）：藏经楼派系 perk——参悟所得 +15%（6→7）
-    p.insight = Math.min(100, (p.insight || 0) + insGain);
+    Cultivate.addInsight(p, insGain, false);   // v37（E264）：感悟增发收口单源（参悟残页=外源感悟）
     Log.add(`你将 ${r.needPages} 页残稿拼合推演——失传丹方【<b>${out.name}</b>】重见天日！（突破感悟 +${insGain}）`, 'realm');
     UI.announce(`✦ 丹方重光 · ${out.name} ✦`, 'gold');
     Story.chron(`参悟失传丹方「${out.name}」`);

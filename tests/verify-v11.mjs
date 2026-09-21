@@ -211,6 +211,10 @@ try {
   (ab1.lock0 === false && ab1.lock2 === true && ab1.defs >= 15 && ab1.items)
     ? pass('AB1 登天塔解锁门控 / 15 祝福 / 3 塔产奇物') : fail('AB1 登天塔结构', JSON.stringify(ab1));
 
+  // v37（B9 定稿）：禁用 15% 跳层赌约——AB5 采样窗与赌约弹窗存在固有竞态（赌约在宝箱解析后
+  // 异步开启，标题采样随机撞上即红），本段落将 chance(15) 恒置 false 使赌约路径确定性不触发
+  await page2.evaluate(() => { const oc = Utils.chance; Utils.chance = (p) => (p === 15 ? false : oc(p)); });
+  await sleep(100);
   // AB2 进塔：耗次数、开战、塔影前缀
   const ab2 = await page2.evaluate(() => {
     const p = Game.player;
@@ -302,6 +306,7 @@ try {
   (!ab6.run && ab6.best >= 5 && ab6.cBest >= 5 && ab6.metaBest >= 5)
     ? pass('AB6 离塔结算：run 清空 + 本档/跨世纪录双写') : fail('AB6 离塔', JSON.stringify(ab6));
 
+  await page2.evaluate(() => { if (Utils._oc) { Utils.chance = Utils._oc; delete Utils._oc; } });   // v37（B9）：还原 chance
   // AB7 败北止步（加购一次再进，必败；buyExtra 的确认弹窗从外层点击）
   const ab7 = await page2.evaluate(() => {
     const p = Game.player;

@@ -95,7 +95,8 @@ const Battle = {
     // v19 真元与战斗统计、精英词缀掷取
     const B = this.active;
     B.zhenyuan = 0;
-    B.zmax = 6 + (DaoSys.tierLevel(p) >= 3 ? 2 : 0);   // v20 道境三重以上真元上限扩至 8
+    // v37（E249）：机制词条「真元圆满」——真元上限 +15%（+12 词条位，ForgeSys.hasMech 单源判定）
+    B.zmax = Math.round((6 + (DaoSys.tierLevel(p) >= 3 ? 2 : 0)) * ((typeof ForgeSys !== 'undefined' && ForgeSys.hasMech(p, 'zmax')) ? 1.15 : 1));   // v20 道境三重以上真元上限扩至 8
     B.stats = { out: 0, in: 0, maxCombo: 0, src: { attack: 0, skill: 0, ult: 0, beast: 0, dot: 0, thorns: 0, counter: 0 } };
     // v30 灵兽合击：副战灵兽不空转——开局战意 +15、真元 +1（气机相随）
     if (typeof BeastSys !== 'undefined' && p.beasts && p.beasts.active2 && p.beasts.list.find(x => x.uid === p.beasts.active2)) {
@@ -226,6 +227,7 @@ const Battle = {
     if (B) {
       atk *= 1 + StatusFx.pctOf(B.myFx, 'atkup') / 100;
       atk *= 1 - StatusFx.pctOf(B.myFx, 'weaken') / 100;
+      atk *= 1 + 0.03 * (B._xueheStacks || 0);   // v37（E249）：血河套技「血河叠浪」——击杀叠攻 3%，至多五层（B._xueheStacks 在 onEnemyHit 击杀判定点累积）
     }
     return Math.round(atk);
   },
@@ -280,7 +282,9 @@ const Battle = {
   eFx(B, id) { return !!(B.enemyFxIds && B.enemyFxIds.includes(id)); },
   /** v34（C1/C2）：敌方受击统一响应——精英词缀「魔棘」反伤与「不灭」复活原先只在普攻路径接线，
    *  必杀/本命/法诀/符箓/人兽合击打上去零反弹、一发带走直接跳过复活（同一词缀时灵时不灵）。
-   *  dmg>0 时结算反伤；随后无论 dmg 都复查不灭。伤害路径在扣除敌方气血后统一调用。 */
+   *  dmg>0 时结算反伤；随后无论 dmg 都复查不灭。伤害路径在扣除敌方气血后统一调用。
+   *  v37（E249）：本总线 hp<=0 即「击杀」判定点——血河套技「血河叠浪」（叠攻 3%×5 层，经 myAtk
+   *  单漏斗生效）与词条「击杀回血 8%」在此单点结算，DOT/追击/破招/多波等全部伤害路径汇入本总线。 */
   onEnemyHit(B, st, dmg) {
     const p = Game.player;
     if (dmg > 0 && this.eFx(B, 'e_thorns') && p.hp > 0) {
@@ -294,6 +298,42 @@ const Battle = {
       B.enemy.hp = Math.round(B.enemy.hpMax * 0.3);
       this.log(`【不灭】${B.enemy.name} 气息骤然暴涨——它以三成气血自死境爬了回来！`, 'log-warn');
       UI.toast(`${B.enemy.name} 触发【不灭】！`, true);
+    }
+    // v37（E249）：击杀判定点——onEnemyHit 总线的 hp<=0 即「击杀」，血河套技与击杀回血词条在此单点结算
+    //（多波/续波/追击/破招/DOT 全部伤害路径都汇入本总线，无新增分叉）
+    if (B.enemy.hp <= 0) {
+      const p2 = Game.player;
+      if (typeof ForgeSys !== 'undefined' && ForgeSys.hasSetTech(p2, 'killAtk')) {
+        B._xueheStacks = Math.min(5, (B._xueheStacks || 0) + 1);
+        this.log(`【血河叠浪】血气入体，攻势更烈——攻击 +${B._xueheStacks * 3}%（${B._xueheStacks}/5 层）。`, 'log-gain');
+      }
+      if (typeof ForgeSys !== 'undefined' && ForgeSys.hasMech(p2, 'killheal')) {
+        const st2 = Stat.compute(p2);
+        const heal = Math.max(1, Math.round(st2.maxHp * 0.08));
+        p2.hp = Math.min(st2.maxHp, p2.hp + heal);
+        this.pushFloat('me', `+${heal}`, 'heal');
+        this.log(`【击杀回血】饮敌精血而复——气血 +${heal}。`, 'log-gain');
+      }
+    }
+  },
+  /** v37（E249）：玩家受击统一响应——敌方伤害落身唯一漏斗（enemyTurn 的 B.playerHit 标记点）调用。
+   *  · 玄天套技「磐岩之意」（zhenyuanOnHit）：受击回真元 5%（真元上限的 5%，累积进位整数入账）
+   *  · 机制词条「致命保命」（laststand）：每场一次，致死伤害保留 1 点气血 */
+  onPlayerHit(B) {
+    const p = Game.player;
+    if (p.hp > 0 && typeof ForgeSys !== 'undefined' && ForgeSys.hasSetTech(p, 'zhenyuanOnHit')) {
+      B._zyAcc = (B._zyAcc || 0) + (B.zmax || 6) * 0.05;
+      while (B._zyAcc >= 1 && (B.zhenyuan || 0) < (B.zmax || 6)) {
+        B._zyAcc -= 1;
+        B.zhenyuan = Math.min(B.zmax || 6, (B.zhenyuan || 0) + 1);
+        this.log('【磐岩之意】受击之际气机自固——真元 +1。', 'log-gain');
+      }
+    }
+    if (p.hp <= 0 && typeof ForgeSys !== 'undefined' && ForgeSys.hasMech(p, 'laststand') && !B._laststandUsed) {
+      B._laststandUsed = true;
+      p.hp = 1;
+      this.log('【致命保命】法器护主，替你挡下了致命一击——只剩一线生机，拼死一搏吧！', 'log-crit');
+      UI.toast('【致命保命】触发——保留 1 点气血！', true);
     }
   },
   /* ---------- v19 敌方情报卡 ---------- */
@@ -357,6 +397,8 @@ const Battle = {
     const B = this.active;
     if (!B || B.over || !B.enemy || B.enemy.hp <= 0) { if (B) B.intent = null; return; }
     B.intent = this.enemyDecide();
+    // v37（E232）：死音效 intent 接线——敌方亮出蓄力/杀招时示警一响（读招博弈的听觉提示）
+    if (B.intent && (B.intent.kind === 'charge' || B.intent.kind === 'finisher')) Ambience.sfx('intent');
   },
   /** 决策树（纯函数化）：返回 {kind, ...}；kind: strike / skill / charge / finisher */
   enemyDecide() {
@@ -807,7 +849,8 @@ const Battle = {
           else if (speciesRel < 0) dmg *= 1 - GameData.BALANCE.SPECIES_COUNTER.bonus;   // v35（E173）：克制幅度接线 SPECIES_COUNTER.bonus（原字面量 ±15%）
           const eqFx = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p) : {};   // v19 词缀特效
           // v19 词缀·斩杀：对血量低于两成的敌人增伤
-          if (eqFx.execute > 0 && B.enemy.hp < B.enemy.hpMax * 0.2) dmg *= 1 + eqFx.execute;
+          // v37（E249）：道途联动——剑修持「斩杀」，终结线自 20% 拓至 30%（不扩池结构，消费端联动）
+          if (eqFx.execute > 0 && B.enemy.hp < B.enemy.hpMax * (p.dao === 'sword' ? 0.3 : 0.2)) dmg *= 1 + eqFx.execute;
           // v30：破绽状态——敌人露出破绽时更易被会心
           const crit = Utils.chance(this.myCrit(st) + StatusFx.pctOf(B.enemy.fx, 'vuln'));
           // v10 剑心六境·剑芒境：暴击伤害 +20%
@@ -846,6 +889,16 @@ const Battle = {
           const comboTxt = B.combo >= 2 ? `<span style="color:var(--gold)">连击×${B.combo}</span>` : '';
           const tags = [crit ? '会心一击！' : '', jianxin ? '【剑心通明】！' : '', comboTxt].filter(Boolean).join('');
           this.log(`${tags}${Narrative.attack()}，对 ${B.enemy.name} 造成 <b>${dmg}</b> 点伤害。`, (crit || jianxin) ? 'log-crit' : 'log-battle');   // v5：招式语气随道途
+          // v37（E249）：机制词条「连击追击」——普攻命中后 20% 概率追加一次六成威力追击
+          //（普攻每回合一次，追击天然一回合至多一次；追击走 onEnemyHit 同一总线复查魔棘/不灭）
+          if (B.enemy.hp > 0 && typeof ForgeSys !== 'undefined' && ForgeSys.hasMech(p, 'combochase') && Utils.chance(20)) {
+            const chase = Math.max(1, Math.round(Stat.afterDef(this.myAtk(st) * 0.6, this.enDef(B.enemy)) * Utils.randF(0.9, 1.1)));
+            B.enemy.hp = Math.max(0, B.enemy.hp - chase);
+            if (B.stats) { B.stats.out += chase; if (B.stats.src) B.stats.src.attack += chase; }
+            this.pushFloat('enemy', `-${chase}`, 'dmg');
+            this.log(`【连击追击】招式未尽，顺势再进——追加 <b>${chase}</b> 点伤害！`, 'log-gain');
+            this.onEnemyHit(B, st, chase);
+          }
           // v18 残玉共鸣六重 · 血河噬敌：普攻命中，按自身孽障汲取对方精元为修为（每10点孽障+1%伤害转化，上限三成）
           if ((p.jade || 0) >= 6 && (p.karma || 0) > 0) {
             const drain = Math.round(dmg * Math.min(0.3, (p.karma || 0) * 0.001));
@@ -1109,6 +1162,8 @@ const Battle = {
       }
       case 'flee': {
         // v27 修瑕：遁走成算改用结算后身法口径（此前用敌方原始 spd，「迅影」「迟滞」均不参与）
+        // v37（E269）语义边界：遁走=真出手之后的撤离（战斗已经打过、因果已生），end() 照常记邪修
+        // 杀业/魔性——与「跳层作废战」（B._voided，未出手，零因果）不同，不作豁免
         const chance = Utils.clamp(GameData.BALANCE.COMBAT.FLEE_BASE + (this.mySpd(st) - this.enSpd(B.enemy)) * 2, 10, 90);   // v32（E24）：遁走基础成算接线集中配置
         if (Utils.chance(chance)) {
           this.log('你虚晃一招，遁走而去，好汉不吃眼前亏！', 'log-warn');
@@ -1612,6 +1667,7 @@ const Battle = {
     B.stats.in += dmg;   // v19 统计
     B.combo = 0;   // v13 受击中断连击
     B.playerHit = true; // v18：玩家受击标记
+    this.onPlayerHit(B);   // v37（E249）：玩家受击统一响应（套技/词条），单点漏斗零新增分叉
     // v19 精英词缀·汲血
     if (this.eFx(B, 'e_leech') && e.hp > 0) {
       const leech = Math.max(1, Math.round(dmg * 0.3));
@@ -1651,7 +1707,9 @@ const Battle = {
       this.onEnemyHit(B, st, 0);   // v36（E206）：反击致死路径接线——传 0 仅复查「不灭」，不触发魔棘防「反伤套反伤」双计
     }
     // v19 词缀·反伤/荆棘
-    const thorns = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p).thorns : 0;
+    // v37（E249）：道途联动——体修持「反伤」，荆棘淬体反伤值 ×1.5（不扩池结构，消费端联动）
+    let thorns = (typeof ForgeSys !== 'undefined' && ForgeSys.suffixFx) ? ForgeSys.suffixFx(p).thorns : 0;
+    if (thorns > 0 && p.dao === 'body') thorns = Math.round(thorns * 1.5 * 100) / 100;
     if (thorns > 0 && e.hp > 0 && p.hp > 0) {
       const back = Math.max(1, Math.round(dmg * thorns));
       e.hp = Math.max(0, e.hp - back);
@@ -1806,6 +1864,7 @@ const Battle = {
     if (B.ctx.spar) {
       this.log('二人收势而立，抱拳一礼——点到为止。', 'log-system');
       NpcSys.afterSpar(p, B.ctx.npcId, true);
+      if (B.ctx.wenjian) RankSys.onWenjianWin(p, B.ctx.npcId);   // v37（E244）：问剑胜局→榜序对调
       p.counters.spars = (p.counters.spars || 0) + 1;   // v6 成就计数
       BountySys.onSpar();   // v13 悬赏切磋进度
       Cultivate.addExp(p, Math.round(B.enemy.expGain * 0.3));
@@ -1847,6 +1906,7 @@ const Battle = {
       const extra = Math.round(expGain * (DaoSys.tierLevel(p) >= 1 ? 0.3 : 0.2));   // v10 血煞境：汲取提至三成
       Cultivate.addExp(p, extra);
       DaoSys.gain(p, 20);   // v16 魔性
+      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 3, '吞噬精元，魔焰蚀心');   // v37（E245）：邪修吞噬 +3——心魔新行为来源
       this.log(`你吞噬了对手残存的精元，额外汲取修为 ${Utils.fmtNum(extra)}。`, 'log-gain');
     }
     const drops = this.rollDrops(B.enemy, B.ctx);
@@ -1935,6 +1995,8 @@ const Battle = {
       return;
     }
     // v25 登天塔：塔内败北不出人命——止步结算，无灵石修为折损
+    // v37（E273）：耗日由 TowerSys.enter 统一计（整场登塔 3 游戏日，一次计讫），勿在此叠加——
+    // 下方尾段的 Time.add(3) 是普通战败疗伤段口径；塔/切磋/大比/秘境/剧情战各分支均提前 return 不经过
     if (B.ctx.tower) {
       const stT2 = Stat.compute(p);
       p.hp = Math.max(1, Math.round(stT2.maxHp * 0.3));
@@ -1994,18 +2056,22 @@ const Battle = {
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood('calm');   // v19 情境配乐
     // v19 战斗回顾：留档最近一场的记录
     if (this.active) {
-      const logs = (this.active.logs || []).slice(-60);
-      this.lastLogs = logs;   // v19 战斗回顾（兼容保留）
-      // v23：最近三场回顾（会话内存，不进存档）
-      const B2 = this.active;
-      this.history = [{ foe: (B2.enemy && B2.enemy.name) || '?', won: !!B2.won, logs },
-        ...(this.history || [])].slice(0, 3);
+      // v37（E269）：跳层作废之战（B._voided，未出手）不入战斗回顾——回顾里没有「负/遁」可言
+      if (!this.active._voided) {
+        const logs = (this.active.logs || []).slice(-60);
+        this.lastLogs = logs;   // v19 战斗回顾（兼容保留）
+        // v23：最近三场回顾（会话内存，不进存档）
+        const B2 = this.active;
+        this.history = [{ foe: (B2.enemy && B2.enemy.name) || '?', won: !!B2.won, logs },
+          ...(this.history || [])].slice(0, 3);
+      }
     }
     const B = this.active;
     const p = Game.player;
     // 邪修：杀伐之气萦绕，每场战斗孽障 +1
     // v30 修瑕：切磋/大比/剧情战/驯服等「点到为止」场合不再记杀业——原 end() 无差别结算
-    if (B && p && p.dao === 'demonic' && !(B.ctx.spar || B.ctx.tourney || B.ctx.story || B._tame)) {
+    // v37（E269）：跳层作废之战（B._voided，玩家未出手）一并豁免——不出手之战孽障/魔性无所依附
+    if (B && p && p.dao === 'demonic' && !(B.ctx.spar || B.ctx.tourney || B.ctx.story || B._tame || B._voided)) {
       p.karma = (p.karma || 0) + 1;
       DaoSys.gain(p, 2);   // v16 魔性
       Log.add('杀伐之气萦绕不去——孽障 +1。', 'loss');

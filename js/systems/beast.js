@@ -289,6 +289,22 @@ const BeastSys = {
     this.checkThirdSkill(b);   // v32 修瑕（E2）：喂食即检查第三技（十阶+亲昵 ≥80 任意时点补发）
     Game.afterAction();
   },
+  /** v37（E235）：连喂五枚——内丹不足、灵兽十阶圆满即自停（逐枚走 feed 单口同一结算核，
+   *  升阶的逐级结算/物种技补插不重入；汇总一条播报） */
+  async feedMulti(uid) {
+    const p = Game.player;
+    const b = p.beasts.list.find(x => x.uid === uid);
+    if (!b) return;
+    if (b.level >= 10) { UI.toast('它已十阶圆满——蜕变请用「蜕变」'); return; }
+    if (Bag.count('m_neidan') < 1) { UI.toast('需【妖兽内丹】一枚'); return; }
+    let fed = 0;
+    while (fed < 5 && b.level < 10 && Bag.count('m_neidan') >= 1) {
+      await this.feed(uid);
+      fed++;
+    }
+    Log.add(`连喂内丹 ×${fed}——【${b.name}】妖气蒸腾（${b.level} 阶 · 经验 ${Math.floor(b.exp)}）。`, 'gain');
+    Game.afterAction();
+  },
   setActive(uid) {
     const p = Game.player;
     // v31 修瑕（E14）：在途派遣的灵兽不可设为出战——原可同时吃派遣寻宝与出战协战双重收益

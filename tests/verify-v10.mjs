@@ -683,13 +683,12 @@ try {
     const g1 = Cultivate.baseGain(p);
     const g0 = g1 / 1.5;
     const dayMark = p.rushDay === 200;
-    p.day = 201;
-    CaveSys.spiritRush && CaveSys.spiritRush;   // 次日未点
-    const g2 = (p.rushDay === 200) ? g1 : g0;   // 次日不加成
+    // v37（E258）收缩：删 no-op 行与死变量 g2——真实覆盖已由 verify-v22 X5（RB 系列）承接，
+    // v10 侧只留「×1.5 生效 + rushDay 落章」两个断言；完整窗口/复燃口径见 v37 E255/E218
     p.rushDay = null; p.day = 10; p.cave = null;
     return { boosted: Math.abs(g1 / g0 - 1.5) < 0.01, dayMark };
   });
-  x5.boosted && x5.dayMark ? pass('X5 聚灵加速：修炼 ×1.5·日限一次') : fail('X5 聚灵', JSON.stringify(x5));
+  x5.boosted && x5.dayMark ? pass('X5 聚灵加速：修炼 ×1.5·rushDay 落章（窗口口径详见 E255/E218）') : fail('X5 聚灵', JSON.stringify(x5));
 
   // X6 首战保底：首战 ctx.mercy 注入
   const x6 = await page.evaluate(async () => {
@@ -1267,6 +1266,7 @@ try {
     p.quest = { ch: 2, side: {} };          // 第三章：助缘=开辟洞府
     p.cave = p.cave || CaveSys.freshCave();
     const doneBefore = QuestSys.bonusDone(QuestSys.CHAPTERS[2], p);
+    p.fortune = 0;   // v37（B9 定稿）：防前序流程把气运推到 FORTUNE_CAP 后 addFortune 静默吞（断言只验「领赏有进账」）
     const fortuneBefore = p.fortune || 0;
     await Game.actions['quest-bonus']();
     const claimed = !!(p.quest.bonus || {}).c3;

@@ -54,15 +54,15 @@ console.log('===== SA 源码静态组 =====');
   /* ---- A 节奏重校 ---- */
   gdata.includes('EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 3540000, 22000000, 137000000, 850000000]') ? pass('SA1 EXP_BASE ×5.4 重排（A1）') : fail('SA1 EXP_BASE', '');
   gdata.includes("sinkCurve(r) { return Math.pow(3, Math.min(10,") ? pass('SA2 sinkCurve 封顶 8→10（D3）') : fail('SA2 sinkCurve', '');
-  cult.includes('const expGain = Math.round(this.baseGain(p) * 2.5);') && !cult.includes('20 * 80 * GameData.eco') ? pass('SA3 悟道收益改 baseGain×2.5 自随缩放（A2）') : fail('SA3 悟道', '');
+  cult.includes('const expGain = Math.round(this.baseGain(p) * 2.5 * pur2);') && !cult.includes('20 * 80 * GameData.eco') ? pass('SA3 悟道收益改 baseGain×2.5 自随缩放（A2；v37（E264）乘感悟纯度 pur2）') : fail('SA3 悟道', '');
   cult.includes('spill * this.baseGain(p) * 0.125') && !cult.includes('spill * 80 * GameData.eco') ? pass('SA4 感悟溢出汇率同悟道口径（A2）') : fail('SA4 溢出', '');
   cult.includes('daoGain >= 500 || p.counters.xianyuan % 500 < daoGain') ? pass('SA5 仙元溢流播报节流（A2）') : fail('SA5 节流', '');
   // r9 双喂拆除：三处转换点（addExp 溢流 / addInsight 溢出 / wuDao）都不得再喂 DaoSys
   {
     const r9spill = cult.indexOf('if (p.realmIdx >= 9) {\n        const yuan = spill * 50;');
     const spillBody = cult.slice(r9spill, r9spill + 400);
-    const r9wudao = cult.indexOf("p.counters.xianyuan = (p.counters.xianyuan || 0) + 1000;\n      Log.add('你于蒲团上");
-    const wudaoBody = cult.slice(r9wudao, r9wudao + 200);
+    const r9wudao = cult.indexOf('const yuan = Math.round(1000 * pur2);');   // v37（E264）：悟道 r9 炼作改纯度折算（原固定 +1000 锚随之更新）
+    const wudaoBody = r9wudao >= 0 ? cult.slice(r9wudao, r9wudao + 200) : '';
     const overflowOk = !cult.includes('DaoSys.gain(p, daoGain);');
     spillBody.includes('DaoSys.gain') || wudaoBody.includes('DaoSys.gain') || !overflowOk ? fail('SA6 r9 双喂拆除（E117）', '') : pass('SA6 r9 双喂拆除（E117）');
   }
@@ -70,7 +70,7 @@ console.log('===== SA 源码静态组 =====');
   world.includes('nextEventYear: 2 + Utils.rand(0, 2), _evResched34: true') ? pass('SA8 世界大事首现 2~4 年（A3）') : fail('SA8 首现', '');
   world.includes('w.nextEventYear = y + 1 + Utils.rand(0, 2)') ? pass('SA9 世界大事后续 1~3 年一遇（A3）') : fail('SA9 后续', '');
   world.includes('!w._evResched34 && !(w.history && w.history.length)') ? pass('SA10 旧档一次性重掷防重（A3）') : fail('SA10 重掷', '');
-  gamejs.includes('Math.min(120, Math.floor(elapsedMs / 60000))') && gamejs.includes('perRound / 3 * 0.6 * realDays') ? pass('SA11 离线上限 120 日·效率 0.6（A4）') : fail('SA11 离线参数', '');
+  gamejs.includes('Math.min(120, Math.floor(elapsedMs / 60000))') && gamejs.includes('const OFFLINE_EFF = 0.6;') && gamejs.includes('perRound / 3 * OFFLINE_EFF * rushMul * realDays') ? pass('SA11 离线上限 120 日·效率 0.6（A4；v37（E277）OFFLINE_EFF/rushMul 具名 + 聚灵窗口补乘）') : fail('SA11 离线参数', '');
   gamejs.includes('云 归 · 离 线 小 结') && cave.includes("Game._offlineAgg.spring = (Game._offlineAgg.spring || 0) + gain") ? pass('SA12 离线小结弹窗+灵泉入账（E1/A4）') : fail('SA12 离线小结', '');
   gamejs.includes('this._skipOfflineOnce = true;') ? pass('SA13 新档离线守卫（G3）') : fail('SA13 新档守卫', '');
 

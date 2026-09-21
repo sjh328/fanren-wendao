@@ -221,7 +221,7 @@ const Tribulation = {
         return;
       }
       if (p.hp >= Stat.compute(p).maxHp * 0.999) { p.flags = p.flags || {}; p.flags.tribFullHp = true; }   // v20 无伤渡劫成就（判定须在回血前，且先于 st 声明避免 TDZ）
-      p.realmIdx++; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(p.realmIdx, 0) - 1); p.insight = 0; p.expOverflow = 0;
+      p.realmIdx++; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(p.realmIdx, 0) - 1); p.insight = 0; p.insightSrc = []; p.expOverflow = 0;   // v37（E264）：感悟清零时来源 FIFO 池同步清空（双池一致）
       p.breakStreak = 0;   // v8 挫而愈坚：成功即清零
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;
@@ -271,12 +271,12 @@ const Tribulation = {
       if (aid) {
         if (!S.xian) p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * keepPct);
         insGain = 10;
-        p.insight = Math.min(100, p.insight + insGain);
+        Cultivate.addInsight(p, insGain);
         this.log(`危难之际，<b>${aid.name}</b> 护法相助，为你护住道基！`, 'log-gain');
       } else {
         if (!S.xian) p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * keepPct);
         insGain = 15;
-        p.insight = Math.min(100, p.insight + insGain);
+        Cultivate.addInsight(p, insGain);
       }
       // v31 仙劫失利：折仙元三成、不折寿——仙劫非天劫，雷火不蚀寿元，蚀的是仙家资粮
       if (S.xian) {

@@ -75,7 +75,7 @@ console.log('===== SA 源码静态组 =====');
 
   /* ---- B2 经济（E73~E80） ---- */
   auction.includes("Daily.resetIfNew(p, '_boxDay')") && auction.includes('p._boxDay === Math.floor(p.day || 0)') ? pass('SA15 古匣日限迁 p 本体日结总线（E73，无真值 coercion）') : fail('SA15 古匣日限', '');
-  forge.includes('feeOf(r)') && forge.includes('FEE_FALLBACK') && forge.includes('开炉需工费') ? pass('SA16 炼器工费收取（E74）') : fail('SA16 工费', '');
+  forge.includes('feeOf(r)') && forge.includes('GameData.GRADE_FALLBACK') && forge.includes('开炉需工费') ? pass('SA16 炼器工费收取（E74；v37（E254）fee 兜底数组并入 GameData.GRADE_FALLBACK 单源）') : fail('SA16 工费', '');
   forge.includes('(out.grade || 0) <= 2 ? 0.25 : (out.grade || 0) <= 4 ? 0.15 : 0.10') ? pass('SA17 工费阶梯 25/15/10（E74）') : fail('SA17 阶梯', '');
   ui.includes('工费 ${Utils.fmtNum(fee)} 灵石') && ui.includes('ForgeSys.feeOf(r)') ? pass('SA18 配方行工费显示同源（E74）') : fail('SA18 工费显示', '');
   (bag.match(/E75/g) || []).length >= 2 ? pass('SA19 批量丢弃/传承清器魂阶梯（E75）') : fail('SA19 阶梯清', '');
@@ -117,7 +117,7 @@ console.log('===== SA 源码静态组 =====');
   idxhtml.includes('id="popup-modal" class="modal hidden" role="dialog"') ? pass('SA49 popup 静态 aria（E101）') : fail('SA49 popup', '');
 
   /* ---- B6 + C 升级包 ---- */
-  dsign.includes('gap >= 1 && gap <= 3') && dsign.includes('progress(p)') ? pass('SA50 连签三日内容差（C2）') : fail('SA50 容差', '');
+  dsign.includes('gap >= 1 && (gap <= 3 || gap % 30 === 0)') && dsign.includes('progress(p)') ? pass('SA50 连签三日容差（C2；v37（E241）增闭关 30 日豁免、gap>=1 前置防同日空涨）') : fail('SA50 容差', '');
   ui.includes('连签第 ${prog.day}/7 日') && ui.includes('连签 ${signProg.day}/7') ? pass('SA51 连签进度双卡可见（C2）') : fail('SA51 进度', '');
   gdata.includes("key: 'k1_promise'") && gdata.includes("key: 'k2_map_method'") && gdata.includes("key: 'k3_defy_response'") && gdata.includes("key: 'k6_clone_fate'") && gdata.includes("key: 'k9_final'") ? pass('SA52 抉择值回响五键（D1）') : fail('SA52 值键', '');
   gdata.includes("req: 'k6_first_survive'") && gdata.includes("req: 'k9_p1'") && gdata.includes("req: 'k9_p2'") && gdata.includes("req: 'k3_purged_watch'") && gdata.includes("req: 'k2_relic_seen'") && gdata.includes("req: 'k7_purge_check'") ? pass('SA53 旗标回响六键（D1）') : fail('SA53 旗标键', '');

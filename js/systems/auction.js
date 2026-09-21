@@ -42,12 +42,11 @@ const AuctionSys = {
     if (!pool.length) return 500;
     // v32 修瑕（E20）：估值两处失真修复——①ecoPrice 物（符箓等时价之物）原按 base 记期望
     //（r6 时 tal_huoshe 单项低估约 3000）；②0 价稀有物原按 500 记（gf_jianxin 宗门兑价 3 万贡献）
-    const GRADE_FALLBACK = [300, 800, 2000, 6000, 16000, 40000];
     const valOf = (x) => {
       const def = GameData.ITEMS[x.id];
       if (!def) return 500;
       let v = def.price || 0;
-      if (!v) v = GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500;
+      if (!v) v = GameData.GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500;
       if (def.ecoPrice) v = Math.round(v * GameData.stoneEco(p.realmIdx || 0));
       return v;
     };

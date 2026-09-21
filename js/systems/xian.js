@@ -39,7 +39,8 @@ const XianSys = {
     }
     if (this.layer(p) >= 3) {
       // v32 修瑕（E29）：大罗圆满原仍提示「引动仙劫晋入下一阶」——其下再无阶，应指证道祖之境
-      UI.toast(this.cur(p) >= 4 ? '大罗已圆满——可证道祖之境' : `${d.name}已圆满——引动仙劫方可晋入${(GameData.XIAN_TIERS[this.cur(p)] || {}).name || '下一阶'}`);
+      // v37（E246）：阶满指引补仙元去处——「可于转世时携往生」（1000:1 折气运 / 2000:1 折悟性）
+      UI.toast(this.cur(p) >= 4 ? '大罗已圆满——可证道祖之境；仙元可于转世时携往生' : `${d.name}已圆满——引动仙劫方可晋入${(GameData.XIAN_TIERS[this.cur(p)] || {}).name || '下一阶'}；余下仙元可于转世时携往生`);
       return;
     }
     const need = d.layerNeed;

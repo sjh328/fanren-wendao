@@ -48,6 +48,7 @@ const ShopSys = {
     if (def.type === 'gongfa' && !DaoSys.canLearnGongfa(p, def)) return; // 体修难悟高阶法诀
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
     Bag.addItem(itemId, 1);
+    if (typeof Ambience !== 'undefined') Ambience.sfx('coin');   // v37（E232）：成交音（死音效 coin 接线）
     Log.add(`你购得 <b>${def.name}</b>，花费 ${Utils.fmtNum(cost)} 下品灵石。`, 'info');
     Game.afterAction();
   },
@@ -84,11 +85,13 @@ const ShopSys = {
     }
     Bag.removeItem(itemId, qty);
     Bag.addStonesRaw(gain);   // v32 修瑕（E16）：出售款原额入账，不吃灵石获取加成（「获取加成」语义收窄为战斗/事件掉落）
+    if (typeof Ambience !== 'undefined') Ambience.sfx('coin');   // v37（E232）：成交音
     Log.add(`你售出 ${def.name} ×${qty}，得 ${Utils.fmtNum(gain)} 下品灵石。`, 'gain');
     Game.afterAction();
   },
   convert(dir) {
     const s = Game.player.stones;
+    let converted = false;   // v37（E232）：任一档成交即鸣响
     const tryOp = (cond, fn, msg) => {
       if (cond) { fn(); Log.add(msg, 'info'); }
       else UI.toast('灵石不足，无法兑换');
@@ -97,6 +100,34 @@ const ShopSys = {
     if (dir === 'down1') tryOp(s.mid >= 1, () => { s.mid--; s.low += 100; }, '你将一枚中品灵石兑换为一百下品灵石。');
     if (dir === 'up2') tryOp(s.mid >= 100, () => { s.mid -= 100; s.high++; }, '你将一百中品灵石兑换为一枚上品灵石。');
     if (dir === 'down2') tryOp(s.high >= 1, () => { s.high--; s.mid += 100; }, '你将一枚上品灵石兑换为一百中品灵石。');
+    if (converted && typeof Ambience !== 'undefined') Ambience.sfx('coin');   // v37（E232）：成交音
+  },
+  /** v37（E236）：批量兑换——×10 连兑（余额不足自动停）与「全兑」（低→中→高一兑到底，零头自留） */
+  convertMulti(dir, times = 10) {
+    const s = Game.player.stones;
+    let n = 0;
+    for (let i = 0; i < times; i++) {
+      if (dir === 'up1' && s.low >= 100) { s.low -= 100; s.mid++; n++; }
+      else if (dir === 'down1' && s.mid >= 1) { s.mid--; s.low += 100; n++; }
+      else if (dir === 'up2' && s.mid >= 100) { s.mid -= 100; s.high++; n++; }
+      else if (dir === 'down2' && s.high >= 1) { s.high--; s.mid += 100; n++; }
+      else break;
+    }
+    if (n > 0) {
+      if (typeof Ambience !== 'undefined') Ambience.sfx('coin');   // v37（E232）：成交音
+      Log.add(`你连续兑换了 ${n} 次。`, 'info');
+    } else UI.toast('灵石不足，无法兑换');
+    Game.afterAction();
+  },
+  convertAll() {
+    const s = Game.player.stones;
+    const m = Math.floor(s.low / 100), h = Math.floor(s.mid / 100);
+    s.low -= m * 100; s.mid += m;
+    s.mid -= h * 100; s.high += h;
+    if (m > 0 || h > 0) {
+      if (typeof Ambience !== 'undefined') Ambience.sfx('coin');   // v37（E232）：成交音
+      Log.add(`你把零散灵石尽数归笼——下品兑中品 ×${m}、中品兑上品 ×${h}（零头自留）。`, 'info');
+    } else UI.toast('没有可归笼的零散灵石');
     Game.afterAction();
   },
   /* ---------- v4 一键减负：凡品清理 ---------- */

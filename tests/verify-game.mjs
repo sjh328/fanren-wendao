@@ -267,7 +267,16 @@ try {
   await drainStory(page);   // v19：T7 探索可能完成章节目标，先清掉剧情链
 
   /* ---------- T8 坊市 ---------- */
-  await clickSel(page, '[data-action="act-tab"][data-tab="shop"]');
+  // v37 加固：切页偶发被剧情/弹窗时序吞点——先排空弹层，再带重试确保坊市面板真正渲染出购买按钮
+  await drainStory(page);
+  let shopOpened = false;
+  for (let i = 0; i < 3 && !shopOpened; i++) {
+    await page.evaluate(() => { if (UI._popupResolve) UI.popupChoose(0); document.getElementById('popup-modal')?.classList.add('hidden'); });
+    await clickSel(page, '[data-action="act-tab"][data-tab="shop"]');
+    await sleep(600);
+    shopOpened = await page.evaluate(() => Game.activeTab === 'shop' && !!document.querySelector('[data-action="act-buy"]'));
+  }
+  shopOpened ? pass('T8 坊市面板就绪') : fail('T8 坊市面板未渲染', `activeTab=${await page.evaluate(() => Game.activeTab)} lock=${await page.evaluate(() => Guide.tabLocked('shop'))}`);
   await sleep(300);
   // 出售先行，凑足灵石（v24：出售区折叠需先展开；全售有二次确认弹窗。
   //  DOM 直点 + 每笔后 drainStory——防章节剧情恰好在此刻弹出拦截坐标点击）
@@ -965,6 +974,7 @@ try {
   console.log('\n===== 中断汇总 =====');
   for (const [s, n] of results) console.log(`${s === 'PASS' ? '✓' : '✗'} ${n}`);
   consoleErrors.slice(0, 10).forEach(e => console.log('  [console] ' + e));
+  process.exit(1);   // v37（B9）：中断即红——原 catch 路径不传播非零码，链上静默绿
 } finally {
   await browser.close();
 }

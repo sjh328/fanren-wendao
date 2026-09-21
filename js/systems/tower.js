@@ -43,6 +43,11 @@ const TowerSys = {
 
   unlockOk(p) { return p.realmIdx >= 1; },
   extraCost(p) { return Math.round(80 * GameData.stoneEco(p.realmIdx)); },
+  /** v37（E273）：层奖修为每日额度 = EXP_ALLOW_MUL × 修炼日均等效。
+   *  修炼日均 = baseGain×(1+cultPct/100)/3（一次修炼 3 日，标准画像修炼日均/baseGain ≈ 0.353，
+   *  balance-sim「塔深爬」行同式定标）。层深 +8 层 eco×4.6 无收敛——任何固定单价都封不住深爬
+   *  （峰值 ×121.6 修炼日均），唯额度制可断；系数 2 目标塔行 ≤ ×2.2 修炼 / ×1.4 闭关门禁带 */
+  EXP_ALLOW_MUL: 2,
 
   /** v30 塔绩兑换所：塔绩 = p.counters.towerWins（累计胜层），兑换扣除；最高层纪录不受影响 */
   REDEEMS: [
@@ -101,6 +106,7 @@ const TowerSys = {
     if (!p.tower.today || typeof p.tower.today.day !== 'number') p.tower.today = { day: 0, used: 0, bought: 0, stonesRedeemDay: 0, stonesRedeemN: 0 };
     if (p.tower.today.stonesRedeemN == null) p.tower.today.stonesRedeemN = 0;   // v36（E221）：老档自愈补默认
     if (p.tower.today.stonesRedeemDay == null) p.tower.today.stonesRedeemDay = 0;
+    if (p.tower.today.exp == null) p.tower.today.exp = 0;   // v37（E273）：老档自愈补默认（层奖修为日额度已用数）
     return p.tower;
   },
   syncToday(p) {
@@ -109,7 +115,8 @@ const TowerSys = {
     // v31 修瑕：层奖灵石日额度同随换日清零——此前只清 used/bought，历史层奖累计达上限后每日层奖恒 0，
     // 与「归于明日」文案相反
     // v36（E221）：纳财次数随换日清零（stonesRedeemDay 印章由 redeem 兑换时重盖）
-    if (t.today.day !== d) { t.today.day = d; t.today.used = 0; t.today.bought = 0; t.today.stones = 0; t.today.stonesRedeemN = 0; }
+    // v37（E273）：层奖修为日额度同构清零（today.exp 归于明日）
+    if (t.today.day !== d) { t.today.day = d; t.today.used = 0; t.today.bought = 0; t.today.stones = 0; t.today.exp = 0; t.today.stonesRedeemN = 0; }
   },
   leftToday(p) {
     const t = this.state(p);
@@ -194,9 +201,18 @@ const TowerSys = {
     // v32 修瑕（E10）：气血门槛原在 nextFloor 才查——enter 已 used++，血线边缘误点即白耗今日次数
     const stT = Stat.compute(p);
     if (p.hp <= Math.max(2, Math.round(stT.maxHp * 0.1))) { UI.toast('气血近乎枯竭——先疗伤，再叩塔门'); return; }
+    // v37（E273）：整场登塔一次计日——入塔耗 3 游戏日，连胜/败北/收手离塔/通关统一在此计讫；
+    // resume 续登（run 仍在）不重复计，nextFloor/onVictory/onDefeat/leave 一律不另计（连胜 87 层不叠加）。
+    // 此前塔全文件零 Time.add、battle 塔败北分支亦提前 return——胜局深爬与收手离塔均零耗日，
+    // 塔成了「免费 1 次 + 零时间」的可重复修为管。耗日收口在塔侧，battle.js 塔分支勿再叠加。
+    // 计日先于扣次（v11 AB7 回归实证）：本次登塔占的是抵达日（day+3）的登塔机缘——免费名额与
+    // 层奖日额度均随抵达日换日重置，而同日再登仍需加购，「每日免费 1 次 + 灵石加购」经济不变
+    Time.add(3);
+    if (p.dead) return;   // 计日跨年可能触发寿元终局——身后不再开战
+    this.syncToday(p);   // 抵达日：used/bought/层奖额度换日清零后再扣本次机缘
     t.today.used++;
     t.run = { floor: 1, buffs: [] };
-    Log.add('你推开通天塔的厚重石门——塔内灵压如山，每层都有一头「守影」踞阶而踞。', 'story');
+    Log.add('你推开通天塔的厚重石门——塔内灵压如山，每层都有一头「守影」踞阶而踞。塔中无岁月，此番登塔计三日。', 'story');
     UI.renderAll();
     this.nextFloor();
   },
@@ -260,15 +276,23 @@ const TowerSys = {
     const exp = Math.round(B.enemy.expGain * 0.5 * (mods.exp || 1));
     // v30 堵漏：层奖灵石设每日总额度（300×境界经济）——原守影战力钳 60 而层奖线性无界，
     // 高战玩家配回春祝福可近乎无限爬层，塔成了后期最粗的可重复收入管
+    // v37（E273）：层奖修为并入每日额度（EXP_ALLOW_MUL×修炼日均等效，与下方灵石 allowance 完全同构，
+    // 超限「归于明日」）——层深 +8 层 eco×4.6 无收敛，修为额度断「塔深爬 ×121.6 修炼日均」主粮通道
     this.syncToday(p);
     const t2 = this.state(p);
     t2.today.stones = t2.today.stones || 0;
+    t2.today.exp = t2.today.exp || 0;
     const rawStones = Math.round((8 + run.floor * 3) * GameData.stoneEco(p.realmIdx) * (mods.stone || 1));
     const allowance = Math.max(0, 300 * GameData.stoneEco(p.realmIdx) - t2.today.stones);
     const stones = Math.min(rawStones, allowance);
     t2.today.stones += stones;
-    if (stones < rawStones) Log.add('塔灵今日缘法已尽——再往上的层奖灵石将归于明日（修为照旧）。', 'warn');
-    Cultivate.addExp(p, exp);
+    if (stones < rawStones) Log.add('塔灵今日缘法已尽——再往上的层奖灵石将归于明日。', 'warn');
+    const cultDaily = Cultivate.baseGain(p) * (1 + (Stat.compute(p).cultPct || 0) / 100) / 3;   // 修炼日均等效（与 balance-sim 塔行同式）
+    const expAllowance = Math.max(0, this.EXP_ALLOW_MUL * cultDaily - t2.today.exp);
+    const expAllowed = Math.min(exp, expAllowance);
+    t2.today.exp += expAllowed;
+    if (expAllowed < exp) Log.add('塔灵今日的悟性缘法亦尽——再往上的层奖修为将归于明日。', 'warn');
+    Cultivate.addExp(p, expAllowed);
     Bag.addStones(stones);
     p.counters.wins++;
     p.counters.towerWins = (p.counters.towerWins || 0) + 1;
@@ -284,7 +308,7 @@ const TowerSys = {
     if (run.floor > (Meta.data.towerBest || 0)) { Meta.data.towerBest = run.floor; Meta.save(); }
     const floor = run.floor;
     run.floor++;
-    Log.add(`登天塔第 ${floor} 层已克——层奖：修为 +${Utils.fmtNum(exp)}、灵石 +${Utils.fmtNum(stones)}${healPct > 0 ? `，气血回复 ${Math.round(healPct * 100)}%` : ''}。`, 'gain');
+    Log.add(`登天塔第 ${floor} 层已克——层奖：修为 +${Utils.fmtNum(expAllowed)}、灵石 +${Utils.fmtNum(stones)}${healPct > 0 ? `，气血回复 ${Math.round(healPct * 100)}%` : ''}。`, 'gain');
     // v36（E200）：此处重复 afterAction 删除——battle.js 塔分支先 end(false)，其收尾已跑 afterAction
     // （E62 同族冗余），重复日结会让节庆检查/日结双跑
     // 每 5 层：宝箱；每 7 层：奇遇层；每 3 层：祝福三选一；其余层自动续层
@@ -332,6 +356,7 @@ const TowerSys = {
           run.riskAtk = (run.riskAtk || 1) * 1.25;   // v36（E211）：累乘——原覆盖赋值使多次赌约仍恒 +25%；run.risk 死字段（全工程唯一读写点）删除
           p.counters.towerWins = (p.counters.towerWins || 0) + 1;
           Log.add('你应下赌约——塔风呼啸，石阶在脚下连退两层！（塔绩 +1，此后守影更凶）', 'event');
+          if (Battle.active) Battle.active._voided = true;   // v37（E269）：跳层作废——被跳层战斗未出手，打作废标：不计杀业/魔性、不入战斗回顾
           Battle.end();   // 作废被跳层（未出手，零损耗）
           this.nextFloor();
         });

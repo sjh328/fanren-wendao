@@ -341,16 +341,16 @@ try {
   await clickSel(page, '[data-action="act-tab"][data-tab="jianghu"]');
   await sleep(300);
   {
-    // 结交至交情≥15（可重复结交）
+    // v37（E240）：结交一次性——单击礼成（+8~14 落印记），再点按钮转「已结识」置灰（情谊改由赠礼/论道温养）
     let p = await player(page);
-    for (let i = 0; i < 3 && p.npcs.n3.rel < 15; i++) {
-      await clickSel(page, '[data-action="npc-befriend"][data-npc="n3"]');
-      await sleep(300);
-      await clickPopupBtn(0);
-      await sleep(450);
-      p = await player(page);
-    }
-    (p.npcs.n3.rel >= 8 && p.npcs.n3.met) ? pass('V3 结交苏白：交情上升') : fail('V3 结交', JSON.stringify(p.npcs.n3));
+    await clickSel(page, '[data-action="npc-befriend"][data-npc="n3"]');
+    await sleep(300);
+    await clickPopupBtn(0);
+    await sleep(450);
+    p = await player(page);
+    (p.npcs.n3.rel >= 8 && p.npcs.n3.met && p.npcs.n3.befriended) ? pass('V3 结交苏白：交情上升+印记落档') : fail('V3 结交', JSON.stringify(p.npcs.n3));
+    const befGone = (await page.$('[data-action="npc-befriend"][data-npc="n3"]')) === null;
+    befGone ? pass('V3 结交一次性：按钮转已结识置灰（E240）') : fail('V3 结交一次性', '结交钮仍在');
     // 切磋（v24 起切磋收进「恩怨与机缘」折叠，先展开）
     await page.evaluate(() => { const f = [...document.querySelectorAll('.npc-more > summary')].find(x => x.closest('.shop-row').textContent.includes('苏白')); if (f && !f.parentElement.open) f.click(); });   // v33（E94）折叠有记忆：已展开（跨重渲染保持）则勿再点（会收起）
     await sleep(150);
@@ -362,6 +362,10 @@ try {
     await sleep(500);
     p = await player(page);
     p.npcs.n3.rel > 0 ? pass('V3 切磋后交情友好') : fail('V3 切磋交情', String(p.npcs.n3.rel));
+    // v37（E240）：结交一次性后交情可能不足 15——按「温养过的交情」显式补足再测背刺线
+    await page.evaluate(() => { Game.player.npcs.n3.rel = Math.max(Game.player.npcs.n3.rel, 20); UI.renderAll(); });
+    p = await player(page);   // v37（B9）：重读快照——上方 bump 后旧 p 的 rel 是旧值，防背刺分支被 SKIP
+    await sleep(200);
     // 背刺
     if (p.npcs.n3.rel >= 15 && p.npcs.n3.alive) {
       const relBefore = p.npcs.n3.rel;

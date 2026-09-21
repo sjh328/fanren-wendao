@@ -170,6 +170,7 @@ const ReincarnationSys = {
         · 可携<b>一件法宝</b>入轮回<br>
         · 得 1 枚<b>轮回印记</b>：累计获得数决定全属性加成（+1%/枚，封顶 30）与传承树 1~10 层（现累计 ${legacy.marksEarned || 0} 枚）<br>
         · 传承树已解锁 ${this.baseTier(legacy)}/15 层：1~10 层随累计印记自动点亮，11~15 层可以余额解锁<br>
+        ${((p.counters && p.counters.xianyuan) || 0) >= 1000 ? '· <b>仙元可携往生</b>：1000 折来世气运 +1（至多 +3）/ 2000 折悟性 +1（至多 +2）<br>' : ''}
         · 来世重择<b>出身与大道</b>；前世仇怨，亦会随记忆寻来<br>
         <span class="neg">此世修为、境界、灵石、宗门尽付东流。</span>`,
       options: [{ text: '兵 解', value: true, primary: true }, { text: '再苟一时', value: false }],
@@ -226,9 +227,21 @@ const ReincarnationSys = {
     });
     if (originId === undefined) return;
     const origin = GameData.ORIGINS.find(o => o.id === originId) || null;
-    await this.execute(p, legacy, kept, origin, opts.extraMarks || 0);
+    // v37（E246）：携仙元往生——仙元死货币闭环：兵解之际可折作来世根基（与轮回印记并行的第二条遗产线）
+    const xy = (p.counters && p.counters.xianyuan) || 0;
+    let carryXianyuan = false;
+    if (xy >= 1000) {
+      const fGain = Math.min(3, Math.floor(xy / 1000));
+      const cGain = Math.min(2, Math.floor(xy / 2000));
+      carryXianyuan = await UI.popup({
+        title: '携仙元往生',
+        html: `你此世炼有 <b class="hl">${Utils.fmtNum(xy)}</b> 仙元。兵解之际，仙元可随神魂折作来世根基：<br>· 每 <b>1000</b> 仙元 → 来世<b>气运 +1</b>（至多 +3）<br>· 每 <b>2000</b> 仙元 → 来世<b>悟性 +1</b>（至多 +2）<br>· 本世折算：<b>气运 +${fGain}</b>${cGain ? `、<b>悟性 +${cGain}</b>` : ''}${xy % 1000 ? '，余数逸散' : ''}<br><span class="neg">携往则当世仙元尽数清零——天予不取，反受其咎。</span>`,
+        options: [{ text: `携 ${Utils.fmtNum(xy)} 仙元往生`, value: true, primary: true }, { text: '散于天地', value: false }],
+      });
+    }
+    await this.execute(p, legacy, kept, origin, opts.extraMarks || 0, carryXianyuan);
   },
-  async execute(oldP, legacy, kept, origin, extraMarks = 0) {
+  async execute(oldP, legacy, kept, origin, extraMarks = 0, carryXianyuan = false) {
     // 前世仇怨：只带走此生尚存的心结（已化解者不入轮回）
     const grudges = Object.keys(oldP.npcs || {}).filter(id => oldP.npcs[id].grudge && oldP.npcs[id].alive);
     // v32（D7）：兵解防重护栏——同一世（同 lifeUid）重复 execute 不再发印记与世数，
@@ -310,12 +323,26 @@ const ReincarnationSys = {
       const s = p2.npcs[gid];
       if (s) { s.rel = -35; s.grudge = true; s.pastLife = true; }
     }
+    // v37（E246）：仙元携往生兑现——折来世气运（1000:1，cap +3）/悟性（2000:1，cap +2），
+    // 当世仙元落定即清零（死货币闭环）；pastXianyuan 记档随新身入世（第二条遗产线，与轮回印记并行）
+    const xyNow = (oldP.counters && oldP.counters.xianyuan) || 0;
+    if (carryXianyuan && xyNow >= 1000) {
+      const fortuneGain = Math.min(3, Math.floor(xyNow / 1000));
+      const compGain = Math.min(2, Math.floor(xyNow / 2000));
+      p2.pastXianyuan = xyNow;
+      p2.fortune = (p2.fortune || 0) + fortuneGain;
+      p2.attrs.comp = Math.min(10, p2.attrs.comp + compGain);
+      Log.add(`仙元携往生——${Utils.fmtNum(xyNow)} 仙元化作来世气运 +${fortuneGain}${compGain ? `、悟性 +${compGain}` : ''}，随神魂入胎。`, 'gain');
+    }
+    if (oldP.counters) oldP.counters.xianyuan = 0;   // v37（E246）：转世落定清零当世仙元
     Game.player = p2;
     p2.pendingDao = true; // 前世记忆：可即刻叩问大道
     Save.write('auto', p2);   // v29：坐化档的 dead 标记随新身落盘清除，防「已坐化无法读取」误锁
     Log.clear();
     if (reExecuted) Log.add('轮回深处旧影一闪——此世因果已了，再入轮回亦无新得。（防重复兵解护栏）', 'warn');
     Log.add('<b>兵解转世</b>——一道流光划破夜空，落入凡间某处。啼哭声中，你重开一世。', 'system');
+    // v37（E238）：转世落定暖色异象一镜（与坐化冷色演出对仗：一冷一暖，一世终一世始）
+    UI.realmShow('一道流光划破夜空——新的一生，在啼哭声中开始。', '#e8c56a');
     Log.add(`此为第 <b>${legacy.lives}</b> 世：轮回印记累计 ${legacy.marksEarned || 0}（全属性 +${Math.min(30, legacy.marksEarned || 0)}%）、前世悟性传承 +10%${kept ? `、携【${GameData.ITEMS[kept].name}】转世` : ''}。`, 'gain');
     if (grudges.length) Log.add(`前世仇怨如附骨之疽：${grudges.map(id => (NpcSys.def(id) || {}).name).filter(Boolean).join('、')} 与你再结梁子。`, 'warn');
     // v31（E22）：出生天赋清单——传承树解锁到第几层、带来哪些天赋，一目了然

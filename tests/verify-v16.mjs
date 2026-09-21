@@ -371,12 +371,12 @@ if (browser) {
       const p = Game.player;
       // 差事五式：钩子在位
       out.hooks = typeof SectSys.onExplore === 'function' && typeof SectSys.onSign === 'function';
-      // 五类任务各生成一次（types 全覆盖）
+      // v37（E242）：池互斥后宗门只余三门（cult/explore/sign），kill/collect 归悬赏板不再自宗门生成
       p.sect = { id: 'qingyun', contrib: 100, tasks: [], faction: null };
       const seen = new Set();
       for (let i = 0; i < 40; i++) { const t = SectSys.genTask(p); seen.add(t.type); }
-      out.fiveTypes = ['kill', 'collect', 'cult', 'explore', 'sign'].every(t => seen.has(t));
-      out.flavor5 = Object.keys(GameData.SECT_QUEST_FLAVOR.qingyun).length === 5;
+      out.threeTypes = ['cult', 'explore', 'sign'].every(t => seen.has(t)) && !seen.has('kill') && !seen.has('collect');
+      out.flavor3 = Object.keys(GameData.SECT_QUEST_FLAVOR.qingyun).length === 3;
       // explore/sign 钩子推进
       p.sect.tasks = [{ type: 'explore', target: null, need: 2, progress: 0, name: 'x', desc: 'x' }];
       SectSys.onExplore(); SectSys.onExplore();
@@ -399,7 +399,7 @@ if (browser) {
       p.sect = null;
       return out;
     });
-    g2.hooks && g2.fiveTypes && g2.flavor5 ? pass('RB39 差事五式生成与名目表（补遗）') : fail('RB39 差事五式', JSON.stringify({ h: g2.hooks, f: g2.fiveTypes, n: g2.flavor5 }));
+    g2.hooks && g2.threeTypes && g2.flavor3 ? pass('RB39 宗门差事三门生成与名目表（补遗；v37（E242）池互斥——kill/collect 归悬赏板不再生成）') : fail('RB39 差事', JSON.stringify({ h: g2.hooks, f: g2.threeTypes, n: g2.flavor3 }));
     g2.exploreHook && g2.signHook ? pass('RB40 历练/问签钩子推进（补遗）') : fail('RB40 钩子', JSON.stringify({ e: g2.exploreHook, s: g2.signHook }));
     g2.disciple && g2.discipleGate ? pass('RB41 亲传弟子历练产出+职位门（补遗）') : fail('RB41 弟子历练', JSON.stringify({ d: g2.disciple, g: g2.discipleGate }));
     consoleErrors.length === 0 ? pass('RB38 运行时 0 控制台错误') : fail('RB38 控制台', consoleErrors.slice(0, 3).join(' | '));

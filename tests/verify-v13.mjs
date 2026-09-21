@@ -522,14 +522,15 @@ try {
     p.day = today - (today % 365) + fest.day - 1;
     p.flags = {};
     const battleBefore = !!Battle.active;
-    FestivalSys.check(p, true);   // 离线模式：自动守岁
+    FestivalSys.check(p, true);   // v37（E247）：离线遇互动节庆改挂起补办（原就地自动守岁）
     const flagged = Object.keys(p.flags).some(k => k.startsWith('fest_chuxi_'));
     const noBattle = !Battle.active;
+    const pended = p.pendingFestival && p.pendingFestival.id === 'chuxi';
     p.day = today;
-    return { flagged, noBattle, battleBefore };
+    return { flagged, noBattle, battleBefore, pended };
   });
-  h11.flagged && h11.noBattle
-    ? pass('H11 离线年关自动守岁（节庆不再被离线跳过/卡死）') : fail('H11 离线节庆', JSON.stringify(h11));
+  h11.flagged && h11.noBattle && h11.pended
+    ? pass('H11 离线年关改挂起补办：旗标防重、不开战、pendingFestival 落档（v37 E247；不再就地守岁）') : fail('H11 离线节庆', JSON.stringify(h11));
 
   const h12 = await page.evaluate(() => {
     // 塔心祝福洗牌均匀性（Fisher–Yates）：首位分布 40 次抽样应覆盖多数候选

@@ -255,6 +255,10 @@ try {
   await page.evaluate(() => {
     const p = Game.player;
     p.realmIdx = 0; p.layer = 0; p.exp = 0; p.day = 3;
+    // v37（B9 定稿）：互动节庆旗标预置——AutoCult 跨日回放若撞上灯谜弹窗会挂起挂机（E247/E61 语义），
+    // 本节只验「目标达成即停」，预置旗标使节庆不与挂机赛跑（原先日 15 上元弹窗把 rounds 卡死）
+    p.flags = p.flags || {};
+    for (const y of [1, 2]) for (const id of ['shangyuan', 'zhongyuan', 'chuxi', 'duanwu', 'chongyang']) p.flags['fest_' + id + '_' + y] = true;
     UI.renderAll();
   });
   await page.evaluate(() => AutoCult.start({ kind: 'exp', need: 120, label: '攒够 120 修为' }));

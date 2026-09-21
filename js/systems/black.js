@@ -123,6 +123,7 @@ const BlackSys = {
       Log.add(`袋中确有${GameData.ITEMS[mat].name} ×${matQty}，不算亏，也不算赚。`, 'info');
     } else {
       KarmaSys.addKarma(4, true);
+      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 3, '赌局失利');   // v37（E245）：赌局失利 +3——心魔新行为来源
       const fine = Math.round(100 * GameData.stoneEco(p.realmIdx));
       // v26 修瑕：罚款实扣实报（此前下品灵石不足时分文未扣，日志却照写扣钱）
       const paid = Bag.spendStonesMax(fine);

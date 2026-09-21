@@ -29,6 +29,14 @@ if (fs.existsSync(relDir)) {
   console.error(`✗ releases/v${ver}/ 已存在——历史版本快照不可改动，新版本请用新的版本号`);
   process.exit(1);
 }
+// v37（E257）README 守卫：根 README 版本行未刷至本版本即拒绝发布——
+// v35/v36 曾把滞后 README（v31）烧进永久快照（releases/ 一经发布永不改动，无法补救）
+const readmePath = path.join(ROOT, 'README.md');
+const readmeSrc = fs.readFileSync(readmePath, 'utf8');
+if (!readmeSrc.includes(`当前版本 **v${ver}`)) {
+  console.error(`✗ README.md 版本行不含「当前版本 **v${ver}」——根 README 滞后。先刷新版本行/测试链/模块数/缓存号口径，再发布（E257 守卫）`);
+  process.exit(1);
+}
 
 /* 0) 版本号单源注入（v32 G7/E58）：缓存号 ?v=N、SW 版本与预缓存、manifest 描述一次到位——
  *    此前三处双轨（?v= / SW VERSION / manifest），发布只 bump 其一即半新半旧。
@@ -50,6 +58,12 @@ bump('sw.js', [
   [/const VERSION = 'fanren-wd-v\d+';/, `const VERSION = 'fanren-wd-v${swV}';`],
   [/'\.\/game\.js\?v=\d+'/g, `'./game.js?v=${cacheV}'`],
   [/'\.\/style\.css\?v=\d+'/g, `'./style.css?v=${cacheV}'`],
+]);
+// v37 收口（E257 补遗）：README 的缓存引用一并单源注入——否则守卫只管版本行、
+// 缓存引用永远滞后一版（v37 实测：README 写 ?v=52，index.html 已被注入为 53）
+bump('README.md', [
+  [/game\.js\?v=\d+/g, `game.js?v=${cacheV}`],
+  [/style\.css\?v=\d+/g, `style.css?v=${cacheV}`],
 ]);
 bump('manifest.webmanifest', [
   [/"description": "[^"]*"/, `"description": "网页版文字修仙放置游戏——凡人之躯，问道十章，白日飞升（v${ver}）。"`],

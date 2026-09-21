@@ -66,12 +66,29 @@ const Cultivate = {
   /** v28 联动：感悟单源入口——满百后溢出不再蒸发，按修炼口径折算修为（感悟圆融，化作修为）。
    *  大额感悟源（讲道/心魔劫/个人线/前世机缘/上签等）统一走此口，小处直写不受影响。
    *  v34（A2）：r<9 折算汇率 80×eco（≈219 倍单日修炼产出）改为 baseGain×0.125/点——与悟道同汇率
-   *  （2.75×eco/点），自随乘数缩放，感悟溢出永远是「小份额炼化」而非旁路成长曲线的第二台印钞机。 */
-  addInsight(p, n) {
+   *  （2.75×eco/点），自随乘数缩放，感悟溢出永远是「小份额炼化」而非旁路成长曲线的第二台印钞机。
+   *  v37（E264/E265）：感悟来源 FIFO 双池——p.insight 保留为总量缓存（消费端读数不变），
+   *  p.insightSrc: [{v, regen}] 记来源（仅调息 regen=true；听讲/灵潮/丹药/事件/剧情等一律 false），
+   *  悟道支出按 FIFO 扣减得纯度 ρ=再生占比，收益按纯度折算（见 wuDao）。全仓 insight 增发自此收口单源，
+   *  直写形态（insight 钳百式）仅存本函数体内（verify-v23 SA 锚：白名单外零命中）。 */
+  INSIGHT_SRC_CAP: 50,
+  addInsight(p, n, regen = false) {
     if (!n) return;
     const before = p.insight || 0;
     p.insight = Math.min(100, before + n);
-    const spill = n - (p.insight - before);
+    const gain = p.insight - before;
+    if (gain > 0) {
+      const src = p.insightSrc = (Array.isArray(p.insightSrc) ? p.insightSrc : []);
+      const last = src[src.length - 1];
+      if (last && last.regen === !!regen) last.v += gain;   // 同源相邻段合并防膨胀
+      else src.push({ v: gain, regen: !!regen });
+      // 段数上限 50：超限相邻合并防存档膨胀（合并段按量大者归档，纯度误差 ≤1 段；悟道消费使池常态远短于此）
+      while (src.length > this.INSIGHT_SRC_CAP) {
+        const a = src.shift(), b = src.shift();
+        src.unshift({ v: a.v + b.v, regen: a.v >= b.v ? a.regen : b.regen });
+      }
+    }
+    const spill = n - gain;
     if (spill > 0) {
       // v32 修瑕（E26）：r9 溢出走仙元定值 spill×50（与悟道 1000/20 同汇率）。
       // v34（E117）：不再双喂 DaoSys（口径同 addExp 溢流）。
@@ -89,32 +106,82 @@ const Cultivate = {
       }
     }
   },
-  /** v32（D5）：悟道——满溢感悟的主动出口：耗 20 点突破感悟炼作修为（飞升后炼作仙元 1000），每日一次。
+  /** v37（E264）：感悟支出单源——按 FIFO 扣减来源池；返回本次消耗中「再生感悟」占比 ρ（0~1）。
+   *  池空（老档未迁/防御态）视同全再生——行为不回退（迁移后新入账按真实来源归池）。 */
+  spendInsight(p, n) {
+    const total = p.insight || 0;
+    const take = Math.min(n, total);
+    if (take <= 0) return 1;
+    const src = Array.isArray(p.insightSrc) ? p.insightSrc : [];
+    let regenTake = 0, left = take;
+    while (left > 0 && src.length) {
+      const seg = src[0];
+      const d = Math.min(seg.v, left);
+      if (seg.regen) regenTake += d;
+      seg.v -= d; left -= d;
+      if (seg.v <= 0.0001) src.shift();
+    }
+    p.insight = Math.max(0, total - take);
+    return regenTake / take;
+  },
+  /** v37（E264）：纯度预览（悟道弹窗/卡面用，非变更）——与 spendInsight 同口径；池空视同全再生 */
+  insightPurity(p, n) {
+    const total = p.insight || 0;
+    const take = Math.min(n, total);
+    if (take <= 0) return 1;
+    const src = Array.isArray(p.insightSrc) ? p.insightSrc : [];
+    if (!src.length) return 1;
+    let regenTake = 0, left = take;
+    for (const seg of src) {
+      if (left <= 0) break;
+      const d = Math.min(seg.v, left);
+      if (seg.regen) regenTake += d;
+      left -= d;
+    }
+    return regenTake / take;
+  },
+  /** v37（E265）：纯度底折系数——ρ=0（纯外源感悟）时悟道收益保留比例。balance-sim 购买悟道链门禁
+   *  与回滚验证（临时注 1.0 实测门禁非零退出）锚此常量；0.3 时纯购买链 ≈2.12× 修炼日均（带 ≤2.2 内） */
+  WUDAO_PUR_FLOOR: 0.3,
+  /** v37（E265）：悟道成本随境界微涨——20+2×realmIdx，拉长纯购买链回本周期（纯度折算之外的第二道保险） */
+  wuDaoCost(p) { return 20 + (p.realmIdx || 0) * 2; },
+  /** v32（D5）：悟道——满溢感悟的主动出口：耗突破感悟炼作修为（飞升后炼作仙元），每日一次。
    *  感悟成算降权 0.5:1 后，囤积的感悟自此有第二条去路（飞升前后皆有用）。
    *  v34（A2）：r<9 收益 20×80×eco（≈219 倍单日修炼，听讲环路整条旁路 ×5.4 曲线）改为
    *  baseGain×2.5（≈7.5 天修炼量/次）——自随乘数缩放，悟道始终是「主动加餐」而非第二主粮；
-   *  r9 仙元 1000 与修炼折算口径自洽，维持；不再双喂 DaoSys。 */
+   *  不再双喂 DaoSys。
+   *  v37（E264/E265）：感悟纯度折算——收益 = baseGain×2.5×(WUDAO_PUR_FLOOR + (1−WUDAO_PUR_FLOOR)×ρ)：
+   *  自然链（ρ=1，纯调息感悟）2.5× 全额不变；纯购买链（ρ=0，筑基丹喂发）折底 ≈2.12× 修炼日均入带
+   *  （现状 ×7.08）；听讲链（ρ=0.2）双带内。成本 20→20+2×realmIdx（wuDaoCost）。 */
   async wuDao() {
     const p = Game.player;
     if (!p || p.dead) return;
     const today = Math.floor(p.day || 0);
     if (p._wuDaoDay === today) { UI.toast('今日已悟过一场——大道贵在日积月累'); return; }
-    if ((p.insight || 0) < 20) { UI.toast('突破感悟不足 20 点'); return; }
-    const expGain = Math.round(this.baseGain(p) * 2.5);
+    const cost = this.wuDaoCost(p);
+    if ((p.insight || 0) < cost) { UI.toast(`突破感悟不足 ${cost} 点`); return; }
+    const r9 = p.realmIdx >= 9;
+    const rho = this.insightPurity(p, cost);
+    const pur = this.WUDAO_PUR_FLOOR + (1 - this.WUDAO_PUR_FLOOR) * rho;
+    const estExp = Math.round(this.baseGain(p) * 2.5 * pur);
+    const estYuan = Math.round(1000 * pur);
     const ok = await UI.popup({
       title: '悟 道',
-      html: `闭目吐纳，将满溢的感悟淬入道基（每日一次）。<br>· 耗突破感悟 20 点${p.realmIdx >= 9 ? '，炼作 <b>仙元 1000</b>' : `，炼作修为 <b>+${Utils.fmtNum(expGain)}</b>`}。`,
+      html: `闭目吐纳，将满溢的感悟淬入道基（每日一次）。<br>· 耗突破感悟 ${cost} 点${r9 ? `，炼作 <b>仙元 ≈${Utils.fmtNum(estYuan)}</b>` : `，炼作修为 <b>+${Utils.fmtNum(estExp)}</b>`}。<br><span class="tip-line">· 感悟纯度 ${Math.round(rho * 100)}%——打坐调息所生的感悟纯粹，丹药/听讲等外源感悟炼作折价。</span>`,
       options: [{ text: '悟 道', value: true, primary: true }, { text: '再想想', value: false }],
     });
     if (!ok) return;
     p._wuDaoDay = today;
-    p.insight = (p.insight || 0) - 20;
-    if (p.realmIdx >= 9) {
-      p.counters.xianyuan = (p.counters.xianyuan || 0) + 1000;
-      Log.add('你于蒲团上进入忘我之境——二十点感悟在识海中炼作 <b>仙元 +1000</b>。', 'gain');
+    const rho2 = this.spendInsight(p, cost);   // v37：实扣 FIFO 并取真实纯度（预览与实发同口径）
+    const pur2 = this.WUDAO_PUR_FLOOR + (1 - this.WUDAO_PUR_FLOOR) * rho2;
+    if (r9) {
+      const yuan = Math.round(1000 * pur2);
+      p.counters.xianyuan = (p.counters.xianyuan || 0) + yuan;
+      Log.add(`你于蒲团上进入忘我之境——${cost} 点感悟在识海中炼作 <b>仙元 +${Utils.fmtNum(yuan)}</b>（感悟纯度 ${Math.round(rho2 * 100)}%）。`, 'gain');
     } else {
+      const expGain = Math.round(this.baseGain(p) * 2.5 * pur2);
       this.addExp(p, expGain);
-      Log.add(`你于蒲团上进入忘我之境——二十点感悟淬入道基，修为 <b>+${Utils.fmtNum(expGain)}</b>。`, 'gain');
+      Log.add(`你于蒲团上进入忘我之境——${cost} 点感悟淬入道基，修为 <b>+${Utils.fmtNum(expGain)}</b>（感悟纯度 ${Math.round(rho2 * 100)}%）。`, 'gain');
     }
     Game.afterAction();
   },
@@ -136,12 +203,12 @@ const Cultivate = {
         evNote = '（灵气潮涌 · 修为 ×2.5）';
       } else if (kind === 'epiphany') {
         gain = Math.round(gain * 1.5);
-        p.insight = Math.min(100, p.insight + 3);
+        this.addInsight(p, 3);
         Log.add('【灵机】吐纳之间忽有所悟，此番修行事半功倍。（突破感悟 +3）', 'gain');
         evNote = '（醍醐灌顶 · 修为 ×1.5）';
       } else if (kind === 'heartDemon') {
         gain = Math.max(1, Math.round(gain * 0.55));
-        p.insight = Math.min(100, p.insight + 6);
+        this.addInsight(p, 6);
         Log.add('【心魔】识海中魔音滋扰，你苦守灵台方寸——虽折了些修为，道心却愈发澄明。（突破感悟 +6）', 'warn');
         evNote = '（心魔滋扰 · 修为折损）';
       } else if (kind === 'glean') {
@@ -179,7 +246,7 @@ const Cultivate = {
         evNote = '（灵露洗尘）';
       } else if (kind === 'shenYou') {
         gain = Math.round(gain * 1.8);
-        p.insight = Math.min(100, (p.insight || 0) + 2);
+        this.addInsight(p, 2);
         Log.add('【灵机】神识离体，遨游星海一瞬——归来时天地都已换了一副面目。（修为 ×1.8，感悟 +2）', 'realm');
         evNote = '（神游太虚 · 修为 ×1.8）';
       }
@@ -210,7 +277,8 @@ const Cultivate = {
     // 打坐凝神偶有顿悟，赋予其独有收益后成为「回血顺便赚感悟」的低耗决策点。
     // v35（E159）：原「每游戏日限一次」守卫在 Time.add(1) 之后判定，dayNow 恒为新日、守卫永不拦截——
     // 但「一次调息恰耗一日」本身构成天然日限，效果与设计意图一致；现移除死守卫并注明口径
-    p.insight = Math.min(100, (p.insight || 0) + 2);
+    // v37（E264）：调息感悟是全游戏唯一的「再生感悟」源（regen=true）——悟道纯度 ρ 的分母来源
+    this.addInsight(p, 2, true);
     Log.add(`你寻一处灵气充裕之地打坐调息，气血灵力恢复大半${detox ? `，气机流转间化解了 ${detox} 点丹毒` : ''}，凝神之际偶有所悟（突破感悟 +2）。`, 'gain');
     Game.afterAction();
   },
@@ -389,7 +457,7 @@ const Cultivate = {
     Log.add('你收敛心神，向 <b>筑基</b> 瓶颈发起最后的冲击——气海翻涌，道基将成！', 'system');
     await Utils.sleep(700);
     if (Utils.chance(chance)) {
-      p.realmIdx = 1; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(1, 0) - 1); p.insight = 0; p.expOverflow = 0;
+      p.realmIdx = 1; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(1, 0) - 1); p.insight = 0; p.insightSrc = []; p.expOverflow = 0;   // v37（E264）：境界重置清空感悟总量缓存时，来源 FIFO 池同步清空（双池一致）
       p.breakStreak = 0;
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;
@@ -411,12 +479,12 @@ const Cultivate = {
       if (aid) {
         p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * 0.8);
         insGain = 10;
-        p.insight = Math.min(100, p.insight + insGain);
+        this.addInsight(p, insGain);
         Log.add(`危难之际，<b>${aid.name}</b> 从旁点拨，你稳住气机——冲击虽败，根基无损！`, 'gain');
       } else {
         p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * 0.6);
         insGain = 15;
-        p.insight = Math.min(100, p.insight + insGain);
+        this.addInsight(p, insGain);
       }
       p.breakStreak = (p.breakStreak || 0) + 1;
       const streakBonus = Math.min(15, p.breakStreak * 5);

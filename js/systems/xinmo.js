@@ -1,11 +1,18 @@
 
 /* ======================================================================
- * §21.4 v19 心魔劫 XinmoSys（心魔值 0~100：丹毒反噬/渡劫失利/玄影窥伺累积）
+ * §21.4 v19 心魔劫 XinmoSys（心魔值 0~100：丹毒反噬/渡劫失利/玄影窥伺/邪行业障累积）
  * 心魔满百必劫：幻境自战心魔化身。胜则道心凝练（全属性+1%/次，永久叠加），
  * 败则心魔暂伏（心魔值回落四成五），修为受挫。
+ * v37（E245）：心魔上限如实化与来源扩容——
+ * · 凝练封顶 +20% 为本世不可达装饰（一劫一胜 +1%，一世至多两三劫），改如实 min(6, cleared)%；
+ * · realmIdx≥6 心魔 70 即劫（高境决策密度更高，心魔是「选择的代价」而非纯惩罚尾巴）；
+ * · 行为来源扩容：邪修吞噬精元 +3 / 丹毒超限仍服丹 +4 / 窥探符 +2 / 赌局失利 +3 / 背刺得手 +5
+ *   （各挂对应系统调用点；3~6 次降伏本世可达，凝练上限自此真实可触）。
  * ====================================================================== */
 const XinmoSys = {
   THRESHOLD: 100,
+  /** v37（E245）：心魔劫阈值——炼虚（realmIdx≥6）起 70 即劫，其余满百 */
+  threshold(p) { return (p && p.realmIdx >= 6) ? 70 : 100; },
   /** 心魔值增减（唯一入口） */
   add(p, n, why) {
     if (!p || !n) return;
@@ -13,17 +20,19 @@ const XinmoSys = {
     p.xinmo = Math.max(0, Math.min(160, before + n));
     if (n > 0 && p.xinmo > before) {
       Log.add(`心魔滋长 +${n}${why ? `（${why}）` : ''}——当前心魔值 <b>${Math.round(p.xinmo)}</b>。`, 'warn');
-      if (before < this.THRESHOLD && p.xinmo >= this.THRESHOLD) {
+      const th = this.threshold(p);
+      if (before < th && p.xinmo >= th) {
         Log.add('<b>心魔已成气候！它在你识海深处叩门——再不降伏，修行必受其乱。</b>', 'loss');
         UI.toast('心魔值已满，速去修炼页降伏心魔！', true);
         Ambience.sfx('xinmo');   // v19 心魔音
       }
     }
   },
-  ready(p) { return (p.xinmo || 0) >= this.THRESHOLD; },
+  ready(p) { return (p.xinmo || 0) >= this.threshold(p); },
   cleared(p) { return (p.flags && p.flags.xinmoCleared) || 0; },
-  /** 全属性加成（Stat.finalScale 消费）：每降伏一次 +1%，封顶 +20%（v30：防扩源后无限堆叠） */
-  scale(p) { return 1 + Math.min(20, this.cleared(p)) * 0.01; },
+  /** 全属性加成（Stat.finalScale 消费）：每降伏一次 +1%，封顶 +6%（v37（E245）：原 +20% 为
+   *  本世不可达装饰，改如实——扩源后每世 3~6 次降伏可期，封顶真实可触） */
+  scale(p) { return 1 + Math.min(6, this.cleared(p)) * 0.01; },
   /** 降伏心魔：幻境之战（胜负皆了局） */
   start() {
     const p = Game.player;
