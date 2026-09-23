@@ -74,7 +74,12 @@ const GameData = {
    *  「钱多到没处花」的剪刀差由本函数一次抹平（各消费端以原曲线为锚换算，前期体感不变） */
   sinkCurve(r) { return Math.pow(3, Math.min(10, Math.max(0, Math.floor(r) || 0))); },   // v34（D3）：封顶 8→10——cap=8 时 r9 收入(3.8^9)仍在涨而全部 sink 停摆，登仙境灵石相对坍缩至收入的 4%；r≤8 数值不变
   layerNeed(realmIdx, layer) {
-    return Math.round(this.EXP_BASE[realmIdx] * this.LAYER_MULT[layer]);
+    return this.EXP_BASE[realmIdx] * this.LAYER_MULT[layer];
+  },
+  /** v38（E318）：转世劫难「大道多艰」——修为需求 ×1.15（进层判定与全部进度轴的统一入口；
+   *  存档迁移钳制与失败折损基数仍走 layerNeed 原函数，劫难只面向未来） */
+  layerNeedT(p, realmIdx, layer) {
+    return this.layerNeed(realmIdx, layer) * ((p && p.reinc && Array.isArray(p.reinc.trials) && p.reinc.trials.includes('exp')) ? 1.15 : 1);
   },
 
   /** v18：种族克制系数（1=克制，0=被克，-1=中立） */
@@ -359,6 +364,18 @@ const GameData = {
     m_xiancui:  { name: '仙灵翠',     type: 'material', tier: 4, price: 120000, desc: '灵墟仙泽灵气凝结的翡翠，内蕴仙道法则。' },
     m_leijing:  { name: '雷晶核',     type: 'material', tier: 4, price: 150000, desc: '九霄雷狱中雷兽体内凝结的雷晶，雷法至宝。' },
     seed_xianling: { name: '仙灵种',   type: 'seed', grade: 5, price: 45000, crop: 'm_xiancui', days: 80, desc: '播入灵田，八十日可收【仙灵翠】。' },
+    /* ---- v38（E305）：洞府阵旗（炼器坊 f23~f26 锻造，布设于 3×3 阵眼，同旗多面叠加） ---- */
+    b_juling:   { name: '聚灵旗', type: 'flag', grade: 2, price: 2600, desc: '旗面绣聚灵纹——布设阵眼后修炼效率 +3%/面（阵道「地载万物」×1.3、周天阁「阵法传习」×1.25）。' },
+    b_yudi:     { name: '御敌旗', type: 'flag', grade: 3, price: 6200, desc: '旗面刻御敌符——布设阵眼后洞府守御愈固：夜袭胜算 +8%/面。' },
+    b_cangfeng: { name: '藏锋旗', type: 'flag', grade: 2, price: 3400, desc: '旗面晦光敛气——布设阵眼后洞府不易为仇家寻见：夜袭几率 -15%/面。' },
+    b_lianxi:   { name: '敛息旗', type: 'flag', grade: 1, price: 1300, desc: '旗面铭敛息咒——布设阵眼后灵田虫害自消：虫害几率 -1%/面。' },
+    /* ---- v38（E317）：以药试方所得小众丹药（研创解锁配方后可炼） ---- */
+    pill_xingshen: { name: '醒神丹', type: 'pill', grade: 1, price: 90, poison: 3, use: { morale: 20 }, desc: '丹成如晨曦破晓——服之战意 +20（战斗方验）。' },
+    pill_ningshan: { name: '凝神香', type: 'pill', grade: 1, price: 110, poison: 2, use: { zy: 2 }, desc: '香篆凝神，灵台清明——服之真元 +2（战斗方验）。' },
+    pill_poxiao:   { name: '破晓散', type: 'pill', grade: 2, price: 200, poison: 4, use: { enfx: { kind: 'defdown', pct: 20, rounds: 2 } }, desc: '散作一线破晓光——祭之使敌破防 20%、两回合（战斗方验）。' },
+    pill_huisheng: { name: '回生露', type: 'pill', grade: 1, price: 120, poison: 3, use: { hpPct: 18, curePoison: 8 }, desc: '露生于回生草——气血 +18%、丹毒 -8。' },
+    pill_lingxi:   { name: '灵犀丹', type: 'pill', grade: 2, price: 180, poison: 4, use: { insight: 6 }, desc: '丹有灵犀一点通——突破感悟 +6。' },
+    pill_yuye:     { name: '御风液', type: 'pill', grade: 1, price: 100, poison: 3, use: { enfx: { kind: 'slow', pct: 25, rounds: 2 } }, desc: '液化罡风缚敌足——祭之使敌迟滞 25%、两回合（战斗方验）。' },
   },
 
   /** 按档次取材料列表 */
@@ -441,6 +458,12 @@ const GameData = {
     m_yexiao:    { name: '夜啼枭',       power: 4,  hp: 0.95, atk: 1.1,  spd: 1.2, dodge: 8, night: true, species: 'beast', skills: [{ name: '无声俯袭', w: 40, kind: 'slow', pct: 20, rounds: 2 }] },
     m_yexing:    { name: '夜行幽狼',     power: 16, hp: 1.05, atk: 1.15, night: true, species: 'beast', skills: [{ name: '月下撕咬', w: 40, kind: 'bleed', pct: 3, rounds: 2 }, { name: '幽嚎', w: 20, kind: 'weaken', pct: 20, rounds: 2 }] },
     m_yuemei:    { name: '月魄夜魅',     power: 27, hp: 1.0,  atk: 1.2,  spd: 1.25, dodge: 8, night: true, species: 'ghost', skills: [{ name: '摄月之光', w: 35, kind: 'mpburn', pct: 30 }, { name: '魄爪', w: 30, kind: 'drain', mult: 1.15, leech: 0.4 }] },
+    /* ---- v38（E310）：仙阙云海仙兽（飞升后游历） ---- */
+    m_xianhe:    { name: '云海仙鹤',     power: 38, hp: 0.95, atk: 1.1,  spd: 1.35, dodge: 10, species: 'beast', stoneMul: 1.3, skills: [{ name: '鹤唳九霄', w: 30, kind: 'cursed', pct: 6, rounds: 2 }, { name: '仙翎如剑', w: 30, kind: 'bleed', pct: 4, rounds: 2 }] },
+    m_yunshou:   { name: '踏云灵兽',     power: 39, hp: 1.15, atk: 1.1,  species: 'beast', skills: [{ name: '云蹄踏岳', w: 30, kind: 'stun', rounds: 1 }, { name: '灵气冲撞', w: 30, kind: 'defdown', pct: 25, rounds: 2 }] },
+    m_xianding:  { name: '衔露仙獐',     power: 40, hp: 1.0,  atk: 1.15, spd: 1.2,  species: 'plant', stoneMul: 1.4, skills: [{ name: '露华蚀骨', w: 30, kind: 'poison', pct: 5, rounds: 3 }, { name: '仙藤缚足', w: 25, kind: 'slow', pct: 30, rounds: 2 }] },
+    m_xianwei:   { name: '仙庭卫从',     power: 41, hp: 1.2,  atk: 1.2,  def: 1.15, species: 'human', skills: [{ name: '仙光贯甲', w: 30, kind: 'defdown', pct: 30, rounds: 2 }, { name: '执戟横扫', w: 30, kind: 'bleed', pct: 4, rounds: 2 }] },
+    m_xianjiang: { name: '云海仙将',     power: 45, hp: 1.45, atk: 1.45, elite: true, rareDrop: 'm_leijing', rareDrop2: 'm_xiancui', species: 'human', skills: [{ name: '仙令如山', w: 30, kind: 'weaken', pct: 40, rounds: 2 }, { name: '裂云一斩', w: 30, kind: 'cursed', pct: 8, rounds: 3 }, { name: '仙罡护体', w: 20, kind: 'guard', def: 40, rounds: 2 }] },
   },
 
   /* ======================================================================
@@ -508,21 +531,57 @@ const GameData = {
     { id: 'leiyu', name: '九霄雷狱', recRealm: 9, recText: '真仙后期', desc: '九天之上的雷霆炼狱，终年雷云不散。传说中藏有仙王陨落前的传承，然雷威之盛，足以灭仙。',
       pool: [{ id: 'm_leixiao', weight: 28 }, { id: 'm_leimen', weight: 24 }, { id: 'm_tianle', weight: 24 }, { id: 'm_lingxue', weight: 16 }, { id: 'm_xianzun', weight: 8 }],
       elite: 'm_leishen', weights: { battle: 55, treasure: 14, fortune: 12, npc: 4, trap: 10, nothing: 5 } },
+    /* ---- v38（E310）：仙界游历「仙阙云海」（飞升解锁；深层须仙官五品） ---- */
+    { id: 'xianhai', name: '仙阙云海', recRealm: 9, recText: '仙籍之身', gate: 'ascended', desc: '飞升者的庭阈——云海之上仙阙林立，仙鹤衔露、仙草生辉；然仙庭法度森严，僭越者逐出云海。',
+      pool: [{ id: 'm_xianhe', weight: 30 }, { id: 'm_yunshou', weight: 26 }, { id: 'm_xianding', weight: 24 }, { id: 'm_xianwei', weight: 20 }],
+      elite: 'm_xianjiang', weights: { battle: 50, treasure: 16, fortune: 15, npc: 6, trap: 7, nothing: 6 } },
+    { id: 'xianhai2', name: '仙阙云海 · 深处', recRealm: 9, recText: '仙官五品', gate: 'court5', desc: '云海最深处——仙禁重重，仙兽比邻，唯有品阶足够高的仙官方可踏足。深处所产，皆是仙材。',
+      pool: [{ id: 'm_xianwei', weight: 30 }, { id: 'm_xianding', weight: 26 }, { id: 'm_xianhe', weight: 24 }, { id: 'm_xianzun', weight: 12 }, { id: 'm_tianle', weight: 8 }],
+      elite: 'm_xianjiang', weights: { battle: 54, treasure: 17, fortune: 16, npc: 4, trap: 8, nothing: 3 } },
+  ],
+
+  /* ---------- v38（E329）：世事反应池——天下大事触发时，相熟修士的江湖风评（{name} 占位） ---------- */
+  WORLD_REACTIONS: {
+    demon: ['{name}：「魔潮又起……此番恐有恶战，道友保重。」', '{name}：「魔气所过，草木皆枯——正是立功积业之时。」'],
+    preach: ['{name}：「圣地开讲，千载难逢——{name}自当负笈前去。」', '{name}：「讲道三年，悟性倍增，机不可失。」'],
+    ruins: ['{name}：「上古秘境现世了？走走走，去晚连汤都喝不上。」', '{name}：「秘境遗府，福祸难料——结伴同行为上。」'],
+    war: ['{name}：「宗门要开战了……物价怕是要涨，早些囤些丹药罢。」', '{name}：「刀兵无情，乱世之中，修为才是硬道理。」'],
+    lingchao: ['{name}：「灵潮涌动！这几日修炼事半功倍，莫要辜负天地。」'],
+    beastwave: ['{name}：「兽潮将至，妖物凶性大发——猎不猎随意，保命要紧。」'],
+    neiluan: ['{name}：「宗门内乱，牵连甚广……明哲保身为上。」'],
+    qiren: ['{name}：「听闻有奇人入世，或有一场大机缘。」'],
+    lingyi: ['{name}：「灵疫蔓延，药价腾贵——囤药的和施药的都是人物。」'],
+    zhongbao: ['{name}：「重宝现世！各路豪强都盯上了，血雨腥风呐。」'],
+    meteor: ['{name}：「天降陨星，夜如白昼——此乃异象。」'],
+    xianmen: ['{name}：「仙门收徒？与你我这样的散人何干……罢了。」'],
+  },
+
+  /* ---------- v38（E331）：季节宜忌（舆图页头一句话，FACTS 同源的静态口径） ---------- */
+  SEASON_TIPS: [
+    '春 · 宜播种耕耘，灵潮暗涌（孟春修炼 +10%）',
+    '夏 · 朱砂引雷，画符正当时（仲夏成符 +2）',
+    '秋 · 五谷丰登，季秋收获 +1',
+    '冬 · 隆冬蛰伏，闭关 +10%、遇敌 -10%',
   ],
 
   /* ---------- 宗门 ---------- */
   SECTS: [
     { id: 'qingyun', name: '青云剑宗', desc: '以剑入道，门下弟子杀伐凌厉，剑气冲霄。',
-      bonusText: '宗门加成：攻击 +8%', bonus: { atkPct: 8 } },
+      bonusText: '宗门加成：攻击 +8%', bonus: { atkPct: 8 },
+      sig: '招牌【剑冢演武】：每旬一次与剑傀免费对练——当日前两场战斗开局战意 +10、必杀熟练精进' },
     { id: 'danxia',  name: '丹霞谷',   desc: '丹道圣地，谷中丹香百年不散，妙手回春。',
-      bonusText: '宗门加成：丹药效果 +30%，丹毒 -30%', bonus: { pillPct: 30, poisonReduce: 30 } },
+      bonusText: '宗门加成：丹药效果 +30%，丹毒 -30%', bonus: { pillPct: 30, poisonReduce: 30 },
+      sig: '招牌【丹房免炉】：每月首炉炼制免耗药材——试新方的底气' },
     { id: 'wanbao',  name: '万宝商会', desc: '富可敌国的修士商会，消息灵通，财源滚滚。',
-      bonusText: '宗门加成：灵石获取 +20%，坊市九二折', bonus: { stonePct: 20, shopDiscount: 8 } },
+      bonusText: '宗门加成：灵石获取 +20%，坊市九二折', bonus: { stonePct: 20, shopDiscount: 8 },
+      sig: '招牌【商路情报】：坊市买价再享九五折（叠加）、黑市讨价每日首谈必成' },
     /* ---- v13 新增宗门 ---- */
     { id: 'panyan',  name: '磐岩谷',   desc: '体修圣地，谷中弟子以山为炉、炼体如岩，一拳可碎巨石。',
-      bonusText: '宗门加成：防御 +8%，气血 +8%', bonus: { defPct: 8, hpPct: 8 } },
+      bonusText: '宗门加成：防御 +8%，气血 +8%', bonus: { defPct: 8, hpPct: 8 },
+      sig: '招牌【营造匠心】：洞府营造与洞天费用 -15%、每月首次强化失败不掉级' },
     { id: 'zhoutian',name: '周天阁',   desc: '阵道魁首，阁中周天大阵终年运转，星辰为子、天地为盘。',
-      bonusText: '宗门加成：修炼效率 +8%，闪避 +3%', bonus: { cult: 8, dodge: 3 } },
+      bonusText: '宗门加成：修炼效率 +8%，闪避 +3%', bonus: { cult: 8, dodge: 3 },
+      sig: '招牌【阵法传习】：阵旗效果 ×1.25（可与阵道「地载万物」叠乘）、秘境守敌地脉加成削弱一档' },
   ],
 
   /* ---- v30 宗门特色差事：按宗门改换任务名目与文案 ----
@@ -616,16 +675,19 @@ const GameData = {
   SETS: {
     /* v37（E249）：tech = 套装炼化三阶解锁的「套装技」（机制技，成套在身时生效；消费端唯一漏斗） */
     xuantian: { name: '玄天套装', pieces: ['s_xt_jian', 's_xt_jia', 's_xt_pei'], bonus: { defPct: 15, hpPct: 10 }, tech: 'zhenyuanOnHit', text: '守御之道：防御 +15%，气血 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【磐岩之意】——受击回真元 5%' },
-    chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, text: '杀伐之道：攻击 +15%，暴击 +5%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
+    chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, tech: 'liaoyuan', text: '杀伐之道：攻击 +15%，暴击 +5%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【燎原之意】——入场自带攻势之势、会心伤害 +8%（v38 E339 补全）' },
     /* ---- v19 新增套装 ---- */
     xuehe:    { name: '血河套装', pieces: ['s_hj_sha', 's_hj_pao', 's_hj_ling'], bonus: { atkPct: 12, crit: 4 }, tech: 'killAtk', text: '血河遗锋：攻击 +12%，暴击 +4%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【血河叠浪】——击杀叠攻 3%（至多五层）' },
-    xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, text: '仙缘天成：攻击、防御、气血俱 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）' },
+    xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, tech: 'tiancheng', text: '仙缘天成：攻击、防御、气血俱 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【天成之意】——游历奇遇权重 +8%、机缘收获 +10%（v38 E339 补全）' },
   },
 
-  /* ---- v37（E249）：套装技名录（炼化三阶解锁；名称与效果单源，ui/forge 引用） ---- */
+  /* ---- v37（E249）：套装技名录（炼化三阶解锁；名称与效果单源，ui/forge 引用）
+   * ---- v38（E339）：赤霄/仙缘套装技补全——四套齐备，各一套装、各一个性格 */
   SET_TECHS: {
     zhenyuanOnHit: { name: '磐岩之意', desc: '受击回复 5% 真元上限（累积进位，真元未满时生效）' },
     killAtk:       { name: '血河叠浪', desc: '每次击杀叠 3% 攻击，战斗内至多五层' },
+    liaoyuan:      { name: '燎原之意', desc: '战斗入场自带「攻势」之势，会心伤害 +8%' },
+    tiancheng:     { name: '天成之意', desc: '游历奇遇权重 +8%，机缘收获 +10%' },
   },
 
   /* ---- v37（E254）：品阶兜底价单源——0 价稀有物（天级/仙级/秘境专属/套装件）按品阶的估值底价。
@@ -635,14 +697,14 @@ const GameData = {
 
   /* ---------- v19 道韵协同：功法双双修至三层以上，共鸣生韵 ---------- */
   DAO_YUN: [
-    { id: 'dy_jian',  name: '万剑归心', need: ['gf_jianxin', 'gf_wanjian'], fx: { atkPct: 4 },  desc: '剑心通明与万剑归宗相合：攻击 +4%' },
-    { id: 'dy_dan',   name: '丹鼎鸿蒙', need: ['gf_danjing', 'gf_hongmeng'], fx: { cult: 4 },   desc: '丹经与鸿蒙相合：修炼效率 +4%' },
-    { id: 'dy_fu',    name: '雷符双绝', need: ['gf_leishen', 'gf_zixiao'], fx: { crit: 4 },    desc: '雷神与紫霄相合：暴击 +4%' },
-    { id: 'dy_ti',    name: '金刚不坏', need: ['gf_tiangang', 'gf_banti'], fx: { hpPct: 4 },   desc: '天罡与般若体相合：气血 +4%' },
-    { id: 'dy_zhen',  name: '周天大衍', need: ['gf_dayan', 'gf_zhoutian'], fx: { dodge: 4 },   desc: '大衍与周天相合：闪避 +4%' },
-    { id: 'dy_mo',    name: '血煞同源', need: ['gf_xuesha', 'gf_hansha'], fx: { atkPct: 3, crit: 2 }, desc: '血煞与寒煞相合：攻击 +3%，暴击 +2%' },
-    { id: 'dy_hunyuan', name: '混元涅槃', need: ['gf_hunyuan', 'gf_niepan'], fx: { hpPct: 3, defPct: 3 }, desc: '混元与涅槃相合：气血、防御 +3%' },
-    { id: 'dy_wangchen', name: '绝尘飞仙', need: ['gf_wangchen', 'gf_feixian'], fx: { dodge: 3 }, desc: '问尘与飞仙相合：身法轻灵，闪避 +3%' },
+    { id: 'dy_jian',  name: '万剑归心', need: ['gf_jianxin', 'gf_wanjian'], fx: { atkPct: 4 }, echo: 'crit',  echoDesc: '会心之后下一记法诀 +10%', desc: '剑心通明与万剑归宗相合：攻击 +4%；协奏【会心引诀】' },
+    { id: 'dy_dan',   name: '丹鼎鸿蒙', need: ['gf_danjing', 'gf_hongmeng'], fx: { cult: 4 }, echo: 'craft', echoDesc: '炼丹暴击当炉再 +1 丹', desc: '丹经与鸿蒙相合：修炼效率 +4%；协奏【丹火同鸣】' },
+    { id: 'dy_fu',    name: '雷符双绝', need: ['gf_leishen', 'gf_zixiao'], fx: { crit: 4 },    echo: 'draw',  echoDesc: '画符翻倍时额外 +1 张', desc: '雷神与紫霄相合：暴击 +4%；协奏【雷笔生花】' },
+    { id: 'dy_ti',    name: '金刚不坏', need: ['gf_tiangang', 'gf_banti'], fx: { hpPct: 4 },   echo: 'guard', echoDesc: '金光护体持续 +1 回合', desc: '天罡与般若体相合：气血 +4%；协奏【金光长明】' },
+    { id: 'dy_zhen',  name: '周天大衍', need: ['gf_dayan', 'gf_zhoutian'], fx: { dodge: 4 },   echo: 'heal',  echoDesc: '疗伤法诀效力 +15%', desc: '大衍与周天相合：闪避 +4%；协奏【周天回春】' },
+    { id: 'dy_mo',    name: '血煞同源', need: ['gf_xuesha', 'gf_hansha'], fx: { atkPct: 3, crit: 2 }, echo: 'dot', echoDesc: '施予的持续伤害 +15%', desc: '血煞与寒煞相合：攻击 +3%，暴击 +2%；协奏【血煞蚀骨】' },
+    { id: 'dy_hunyuan', name: '混元涅槃', need: ['gf_hunyuan', 'gf_niepan'], fx: { hpPct: 3, defPct: 3 }, echo: 'ult', echoDesc: '必杀会心几率 +5%', desc: '混元与涅槃相合：气血、防御 +3%；协奏【涅槃锋芒】' },
+    { id: 'dy_wangchen', name: '绝尘飞仙', need: ['gf_wangchen', 'gf_feixian'], fx: { dodge: 3 }, echo: 'crit', echoDesc: '会心之后下一记法诀 +10%', desc: '问尘与飞仙相合：身法轻灵，闪避 +3%；协奏【绝尘引诀】' },
   ],
 
   /* ---------- v20 功法大成奥义：修至满层解锁专属被动（fx 限 Stat.gongfaBonus 已聚合的九键） ---------- */
@@ -680,10 +742,27 @@ const GameData = {
   },
   /** v20 道韵扩池（渲染与激活逻辑与 DAO_YUN 合并消费） */
   DAO_YUN_EXTRA: [
-    { id: 'dy_zhuixing', name: '追星踏月', need: ['gf_zhuixian', 'gf_feixian'], fx: { atkPct: 3, spdPct: 2 }, desc: '星坠与飞仙相合：攻击 +3%，身法 +2%' },
-    { id: 'dy_taiyin_x', name: '太阴玄壁', need: ['gf_taiyin', 'gf_xuantian'], fx: { hpPct: 3, defPct: 2 }, desc: '太阴与玄天相合：气血 +3%，防御 +2%' },
-    { id: 'dy_yanyu',    name: '林衍同修', need: ['gf_yulin', 'gf_dayan'], fx: { cult: 3, hpPct: 2 }, desc: '御林与大衍相合：修炼 +3%，气血 +2%' },
-    { id: 'dy_binglei',  name: '冰雷相激', need: ['gf_lidu', 'gf_hansha'], fx: { crit: 3, atkPct: 2 }, desc: '离火与寒沙相合：暴击 +3%，攻击 +2%' },
+    { id: 'dy_zhuixing', name: '追星踏月', need: ['gf_zhuixian', 'gf_feixian'], fx: { atkPct: 3, spdPct: 2 }, echo: 'ult', echoDesc: '必杀会心几率 +5%', desc: '星坠与飞仙相合：攻击 +3%，身法 +2%；协奏【追星锋芒】' },
+    { id: 'dy_taiyin_x', name: '太阴玄壁', need: ['gf_taiyin', 'gf_xuantian'], fx: { hpPct: 3, defPct: 2 }, echo: 'guard', echoDesc: '金光护体持续 +1 回合', desc: '太阴与玄天相合：气血 +3%，防御 +2%；协奏【玄壁长明】' },
+    { id: 'dy_yanyu',    name: '林衍同修', need: ['gf_yulin', 'gf_dayan'], fx: { cult: 3, hpPct: 2 }, echo: 'heal', echoDesc: '疗伤法诀效力 +15%', desc: '御林与大衍相合：修炼 +3%，气血 +2%；协奏【林衍回春】' },
+    { id: 'dy_binglei',  name: '冰雷相激', need: ['gf_lidu', 'gf_hansha'], fx: { crit: 3, atkPct: 2 }, echo: 'dot', echoDesc: '施予的持续伤害 +15%', desc: '离火与寒沙相合：暴击 +3%，攻击 +2%；协奏【冰雷蚀骨】' },
+  ],
+
+  /* ---------- v38（E340）：称号录——成就长出「戴在身上的性格」：同时佩戴一枚，
+   *  每枚一条触发式小机制（≤5% 档）；mech 为实现侧消费键 ---------- */
+  TITLES: [
+    { id: 't_war',    name: '百战不殆', cond: p => (p.counters.wins || 0) >= 500, mech: 'warOpen',   desc: '战斗胜场 500——每场首回合战意 +5' },
+    { id: 't_dan',    name: '丹道宗师', cond: p => (p.counters.craftsOk || 0) >= 200, mech: 'danCrit', desc: '炼丹大成 200 炉——炼丹暴击率 +5%' },
+    { id: 't_beast',  name: '御兽行家', cond: p => (p.beasts.list || []).some(b => b.evolved), mech: 'beastAssist', desc: '驯出一头蜕变灵兽——协战追击率 +5%' },
+    { id: 't_explore', name: '行遍天下', cond: p => (p.counters.explores || 0) >= 500, mech: 'exploreGain', desc: '游历 500 次——游历灵石收获 +5%' },
+    { id: 't_top',    name: '天骄第一', cond: p => typeof RankSys !== 'undefined' && RankSys.isTop && RankSys.isTop(p), mech: 'wenjian2', desc: '身居天骄榜首——问剑可越一位递帖' },
+    { id: 't_hero',   name: '侠名远播', cond: p => (p.reputation || 0) >= 120, mech: 'heroChain', desc: '声望 120——悬赏连锁续链率 +5%' },
+    { id: 't_free',   name: '散人不羁', cond: p => !p.sect && !!(p.flags && p.flags.ascended), mech: 'freeRep', desc: '飞升而未入宗门——声望获取 +10%、黑市售价 -5%' },
+    { id: 't_slayer', name: '伏魔尊者', cond: p => (p.counters.killsElite || 0) >= 100, mech: 'slayerLoot', desc: '诛精英 100——精英战利品 +8%' },
+    { id: 't_forge',  name: '神工巧匠', cond: p => (p.counters.forges || 0) >= 200, mech: 'forgeRate', desc: '开炉 200 次——祭炼强化成功率 +3%' },
+    { id: 't_heart',  name: '情深义重', cond: p => !!p.partner && (p.sworn || []).length >= 1, mech: 'heartGift', desc: '道侣与结拜俱全——赠礼情谊 +1' },
+    { id: 't_mark',   name: '印记满身', cond: p => ((p.reinc || {}).marksEarned || 0) >= 30, mech: '', fx: { allPct: 1 }, desc: '累计轮回印记 30——全属性 +1%' },
+    { id: 't_daozu',  name: '道祖法印', cond: p => !!(p.flags && p.flags.daozu), mech: 'daoZuYuan', desc: '证道祖之境——仙元溢流 +10%' },
   ],
 
   /* ---------- v19→v20 精英词缀（精英怪随机 1~2 条，战斗前可见；mutex 互斥对不同时出现） ---------- */
@@ -876,12 +955,79 @@ const GameData = {
     { id: 'talisman', name: '符修', motto: '一符在手，天地借法',
       desc: '战斗中可祭出符箓，轰出高额爆发；可在坊市挥毫画符售卖营生；法诀灵力消耗 +20%。' },
     { id: 'body',     name: '体修', motto: '肉身成圣，金刚不坏',
-      desc: '气血上限 +100%，防御 +50%；肉身蔽塞灵窍，难悟玄级及以上法诀；金刚之躯，渡劫成算 +40%。' },
+      desc: '气血上限 +100%，防御 +50%；可修诸家法诀，唯高阶法诀威力折七成；金刚之躯，渡劫成算 +40%。' },
     { id: 'array',    name: '阵道', motto: '一念成阵，困杀万物',
       desc: '历练遇敌有五成几率抢先布阵，压制敌方攻防（困阵境四成、杀阵境开场两成直接困杀）；于秘境遗迹探索时收益 +20%。' },
     { id: 'demonic',  name: '邪修', motto: '逆天而行，唯我独邪',
       desc: '修炼速度 +80%，杀敌可吞噬精元（额外两成修为）；每场战斗孽障 +1；一身邪气，为正道修士所不容。' },
   ],
+
+  /* ---------- v38（E304）：天劫三段劫象表——每重劫云呈一象，应/避/御逐重应对 ---------- */
+  TRIB_OMENS: [
+    { id: 'lei',  name: '雷劫', icon: '⚡', desc: '紫雷千丈贯顶而下，轰击道基。' },
+    { id: 'huo',  name: '火劫', icon: '🔥', desc: '心火自燃，焚尽周天三万窍。' },
+    { id: 'feng', name: '风劫', icon: '🌪️', desc: '罡风如刀，削肉剔骨裂金躯。' },
+    { id: 'xin',  name: '心劫', icon: '🫀', desc: '心湖翻涌，魔音灌耳试道心。' },
+  ],
+
+  /* ---------- v38（E300）：道途双脉——六大道在道境 3/6 重各一次分岔，二选一不可回改。
+   *  同档双脉强度等价、玩法分化；key 为实现侧消费键（DaoSys.hasPath 单源判定） ---------- */
+  DAO_PATHS: {
+    sword: {
+      3: { A: { name: '剑阵·纵横', key: 'comboCap2', desc: '连击上限 +2（五→七）——连绵剑势，愈战愈酣。' },
+           B: { name: '杀剑·夺命', key: 'critDmg25', desc: '会心伤害 +25%——一剑定生死之道。' } },
+      6: { A: { name: '万剑朝宗·极', key: 'skillMul15', desc: '法诀伤害再 +15%（与万剑归宗境叠乘）。' },
+           B: { name: '剑心通明·极', key: 'jianxin45', desc: '【剑心通明】触发率提至 45%。' } },
+    },
+    pill: {
+      3: { A: { name: '药王遗篇', key: 'danWang', desc: '炼丹成功率 +8%——药王秘传火候。' },
+           B: { name: '九幽毒经', key: 'duJing', desc: '你施加的毒/焰/血/咒持续伤害 +50%。' } },
+      6: { A: { name: '金丹九转', key: 'jinDan', desc: '炼丹极品率翻倍（1%→2%，丹道四重再翻）。' },
+           B: { name: '以丹入道', key: 'yiDan', desc: '每服一丹，感悟 +1——以药石磨道心。' } },
+    },
+    talisman: {
+      3: { A: { name: '妙笔生花', key: 'miaoBi', desc: '画符产量 +1——笔走龙蛇，一挥而就。' },
+           B: { name: '燃符焚天', key: 'ranFu', desc: '符箓伤害 +15%——符落之处寸草不生。' } },
+      6: { A: { name: '天笔点睛', key: 'tianBi', desc: '画符翻倍几率 +15%——偶得神来之笔。' },
+           B: { name: '节墨惜墨', key: 'jieMo', desc: '法诀灵力消耗 -30%（含符修 +20% 特性后）。' } },
+    },
+    body: {
+      3: { A: { name: '金身不摧', key: 'jinShen', desc: '所受伤害 -10%——肉身即最坚甲胄。' },
+           B: { name: '血牛盘根', key: 'xueNiu', desc: '气血上限 +15%——血气雄浑如江海。' } },
+      6: { A: { name: '反震罡劲', key: 'fanZhen', desc: '受击反弹一成伤害——以伤换伤，寸劲还身。' },
+           B: { name: '不动如山', key: 'buDong', desc: '格挡率 +15%——任他风浪，岿然不动。' } },
+    },
+    array: {
+      3: { A: { name: '奇门遁甲', key: 'qiMen', desc: '秘境收获 +10%——阵眼即宝眼。' },
+           B: { name: '迷阵困龙', key: 'miZhen', desc: '开场布阵使敌方闪避 -10。' } },
+      6: { A: { name: '天罗绝杀', key: 'tianLuo', desc: '杀阵开场直接困杀几率提至 50%。' },
+           B: { name: '地载万物', key: 'diZai', desc: '洞府阵旗效果 ×1.3（与阵道本职叠乘）。' } },
+    },
+    demonic: {
+      3: { A: { name: '噬魂夺魄', key: 'shiHun', desc: '杀敌吞噬精元 30%→40%——以敌养道。' },
+           B: { name: '血遁千里', key: 'xueDun', desc: '遁走必成——来去如鬼魅，不留行迹。' } },
+      6: { A: { name: '天魔解体·极', key: 'tianMo', desc: '必杀伤害 +15%——燃命之招更添凶戾。' },
+           B: { name: '炼狱血海', key: 'lianYu', desc: '你施加的持续伤害 +20%——敌陷血海炼狱。' } },
+    },
+  },
+
+  /* ---------- v38（E301）：自创功法「悟法」意韵模块池——从已大成功法的奥义拆解。
+   *  解锁条件：持有任一大成功法，其奥义 fx 含同键（如悟出「锋锐之意」须至少一部
+   *  奥义带 atkPct 的功法修至满层）。自创一世至多三部，数值锚 grade4 带 ---------- */
+  GONGFA_MODULES: [
+    { id: 'gm_fengrui',  name: '锋锐之意', fxKey: 'atkPct', val: 5, hint: '攻击 +5%（随功法层数再涨）' },
+    { id: 'gm_buhuai',   name: '不坏之意', fxKey: 'hpPct',  val: 5, hint: '气血 +5%（随功法层数再涨）' },
+    { id: 'gm_panshou',  name: '磐守之意', fxKey: 'defPct', val: 5, hint: '防御 +5%（随功法层数再涨）' },
+    { id: 'gm_jifeng',   name: '疾风之意', fxKey: 'spdPct', val: 4, hint: '身法 +4%（随功法层数再涨）' },
+    { id: 'gm_shafa',    name: '杀伐之意', fxKey: 'crit',   val: 3, hint: '暴击 +3%' },
+    { id: 'gm_yuanrong', name: '圆融之意', fxKey: 'cult',   val: 4, hint: '修炼效率 +4%' },
+    { id: 'gm_wuzong',   name: '无踪之意', fxKey: 'dodge',  val: 3, hint: '闪避 +3%' },
+    { id: 'gm_budong',   name: '不动之意', fxKey: 'block',  val: 3, hint: '格挡 +3%' },
+    { id: 'gm_lingjun',  name: '灵均之意', fxKey: 'mpPct',  val: 4, hint: '灵力 +4%（随功法层数再涨）' },
+  ],
+
+  /* ---------- v38（E305）：洞府阵旗（炼器坊新方）——布设于 3×3 阵眼，同旗多面叠加 ---------- */
+  /* 阵旗物品见 ITEMS 末尾 b_* 条目；配方见 FORGE_RECIPES f23~f26 */
 
   /* ---------- §20 炼丹配方（坊市炼丹炉，人人可用，丹道大成率大涨）---------- */
   ALCHEMY_RECIPES: [
@@ -937,6 +1083,35 @@ const GameData = {
     { id: 'f20', out: 'a_xianpao',  need: { m_xianjing: 2, m_shenmu: 2, m_leijing: 2 },  rate: 35 },
     { id: 'f21', out: 'w_lingjie',  need: { m_leijing: 2, m_xianjing: 2, m_jiaojin: 2 }, rate: 30 },
     { id: 'f22', out: 'z_xianyao',  need: { m_xiancui: 3, m_xianjing: 1, m_shenmu: 1 },  rate: 30 },
+    // v38（E305）：洞府阵旗四方——布设于洞府 3×3 阵眼
+    { id: 'f23', out: 'b_juling',   need: { m_xuantie: 4, m_lingcao: 2 },              rate: 85 },
+    { id: 'f24', out: 'b_yudi',     need: { m_xuantie: 6, m_neidan: 1 },               rate: 70 },
+    { id: 'f25', out: 'b_cangfeng', need: { m_xuantie: 4, m_yaopi: 2 },                rate: 80 },
+    { id: 'f26', out: 'b_lianxi',   need: { m_xuantie: 3, m_lingcao: 1 },              rate: 90 },
+  ],
+
+  /* ---------- v38（E317）：以药试方——丹炉研创可得的小众个人丹方（试成后永久解锁） ---------- */
+  EXP_RECIPES: [
+    { id: 'er1', out: 'pill_xingshen', need: { m_lingcao: 2 },                rate: 55 },
+    { id: 'er2', out: 'pill_ningshan', need: { m_lingcao: 1, m_lingzhi: 1 },  rate: 50 },
+    { id: 'er3', out: 'pill_poxiao',   need: { m_lingzhi: 1, m_yaopi: 1 },    rate: 45 },
+    { id: 'er4', out: 'pill_huisheng', need: { m_lingcao: 1, m_xuecan: 1 },   rate: 45 },
+    { id: 'er5', out: 'pill_lingxi',   need: { m_lingzhi: 2 },                rate: 40 },
+    { id: 'er6', out: 'pill_yuye',     need: { m_yaopi: 1, m_bingpo: 1 },     rate: 40 },
+  ],
+
+  /* ---------- v38（E307）：秘境异变池——每次入秘境 roll 1~2 条（正负成对，可花灵石净化一条） ---------- */
+  DUNGEON_MUTATIONS: [
+    { id: 'lingchao', name: '灵潮激荡', desc: '此行奇遇之所得翻倍。', tone: 'good' },
+    { id: 'xueyue',    name: '血月当空', desc: '守敌攻击 +10%，然所获皆丰（收获 ×1.2）。', tone: 'mix' },
+    { id: 'fukuan',    name: '地脉富矿', desc: '古匣中藏材之机大增（几率 ×1.5）。', tone: 'good' },
+    { id: 'huanzhen',  name: '幻阵迷踪', desc: '陷阱频生（权重 +10），然每破一层，感悟 +1。', tone: 'mix' },
+    { id: 'jianzhong', name: '剑冢共鸣', desc: '我方攻击 +15%，防御 -15%——以攻代守。', tone: 'mix' },
+    { id: 'guyong',    name: '孤勇之道', desc: '灵兽不得协战，然此行收获 ×1.3。', tone: 'mix' },
+    { id: 'tianyou',   name: '天佑之地', desc: '每过一层，气血自复一成。', tone: 'good' },
+    { id: 'shenhan',   name: '深寒彻骨', desc: '守敌身法 +10%，你施予的持续伤害 +30%。', tone: 'mix' },
+    { id: 'zhangwu',   name: '瘴雾蚀体', desc: '每场战斗开局，气血折一成。', tone: 'bad' },
+    { id: 'guzhou',    name: '上古古咒', desc: '层数 +1，守关者必携双重词缀。', tone: 'bad' },
   ],
 
   /* ---------- §20 红尘劫剧本（历练道德三选一）---------- */
@@ -1111,6 +1286,11 @@ const GameData = {
     m_tianle: '九霄雷兽，雷狱深处的凶兽，皮糙如雷砧，吼声滚滚如雷过境。',
     m_xianzun: '仙尊残念，一位仙尊陨落前的不灭执念，仙威犹存。近之者，神魂如坠冰渊。',
     m_leishen: '雷狱主宰，九霄雷狱的最深处的主人，雷罚加身而不伤——渡劫者若有幸一见，多半已无幸。',
+    m_xianhe: '云海仙鹤，仙阙云海的引路灵禽，鹤羽如霜、鹤唳清越。惹恼了它，仙翎亦能作剑。',
+    m_yunshou: '踏云灵兽，生于云海深处的瑞兽，四蹄踏云而不沾水汽。性情温顺，然护云极凶。',
+    m_xianding: '衔露仙獐，口衔仙露、蹄生仙藤的灵獐。其露可入药，其藤可缚妖。',
+    m_xianwei: '仙庭卫从，执戟巡云的仙庭甲士。法度森严，僭越云海者，戟下无情。',
+    m_xianjiang: '云海仙将，统御云海卫从的仙庭将领。仙令所指，裂云断海。',
     /* ---- v20 夜行妖兽图录 ---- */
     m_yexiao: '夜啼枭，白日敛羽夜半啼，一声枭鸣能叫人手脚发软。猎户说它是给阴司引路的。',
     m_yexing: '夜行幽狼，月圆之夜成群出游，双目如磷火。天一亮，便只剩雪地上一串爪印。',

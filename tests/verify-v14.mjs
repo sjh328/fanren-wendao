@@ -244,6 +244,7 @@ try {
     // 宗门任务已达成 → 一键行权应领取（弹窗小账含「宗门任务领赏」）
     const p = Game.player;
     p._autoRush = 'always';   // v35（U3）：聚灵扣款改明示确认——测试预置「以后不再询问」走自动路径
+    p._restDay = Math.floor(p.day); p._wuDaoDay = Math.floor(p.day); p.listenDay = Math.floor(p.day); p._sparCount = 3; p._wenjianDay = Math.floor(p.day);   // v38（E325）：预置跳过新增行，专测宗门领赏
     const before = p.sect.contrib;
     Guide.dailyAll();
     await new Promise(r => setTimeout(r, 600));
@@ -271,6 +272,7 @@ try {
     ? pass('TE3 界面密度档：紧凑档切换 body 类并真实改变卡片内边距') : fail('TE3 密度档', JSON.stringify(te3));
 
   /* ================= TF 联动织网数值组（纯函数断言） ================= */
+  console.log("  [mark] tf-begin");
   const tf = await page.evaluate(async () => {
     const p = Game.player;
     const out = {};
@@ -329,6 +331,7 @@ try {
   tf.g11 ? pass('TF6 亲昵≥60 灵兽出行多带一份材料') : fail('TF6 灵兽出行', JSON.stringify(tf));
 
   /* ================= TG 宗门听讲（贡献新去处） ================= */
+  console.log('  [mark] before '+JSON.stringify(process.argv[2]||'g = await pag'));
   const tg = await page.evaluate(async () => {
     const p = Game.player;
     Game.actions['act-tab']({ tab: 'sect' });
@@ -339,15 +342,19 @@ try {
     const before = p.sect.contrib;
     const dayBefore = Math.floor(p.day || 0);
     p.listenDay = -99;
-    btn.click();
+    UI.renderTabContent();
+    await new Promise(r => setTimeout(r, 250));
+    const btn2 = document.querySelector('#tab-content [data-action="act-sect-listen"]');
+    btn2.click();
     await new Promise(r => setTimeout(r, 450));
     const after = p.sect.contrib;
-    return { has: true, rowTxt: rowTxt.includes('听讲一日'), spent: after === before - 300,
+    return { has: true, rowTxt: rowTxt.includes('听讲一日'), spent: after === before - 300, before, after, listen: p.listenDay, day: Math.floor(p.day||0),
       dayAdvanced: Math.floor(p.day || 0) === dayBefore + 1,
       listenDayMarked: p.listenDay === dayBefore };
   });
   // v34（A2）：听讲实耗一日——日限标记照记（listenDay=听讲当日），但时间已推进到次日，
   // 按钮不再转灰（贡献允许可连日听讲），以「标记日 + 推进一日」为断言
+  console.log("  [mark] tg-done");
   (tg.has && tg.rowTxt && tg.spent && tg.dayAdvanced && tg.listenDayMarked)
     ? pass('TG1 宗门「听讲一日」：300 贡献兑感悟，实耗一日且日限标记（v34）') : fail('TG1 听讲', JSON.stringify(tg));
 

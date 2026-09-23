@@ -29,6 +29,7 @@ const RankSys = {
     if ((p.topTitle || {}).day === today) return false;
     p.topTitle = { day: today };
     KarmaSys.addFortune(2);
+    if (typeof Game !== 'undefined' && Game.milestone) Game.milestone('msTop', '天 骄 第 一', '#e8d9a0');   // v38（E328）里程碑
     Log.add('【天骄榜】你名压群雄，独占鳌头——气运 +2。（每日登顶皆有小赏）', 'gain');
     return true;
   },
@@ -37,11 +38,15 @@ const RankSys = {
   async challengeAhead() {
     const p = Game.player;
     if (Battle.active) return;
+    // v38（E306）：止戈之誓——不发问剑
+    if (typeof OathSys !== 'undefined' && OathSys.active(p, 'still')) { UI.toast('止戈之誓在手——问剑之约，皆非此道'); return; }
     if (!Daily.resetIfNew(p, '_wenjianDay')) { UI.toast('今日已问过剑——剑意养锐，明日再约'); return; }
     const rows = this.board(p);
     const myIdx = rows.findIndex(r => r.id === 'me');
     if (myIdx <= 0) { UI.toast('你已身居榜首——天上地下，再无问剑之靶'); return; }
-    const ahead = rows[myIdx - 1];
+    // v38（E340）：称号「天骄第一」——可越一位递帖（隔位问剑，声名所至）
+    const skip = Game.titleOn(p, 'wenjian2') && myIdx >= 2 ? 2 : 1;
+    const ahead = rows[myIdx - skip];
     const st = p.npcs[ahead.id];
     if (!st || !st.alive) { UI.toast('身前一位无从问剑'); return; }
     if (NpcSys.isAway(p, ahead.id)) { UI.toast(`${ahead.name} 行游在外，旬末方归`); return; }

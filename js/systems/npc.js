@@ -240,6 +240,8 @@ const NpcSys = {
   async showdown(id) {
     const p = Game.player;
     const d = this.def(id);
+    // v38（E306）：止戈之誓——不上雷台
+    if (typeof OathSys !== 'undefined' && OathSys.active(p, 'still')) { UI.toast('止戈之誓在手——雷台生死之约，皆非此道'); return; }
     if (!this.canShowdown(p, id) || Battle.active) return;
     const s = this.state(p, id);
     // v37（E248）：狠度进赔率——rel 低于 -20 的部分每 10 点折算对方战力 +4%（封顶 +32%）
@@ -288,13 +290,21 @@ const NpcSys = {
     this.mem(p, cand, 'save', '危难相救');   // v19 记忆
     return { id: cand, name: this.def(cand).name };
   },
+  /** v38（E312）：名动一方（声望 ≥120）——初见自带三分敬意（一次性，五点交情随初见入账） */
+  firstMeetBoost(p, id) {
+    const s = this.state(p, id);
+    if (!s || s.met) return 0;
+    if ((p.reputation || 0) >= 120) { s.rel = Utils.clamp((s.rel || 0) + 5, -100, 100); return 5; }
+    return 0;
+  },
   afterSpar(p, id, won) {
     const s = this.state(p, id);
     if (!s) return;
+    this.firstMeetBoost(p, id);   // v38（E312）
     s.met = true;
     // v35（E131）：落败不再加好感——原败也 +2，配合无限切磋构成零成本好感印钞机；
     // 胜 +5 不变（且受每日一场限制）
-    if (won) s.rel = Utils.clamp(s.rel + 5, -100, 100);
+    if (won) s.rel = Utils.clamp(s.rel + Math.round(5 * (typeof OathSys !== 'undefined' ? OathSys.relMul(p) : 1)), -100, 100);   // v38（E306）：独行之道 ×1.3
     this.mem(p, id, 'spar', won ? '切磋获胜' : '切磋落败');   // v19 记忆
     if (won) s.sparWins = (s.sparWins || 0) + 1; else s.sparLoses = (s.sparLoses || 0) + 1;   // v20 切磋段位
   },
@@ -306,11 +316,14 @@ const NpcSys = {
     const s = p.npcs[id];
     if (!s) return 0;
     const rp = Utils.clamp(s.realmIdx * 4 + s.layer, 0, 60);
+    // v38（E282）修瑕：基式对齐 buildEnemy（hp=(65+rp^1.6×5.2)、atk=(7+rp×2.7)、def=(4+rp×1.7)、
+    // spd=(7+rp×0.9)×mod，mod 同含 fury 语义外的 talent 项）——原用旧基式（55+5rp^1.6 / 6+2.6rp /
+    // 4+2.2rp、spd 不乘 mod）且漏乘 mod，问剑/榜行三档成算系统性失真
     const mod = 0.92 + (this.def(id) || { talent: 3 }).talent * 0.04;
-    const atk = Math.round((6 + rp * 2.6) * mod);
-    const def = Math.round((4 + rp * 2.2) * mod);
-    const hp = Math.round((55 + Math.pow(rp, 1.6) * 5) * mod);
-    const spd = Math.round(7 + rp * 0.9);
+    const atk = Math.round((7 + rp * 2.7) * mod);
+    const def = Math.round((4 + rp * 1.7) * mod);
+    const hp = Math.round((65 + Math.pow(rp, 1.6) * 5.2) * mod);
+    const spd = Math.round((7 + rp * 0.9) * mod);
     return Math.round(atk * 2 + def * 1.5 + hp * 0.3 + spd * 1 + 8 * 2 + 5 * 1.5 + 8 * 0.5);
   },
   buildEnemy(p, id, fury = 0) {
@@ -346,11 +359,13 @@ const NpcSys = {
       '侠气': [{ name: '侠义剑', w: 40, kind: 'bleed', pct: 3, rounds: 2 }],
     };
     const skills = temperSkills[d.temper] || [{ name: '出手一击', w: 40, kind: 'bleed', pct: 2, rounds: 2 }];
+    // v38（E318）：转世劫难「群邪环伺」——NPC 之敌同样 hp/atk ×1.10
+    const foeMul = (p.reinc && Array.isArray(p.reinc.trials) && p.reinc.trials.includes('foe')) ? 1.1 : 1;
     return {
       id: null, npcId: id, name: d.name, elite: false, power: rp,
       realmLabel: GameData.REALM_NAMES[realmIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
-      hpMax: Math.round((65 + Math.pow(rp, 1.6) * 5.2) * mod),
-      atk: Math.round((7 + rp * 2.7) * mod),
+      hpMax: Math.round((65 + Math.pow(rp, 1.6) * 5.2) * mod * foeMul),
+      atk: Math.round((7 + rp * 2.7) * mod * foeMul),
       def: Math.round((4 + rp * 1.7) * mod),
       spd: Math.round((7 + rp * 0.9) * mod),
       dodge: 5, crit: 8,
@@ -444,6 +459,8 @@ const NpcSys = {
     // v37（E240）：结交一次性——原无日限无上限，+8~14/次可把社交阶梯整条买穿（24 人全扫
     // 即可囤满好感轴）；礼数只行一回，此后情谊归赠礼/论道/切磋等温养互动
     if (s.befriended) { UI.toast('尔等早已结识——情谊当以赠礼与论道温养'); return; }
+    // v38（E306）：独行之道——不结新交
+    if (typeof OathSys !== 'undefined' && OathSys.active(p, 'solo')) { UI.toast('独行之道在身——新朋之礼，皆非此道'); return; }
     const cost = this.befriendCost(p, id);
     const ok = await UI.popup({
       title: `结交 · ${d.name}`,
@@ -452,10 +469,10 @@ const NpcSys = {
     });
     if (!ok) return;
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    this.firstMeetBoost(p, id);   // v38（E312）：名动一方初见敬意
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴；v34（E120）：挪到确认成交后——原弹确认框前即解锁，「作罢」/灵石不足也录了图鉴（萍水未谋面却已入册，图鉴完成度虚增）
-    s.met = true;
-    s.befriended = true;   // v37（E240）：结交印记——一次性通道就此关闭
+    s.befriended = true;   // v37（E240）：结交印记——一次性通道就此关闭（v38（E285）：重复的 s.met 赋值删除）
     // v28 联动：声望先于人先——名望高者结交更受欢迎，恶名远扬者见面先减三分
     const rep = p.reputation || 0;
     const repAdj = rep >= 80 ? 5 : rep >= 30 ? 3 : rep < -30 ? -5 : rep < 0 ? -2 : 0;
@@ -474,17 +491,22 @@ const NpcSys = {
     if (!d || !s || !s.alive || Battle.active) return;
     // v35（U1）：行游在外者不在山中——江湖页互动一并拦下（原只挡偶遇，机制纯装饰）
     if (this.isAway(p, id)) { UI.toast(`${d.name} 行游在外，旬末方归`); return; }
+    // v38（E306）：止戈之誓——不切磋
+    if (typeof OathSys !== 'undefined' && OathSys.active(p, 'still')) { UI.toast('止戈之誓在手——刀兵切磋，皆非此道'); return; }
     // v35（E131）修瑕：切磋原零成本无限刷好感（胜 +5、败 +2，连输 45 场可把任意渡劫修士刷到
     // 莫逆）——赠礼/论道/结交三套社交被免费切磋完全支配。现每 NPC 每日限一场；落败不加好感
     // （以武会友，胜负皆不损交情），胜 +5 不变，「三胜指点」回归阶段性目标
     const today = Math.floor(p.day || 0);
     if (s.sparDay === today) { UI.toast(`今日已与${d.name}切磋过——武道贵精不贵多，明日再来讨教`); return; }
-    s.sparDay = today;
     // v36（E198）：每日 3 场跨 NPC 总限——E131 只限单 NPC 频次，24 人同日各一场的总量通道依旧
     // 零时间零灵石成本（r3 全扫日修为 21025 ≈ 闭关日均 12.7 倍）；形态对齐 SectSys.claimLeft
+    // v38（E279）修瑕：总限判定移到单 NPC 落章之前——原 s.sparDay 先写、总限后拦，被拦的那场
+    // 也烧掉该 NPC 当日切磋配额（先点满 3 场再切此人 → 此人当日永不可切）
     if (p._sparCountDay !== today) { p._sparCountDay = today; p._sparCount = 0; }
     if ((p._sparCount || 0) >= 3) { UI.toast('今日已三度以武会友——筋骨酸软，明日再战'); return; }
+    s.sparDay = today;
     p._sparCount = (p._sparCount || 0) + 1;
+    this.firstMeetBoost(p, id);   // v38（E312）：名动一方初见敬意
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴
     const sparLine = this.lineFor(p, id, 'spar');
@@ -540,6 +562,8 @@ const NpcSys = {
     const d = this.def(id);
     const s = this.state(p, id);
     if (!d || !s || !s.alive) return;
+    // v38（E306）：独行之道——不结新交
+    if (typeof OathSys !== 'undefined' && OathSys.active(p, 'solo')) { UI.toast('独行之道在身——结义之盟，皆非此道'); return; }
     if ((p.sworn || []).includes(id)) { UI.toast('你们已是结拜之交'); return; }
     if (s.rel < 70) { UI.toast('交情尚浅，不足结拜'); return; }
     const cost = Math.round(100 * GameData.stoneEco(s.realmIdx));
@@ -567,6 +591,8 @@ const NpcSys = {
     const d = this.def(id);
     const s = this.state(p, id);
     if (!d || !s || !s.alive) return;
+    // v38（E306）：独行之道——不结新交
+    if (typeof OathSys !== 'undefined' && OathSys.active(p, 'solo')) { UI.toast('独行之道在身——道侣之约，皆非此道'); return; }
     if (p.partner) { UI.toast('你已有道侣'); return; }
     if (s.rel < 90) { UI.toast('两情尚未通明，谈何结发'); return; }
     const ok = await UI.popup({
@@ -689,6 +715,7 @@ const NpcSys = {
     }
     const before = this.tierOf(Math.max(0, s.rel)).name;
     const relBefore2 = s.rel;
+    gain = Math.round(gain * (typeof OathSys !== 'undefined' ? OathSys.relMul(p) : 1));   // v38（E306）：独行之道——既有情谊增长 +30%
     s.rel = Utils.clamp(s.rel + gain, -100, 100);
     this.mem(p, id, 'gift', '赠礼之谊');
     const after = this.tierOf(Math.max(0, s.rel)).name;
@@ -812,7 +839,7 @@ const NpcSys = {
     Cultivate.addExp(p, gain);
     Cultivate.addInsight(p, insight, false);   // v37（E264）：感悟增发收口单源（论道=外源感悟）
     if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 4);
-    s.rel = Utils.clamp(s.rel + 1, -100, 100);
+    s.rel = Utils.clamp(s.rel + Math.round(1 * (typeof OathSys !== 'undefined' ? OathSys.relMul(p) : 1)), -100, 100);   // v38（E306）：独行之道 ×1.3
     this.mem(p, id, 'chat', '席地论道');
     Time.add(2);
     const disLine = this.lineFor(p, id, 'discuss');

@@ -44,7 +44,7 @@ LOCKS: {
   tips(p) {
     const t = [];
     const st = Stat.compute(p);
-    const need = GameData.layerNeed(p.realmIdx, p.layer);
+    const need = GameData.layerNeedT(p, p.realmIdx, p.layer);
     const cap = Stat.poisonCap(p);   // v20：上限单源化（v22 提前：新知丹毒提示亦用）
     const full = p.layer === 3 && p.exp >= need;
     // v34（E5）：与 renderFocus 同一条首命中链——focus 主/副卡只显示链上第一条，
@@ -144,7 +144,7 @@ LOCKS: {
   },
   totalExp(p) {
     let sum = 0;
-    for (let l = 0; l < p.layer; l++) sum += GameData.layerNeed(p.realmIdx, l);
+    for (let l = 0; l < p.layer; l++) sum += GameData.layerNeedT(p, p.realmIdx, l);
     return sum + p.exp;
   },
   /** v22 一键日常：求签 → 聚灵 → 采收灵田 → 照料（浇水/抚兽/除虫）→ 领悬赏 → 宗门领赏，一纸小账回报
@@ -246,6 +246,16 @@ LOCKS: {
       }
       if (sn) done.push(`宗门任务领赏 ×${sn}`);
     }
+    // v38（E325）：行权扩容——调息 / 悟道 / 宗门听讲（安静三件，逐项自停）
+    if (!p.dead && p._restDay !== today && !Battle.active) {
+      try { Cultivate.rest(); if (p._restDay === today) done.push('打坐调息'); } catch (e) {}
+    }
+    if (!p.dead && (p._wuDaoDay || -1) !== today && (p.insight || 0) >= Cultivate.wuDaoCost(p) && !Battle.active) {
+      try { await Cultivate.wuDao(); if (p._wuDaoDay === today) done.push('悟道炼作'); } catch (e) {}
+    }
+    if (!p.dead && p.sect && p.listenDay !== today && p.sect.contrib >= 300 && !Battle.active && Game.actions['act-sect-listen']) {
+      try { await Game.actions['act-sect-listen']({}, null); if (p.listenDay === today) done.push('宗门听讲'); } catch (e) {}
+    }
     if (!done.length) { UI.toast('今日诸事皆已办妥——安心修行便是'); return; }
     await UI.popup({
       title: '✦ 一键行权 · 小账',
@@ -253,6 +263,28 @@ LOCKS: {
         + '<div class="tip-line" style="margin-top:6px">· 各项收支明细见「游历记载」。</div>',
       options: [{ text: '收 下', value: true, primary: true }],
     });
+    // v38（E325）：以武会友收尾——问剑优先，次切磋好感最高者（开战即止，战报自见）
+    if (!p.dead && !Battle.active && !Story.active && !UI._popupResolve) {
+      try {
+        if ((p._wenjianDay || -1) !== today && typeof RankSys !== 'undefined' && RankSys.board) {
+          const rk = RankSys.board(p);
+          const myIdx = rk.findIndex(r => r.id === 'me');
+          if (myIdx > 0) {
+            const ahead = rk[myIdx - 1];
+            const stA = ahead && p.npcs[ahead.id];
+            if (stA && stA.alive && !NpcSys.isAway(p, ahead.id)) { await RankSys.challengeAhead(); return; }
+          }
+        }
+      } catch (e) {}
+      try {
+        if ((p._sparCount || 0) < 3) {
+          const cand = Object.entries(p.npcs || {})
+            .filter(([id, s]) => s && s.alive && s.met && s.rel >= 8 && s.sparDay !== today && !(typeof NpcSys !== 'undefined' && NpcSys.isAway && NpcSys.isAway(p, id)))
+            .sort((a, b) => b[1].rel - a[1].rel)[0];
+          if (cand) { await NpcSys.spar(cand[0]); return; }
+        }
+      } catch (e) {}
+    }
     Game.afterAction();
   },
 };

@@ -287,8 +287,18 @@ try {
     AutoCult.start({ kind: 'time', minutes: 30, label: '运行 30 分钟' });
   });
   await sleep(3000);
-  const f3 = await page.evaluate(() => ({ active: AutoCult.active, paused: Log.entries.join('|').includes('请亲手冲击瓶颈') }));
-  !f3.active && f3.paused ? pass('F3 修为圆满挂机自动暂停') : fail('F3 圆满暂停', JSON.stringify(f3));
+  // v38（E326）：静修境（金丹前）圆满改为自动冲关——断言二选一：已自动晋入筑基，或（金丹+）暂停待手
+  const f3 = await page.evaluate(() => ({ active: AutoCult.active, paused: Log.entries.join('|').includes('请亲手冲击瓶颈'), realm: Game.player.realmIdx }));
+  (f3.paused || f3.realm >= 1) ? pass('F3 圆满：静修自动冲关或暂停待手（E326）') : fail('F3 圆满暂停', JSON.stringify(f3));
+  await page.evaluate(() => { if (AutoCult.active) AutoCult.finish('测试续行'); });
+  await sleep(300);
+  // v38（E326）副作用清场：静修自动冲关会置 pendingDao 并弹叩问大道——关闭之，免拦截后续用例
+  await page.evaluate(() => {
+    document.getElementById('dao-modal') && document.getElementById('dao-modal').classList.add('hidden');
+    if (Game.player) Game.player.pendingDao = false;
+    UI.closeOverlays();
+  });
+  await sleep(200);
   // 战斗暂停
   await page.evaluate(() => {
     const p = Game.player;
@@ -296,7 +306,7 @@ try {
     AutoCult.start({ kind: 'time', minutes: 30, label: '运行 30 分钟' });
   });
   await sleep(400);
-  await page.evaluate(() => Battle.start('m_yezhu', { mapName: '测试' }));
+  await page.evaluate(() => { Game.player._autoWin = 'off'; Battle.start('m_yezhu', { mapName: '测试' }); });
   await sleep(1800);
   const f4 = await page.evaluate(() => ({ active: AutoCult.active, warned: Log.entries.join('|').includes('遭遇战斗') }));
   !f4.active && f4.warned ? pass('F4 遭遇战斗挂机自动暂停') : fail('F4 战斗暂停', JSON.stringify(f4));
@@ -344,6 +354,7 @@ try {
       }
       if (!opened) continue;
     }
+    await walkTribStages(page);
     await clickSel(page, '[data-action="trib-strategy"][data-strategy="endure"]');
     await sleep(4300);
     // 失败 → 回溯弹窗：点「回溯因果」验证回退；其余弹窗点「继续前行」
@@ -437,3 +448,16 @@ const failCount = results.filter(r => r[0] === 'FAIL').length;
 console.log(`共 ${results.length} 项，失败 ${failCount} 项`);
 console.log(`控制台错误 ${consoleErrors.length} 条: ` + consoleErrors.slice(0, 5).join(' || '));
 process.exit(failCount > 0 || consoleErrors.length > 0 ? 1 : 0);
+/** v38（E304）兼容：三段劫势视图先行——点击 trib-strategy 前先以「避」连走三重劫象 */
+async function walkTribStages(page) {
+  await page.evaluate(async () => {
+    for (let i = 0; i < 3; i++) {
+      const S = (typeof Tribulation !== 'undefined') ? Tribulation.state : null;
+      if (!S || (S.stageIdx || 0) >= 3) break;
+      const btn = document.querySelector('[data-action="trib-stage"][data-stage="bi"]');
+      if (btn) btn.click();
+      await new Promise(r => setTimeout(r, 120));
+    }
+  });
+  await sleep(250);
+}

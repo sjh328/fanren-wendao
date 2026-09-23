@@ -365,7 +365,8 @@ try {
     let pillExp0;
     try { pillExp0 = p.daoExp ? p.daoExp.pill : 0; } catch (e) { pillExp0 = 0; }
     const before = p.bag[r.out] || 0;
-    try { CraftSys.alchemy(r.id, 5); } finally { UI.popup = origPopup; }
+    const origRandom2 = Math.random; Math.random = () => 0.0005;   // v38：随机桩定死——连炉必成，断言面只看「无弹窗直通」
+    try { CraftSys.alchemy(r.id, 5); } finally { Math.random = origRandom2; UI.popup = origPopup; }
     return { made: (p.bag[r.out] || 0) - before };
   });
   ve4.made >= 1 ? pass('VE4 批量连炉不受火候影响（无弹窗直通）') : fail('VE4 批量连炉', JSON.stringify(ve4));

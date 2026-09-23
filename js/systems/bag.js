@@ -13,6 +13,8 @@ const Bag = {
     // v6：图鉴收录（功法 / 法宝）
     if (def && def.type === 'gongfa') Meta.see('gongfa', itemId);
     if (def && def.type === 'artifact') Meta.see('artifact', itemId);
+    // v38（E328）：首件天阶（grade4+）法宝入手——里程碑
+    if (def && def.type === 'artifact' && (def.grade || 0) >= 4 && typeof Game !== 'undefined' && Game.milestone) Game.milestone('msGr4', '天 阶 重 宝 · 首 入 手');
   },
   removeItem(itemId, qty = 1) {
     const p = Game.player;
@@ -90,6 +92,8 @@ const Bag = {
     const p = Game.player;
     const def = GameData.ITEMS[itemId];
     if (!def || def.type !== 'pill') return;
+    // v38（E306）：辟谷丹誓——不服丹药
+    if (typeof OathSys !== 'undefined' && OathSys.active(p, 'dan')) { UI.toast('辟谷丹誓在身——丹药入口，即是破誓'); return; }
     n = Utils.clamp(Math.floor(Number(n)) || 5, 1, 99);
     let used = 0;
     while (used < n && this.count(itemId) > 0) {
@@ -111,6 +115,8 @@ const Bag = {
     const p = Game.player;
     const def = GameData.ITEMS[itemId];
     if (!def || def.type !== 'pill' || !this.count(itemId)) return;
+    // v38（E306）：辟谷丹誓——不服丹药
+    if (typeof OathSys !== 'undefined' && OathSys.active(p, 'dan')) { UI.toast('辟谷丹誓在身——丹药入口，即是破誓'); return; }
     this.removeItem(itemId, 1);
     Pill.apply(p, def);
     Game.afterAction();
@@ -360,6 +366,8 @@ const Pill = {
   apply(p, def, inBattle = false) {
     p.counters.pills = (p.counters.pills || 0) + 1;   // v11 剧情计数
     if (p.dao === 'pill') DaoSys.gain(p, 3);   // v16 丹火
+    // v38（E300）：丹道 6 重 B 脉「以丹入道」——每服一丹感悟 +1（外源入池，不扰纯度口径）
+    if (p.dao === 'pill' && DaoSys.hasPath(p, 6, 'yiDan')) Cultivate.addInsight(p, 1);
     const st = Stat.compute(p);
     const effect = { ...def.use };
     // 丹霞谷 / 丹道：丹药效果增强（作用于数值部分）；金丹境再 +30%
@@ -373,6 +381,21 @@ const Pill = {
     if (effect.mpPct) { p.mp = Math.min(st.maxMp, p.mp + Math.round(st.maxMp * effect.mpPct / 100)); effectText.push(`灵力 +${effect.mpPct}%`); }
     if (effect.curePoison) { p.poison = Math.max(0, p.poison - effect.curePoison); effectText.push(`丹毒 -${effect.curePoison}`); }
     if (effect.insight) { Cultivate.addInsight(p, effect.insight); effectText.push(`突破感悟 +${effect.insight}`); }   // v30 修瑕：走单源（溢出折修为，原直接写 insight 高位蒸发）
+    // v38（E317）：研创丹新效果键——战意 / 真元 / 敌方施减益（战斗方验，体外服之药力蛰伏）
+    if (effect.morale) {
+      if (inBattle && typeof Battle !== 'undefined' && Battle.active) { Battle.active.morale = Math.min(100, (Battle.active.morale || 0) + effect.morale); effectText.push(`战意 +${effect.morale}`); }
+      else effectText.push('战气暗涌（战斗方验）');
+    }
+    if (effect.zy) {
+      if (inBattle && typeof Battle !== 'undefined' && Battle.active) { Battle.active.zhenyuan = Math.min(Battle.active.zmax || 6, (Battle.active.zhenyuan || 0) + effect.zy); effectText.push(`真元 +${effect.zy}`); }
+      else effectText.push('真元微漾（战斗方验）');
+    }
+    if (effect.enfx) {
+      if (inBattle && typeof Battle !== 'undefined' && Battle.active && Battle.active.enemy.hp > 0) {
+        Battle.applyEnemyFx(Battle.active.enemy, { ...effect.enfx });
+        effectText.push(`${(StatusFx.DEFS[effect.enfx.kind] || {}).name || '异状'}已施于敌身`);
+      } else effectText.push('药力蛰伏（战斗方验）');
+    }
     // v32 修瑕（E1）：清心丹 use.purge 原是死键——500 灵石的战斗解控丹毫无效果（安慰剂），服用日志甚至为空
     if (effect.purge) {
       if (inBattle && typeof Battle !== 'undefined' && Battle.active) {

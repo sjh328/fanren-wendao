@@ -5,6 +5,9 @@ const Explore = {
     if (Battle.active || p.dead) return;
     const map = GameData.MAPS.find(m => m.id === mapId);
     if (!map) return;
+    // v38（E310）：仙界舆图门槛——仙阙云海须仙籍；深处须仙官五品
+    if (map.gate === 'ascended' && !(p.flags && p.flags.ascended)) { UI.toast('云海之上非法可及——白日飞升后方可踏足仙阙'); return; }
+    if (map.gate === 'court5' && !(typeof XianSys !== 'undefined' && XianSys.deepOpen(p))) { UI.toast('仙禁重重——须仙官五品方准入云海深处'); return; }
     p.counters.explores++;
     const mapExp = p.counters.mapExplores = (p.counters.mapExplores || {});
     mapExp[map.id] = (mapExp[map.id] || 0) + 1;
@@ -18,6 +21,17 @@ const Explore = {
     for (const k of ['treasure', 'fortune', 'npc']) if (weights[k]) weights[k] *= gm;
     // §23 上古秘境现世：宝箱与机缘权重提升
     if (WorldSys.ruinsActive(p)) for (const k of ['treasure', 'fortune']) if (weights[k]) weights[k] *= 1.5;
+    // v38（E312）：声望四档——90 声望「名震一方」，奇遇/宝箱权重 +5%（只调好事轴，dilemma 常驻不动）
+    if ((p.reputation || 0) >= 90) for (const k of ['treasure', 'fortune']) if (weights[k]) weights[k] *= 1.05;
+    // v38（E341）：传承树「福缘深厚」遗风——奇遇权重 +5%；v38（E339）：仙缘套「天成之意」奇遇权重 +8%
+    if (p.flags && p.flags.treeLuck && weights.fortune) weights.fortune *= 1.05;
+    if (typeof ForgeSys !== 'undefined' && ForgeSys.hasSetTech && ForgeSys.hasSetTech(p, 'tiancheng') && weights.fortune) weights.fortune *= 1.08;
+    // v38（E338）：藏宝阁「寻宝灵机」——灵机在身，此行必遇宝箱
+    let huntForce = false;
+    if (p.flags && p.flags.treasureHunt > 0) { p.flags.treasureHunt--; huntForce = true; Log.add('【寻宝灵机】眉宇间的灵机微微一烫——你循着感应直奔藏宝之地！', 'system'); }
+    const type0 = huntForce ? 'treasure' : Utils.pickWeighted(weights);
+    const type = type0;
+    if (huntForce) { p.flags = p.flags || {}; p.flags._huntJustNow = true; }
     // v20 天时与深耕：雾日机缘↑、隆冬遇敌↓、兽潮妖患↑、深耕宝箱↑
     const wx0 = Art.weatherOf(p, map.id);
     if (wx0.sky === 'fog' && weights.fortune) weights.fortune *= 1.5;
@@ -26,7 +40,6 @@ const Explore = {
     const deepN = (p.counters.mapExplores || {})[map.id] || 0;
     const deepTier = deepN >= 100 ? 3 : deepN >= 50 ? 2 : deepN >= 20 ? 1 : 0;
     if (deepTier > 0 && weights.treasure) weights.treasure += deepTier * 3;
-    const type = Utils.pickWeighted(weights);
     switch (type) {
       case 'battle': {
         const eliteChance = (under ? 14 : 8) + deepTier * 4;   // v20 深耕：精英率 +
@@ -47,7 +60,7 @@ const Explore = {
         const arrayTier = p.dao === 'array' ? DaoSys.tierLevel(p) : 0;
         const arraySetup = arrayTier >= 1 && Utils.chance(50);
         if (arraySetup) DaoSys.gain(p, 20);   // v16 阵道
-        const bctx = { mapName: map.name, mapId: map.id, firstStrike, arraySetup, arrayPotent: arrayTier >= 3, arrayGrand: arrayTier >= 6 };
+        const bctx = { mapName: map.name, mapId: map.id, firstStrike, arraySetup, arrayPotent: arrayTier >= 3, arrayGrand: arrayTier >= 6, explore: true };   // v38（E323）：秒胜「探索时关闭」判据
         // v20 深耕掉落与兽潮掉落
         if (deepTier > 0) {
           bctx.dropMul = (bctx.dropMul || 1) * (1 + deepTier * 0.15);
@@ -179,7 +192,11 @@ const EventSys = {
       Log.add(`箱底暗藏毒针！你躲避不及，气血 -${dmg}。`, 'loss');
       return;
     }
-    const stones = Math.round(Utils.rand(12, 22) * GameData.stoneEco(er) * (1 + st.luck * 0.02) * this.arrMult(map));
+    // v38（E340）：行遍天下 +5%；v38（E338）：寻宝灵机 ×1.3（v38 E339 天成之意机缘面在 fortune 分支）
+    const huntMul = (p.flags && p.flags._huntJustNow) ? 1.3 : 1;
+    const stones = Math.round(Utils.rand(12, 22) * GameData.stoneEco(er) * (1 + st.luck * 0.02) * this.arrMult(map)
+      * (Game.titleOn(p, 'exploreGain') ? 1.05 : 1) * huntMul);
+    p.flags = p.flags || {}; delete p.flags._huntJustNow;
     if (this.arrMult(map) > 1) Log.add('阵道造诣令你于遗迹中如鱼得水，所获更丰！', 'gain');
     Bag.addStones(stones);
     let text = `箱中有灵石 ${Utils.fmtNum(stones)} 枚`;
@@ -206,6 +223,8 @@ const EventSys = {
     }
     const er = this.ecoRealm(p, map);   // v32 修瑕（E65）：机缘经济随图梯度封顶（前世洞府机缘除外——那是轮回主题）
     const eco = GameData.eco(er);
+    // v38（E339）：仙缘套「天成之意」——机缘收获 +10%（护持中炼化三阶方生效）
+    const tiancheng = (typeof ForgeSys !== 'undefined' && ForgeSys.hasSetTech && ForgeSys.hasSetTech(p, 'tiancheng')) ? 1.1 : 1;
     const arr = this.arrMult(map);
     // v32（F6）事件池轻扩：兽潮期间「战场拾遗」——世界事件与探索互文（兽潮掉肉/皮，权重随兽潮现世）
     // v33（E105）修瑕：触发门原判「任意地图有兽潮」（some until>=yr）——无兽潮的图也能拾遗，
@@ -214,7 +233,7 @@ const EventSys = {
     const kind = Utils.pickWeighted(Object.assign({ lingmai: 30, wudao: 20, yifu: 20, lingru: 15, shenquan: 8, tiancai: 7 }, beastOn ? { beastpick: 12 } : {}));
     switch (kind) {
       case 'lingmai': {
-        const gain = Math.round(90 * eco);
+        const gain = Math.round(90 * eco * tiancheng);
         Cultivate.addExp(p, gain);
         Log.add(`你误入一处灵脉福地，灵气浓得化不开！修为 +${Utils.fmtNum(gain)}。`, 'gain');
         break;

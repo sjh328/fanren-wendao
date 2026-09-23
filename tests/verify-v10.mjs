@@ -408,6 +408,7 @@ try {
     const en = buildMonster('m_yezhu');
     const base = en.atk;
     Battle.speed = 3;
+    Game.player._autoWin = 'off';   // v38（E323）：天时钩子需读取战斗日志，关碾压秒胜
     await Battle.start(null, { enemy: en, wx: { night: true, sky: 'fog' }, mapName: '天时测试' });
     // v20 修正：r≥1 时「灵压」先 ×0.9，夜战再 ×1.15——期望值按序复算
     const expected = Game.player.realmIdx >= 1 ? Math.round(Math.round(base * 0.9) * 1.15) : Math.round(base * 1.15);
@@ -700,6 +701,7 @@ try {
     Battle.active = null;
     // 不真正开战：只验证 mercy 分支存在（源码检查）+ 战斗计数清零判定
     // v20 行为化验证：带 mercy 的 start 会削弱敌方
+    Game.player._autoWin = 'off';
     await Battle.start('m_yezhu', { mapName: '保底测试', mercy: 0.8 });
     const boosted = Battle.active && Battle.active.enemy._mercyChecked !== undefined ? true : true;
     const reduced = Battle.active && Battle.active.ctx && Battle.active.ctx.mercy === 0.8;
@@ -960,14 +962,15 @@ try {
   const w8 = await page.evaluate(async () => {
     const p = Game.player;
     const today = Math.floor(p.day);
-    p.signDay = -1; p._autoRush = 'always';   // v35（U3）：聚灵明示后测试预置不再询问
+    p.signDay = -1; p._autoRush = 'always'; p._restDay = today; p._wuDaoDay = today; p._sparCount = 3; p._wenjianDay = today;   // v38（E325）：预置跳过新增行，维持本段断言面
     p.cave = { lv: 1, plots: [{ seed: 'seed_lingcao', crop: 'm_lingcao', days: 1, plantedDay: today - 3 }], builds: {} };
+    p._restDay = Math.floor(p.day); p._wuDaoDay = Math.floor(p.day); p._sparCount = 3; p._wenjianDay = Math.floor(p.day);   // v38（E325）
     p.bounties = { day: Math.floor(p.day), list: [{ name: '测试悬赏', type: 'kill', target: 'm_lingcao', need: 1, progress: 1, desc: 'x', chain: 3 }] };   // v30：chain 3 为连锁终点（领完不再续，测试确定）
     Guide.dailyAll();
     await new Promise(r => setTimeout(r, 300));
     const txt = document.getElementById('popup-body').innerText || '';
     const claimed = !p.bounties.list[0];
-    const ok = p.signDay === today && !p.cave.plots[0] && claimed;
+    const ok = p.signDay === today && !(p.cave.plots[0] && p.cave.plots[0].seed) && claimed;   // v38（E311）：收获后留土地记忆对象
     window.__w8diag = { sign: p.signDay === today, plot: !p.cave.plots[0], claimed };
     UI.popupChoose(-1);
     p.cave = null; p.bounties = { day: 0, list: [] };
@@ -1159,6 +1162,7 @@ try {
     const p = Game.player;
     const today = Math.floor(p.day);
     p.signDay = today; p.rushDay = today;   // 跳过求签/聚灵，专测补种
+    p._restDay = today; p._wuDaoDay = today; p._sparCount = 3; p._wenjianDay = today;   // v38（E325）跳过新增行
     p.cave = { lv: 1, plots: [null, null, null], builds: {} };
     p.bag.seed_lingcao = 2;
     p.bounties = { day: today, list: [] };

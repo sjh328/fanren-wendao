@@ -64,6 +64,11 @@ const WorldSys = {
   onYear(p, y) {
     const w = p.world;
     if (!w) return;
+    // v38（E306）：不杀之誓——岁末天道酬誓，气运 +1
+    if (typeof OathSys !== 'undefined' && OathSys.active(p, 'kill')) {
+      KarmaSys.addFortune(1);
+      Log.add('不杀之誓持守经年，天道暗记其功——气运 +1。', 'gain');
+    }
     // v29/v30/v34：旧档一次性迁移——大事周期改短后，从未触发过大事的旧档重掷首次年份（_evResched34 防重复执行）
     if (!w._evResched34 && !(w.history && w.history.length)) { w.nextEventYear = 2 + Utils.rand(0, 2); w._evResched34 = true; }   // v34：重掷至 2~4 年新窗
     NpcSys.yearTick(p, y);
@@ -155,6 +160,17 @@ const WorldSys = {
     Log.add(`【天下大事 · 第${y}年】${text}`, 'system');
     Log.add(`${def ? def.name : ''}之卡已现于「游历」页——参与或观望，一念自决。`, 'event');
     if (typeof Story !== 'undefined' && Story.chron) Story.chron(`第${y}年 · 天下大事「${def ? def.name : type}」`);   // v33（E92）：天下大事入年表（原只入 8 条轮换的 history 且 UI 无展示入口）
+    // v38（E329）：世事反应——抽 1~2 位相熟（rel≥30）修士，对此事发一句江湖风评
+    try {
+      const pool2 = Object.entries(p.npcs || {}).filter(([id, s]) => s && s.alive && s.met && s.rel >= 30);
+      const n2 = Math.min(pool2.length, Utils.rand(1, 2));
+      for (let i = 0; i < n2; i++) {
+        const [id, s] = pool2.splice(Utils.rand(0, pool2.length - 1), 1)[0] || [];
+        const d2 = (typeof NpcSys !== 'undefined' && NpcSys.def) ? NpcSys.def(id) : null;
+        const lines = GameData.WORLD_REACTIONS && GameData.WORLD_REACTIONS[type];
+        if (d2 && lines && lines.length) Log.add(lines[Utils.rand(0, lines.length - 1)].replace(/\{name\}/g, d2.name), 'event');
+      }
+    } catch (e2) { /* 反应池异常不阻塞大事 */ }
   },
   /** 参与大事件：各得其赏 */
   async joinEvent() {

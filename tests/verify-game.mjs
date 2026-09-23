@@ -355,6 +355,8 @@ try {
   const tribOpen9 = await page.$eval('#tribulation-modal', el => !el.className.includes('hidden')).catch(() => false);
   if (tribOpen9) {
     pass('T9 闭关自动引动天劫（圆满联动）');
+    await walkTribStages(page);
+    await walkTribStages(page);
     await clickSel(page, '[data-action="trib-strategy"][data-strategy="hide"]');
     await sleep(3600);
     await dismissRollback();
@@ -616,8 +618,11 @@ try {
   tribVisible ? pass('T12 天劫弹窗弹出三策') : fail('T12 天劫弹窗', '');
   if (tribVisible) {
     await shot(page, 'tribulation');
+    await walkTribStages(page);
     const tribText = await text(page, '#trib-box');
     /硬抗天劫/.test(tribText) && /法宝挡劫/.test(tribText) && /借地躲劫/.test(tribText) ? pass('T12 三策齐备（硬抗/法宝/借地）') : fail('T12 三策', '');
+    await walkTribStages(page);
+    await walkTribStages(page);
     await clickSel(page, '[data-action="trib-strategy"][data-strategy="hide"]');
     await sleep(3600);
     await dismissRollback();
@@ -629,7 +634,9 @@ try {
       await sleep(300);
       await clickSel(page, '[data-action="act-breakthrough"]');
       await sleep(400);
-      await clickSel(page, '[data-action="trib-strategy"][data-strategy="hide"]');
+      await walkTribStages(page);
+    await walkTribStages(page);
+    await clickSel(page, '[data-action="trib-strategy"][data-strategy="hide"]');
       await sleep(3600);
       await dismissRollback();
       t12b = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
@@ -710,13 +717,13 @@ try {
   {
     const panel = await text(page, '#panel-left');
     panel.includes('体修') ? pass('T14 面板显示体修大道') : fail('T14 面板大道', '');
+    await page.evaluate(() => { Game.player.stones.low = 100000; });   // v19/v38：垫足灵石消除行情随机性（垫款须在购买前）
     await clickSel(page, '[data-action="act-tab"][data-tab="shop"]');
     await sleep(300);
     await clickSel(page, '[data-action="act-buy"][data-item="gf_tiangang"]'); // 玄级功法
     await sleep(400);
     const t14 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
-    (!t14.bag.gf_tiangang && !t14.gongfa.gf_tiangang) ? pass('T14 体修无法购买玄级功法') : fail('T14 体修功法限制', '竟被买下');
-    await page.evaluate(() => { Game.player.stones.low = 100000; });   // v19：垫足灵石消除行情随机性
+    (t14.bag.gf_tiangang || t14.gongfa.gf_tiangang) ? pass('T14 体修可购买玄级功法（E316 解禁：战内法诀 ×0.7）') : fail('T14 体修功法限制', '玄级功法仍不可买');
     // v20 加固：种子合并会残留此前学过的沧海剑诀——显式清掉，保证购买路径可断言
     await page.evaluate(() => { delete Game.player.gongfa.gf_canghai; delete Game.player.bag.gf_canghai; UI.renderAll(); });
     await clickSel(page, '[data-action="act-buy"][data-item="gf_canghai"]'); // 凡级功法应可买
@@ -765,6 +772,8 @@ try {
     await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
     await sleep(300);
     let talBattle = false;
+    // v38（E323）：本段验证符箓战斗交互——临时关闭碾压秒胜，使战斗弹窗保持开启
+    await page.evaluate(() => { Game.player._autoWin = 'off'; });
     for (let i = 0; i < 15 && !talBattle; i++) {
       await clickSel(page, '[data-action="act-explore"][data-map="village"]');
       await sleep(600);
@@ -912,10 +921,12 @@ try {
     await sleep(400);
     const tribOpen = await page.$eval('#tribulation-modal', el => !el.className.includes('hidden')).catch(() => false);
     if (tribOpen) {
+      await walkTribStages(page);
       const artBtnEnabled = await page.$eval('[data-action="trib-strategy"][data-strategy="artifact"]', el => !el.disabled).catch(() => false);
       artBtnEnabled ? pass('T21 持对应法宝时挡劫可选') : fail('T21 挡劫可用性', '');
       // 成算上限 95%，5% 天然失败率：失败则重种子重试一次
       const T21_PATCH = { name: '挡劫人', realmIdx: 1, layer: 3, exp: 950, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } };
+      await walkTribStages(page);
       await clickSel(page, '[data-action="trib-strategy"][data-strategy="artifact"]');
       await sleep(3600);
       let t21 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
@@ -926,6 +937,7 @@ try {
         await sleep(300);
         await clickSel(page, '[data-action="act-breakthrough"]');
         await sleep(400);
+        await walkTribStages(page);
         await clickSel(page, '[data-action="trib-strategy"][data-strategy="artifact"]');
         await sleep(3600);
         t21 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
@@ -977,4 +989,17 @@ try {
   process.exit(1);   // v37（B9）：中断即红——原 catch 路径不传播非零码，链上静默绿
 } finally {
   await browser.close();
+}
+/** v38（E304）兼容：三段劫势视图先行——点击 trib-strategy 前先以「避」连走三重劫象 */
+async function walkTribStages(page) {
+  await page.evaluate(async () => {
+    for (let i = 0; i < 3; i++) {
+      const S = (typeof Tribulation !== 'undefined') ? Tribulation.state : null;
+      if (!S || (S.stageIdx || 0) >= 3) break;
+      const btn = document.querySelector('[data-action="trib-stage"][data-stage="bi"]');
+      if (btn) btn.click();
+      await new Promise(r => setTimeout(r, 120));
+    }
+  });
+  await sleep(250);
 }

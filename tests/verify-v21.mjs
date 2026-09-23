@@ -88,8 +88,8 @@ console.log('===== SA 源码静态组 =====');
   /* ---- B 批修 ---- */
   npc.includes('s.sparDay = today;') && npc.includes(`今日已与\${d.name}切磋过`)
     ? pass('SA9 切磋每 NPC 每日限一场（E131）') : fail('SA9 切磋日限', '');
-  npc.includes('if (won) s.rel = Utils.clamp(s.rel + 5, -100, 100);') && !npc.includes('s.rel + (won ? 5 : 2)')
-    ? pass('SA10 切磋落败不加好感（E131）') : fail('SA10 落败好感', '');
+  npc.includes('Math.round(5 * (typeof OathSys !== ') && npc.includes("OathSys.relMul(p) : 1)")
+    ? pass('SA10 切磋落败不加好感（E131）；v38（E306）独行之道 ×1.3') : fail('SA10 落败好感', '');
   {
     const baseIdx = reinc.indexOf('const unlockedTalents = this.TREE_EFFECTS.filter');
     const carryIdx = reinc.indexOf('if (kept) p2.bag[kept] = (p2.bag[kept] || 0) + 1;');

@@ -172,6 +172,8 @@ try {
   const b1b = await page.evaluate(async () => {
     const p = Game.player;
     p.hp = Stat.compute(p).maxHp;
+    p._autoWin = 'off';   // v38（E323）：本段验证战斗内结算，关闭碾压秒胜
+    if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜
     await Battle.start('m_yezhu', { mapName: '测试' });
     const B = Battle.active;
     B.busy = false; B.over = false;
@@ -195,6 +197,7 @@ try {
   const b2b = await page.evaluate(async () => {
     const p = Game.player;
     p.hp = Stat.compute(p).maxHp;
+    if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜
     await Battle.start('m_shuyao', { mapName: '测试' });
     const B = Battle.active;
     B.busy = false; B.over = false;
@@ -209,6 +212,7 @@ try {
   /* ================= B3 狂暴 ================= */
   const b3 = await page.evaluate(async () => {
     const p = Game.player;
+    if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜
     await Battle.start('m_moxiu', { mapName: '测试' });   // 精英
     const B = Battle.active;
     B.busy = false; B.over = false;
@@ -258,6 +262,7 @@ try {
   const b5 = await page.evaluate(async () => {
     const p = Game.player;
     p.hp = Stat.compute(p).maxHp;
+    if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜
     await Battle.start('m_yezhu', { mapName: '测试' });
     const B = Battle.active;
     B.busy = false; B.over = false;
@@ -273,6 +278,7 @@ try {
   /* ================= B7 驯服 ================= */
   const b7 = await page.evaluate(async () => {
     const p = Game.player;
+    if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜
     await Battle.start('m_linghou', { mapName: '测试' });   // beast 可驯
     const B = Battle.active;
     B.busy = false; B.over = false;
@@ -375,7 +381,7 @@ try {
   // 收获（UI 流程）
   await page.evaluate(() => { Game.player.day = 110; });
   await page.evaluate(() => CaveSys.harvest(0));
-  const c1b = await page.evaluate(() => ({ got: Bag.count('m_lingcao'), empty: Game.player.cave.plots[0] === null }));
+  const c1b = await page.evaluate(() => ({ got: Bag.count('m_lingcao'), empty: !(Game.player.cave.plots[0] && Game.player.cave.plots[0].seed) }));
   c1b.got >= 2 && c1b.empty ? pass('C1 灵田播种 10 日成熟收获 ×2') : fail('C1 收获', JSON.stringify(c1b));
   // 过熟减半
   const c1c = await page.evaluate(() => {
@@ -510,6 +516,8 @@ try {
   });
   const m2b = await page.evaluate(async () => {
     const p = Game.player;
+    p._autoWin = 'off';   // v38（E323）：本段依赖长战斗，关碾压秒胜
+    if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜
     await Battle.start('m_shikui', { mapName: '测试' });   // 高防石傀：测试期间不会被打死
     const B = Battle.active;
     B.busy = false; B.over = false;
@@ -532,6 +540,7 @@ try {
   // 冰封机制补充验证：冻结状态下敌方回合被跳过
   const m2c = await page.evaluate(async () => {
     const p = Game.player;
+    if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜
     await Battle.start('m_shikui', { mapName: '测试' });
     const B = Battle.active;
     B.busy = false; B.over = false;
@@ -564,7 +573,7 @@ try {
     return {
       enhanced: p.enhanced,
       caveField: 'cave' in p && p.cave === null,
-      caveLazy: CaveSys.plotsOf(p).length === 4,   // cave=null 惰性初始化兜底（在 caveField 之后求值）
+      caveLazy: CaveSys.plotsOf(p).length === 8,   // cave=null 惰性初始化兜底；v38（E288/E311）定长 8 槽
       beasts: p.beasts && Array.isArray(p.beasts.list) && p.beasts.list.length === 0,
       bounties: 'bounties' in p && p.bounties === null,
       topTitle: 'topTitle' in p && p.topTitle === null,
@@ -588,8 +597,10 @@ try {
     scenes: document.querySelectorAll('.map-scene svg').length,
     mapCards: document.querySelectorAll('.map-card').length,
   }));
-  v1.scenes === 11 && v1.mapCards === 11 ? pass('V1 十一张地图皆渲染山水插画') : fail('V1 场景插画', JSON.stringify(v1));
+  v1.scenes === 13 && v1.mapCards === 13 ? pass('V1 十三张地图（含仙阙云海×2）皆渲染山水插画') : fail('V1 场景插画', JSON.stringify(v1));
   const v1b = await page.evaluate(async () => {
+    Game.player._autoWin = 'off';   // v38（E323）
+    if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜
     await Battle.start('m_dushe', { mapName: '测试' });
     return { fig: !!document.querySelector('#battle-box .enemy-fig svg') };
   });
@@ -796,6 +807,7 @@ try {
     p.dao = 'sword';
     p.daoExp = { sword: 0 };
     p.hp = Stat.compute(p).maxHp;
+    if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜
     await Battle.start('m_yezhu', { mapName: '测试' });
     const B = Battle.active;
     B.busy = false; B.over = false;

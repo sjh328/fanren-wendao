@@ -560,7 +560,9 @@ try {
     const tribVis = await page.$eval('#tribulation-modal', el => !el.className.includes('hidden')).catch(() => false);
     tribVis ? pass('V6 大乘天劫弹出') : fail('V6 天劫', '');
     if (tribVis) {
-      await clickSel(page, '[data-action="trib-strategy"][data-strategy="hide"]');
+      await walkTribStages(page);
+      
+      await page.evaluate(() => { if (window.Tribulation && Tribulation.state) Tribulation.state.base = 1; });await clickSel(page, '[data-action="trib-strategy"][data-strategy="hide"]');
       await sleep(4500);
       await dismissRollback();
       let p = await player(page);
@@ -578,7 +580,9 @@ try {
         await sleep(300);
         await clickSel(page, '[data-action="act-breakthrough"]');
         await sleep(500);
-        await clickSel(page, '[data-action="trib-strategy"][data-strategy="hide"]');
+        await walkTribStages(page);
+        
+      await page.evaluate(() => { if (window.Tribulation && Tribulation.state) Tribulation.state.base = 1; });await clickSel(page, '[data-action="trib-strategy"][data-strategy="hide"]');
         await sleep(4500);
         await dismissRollback();
         p = await player(page);
@@ -599,6 +603,12 @@ try {
       await sleep(350);
       await clickPopupBtn(0); // 择出身：山村猎户
       await sleep(700);
+      await sleep(350);
+      // v38（E318）：转世劫难三连弹——各选「不请此劫」（末项）
+      for (let i = 0; i < 3; i++) { await clickPopupBtn(1); await sleep(300); }
+      await clickPopupBtn(0);
+      await sleep(400);
+      await sleep(400);
       const p2 = await player(page);
       p2.realmIdx === 0 && p2.layer === 0 ? pass('V6 转世后重归练气') : fail('V6 转世境界', JSON.stringify({ r: p2.realmIdx, l: p2.layer }));
       p2.reinc && p2.reinc.marks === 1 && p2.reinc.compPct === 10 ? pass('V6 轮回印记×1 + 悟性传承10%') : fail('V6 印记', JSON.stringify(p2.reinc));
@@ -662,4 +672,17 @@ try {
   consoleErrors.slice(0, 10).forEach(e => console.log('  [console] ' + e));
 } finally {
   await browser.close();
+}
+/** v38（E304）兼容：三段劫势视图先行——点击 trib-strategy 前先以「避」连走三重劫象 */
+async function walkTribStages(page) {
+  await page.evaluate(async () => {
+    for (let i = 0; i < 3; i++) {
+      const S = (typeof Tribulation !== 'undefined') ? Tribulation.state : null;
+      if (!S || (S.stageIdx || 0) >= 3) break;
+      const btn = document.querySelector('[data-action="trib-stage"][data-stage="bi"]');
+      if (btn) btn.click();
+      await new Promise(r => setTimeout(r, 120));
+    }
+  });
+  await sleep(250);
 }

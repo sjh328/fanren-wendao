@@ -216,6 +216,17 @@ const TowerSys = {
     UI.renderAll();
     this.nextFloor();
   },
+  /** v38（E324）：连战开关——祝福/宝箱/奇遇自动择优，塔守层与气血 <35% 自停（决策载体须亲断） */
+  toggleAuto() {
+    const p = Game.player;
+    const t = this.state(p);
+    t.auto = !t.auto;
+    Log.add(t.auto
+      ? '【连战】开启——塔内祝福自动择优、宝箱奇遇自动拾取，连战不休（塔守层与气血 <35% 自停）。'
+      : '【连战】关闭——每层祝福亲择，稳扎稳打。', 'system');
+    Game.afterAction();
+  },
+
   /** 中途退出后续登（run 仍在，接着打当前层） */
   resume() {
     const p = Game.player;
@@ -237,8 +248,15 @@ const TowerSys = {
   /** 开打当前层 */
   nextFloor() {
     const p = Game.player;
-    const run = this.state(p).run;
+    const t = this.state(p);
+    const run = t.run;
     if (!run) return;
+    // v38（E324）：连战三停——塔守层（决策载体）、跳层赌约已offered则不停、血量 <35%
+    if (t.auto) {
+      const stT = Stat.compute(p);
+      if (run.floor % 10 === 0) { t.auto = false; Log.add('【连战】前方是塔守之层——自动连战暂停，此战亲手来。', 'system'); }
+      else if (p.hp < stT.maxHp * 0.35) { t.auto = false; Log.add('【连战】气血不足三成五——自动连战暂停，先恢复或离塔。', 'warn'); }
+    }
     // v30 修瑕：濒死劝退口径明确化——原 p.hp<=1 语义模糊（hp=2 可登、hp=1 被拒）
     const stT = Stat.compute(p);
     if (p.hp <= Math.max(2, Math.round(stT.maxHp * 0.1))) { UI.toast('气血近乎枯竭——先疗伤，或收手离塔'); UI.renderAll(); return; }
@@ -302,6 +320,7 @@ const TowerSys = {
     if (healPct > 0) p.hp = Math.min(st.maxHp, p.hp + Math.round(st.maxHp * healPct));
     // v30：登天塔三十层——轮回印记 +1（跨世一次性）
     if (run.floor >= 30 && typeof ReincarnationSys !== 'undefined' && ReincarnationSys.grantMarks) ReincarnationSys.grantMarks(1, 'tower_30');
+    if (run.floor >= 30 && typeof Game !== 'undefined' && Game.milestone) Game.milestone('msTower30', '塔 登 三 十 层');   // v38（E328）里程碑
     // 纪录（本档 + 跨世）
     if (run.floor > t.best) t.best = run.floor;
     if (run.floor > (p.counters.towerBest || 0)) p.counters.towerBest = run.floor;
@@ -335,7 +354,8 @@ const TowerSys = {
       // 现接受分支改为「作废刚开打的这一层」：该层战斗（弹窗拦路、尚未出手）就地收场、
       // 跳进再下一层——被跳层真正一无所获，层奖/纪录/文案三者归位；拒绝则照常作战（v32 体验不变）。
       // 兜底：若该层已被打完（自动战斗等时机已过），赌约作罢不追溯。
-      if (!quitAll && run && run.floor < 90 && Utils.chance(15)) {
+      // v38（E324）：连战中不递赌约（决策载体须亲断，静默照常登层）。
+      if (!quitAll && !((this.state(p) || {}).auto) && run && run.floor < 90 && Utils.chance(15)) {
         await this.waitIdle();   // v36（E200）：赌约弹窗构造前挂起——防赌约弹窗开启本身吞掉未决节庆
         const skipTarget = run.floor;   // 即将开打/刚开打的下一层
         let settled = false;
@@ -373,6 +393,14 @@ const TowerSys = {
     // v31 修瑕（E8）：塔灵「赐福」从全池均匀抽取——可能塞给你诅咒祝福（琉璃贪匣），gift 池滤除 curse
     const giftPool = pool.filter(b => !b.curse);
     const gift = giftPool.length ? Utils.pick(giftPool) : null;
+    // v38（E324）：连战自动——有赐福收赐福，血虚入灵泉，否则径直登层（商人与血祭须亲断）
+    if ((this.state(p) || {}).auto) {
+      if (gift) { run.buffs.push(gift.id); Log.add(`【连战】塔灵赐福自动收下——【<b>${gift.name}</b>】入体：${gift.desc}`, 'gain'); }
+      else if (p.hp < Stat.compute(p).maxHp * 0.7) { const stA = Stat.compute(p); p.hp = Math.min(stA.maxHp, p.hp + Math.round(stA.maxHp * 0.6)); Log.add('【连战】自动入灵泉石台——气血回复六成。', 'gain'); }
+      else Log.add('【连战】奇遇层匆匆一瞥——径直登层。', 'info');
+      if (advance) this.nextFloor();
+      return false;
+    }
     const stNow = Stat.compute(p);
     const v = await UI.popup({
       title: `✦ 登天塔 · 第 ${floor} 层 · 塔中奇遇`,
@@ -422,6 +450,14 @@ const TowerSys = {
       [pool[i], pool[j]] = [pool[j], pool[i]];
     }
     const picks = pool.slice(0, 3);
+    // v38（E324）：连战自动择优——规则祝福 > 非诅咒首项 > 首项（诅咒仅在唯一项时取）
+    if ((this.state(p) || {}).auto) {
+      const pickB = picks.find(b => b.rule) || picks.find(b => !b.curse) || picks[0];
+      run.buffs.push(pickB.id);
+      Log.add(`【连战】自动择定祝福【<b>${pickB.name}</b>】——${pickB.desc}`, 'gain');
+      if (advance) this.nextFloor();
+      return false;
+    }
     const v = await UI.popup({
       title: `✦ 登天塔 · 第 ${floor} 层已克`,
       html: `<div class="tip-line">塔心浮动，三道祝福任择其一——出塔即散，塔内长存。</div>
@@ -464,6 +500,12 @@ const TowerSys = {
     // v31 修瑕：文案与实发同源——回复比例与 onVictory:233 同式（原恒写「三成」，诅咒祝福吸干后仍是死文案）
     const healPct = (mods.heal || 0) + 0.30 + (mods.healChest || 0);
     const healTxt = healPct > 0 ? `气血回复 ${Math.round(healPct * 100)}%` : '气血回复……宝气被诅咒祝福吸去了（0）';
+    // v38（E324）：连战自动——宝箱已入囊，径直登层
+    if ((this.state(p) || {}).auto) {
+      Log.add(`【连战】宝箱尽入囊中（灵石 +${Utils.fmtNum(bonus)}、${this.gradeName(def)} ×${n}）——径直登层。`, 'gain');
+      if (advance) this.nextFloor();
+      return false;
+    }
     const v = await UI.popup({
       title: `✦ 登天塔 · 第 ${floor} 层宝箱`,
       html: `<div class="tip-line">石阶尽头的鎏金宝箱应声而开——</div>

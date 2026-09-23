@@ -100,7 +100,7 @@ const BountySys = {
     Bag.addStones(gainStones);
     if (p.sect) p.sect.contrib += Math.round(r.contrib * mul);
     Log.add(`悬赏【${t.name}】交付！赏得灵石 ${Utils.fmtNum(gainStones)}${p.sect ? `、宗门贡献 +${Math.round(r.contrib * mul)}` : ''}。`, 'gain');
-    if (curChain < 3 && (t.type === 'kill' || t.type === 'collect') && Utils.chance(CHAIN_CHANCE[curChain])) {
+    if (curChain < 3 && (t.type === 'kill' || t.type === 'collect') && Utils.chance(CHAIN_CHANCE[curChain] + (Game.titleOn(p, 'heroChain') ? 5 : 0))) {   // v38（E340）：侠名远播续链 +5%
       const nc = curChain + 1;
       const baseName = t.name.replace(/^(连锁Ⅱ?Ⅲ? · )/, '');
       const nt = { ...t, need: t.need + 2, progress: 0, chain: nc, name: `${CHAIN_TAG[nc]}${baseName}`, desc: `${t.desc.replace(/×\d+/, `×${t.need + 2}`)}（连锁${['Ⅰ', 'Ⅱ', 'Ⅲ'][nc - 1] || ''} · 赏格 ×${CHAIN_MUL[nc]}）` };

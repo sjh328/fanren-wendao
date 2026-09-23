@@ -56,7 +56,7 @@ const AutoCult = {
       if (!isFinite(val) || val <= 0) { UI.toast('请填写目标数值'); return; }
       // v35（U5）：真仙圆满期「攒修为」目标永远不可达（修为轴已顶、totalExp 冻结）——
       // 开启时即刻拦截并指路仙元目标，不再让挂机循环每 0.28s 空转刷日志
-      if (kind === 'exp' && p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeed(p.realmIdx, 3) && p.flags && p.flags.ascended) {
+      if (kind === 'exp' && p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeedT(p, p.realmIdx, 3) && p.flags && p.flags.ascended) {
         UI.toast('修为轴已至尽头——圆满态请改选「攒够指定仙元」');
         return;
       }
@@ -103,7 +103,7 @@ const AutoCult = {
       const p2 = Game.player;
       if (!p2 || p2.dead) { this.finish('寿元将尽，自动修炼停止'); return; }
       this.rounds++;
-      const need = GameData.layerNeed(p2.realmIdx, p2.layer);
+      const need = GameData.layerNeedT(p2, p2.realmIdx, p2.layer);
       if (p2.layer === 3 && p2.exp >= need) {
         // v32 修瑕（D4）：飞升圆满原「即停等飞升」——仙籍之身修为恒圆满，AutoCult 每轮即停，
         // 仙元从此没有挂机路径。圆满后改为继续空转（溢流自动炼作仙元），只受目标达成控制。
@@ -117,6 +117,29 @@ const AutoCult = {
           }
           if (this.reached(p2)) { this.finish('目标达成'); return; }
           await Utils.sleep(280);
+          continue;
+        }
+        // v38（E326）：静修境（金丹前）圆满自动冲关——静修无劫无碍，挂机链全通
+        if (p2.realmIdx + 1 < GameData.TRIB_START) {
+          Log.add('【自动冲关】修为已至圆满——静修冲关，水到渠成……', 'realm');
+          await Cultivate.breakthrough(10);
+          if (!this.active) return;
+          continue;
+        }
+        // v38（E326）：金丹起仍亲手渡劫；真仙圆满给出「转攒仙元/停机」双钮，减少来回翻页
+        const pickEnd = await UI.popup({
+          title: '自动修炼 · 圆满待决',
+          html: p2.realmIdx < 9
+            ? '修为已至圆满——金丹引劫，须亲手冲击瓶颈。'
+            : '真仙圆满——仙门已开，飞升须亲手叩之。',
+          options: [
+            { text: '停机，由我亲手冲关', value: 'stop', primary: true },
+            ...(p2.realmIdx >= 9 ? [{ text: '不飞升了——继续空转攒仙元', value: 'yuan' }] : []),
+          ],
+        });
+        if (pickEnd === 'yuan') {
+          this.target = { kind: 'xian', need: (p2.counters.xianyuan || 0) + 1, label: '转攒仙元' };
+          Log.add('自动修炼转为持续炼化仙元——仙途不辍，随时可停。', 'system');
           continue;
         }
         this.pause(p2.realmIdx < 9 ? '修为已至圆满——请亲手冲击瓶颈' : '真仙圆满——仙门已开，请亲手飞升');
@@ -169,7 +192,7 @@ const AutoCult = {
     const days = Math.max(0, Math.floor(p.day - this.startDay));
     // v35（U5）修瑕：真仙圆满态 totalExp 恒为常数——挂机攒仙元（系统明确支持的玩法）停机小结
     // 恒报「累计修为 +0」；圆满态改报仙元增量，与离线小结的贴心程度对齐
-    const r9Full = p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeed(p.realmIdx, 3) && p.flags && p.flags.ascended;
+    const r9Full = p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeedT(p, p.realmIdx, 3) && p.flags && p.flags.ascended;
     if (r9Full) {
       const yuan = (p.counters.xianyuan || 0) - (this.startYuan || 0);
       Log.add(`本次自动修炼小结：${this.rounds} 轮吐纳，游戏内历时 ${days} 日，修为尽炼仙元 <b>+${Utils.fmtNum(Math.max(0, yuan))}</b>（累计 ${Utils.fmtNum(p.counters.xianyuan || 0)}）。`, 'gain');

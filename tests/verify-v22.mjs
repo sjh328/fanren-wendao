@@ -164,7 +164,7 @@ console.log('===== SA 源码静态组 =====');
   {
     const cult = R('systems/cultivate.js');
     const bal = readFileSync(join(__dirname, 'scripts', 'balance-sim.mjs'), 'utf8').replace(/\r\n/g, '\n');
-    cult.includes('p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < 3')
+    cult.includes('p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < (typeof CaveSys') && cult.includes('CaveSys.RUSH_WINDOW() : 3')
       ? pass('SA94a 聚灵 3 游戏日窗口口径入 baseGain 单源（E218）') : fail('SA94a 窗口', '');
     cave.includes('聚灵阵灵机未散（余') && cave.includes('Cultivate.baseGain(p) * 0.5') && cave.includes('Cultivate.baseGain(p) * 8')
       ? pass('SA94b spiritRush 窗口守卫 + 弹窗净收益按场景实算 0.5/8×baseGain（E218）') : fail('SA94b 净收益', '');
@@ -914,7 +914,7 @@ try {
     const p = Game.player;
     p.cave = { lv: 1, builds: {}, plots: [{ seed: 'seed_lingcao', crop: 'm_lingcao', days: 10, plantedDay: Math.floor(p.day) - 30, pested: true }] };
     CaveSys.harvest(0);
-    const harvested = p.cave.plots[0] === null && !(p.bag['m_lingcao'] > 0);   // 过熟 20 日+虫害叠加 → 颗粒无收（惩罚链生效口径）
+    const harvested = !(p.bag['m_lingcao'] > 0) && !(p.cave.plots[0] && p.cave.plots[0].seed);   // v38（E311）：过熟+虫害颗粒无收，田留土地记忆对象（lastCrop/streak）可再播
     p.cave.plots = [{ seed: 'seed_lingcao', crop: 'm_lingcao', days: 10, plantedDay: Math.floor(p.day) - 5, pested: true }];
     CaveSys.removePest(0);
     const cured = p.cave.plots[0].pested === false;

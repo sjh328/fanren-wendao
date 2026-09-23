@@ -15,6 +15,8 @@ const buildMonster = (id, delta = 0, opts = {}) => {
   const tplId = Utils.pickWeighted(GameData.MONSTER_TEMPLATE_WEIGHTS);
   const tpl = GameData.MONSTER_TEMPLATES.find(t => t.id === tplId) || null;
   const m = (v, k) => Math.round(v * ((tpl && tpl[k]) || 1));
+  // v38（E318）：转世劫难「群邪环伺」——天下之敌 hp/atk ×1.10（全部怪物统一入口）
+  const foeMul = (typeof Game !== 'undefined' && Game.player && Game.player.reinc && Array.isArray(Game.player.reinc.trials) && Game.player.reinc.trials.includes('foe')) ? 1.1 : 1;
   return {
     id,
     name: d.name,
@@ -25,8 +27,8 @@ const buildMonster = (id, delta = 0, opts = {}) => {
     tplName: tpl ? tpl.name : null,
     skills: (d.skills || []).map(s => ({ ...s })),
     realmLabel: GameData.REALM_NAMES[realmIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
-    hpMax: m(Math.round((55 + Math.pow(rp, 1.6) * 5) * (d.hp || 1) * (dataElite ? 1.7 : 1)), 'hp'),
-    atk: m(Math.round((6 + rp * 2.6) * (d.atk || 1) * (dataElite ? 1.35 : 1)), 'atk'),
+    hpMax: Math.round(m(Math.round((55 + Math.pow(rp, 1.6) * 5) * (d.hp || 1) * (dataElite ? 1.7 : 1)), 'hp') * foeMul),
+    atk: Math.round(m(Math.round((6 + rp * 2.6) * (d.atk || 1) * (dataElite ? 1.35 : 1)), 'atk') * foeMul),
     def: m(Math.round((3 + rp * 1.6) * (d.def || 1)), 'def'),
     spd: m(Math.round((6 + rp * 0.9) * (d.spd || 1)), 'spd'),
     dodge: d.dodge || 0,

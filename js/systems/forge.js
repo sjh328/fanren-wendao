@@ -55,7 +55,7 @@ const ForgeSys = {
     const oreNeed = lv + 1;
     const hasOre = Bag.count('m_xuantie') >= oreNeed;
     const hasGuard = Bag.count('m_qianghua') > 0;
-    const rate = this.rate(lv);
+    const rate = Math.min(100, this.rate(lv) + (Game.titleOn(p, 'forgeRate') ? 3 : 0));   // v38（E340）：称号「神工巧匠」+3%
     const bless = this.blessOf(p, itemId);
     const autoSuccess = bless >= 100;
     const ok = await UI.popup({
@@ -98,13 +98,22 @@ const ForgeSys = {
       Log.add(`炉火纯青——<b class="grade-${def.grade}">${def.name}</b> 祭炼功成，升至 <b>+${lv + 1}</b>！法宝灵光更胜往昔。`, 'gain');
       if (lv + 1 >= 7) UI.announce(`✦ ${def.name} +${lv + 1}`, 'gold');
     } else if (lv >= 7) {
-      const eq2 = p.equipped[slot];
-      if (eq2 && typeof eq2 === 'object') eq2.enhance = Math.max(0, lv - 1);
-      else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv - 1; }
-      let blessNote = '';
-      if (lv >= 8) { const b = this.addBless(p, itemId, 20); blessNote = `（祝福值 ${b}/100${b >= 100 ? '——下次必定成功！' : ''}）`; }
-      Log.add(`炉火骤然失控！<b class="grade-${def.grade}">${def.name}</b> 祭炼失利，灵纹黯淡——强化跌至 <b>+${lv - 1}</b>${blessNote}。`, 'loss');
-      UI.toast('祭炼失败，强化跌落一级', true);
+      // v38（E337）：磐岩谷【营造匠心】——每月首次强化失败不掉级（匠心稳炉）
+      const mk = Math.floor((p.day || 0) / 30);
+      if (p.sect && p.sect.id === 'panyan' && p._panyanEnhMonth !== mk) {
+        p._panyanEnhMonth = mk;
+        let blessNote2 = '';
+        if (lv >= 8) { const b2 = this.addBless(p, itemId, 20); blessNote2 = `（祝福值 ${b2}/100${b2 >= 100 ? '——下次必定成功！' : ''}）`; }
+        Log.add(`炉火骤然失控！幸得磐岩谷匠心之术稳住炉基——<b class="grade-${def.grade}">${def.name}</b> 强化未坠（仍为 +${lv}）${blessNote2}。本月「首败保级」已用。`, 'warn');
+      } else {
+        const eq2 = p.equipped[slot];
+        if (eq2 && typeof eq2 === 'object') eq2.enhance = Math.max(0, lv - 1);
+        else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv - 1; }
+        let blessNote = '';
+        if (lv >= 8) { const b = this.addBless(p, itemId, 20); blessNote = `（祝福值 ${b}/100${b >= 100 ? '——下次必定成功！' : ''}）`; }
+        Log.add(`炉火骤然失控！<b class="grade-${def.grade}">${def.name}</b> 祭炼失利，灵纹黯淡——强化跌至 <b>+${lv - 1}</b>${blessNote}。`, 'loss');
+        UI.toast('祭炼失败，强化跌落一级', true);
+      }
     } else {
       Log.add(`此番祭炼火候未至，<b class="grade-${def.grade}">${def.name}</b> 未能精进（强化仍为 +${lv}）。`, 'warn');
       UI.toast('祭炼未成，等级保留');
@@ -186,11 +195,14 @@ const ForgeSys = {
   },
   /** 执行炼器（v31 D7：炸炉产器胚残片；持 6 片材料折半——大额炼器赌博补上保底）
    *  v32（E6）：残片入炉——耗 6 片不减材料：成器率 +10%，且成功品自带「保底一条后缀」旗标 */
-  forge(recipeId, fragBoost = false) {
+  forge(recipeId, fragBoost = false, extraIron = 0) {
     const p = Game.player;
     const r = GameData.FORGE_RECIPES.find(x => x.id === recipeId);
     if (!r) return;
     if (fragBoost && Bag.count('m_qipei') < 6) { UI.toast('器胚残片不足（需 6 片入炉）'); return; }
+    // v38（E317）：炼器配比自由——加料玄铁 0~2 份，影响落缀倾向（多料偏前缀、少料偏后缀）
+    extraIron = Utils.clamp(Math.floor(Number(extraIron)) || 0, 0, 2);
+    if (extraIron > 0 && Bag.count('m_xuantie') < extraIron) { UI.toast('玄铁矿不足，无从加料'); return; }
     // v31（D7）：器胚残片折抵——集 6 片自动折半材料（残片入炉模式不减材料）
     const useFrag = !fragBoost && Bag.count('m_qipei') >= 6;
     const needEff = {};
@@ -200,6 +212,7 @@ const ForgeSys = {
     const fee = this.feeOf(r);   // v33（E74）：工费先行（不足不开炉）
     if (!Bag.spendStones(fee)) { UI.toast(`开炉需工费 ${Utils.fmtNum(fee)} 灵石，灵石不足`); return; }
     for (const [id, n] of Object.entries(needEff)) Bag.removeItem(id, n);
+    if (extraIron > 0) Bag.removeItem('m_xuantie', extraIron);
     if (useFrag) { Bag.removeItem('m_qipei', 6); Log.add('六片器胚残片入炉垫底——材料折半。', 'info'); }
     if (fragBoost) { Bag.removeItem('m_qipei', 6); Log.add('六片器胚残片重入炉膛，火候再进一重——成器率 +10%，成器必带后缀。', 'info'); }
     p.counters.forges = (p.counters.forges || 0) + 1;
@@ -211,8 +224,9 @@ const ForgeSys = {
     if (Utils.chance(rate)) {
       Bag.addItem(r.out, 1);
       if (fragBoost) p._embryoSuffixFor = r.out;   // v32（E6）：残片入炉成功品——首次落缀时保底一条后缀；v33（E76）：旗标挂物品 id（原挂玩家本体，可错付给后穿的无关装备）
+      if (extraIron > 0) p._forgeBias = { out: r.out, extra: extraIron };   // v38（E317）：配比旗标——同 id 成器首次落缀时按加料倾向掷词缀（affixesOf 消费后清除）
       Ambience.sfx('forge');
-      Log.add(`锤起锤落，火星四溅——<b class="grade-${out.grade}">${out.name}</b> 铸成出世！（工费 ${Utils.fmtNum(fee)} 灵石）${fragBoost ? '（器胚余韵未散——装备落缀时必带一条后缀）' : ''}`, 'gain');
+      Log.add(`锤起锤落，火星四溅——<b class="grade-${out.grade}">${out.name}</b> 铸成出世！（工费 ${Utils.fmtNum(fee)} 灵石）${fragBoost ? '（器胚余韵未散——装备落缀时必带一条后缀）' : ''}${extraIron > 0 ? `（添料 ${extraIron} 份——落缀时${extraIron === 2 ? '大' : ''}幅偏向前缀）` : ''}`, 'gain');
       if ((out.grade || 0) >= 4 || out.set) UI.announce(`✦ 炼器大成 · ${out.name}`, 'gold');
     } else {
       const frag = Utils.rand(1, 2);
@@ -231,22 +245,24 @@ const ForgeSys = {
     if (!def || !def.bonus) return out;
     const pool = GameData.BALANCE.AFFIXES;
     const grade = def.grade || 0;
+    const bias = Utils.clamp(opts.metalBias || 0, 0, 2);   // v38（E317）：加料玄铁份数——前缀权重 ×(1+0.25×n)、后缀 ×(1-0.15×n)
     if (Utils.chance(Utils.clamp(40 + grade * 10, 0, 85))) {
       const cands = pool.prefix.filter(a => a.slot === 'any' || a.slot === def.slot);
-      if (cands.length) out.prefix = this.pickAffix(cands, grade).id;
+      if (cands.length) out.prefix = this.pickAffix(cands, grade, 1 + 0.25 * bias).id;
     }
     if (Utils.chance(Utils.clamp(25 + grade * 10, 0, 70)) || opts.forceSuffix) {
       const cands = pool.suffix.filter(a => a.slot === 'any' || a.slot === def.slot);
-      if (cands.length && !out.suffix) out.suffix = this.pickAffix(cands, grade).id;
+      if (cands.length && !out.suffix) out.suffix = this.pickAffix(cands, grade, Math.max(0.3, 1 - 0.15 * bias)).id;
     }
     return out;
   },
   affixDef(part, id) { return ((GameData.BALANCE.AFFIXES || {})[part] || []).find(a => a.id === id) || null; },
-  /** v31（D7）：词缀加权掷取——高端词缀权重低、有品阶门槛（原全池等权，煞威与磐石同权重） */
-  pickAffix(cands, grade) {
+  /** v31（D7）：词缀加权掷取——高端词缀权重低、有品阶门槛（原全池等权，煞威与磐石同权重）
+   *  v38（E317）：wMul 权重乘数（炼器配比倾向） */
+  pickAffix(cands, grade, wMul = 1) {
     const usable = cands.filter(a => (a.minGrade || 0) <= (grade || 0));
     const pool = usable.length ? usable : cands;
-    const wOf = a => a.w || 100;
+    const wOf = a => (a.w || 100) * wMul;
     const total = pool.reduce((s2, a) => s2 + wOf(a), 0);
     let r = Math.random() * total;
     for (const a of pool) { r -= wOf(a); if (r <= 0) return a; }
@@ -263,7 +279,10 @@ const ForgeSys = {
       // v33（E76）修瑕：旗标原挂玩家本体布尔（p._embryoSuffix），入炉成功品未及穿戴而先穿出
       // 另一件新装时会被错付。改挂物品 id（p._embryoSuffixFor），只对同 id 成器兑现；旧布尔档兼容读取。
       const guaranteed = !!(p && (p._embryoSuffixFor === id || (!p._embryoSuffixFor && p._embryoSuffix)));
-      inst.affixes = this.rollAffixes(def, { forceSuffix: guaranteed });
+      // v38（E317）：炼器配比倾向——同 id 成器（加料锻造）首次落缀时按加料份数偏置权重
+      let metalBias = 0;
+      if (p && p._forgeBias && p._forgeBias.out === id) { metalBias = p._forgeBias.extra; delete p._forgeBias; }
+      inst.affixes = this.rollAffixes(def, { forceSuffix: guaranteed, metalBias });
       if (guaranteed && inst.affixes.suffix && p) {
         if (p._embryoSuffixFor === id) p._embryoSuffixFor = null;
         else p._embryoSuffix = false;

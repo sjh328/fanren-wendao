@@ -41,6 +41,24 @@ const Stat = {
     return this.daoYunAll()
       .filter(dy => dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3));
   },
+  /** v38（E342）：已激活道韵的「协奏」类型集合——战斗/百艺各消费端经此单源判定 */
+  activeEchoes(p) {
+    const s = new Set();
+    if (!p || !p.gongfa) return s;
+    for (const dy of this.daoYunAll()) {
+      if (dy.echo && dy.need.every(gid => p.gongfa[gid] && p.gongfa[gid].level >= 3)) s.add(dy.echo);
+    }
+    return s;
+  },
+  /** v38（E340）：佩戴中称号的属性面加成聚合（mech 类效果散在消费端） */
+  titleBonus(p) {
+    const total = {};
+    if (!p || !p.title) return total;
+    const t = (GameData.TITLES || []).find(x => x.id === p.title);
+    if (!t || (t.cond && !t.cond(p))) return total;
+    for (const [k, v] of Object.entries(t.fx || {})) total[k] = (total[k] || 0) + v;
+    return total;
+  },
   /** 汇总已穿戴法宝的加成（v13：数值属性受强化等级 +10%/级 加成；套装加成并入） */
   equipBonus(p) {
     const total = {};
@@ -104,6 +122,8 @@ const Stat = {
     const beastPass = (typeof BeastSys !== 'undefined' && BeastSys.passive) ? BeastSys.passive(p) : {};
     const caveCult = (typeof CaveSys !== 'undefined' && CaveSys.cultBonus) ? CaveSys.cultBonus(p) : 0;
     const rootPct = p.rootDeep ? 20 : 0;    // §22 根基深厚：全属性 +20%
+    // v38（E304）：根骨如渊——三段劫势全应而成，全属性再 +5%（与根基深厚叠加，恰合 25% 三档）
+    const rootPeak = (p.flags && p.flags.rootPeak) ? 5 : 0;
     const lossPct = Math.min(50, p.statLossPct || 0); // §20 斩三尸：全属性永久折损（上限50%）
     const marks = p.reinc ? Math.min(30, p.reinc.marks || 0) : 0; // §26 轮回印记：每枚 +1% 全属性（v32 D1 封顶 30，与轮回镜口径一致）
     // v18 残玉共鸣 + 道心烙印
@@ -115,17 +135,22 @@ const Stat = {
     const xianLayers = (typeof XianSys !== 'undefined' && XianSys.layersTotal) ? XianSys.layersTotal(p) : 0;
     const A = p.attrs;
     const compEff = this.compOf(p);
-    const finalScale = (1 + rootPct / 100) * (1 - lossPct / 100) * (1 + marks * 0.01)
+    const finalScale = (1 + (rootPct + rootPeak) / 100) * (1 - lossPct / 100) * (1 + marks * 0.01)
       * (1 + jadePct / 100)
       * (1 + xianLayers * 0.015)   // v31 仙阶：每层全属性 +1.5%
       * ((typeof XinmoSys !== 'undefined' && XinmoSys.scale) ? XinmoSys.scale(p) : 1)
       * (1 + ((p.benming && p.benming.lv) || 0) * 0.01)
       * (1 + (p.codexBonus || 0) * 0.01)   // v24 图鉴大成：每类收集满全属性 +1%
       * ((p.flags && p.flags.beyondGate) ? 1.03 : 1)   // v25 真仙终章「仙门之外」：残玉终响，全属性永久 +3%
-      * ((typeof RankSys !== 'undefined' && RankSys.isTop && RankSys.isTop(p)) ? 1.02 : 1);   // v13 天下第一：全属性 +2%
+      * ((typeof RankSys !== 'undefined' && RankSys.isTop && RankSys.isTop(p)) ? 1.02 : 1)   // v13 天下第一：全属性 +2%
+      * (1 + ((typeof this.titleBonus === 'function' && this.titleBonus(p).allPct) || 0) / 100);   // v38（E340）：称号属性面（印记满身 +1%）
 
     // v27 洞府演武场：攻防 +2%/阶（此前建筑效果定义了却无消费方）
     const trainPct = ((p.cave && p.cave.builds && p.cave.builds.train) || 0) * 2;
+    // v38（E344）：长老季议——「勤修不辍」修炼 +3%；「通商惠工」坊市九七折
+    const council = (typeof SectSys !== 'undefined' && SectSys.council) ? SectSys.council(p) : null;
+    const councilCult = council === 'cult' ? 3 : 0;
+    const councilShop = council === 'trade' ? 3 : 0;
     const maxHp = Math.round((90 + A.body * 15 + Math.pow(rp, 1.6) * 6 + (eq.hp || 0))
       * (1 + ((gf.hpPct || 0) + (eq.hpPct || 0) + (sb.hpPct || 0) + (dao.hpPct || 0) + (beastPass.hpPct || 0) + (dx.hpPct || 0) + (pl.hpPct || 0)) / 100) * finalScale);   // v27 修瑕：宗门/职位的 hpPct 此前从未生效
     const maxMp = Math.round((40 + compEff * 8 + rp * 4 + (eq.mp || 0))
@@ -140,13 +165,13 @@ const Stat = {
       maxHp, maxMp, atk, def, speed,
       crit: Utils.clamp(5 + (A.luck + (eq.luck || 0)) * 0.6 + (gf.crit || 0) + (eq.crit || 0) + (beastPass.crit || 0) + (dx.crit || 0) + (pl.crit || 0), 0, 75),
       dodge: Utils.clamp((gf.dodge || 0) + (eq.dodge || 0) + (sb.dodge || 0) + (beastPass.dodge || 0) + (dx.dodge || 0) + (pl.dodge || 0) + (p.dao === 'array' && DaoSys.tierLevel(p) >= 4 ? 8 : 0), 0, 35),   // v10 阵道六境·迷踪境 · v13 宗门/灵兽
-      block: Utils.clamp(8 + (gf.block || 0) + (eq.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0), 0, 60),   // v10 般若六境·铁骨境；v31 修瑕：补读 eq.block——词缀「磐石」/玄天玉佩/仙缘玉环的格挡此前是死键（强化按功能键收费、明细表却虚报）
-      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0) + (pl.cultPct || 0) + xianLayers * 2 + (p.cultGift || 0),   // v30 补个人线 cultPct；v31 仙阶每层修炼效率 +2%；v36（E228）传承树四维满值折算 cultGift（百分点计，经 gainMult 生效）
+      block: Utils.clamp(8 + (gf.block || 0) + (eq.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0) + (p.dao === 'body' && DaoSys.hasPath(p, 6, 'buDong') ? 15 : 0), 0, 60),   // v10 般若六境·铁骨境；v31 修瑕：补读 eq.block——词缀「磐石」/玄天玉佩/仙缘玉环的格挡此前是死键（强化按功能键收费、明细表却虚报）；v38（E300）：不动如山 +15
+      cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0) + (pl.cultPct || 0) + xianLayers * 2 + (p.cultGift || 0) + ((typeof OathSys !== 'undefined' && OathSys.cultBonus) ? OathSys.cultBonus(p) : 0) + councilCult,   // v30 补个人线 cultPct；v31 仙阶每层修炼效率 +2%；v36（E228）传承树四维满值折算 cultGift（百分点计，经 gainMult 生效）；v38（E306）：止戈之誓 +8；v38（E344）：季议勤修 +3
       stonePct: (sb.stonePct || 0) + (eq.stonePct || 0) + (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3),   // v20 藏宝阁
       luck: A.luck + (eq.luck || 0),
-      pillPct: (sb.pillPct || 0) + (pl.pillPct || 0),
+      pillPct: (sb.pillPct || 0) + (pl.pillPct || 0) + ((typeof OathSys !== 'undefined' && OathSys.pillBonus) ? OathSys.pillBonus(p) : 0),   // v38（E306）：辟谷丹誓丹效 +10%
       poisonReduce: sb.poisonReduce || 0,
-      shopDiscount: sb.shopDiscount || 0,
+      shopDiscount: (sb.shopDiscount || 0) + ((p.reputation || 0) >= 60 ? 5 : 0) + ((typeof OathSys !== 'undefined' && OathSys.shopBonus) ? OathSys.shopBonus(p) : 0) + councilShop + ((p.sect && p.sect.id === 'wanbao') ? 5 : 0),   // v38（E312）：声望四档九五折；v38（E306）：清贫之誓九折；v38（E344）：季议通商；v38（E337）：万宝商路情报再九五折
       // v29 天年：折寿扣减 + 延寿丹增益（下限 60，延寿不超该境基准——增益入 p.lifeGain）
       // v31 仙阶：入阶续仙寿（地仙 +2000 → 大罗 +30000 年）
       lifespan: Math.max(60, GameData.LIFESPAN[p.realmIdx] - (p.lifeCut || 0) + (p.lifeGain || 0)

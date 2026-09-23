@@ -15,6 +15,11 @@ const KarmaSys = {
   },
   addKarma(n, silent = false) {
     const p = Game.player;
+    // v38（E306）：不杀之誓——杀孽冻结（誓约在身，孽障不再增长）
+    if (n > 0 && typeof OathSys !== 'undefined' && OathSys.active(p, 'kill')) {
+      if (!silent) Log.add('不杀之誓护持因果——血墨难入簿。', 'info');
+      return;
+    }
     // v18 道心烙印【戾/杀/厉/慈/容】：孽障增减（仅正向放大，负向/减免取整不低于1）
     if (n > 0 && typeof DaoxinSys !== 'undefined') n = Math.max(1, Math.round(n * DaoxinSys.gainMult(p, 'karmaMult')));
     p.karma = Math.max(0, (p.karma || 0) + n);   // v26 修瑕：消业不至负（负孽障曾反向加成突破成算）
@@ -66,6 +71,8 @@ const RepSys = {
     return this.LEVELS[0];
   },
   add(p, amount, reason = '') {
+    // v38（E306）：清贫之誓——声望增速 +50%（正向）
+    if (amount > 0 && typeof OathSys !== 'undefined' && OathSys.active(p, 'poor')) amount = Math.round(amount * 1.5);
     p.reputation = Utils.clamp((p.reputation || 0) + amount, -100, 200);
     if (reason) Log.add(`声望 ${amount > 0 ? '+' : ''}${amount}（${reason}）`, amount > 0 ? 'gain' : 'loss');
   },

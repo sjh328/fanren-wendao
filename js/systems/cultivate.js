@@ -12,7 +12,8 @@ const Cultivate = {
     if (p.dao === 'array' && DaoSys.tierLevel(p) >= 2) g *= 1.1;   // v10 阵道六境·聚灵境
     if (typeof Art !== 'undefined' && Art.seasonOf(p) === 0) g *= 1.1;   // v20 孟春灵潮：修炼 +10%
     if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) g *= 1.2;   // v20 天下大事·灵潮
-    if (p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < 3) g *= 1.5;   // v36（E218）：聚灵 3 游戏日窗口——点燃后 3 日内所有修炼 ×1.5（原仅点燃当日；闭关开局一次结算恰被窗口整段覆盖，普通修炼/挂机恰覆盖点燃后一轮）
+    if (p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < (typeof CaveSys !== 'undefined' && CaveSys.RUSH_WINDOW ? CaveSys.RUSH_WINDOW() : 3)) g *= 1.5;   // v36（E218）：聚灵 3 游戏日窗口；v38（E314）：洞天灵潮 4 日
+    g *= 1 + 0.03 * ((typeof CaveSys !== 'undefined' && CaveSys.flagPower) ? CaveSys.flagPower(p, 'b_juling') : 0);   // v38（E305）：聚灵旗 +3%/面（地载万物/阵法传习加成）
     return g;
   },
   /** v20 闭关效率：隆冬蛰伏 +10% */
@@ -30,7 +31,7 @@ const Cultivate = {
     p.exp += amount;
     SectSys.onCultivate(amount);
     while (p.layer < 3) {
-      const need = GameData.layerNeed(p.realmIdx, p.layer);
+      const need = GameData.layerNeedT(p, p.realmIdx, p.layer);
       if (p.exp < need) break;
       p.exp -= need;
       p.layer++;
@@ -43,7 +44,7 @@ const Cultivate = {
       p.hp = st.maxHp; p.mp = st.maxMp;
     }
     if (p.layer === 3) {
-      const need = GameData.layerNeed(p.realmIdx, 3);
+      const need = GameData.layerNeedT(p, p.realmIdx, 3);
       if (p.exp > need) {
         const over = p.exp - need;
         p.exp = need;
@@ -51,7 +52,7 @@ const Cultivate = {
           // v30 仙途续航：真仙圆满之后修为溢流炼作「仙元」——修为轴有终点，道境没有。
           // v34（E117）：拆除双喂——道境经验声明口径是「职业行为积累、不随修为境界绑定」，
           // 溢流一轮闭关动辄数千道境经验，把剑仙境等行为轴秒满；自此仙元独享溢流。
-          const daoGain = Math.max(1, Math.round(over / (GameData.eco(9) * 0.05) * ((p.flags && p.flags.visionLeichi) ? 1.1 : 1)));   // v32（D6）：雷池淬体——仙元溢流 +10%
+          const daoGain = Math.max(1, Math.round(over / (GameData.eco(9) * 0.05) * ((p.flags && p.flags.visionLeichi) ? 1.1 : 1) * ((p.cave && p.cave.dongtian >= 4) ? 1.05 : 1) * (Game.titleOn(p, 'daoZuYuan') ? 1.1 : 1)));   // v32（D6）雷池淬体 +10%；v38（E314）大罗洞天 +5%；v38（E340）道祖法印 +10%
           p.counters.xianyuan = (p.counters.xianyuan || 0) + daoGain;
           // v34：播报节流——原 xianyuan%50<daoGain 在 daoGain>50 时恒真，长闭关每轮刷一条
           if (daoGain >= 500 || p.counters.xianyuan % 500 < daoGain) Log.add(`修为满溢，尽数炼作 <b>仙元</b>（道境资粮 +${daoGain} · 累计 ${p.counters.xianyuan}）——修为轴有终点，道境没有。`, 'gain');
@@ -113,6 +114,9 @@ const Cultivate = {
     const take = Math.min(n, total);
     if (take <= 0) return 1;
     const src = Array.isArray(p.insightSrc) ? p.insightSrc : [];
+    // v38（E278）修瑕：池空（老档 insight>0 未迁来源 / 防御态）应视同全再生 ρ=1——原实发 regenTake(0)/take=0，
+    // 与 insightPurity 的「池空视同全再生」相反，老档悟道被静默折到 0.3 底折
+    if (!src.length) { p.insight = Math.max(0, total - take); return 1; }
     let regenTake = 0, left = take;
     while (left > 0 && src.length) {
       const seg = src[0];
@@ -271,6 +275,7 @@ const Cultivate = {
     const detox = p.realmIdx === 0 ? 5 : 3;
     if (detox) p.poison = Math.max(0, p.poison - detox);
     Time.add(1);
+    p._restDay = Math.floor(p.day || 0);   // v38（E325）：行权扩容判据（今日已调息）
     if (p.dead) return;
     if (p.dao === 'body') DaoSys.gain(p, 10);   // v16 体魄：吐纳炼体
     // v34（F3）：调息 +2 感悟——修炼自回血、闭关回更多，调息原是三枚死按钮之一；
@@ -288,7 +293,7 @@ const Cultivate = {
     const cost = this.secludeCost(p);
     // v35（U5c）：真仙圆满态预估改报仙元——原预估恒按修为口径（「≈6.8 亿修为」），实发却是
     // 溢流折算的仙元（数字币种双失真）
-    const r9Full = p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeed(p.realmIdx, 3);
+    const r9Full = p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeedT(p, p.realmIdx, 3);
     const est = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMultExp());
     const ok = await UI.popup({
       title: '闭关修炼',
@@ -322,7 +327,7 @@ const Cultivate = {
     Time.add(30);
     if (p.dead) return;
     let advanced = false;
-    if (p.layer === 3 && p.exp >= GameData.layerNeed(p.realmIdx, 3)) {
+    if (p.layer === 3 && p.exp >= GameData.layerNeedT(p, p.realmIdx, 3)) {
       await Utils.sleep(400);
       const r0 = p.realmIdx, l0 = p.layer;
       await this.breakthrough(10);
@@ -396,7 +401,7 @@ const Cultivate = {
       if (p.dead || Game.player !== p) return;
       Game.afterAction();
       // 圆满冲关（与单轮闭关同款逻辑）：天劫博弈中胜出即境界跃升
-      if (p.layer === 3 && p.exp >= GameData.layerNeed(p.realmIdx, 3)) {
+      if (p.layer === 3 && p.exp >= GameData.layerNeedT(p, p.realmIdx, 3)) {
         await Utils.sleep(400);
         await this.breakthrough(10);
         if (!p || p.dead || Game.player !== p) return;
@@ -433,6 +438,11 @@ const Cultivate = {
     if (p.realmIdx >= 8) chance += 8;   // v10 境界特性 · 劫体（渡劫）：半身已在雷海
     if (p.dao === 'sword') chance *= 0.77;  // 剑心桀骜：渡劫难度+30%
     if (p.dao === 'body') chance *= 1.4;    // 金刚不坏：渡劫成算+40%
+    // v38（E321/E300）：职业渡劫收敛——丹/符/阵以战力换百艺，天劫微宽（+4/+2/+2），
+    // 邪修自持 1.8× 修炼不另补；六职业至飞升离散收敛进 ±15% 带（balance-sim 职业矩阵看门）
+    if (p.dao === 'pill') chance += 4;
+    if (p.dao === 'talisman') chance += 2;
+    if (p.dao === 'array') chance += 2;
     if (p.rootDeep) chance *= 1.1;          // 根基深厚：历劫难度-10%
     if (p.rootWeak) chance *= 0.85;         // 根基虚浮：历劫难度+15%
     return Utils.clamp(chance, 5, 95);
@@ -440,7 +450,7 @@ const Cultivate = {
   /** 大境界突破：练气→筑基为静修冲关（无天劫）；金丹劫起进入天劫三策博弈（小境界进层仍在 addExp 中自动结算） */
   async breakthrough(bonus = 0) {
     const p = Game.player;
-    if (p.layer !== 3 || p.exp < GameData.layerNeed(p.realmIdx, 3)) return;
+    if (p.layer !== 3 || p.exp < GameData.layerNeedT(p, p.realmIdx, 3)) return;
     if (p.realmIdx >= 9) return;
     if (p.realmIdx + 1 < GameData.TRIB_START) {
       await this.quietBreakthrough(bonus);
@@ -477,12 +487,12 @@ const Cultivate = {
       const aid = NpcSys.tryAid(p, 'trib');
       let insGain;
       if (aid) {
-        p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * 0.8);
+        p.exp = Math.round(GameData.layerNeedT(p, p.realmIdx, 3) * 0.8);
         insGain = 10;
         this.addInsight(p, insGain);
         Log.add(`危难之际，<b>${aid.name}</b> 从旁点拨，你稳住气机——冲击虽败，根基无损！`, 'gain');
       } else {
-        p.exp = Math.round(GameData.layerNeed(p.realmIdx, 3) * 0.6);
+        p.exp = Math.round(GameData.layerNeedT(p, p.realmIdx, 3) * 0.6);
         insGain = 15;
         this.addInsight(p, insGain);
       }
@@ -537,6 +547,7 @@ const Cultivate = {
     await Utils.sleep(500);
     p.flags.ascended = true;
     if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.grantMarks) ReincarnationSys.grantMarks(2, 'ascend');   // v30：白日飞升 +2 印记
+    if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.showLifeReport) ReincarnationSys.showLifeReport(p, '白日飞升');   // v38（E319）：飞升小结（异步弹窗不阻塞）
     UI.realmShow('霞举飞升，肉身成圣——凡人之躯，终成不朽。', GameData.REALM_AURA[9]);   // v5
     UI.announce('✦ 白日飞升 · 位列仙班 ✦', 'gold');   // v4
     Ambience.sfx('breakthrough');

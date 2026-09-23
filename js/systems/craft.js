@@ -33,6 +33,7 @@ const CraftSys = {
     r += Utils.clamp((p.fortune || 0) * 0.1, 0, 15);
     if (typeof CaveSys !== 'undefined' && CaveSys.pillBonus) r += CaveSys.pillBonus(p);
     if (p.sect && p.sect.faction === 'danding') r += 8;   // v36（E226）：丹鼎阁派系 perk——炼丹成丹率 +8%
+    if (p.dao === 'pill' && DaoSys.hasPath(p, 3, 'danWang')) r += 8;   // v38（E300）：药王遗篇
     if ((p.poison || 0) > Stat.poisonCap(p) * 0.5) r -= 5;   // v28 联动：手有浮毒，丹火不稳（丹毒过半成丹率 -5）
     if (fire) r += this.fireMatch(p, recipe, fire);
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 6) return Utils.clamp(r, 40, 95);
@@ -42,6 +43,7 @@ const CraftSys = {
   rollQuality(p, recipe, fire = null) {
     let sup = 6, supreme = 1;
     if (p.dao === 'pill' && DaoSys.tierLevel(p) >= 4) { sup = 12; supreme = 2; } // 炉火纯青
+    if (p.dao === 'pill' && DaoSys.hasPath(p, 6, 'jinDan')) supreme *= 2;   // v38（E300）：金丹九转——极品率翻倍
     if (fire === 'wu') sup += 10;
     if (Utils.chance(supreme)) return 'supreme';
     if (Utils.chance(sup)) return 'superior';
@@ -81,7 +83,9 @@ const CraftSys = {
   },
   alchemy(recipeId, times = 1) {
     const p = Game.player;
-    const r = GameData.ALCHEMY_RECIPES.find(x => x.id === recipeId);
+    // v38（E317）：研创个人丹方并入配方池（悟得后长留丹炉）
+    const r = GameData.ALCHEMY_RECIPES.find(x => x.id === recipeId)
+      || ((p.flags && p.flags.expRecipes || []).includes(recipeId) ? (GameData.EXP_RECIPES || []).find(x => x.id === recipeId) : null);
     if (!r) return;
     // v19 失传丹方：须先以残页参悟
     if (r.needPages && !(p.flags.recipeOk || {})[r.id]) { UI.toast('此丹方失传——需先集齐丹方残页参悟'); return; }
@@ -92,19 +96,25 @@ const CraftSys = {
     const out = GameData.ITEMS[r.out];
     let tried = 0, made = 0, critN = 0, supN = 0, supremeN = 0;
     const gainMap = {};
+    // v38（E337）：丹霞谷【丹房免炉】——每月首炉单炼免耗药材（试新方的底气）
+    const mkMonth = Math.floor((p.day || 0) / 30);
+    const freeMats = times === 1 && tried === 0 && p.sect && p.sect.id === 'danxia' && p._danxiaFreeMonth !== mkMonth;
+    if (freeMats) p._danxiaFreeMonth = mkMonth;
     while (tried < times) {
-      if (!this.haveMats(p, r)) break;
-      for (const [id, n] of Object.entries(r.need)) Bag.removeItem(id, n);
+      if (!freeMats && !this.haveMats(p, r)) break;
+      if (!freeMats) for (const [id, n] of Object.entries(r.need)) Bag.removeItem(id, n);
       p.counters.crafts = (p.counters.crafts || 0) + 1;
       Time.add(2);
       tried++;
       if (p.dead) break;
       if (Utils.chance(rate)) {
         DaoSys.gain(p, 25);
-        const isCrit = Utils.chance(p.dao === 'pill' && DaoSys.tierLevel(p) >= 4 ? 15 : 10);
+        const isCrit = Utils.chance((p.dao === 'pill' && DaoSys.tierLevel(p) >= 4 ? 15 : 10) + (Game.titleOn(p, 'danCrit') ? 5 : 0));   // v38（E340）：丹道宗师 +5%
         // v27 修瑕：品质先判定、翻倍后入包——此前极品在 addItem 之后才 ×2，袋中只得一枚、日志却按两枚记账
         const qual = this.rollQuality(p, r, fire);
         let qty = isCrit ? 2 : 1;   // v26：极品翻倍需要可变（原 const 与 ×2 冲突）
+        if (isCrit && typeof Stat !== 'undefined' && Stat.activeEchoes(p).has('craft')) qty += 1;   // v38（E342）：丹火同鸣——暴击当炉再 +1
+        if (freeMats) Log.add('【丹房免炉】丹霞谷丹房本月的免料炉火为你而燃——此炉药材不耗。', 'gain');
         if (qual === 'supreme') { supremeN++; qty *= 2; DaoSys.gain(p, 10); }
         else if (qual === 'superior') { supN++; DaoSys.gain(p, 5); }
         Bag.addItem(r.out, qty);
@@ -180,9 +190,13 @@ const CraftSys = {
     p._drawCount = (p._drawCount || 0) + 1;
     p.counters.talRounds = (p.counters.talRounds || 0) + 1;   // v27 修瑕：画符轮次从未计数，成就「画符千张」永不可解锁
     Time.add(1);
-    let qty = 2 + Utils.rand(0, 2) + (p.realmIdx >= 2 ? 1 : 0) + (DaoSys.tierLevel(p) >= 1 ? 1 : 0);   // v10 符道三境·描符境
+    let qty = 2 + Utils.rand(0, 2) + (p.realmIdx >= 2 ? 1 : 0) + (DaoSys.tierLevel(p) >= 1 ? 1 : 0)
+      + (DaoSys.hasPath(p, 3, 'miaoBi') ? 1 : 0);   // v10 符道三境·描符境；v38（E300）：妙笔生花 +1
     if (typeof Art !== 'undefined' && Art.seasonOf(p) === 1) qty += 2;   // v20 仲夏雷雨：朱砂易引雷，成符 +2
-    if (Utils.chance(p.dao === 'talisman' && DaoSys.tierLevel(p) >= 2 ? 20 : 12)) qty *= 2;   // v10 符道六境·朱砂境
+    if (Utils.chance((p.dao === 'talisman' && DaoSys.tierLevel(p) >= 2 ? 20 : 12) + (DaoSys.hasPath(p, 6, 'tianBi') ? 15 : 0))) {
+      qty *= 2;   // v10 符道六境·朱砂境；v38（E300）：天笔点睛 +15%
+      if (typeof Stat !== 'undefined' && Stat.activeEchoes(p).has('draw')) qty += 1;   // v38（E342）：雷笔生花——翻倍额外 +1 张
+    }
     if (DaoSys.tierLevel(p) >= 6) qty += 2;   // v10 符道六境·符仙境
     // v13 符池：随境界逐步解锁高阶符箓（v35（E128）抽单源 talismanPool——成本定价与实发同池）
     const pool = this.talismanPool(p);
@@ -195,6 +209,34 @@ const CraftSys = {
     if (p.dao === 'talisman') DaoSys.gain(p, qty * 4);   // v16 符道：画符
     const parts = Object.entries(out).map(([id, n]) => `${GameData.ITEMS[id].name} ×${n}`);
     Log.add(`你焚香沐手，朱砂勾雷文、灵纸蕴符罡——成符 ${parts.join('、')}！`, 'gain');
+    Game.afterAction();
+  },
+
+  /* ========== v38（E317）：以药试方——丹炉上的小概率研创，日限一次 ========== */
+  experiment() {
+    const p = Game.player;
+    const today = Math.floor(p.day || 0);
+    if (p._expDay === today) { UI.toast('今日已试过方——丹炉需歇一日'); return; }
+    const discovered = (p.flags && p.flags.expRecipes) || [];
+    if (discovered.length >= (GameData.EXP_RECIPES || []).length) { UI.toast('可试之方皆已悟尽——你家丹炉已自成一家'); return; }
+    if (Bag.count('m_lingcao') < 2) { UI.toast('试方需【百年灵草】×2 为引'); return; }
+    p._expDay = today;
+    Bag.removeItem('m_lingcao', 2);
+    Time.add(1);
+    if (p.dead) return;
+    const chance = 12 + (p.attrs.luck || 0) * 0.5;   // 福缘愈高愈有灵光
+    if (Utils.chance(chance)) {
+      const rest = (GameData.EXP_RECIPES || []).filter(r => !discovered.includes(r.id));
+      const got = rest[Utils.rand(0, rest.length - 1)];
+      p.flags = p.flags || {};
+      p.flags.expRecipes = (p.flags.expRecipes || []).concat([got.id]);
+      const outName = (GameData.ITEMS[got.out] || {}).name || got.out;
+      Log.add(`你以灵草二株入炉试炼——丹烟散处灵光一现：<b>悟得个人丹方「${outName}」</b>！此方自此长留你家丹炉。`, 'realm');
+      UI.toast(`悟得丹方：${outName}`);
+    } else {
+      Cultivate.addInsight(p, 1);
+      Log.add('你以灵草试方，丹烟散尽却无所得——然守炉一日，似有所悟（感悟 +1）。（试方日限一次）', 'info');
+    }
     Game.afterAction();
   },
 };

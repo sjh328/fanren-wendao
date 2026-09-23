@@ -334,8 +334,8 @@ console.log('===== SA 源码静态组 =====');
       /* E237 散修红点 + E255 窗口口径 + E233/E260/E261 口径 */
       ui.includes('!p.sect && p.realmIdx >= 1 && !p.flags.sectDeclined') && gamejs.includes('sectDeclined = true;')
         && pfac.includes('sectDeclined: false') && pfac.includes('!out.sect && (out.realmIdx || 0) >= 2 && out.flags) out.flags.sectDeclined = true;')
-        && ui.includes("(p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < 3) ? '' :")
-        && ui.includes('3 日内修炼 ×1.5 · ') && !ui.includes('<span class="tag">v19</span>')
+        && ui.includes("Math.floor(p.day || 0) - p.rushDay < CaveSys.RUSH_WINDOW()) ? '' :")
+        && ui.includes('日内修炼 ×1.5 · ') && ui.includes('CaveSys.RUSH_WINDOW()') && !ui.includes('<span class="tag">v19</span>')
         && !ui.includes('v32 E8') && !ui.includes('v33 起开炉收工费') && !ui.includes('非印钞机')
         && ui.includes('黑市${this.FACTS.blackOpen}') && ui.includes('${this.FACTS.blackOpen}——如今巷口空空')
         && ui.includes('黑市${this.FACTS.blackOpen}（贵六成但货奇）') && ui.includes("blackOpen: '每月初一至初三开市三日'")

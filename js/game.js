@@ -31,7 +31,7 @@ const Game = {
         if (el._busy) return;   // v24 防重入：同一按钮上一笔尚未结清时忽略连点
         el._busy = true;
         try { await fn(el.dataset, el); }
-        catch (err) { console.error('动作执行出错:', el.dataset.action, err); UI.toast('操作出了点问题，请重试', true); }
+        catch (err) { console.error('动作执行出错:', el.dataset.action, err && err.stack || err); UI.toast('操作出了点问题，请重试', true); }
         finally { el._busy = false; }
       }
     });
@@ -320,7 +320,7 @@ const Game = {
       Log.add(`离山的日子你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（按${UI.FACTS.offlineEff}效率折算，不计闭关加成，共 ${realDays} 日${offlineRushBonus > 0 ? `；聚灵加护 +${Utils.fmtNum(offlineRushBonus)}` : ''}）。`, 'gain');   // v36（E217）：口径如实——闭关流实得落差从暗亏变明示
     }
     // v34（E1）：离线小结——回家一份四行账的「仪式」，收益不再藏在默认折叠的日志红点后
-    if (!p.dead && realDays >= 1 && (offlineExp > 0 || aggSnap.spring || aggSnap.disciple || aggSnap.xianVisit)) {
+    if (!p.dead && realDays >= 1 && (offlineExp > 0 || aggSnap.spring || aggSnap.disciple || aggSnap.xianVisit || aggSnap.avatarExp || aggSnap.avatarStones || aggSnap.nightRaid)) {
       const rows = [
         [`离线时长`, `${realDays} 日`],
         // v37（E277）：小结拆「基础/聚灵加护」两段——窗口补乘的收益明示
@@ -331,6 +331,9 @@ const Game = {
         ...(aggSnap.spring ? [[`灵泉涌出`, `<b class="hl">${Utils.fmtNum(aggSnap.spring)}</b> 灵石`]] : []),
         ...(aggSnap.disciple ? [[`弟子历练`, `缴回灵石 ${Utils.fmtNum(aggSnap.disciple)}`]] : []),
         ...(aggSnap.xianVisit ? [[`仙界访客`, `到访 ${aggSnap.xianVisit} 次`]] : []),
+        ...(aggSnap.avatarExp ? [[`化身闭关`, `<b class="hl">+${Utils.fmtNum(aggSnap.avatarExp)}</b> 修为`]] : []),   // v38（E302/E327）
+        ...(aggSnap.avatarStones ? [[`化身游历`, `觅得灵石 ${Utils.fmtNum(aggSnap.avatarStones)}`]] : []),
+        ...(aggSnap.nightRaid ? [[`洞府夜袭`, `遇袭 ${aggSnap.nightRaid} 次（日志详载）`]] : []),
       ];
       UI.popup({
         title: '云 归 · 离 线 小 结',
@@ -344,6 +347,27 @@ const Game = {
   /** v27：每日例行结算（行动收尾与离线回放共用）——所有子项内部自带日界防重，重复调用无副作用。
    *  auto=离线回放模式：节庆自动从简（不弹窗不开战）、访客/灵泉不回环 afterAction、
    *  道侣心愿需互动故跳过（来日在线再叙）。 */
+  /** v38（E340）：称号机制判定单源——佩戴中、条件仍满足、且 mech 匹配 */
+  titleOn(p, mech) {
+    if (!p || !p.title) return false;
+    const t = (GameData.TITLES || []).find(x => x.id === p.title);
+    return !!t && t.mech === mech && (!t.cond || t.cond(p));
+  },
+
+  /** v38（E328）：里程碑演出——一次性旗标 + 全屏异象 + 专属音色 + 金色公告（规格对齐本命合成） */
+  milestone(id, text, color) {
+    const p = this.player;
+    if (!p) return;
+    p.flags = p.flags || {};
+    if (p.flags[id]) return;
+    p.flags[id] = true;
+    UI.realmShow(text, color || '#e8c56a');
+    if (typeof Ambience !== 'undefined' && Ambience.sfx) Ambience.sfx('rare');
+    UI.announce(`✦ ${text} ✦`, 'gold');
+    Log.add(`<b>${text}</b>——此身此世，又添一笔传奇。`, 'realm');
+    Story.chron(text);
+  },
+
   dailySettle(p, auto = false) {
     try { if (typeof FestivalSys !== 'undefined') FestivalSys.check(p, auto); } catch (err) { console.error('节庆检查异常:', err); }   // v20：节庆触发
     try { if (typeof SectSys !== 'undefined' && SectSys.tourneyCheck) SectSys.tourneyCheck(p); } catch (err) { console.error('大比检查异常:', err); }   // v22：宗门大比（每五年一届）
@@ -351,10 +375,13 @@ const Game = {
     try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
     // v24：日常结算统一收口到行动后（原先藏在各页签渲染函数里，打开页面才结算）
     try { if (typeof RankSys !== 'undefined' && RankSys.dailyReward && RankSys.isTop(p)) RankSys.dailyReward(p); } catch (err) { console.error('登顶日赏异常:', err); }
-    try { if (p.cave) { CaveSys.visitorEvent(p, auto); CaveSys.checkPest(p); CaveSys.springDaily(p, auto); } } catch (err) { console.error('洞府日常异常:', err); }
+    try { if (p.cave) { CaveSys.visitorEvent(p, auto); CaveSys.checkPest(p); CaveSys.springDaily(p, auto); CaveSys.treasuryDaily(p, auto); } } catch (err) { console.error('洞府日常异常:', err); }
     try { if (typeof SectSys !== 'undefined' && SectSys.discipleDaily) SectSys.discipleDaily(p, auto); } catch (err) { console.error('弟子历练异常:', err); }   // v30 补遗：亲传门中弟子历练（离线亦入账）
     try { if (typeof Codex !== 'undefined' && Codex.checkRewards) Codex.checkRewards(); } catch (err) { console.error('图鉴检查异常:', err); }
     try { if (typeof XianSys !== 'undefined' && XianSys.dailyCheck) XianSys.dailyCheck(p, auto); } catch (err) { console.error('仙界访客异常:', err); }   // v31：仙界访客（入仙籍后，离线静默入账）
+    try { if (typeof XianSys !== 'undefined' && XianSys.courtDaily) XianSys.courtDaily(p, auto); } catch (err) { console.error('仙庭差遣异常:', err); }   // v38（E309）：仙庭差遣换日 + 心魔罢黜
+    try { if (typeof AvatarSys !== 'undefined' && AvatarSys.daily) AvatarSys.daily(p, auto); } catch (err) { console.error('化身行功异常:', err); }   // v38（E302/E327）：化身逐日行功（离线同源同量）
+    try { if (typeof CaveSys !== 'undefined' && CaveSys.nightRaidCheck) CaveSys.nightRaidCheck(p, auto); } catch (err) { console.error('夜袭检查异常:', err); }   // v38（E305）：宿敌夜袭（离线自动结算）
   },
 
   /** v32 修瑕（E60）：离线日报——auto 回放期间各系统聚合的收益在此收口成一条日志
@@ -364,6 +391,9 @@ const Game = {
     const parts = [];
     if (agg.disciple) parts.push(`门中弟子历练缴回灵石 ${Utils.fmtNum(agg.disciple)}${agg.discipleExtra ? '、捎回灵材若干' : ''}`);
     if (agg.xianVisit) parts.push(`仙界访客到访 ${agg.xianVisit} 次`);
+    if (agg.avatarExp) parts.push(`化身代主行功，修为 +${Utils.fmtNum(agg.avatarExp)}`);   // v38（E302/E327）
+    if (agg.avatarStones) parts.push(`化身游历，觅得灵石 ${Utils.fmtNum(agg.avatarStones)}`);
+    if (agg.nightRaid) parts.push(`洞府遭夜袭 ${agg.nightRaid} 次（胜负已分，详情见日志）`);
     if (parts.length) Log.add(`${title}${parts.join('；')}。`, 'info');
     this._offlineAgg = null;
   },
@@ -373,6 +403,11 @@ const Game = {
     this.subTab = {};   // v22：换档后子页签记忆一并复位
     this.scrollMem = {};   // v26：滚动记忆一并复位
     Meta.load();    // v6：装载本存档位的成就与图鉴
+    GongfaSys.syncCustom(this.player);   // v38（E301）：自创功法定义重新注册进 ITEMS（静态表不含运行期产物）
+    // v38（E319）：本世印记基线快照（一世报告「本世印记」的分子）
+    if (this.player && this.player.counters && this.player.counters.marksStart == null) {
+      this.player.counters.marksStart = (typeof ReincarnationSys !== 'undefined') ? ReincarnationSys.readLegacy().marksEarned || 0 : 0;
+    }
     AutoCult.abort();
     Save.snapshotAuto();   // v30：滚动快照——本次会话前的 auto 存一份 bak2
     // v37（E268）：纯挂机长会话兜底——每 10 分钟滚动一次 bak2（注意 setInterval 参数 fn 在前；
@@ -459,6 +494,23 @@ const Game = {
       p.pendingDao = false;
       DaoSys.openModal();
     }
+    // v38（E300）：道途分岔时序——道境 3/6 重晋阶后的二选一（不可回改）；战斗中延后至战后
+    if (p.pendingDaoPath && !p.dead && !Battle.active) {
+      const tier = p.pendingDaoPath;
+      p.pendingDaoPath = null;
+      DaoSys.openPathModal(tier);
+    }
+    // v38（E305）：夜袭时序——宿敌叩门（Story/弹窗/战斗中延后，节庆同款挂起语义）
+    if (p.pendingNightRaid && !p.dead && !Battle.active && !Story.active && !UI._popupResolve) {
+      const npcId = p.pendingNightRaid;
+      p.pendingNightRaid = null;
+      CaveSys.resolveNightRaid(p, npcId, false);
+    }
+    // v38（E306）：誓言清算——破戒待决 / 贫誓超限（异步弹窗，不阻塞收尾）
+    if (typeof OathSys !== 'undefined' && !p.dead && !Battle.active && !Story.active && !UI._popupResolve
+      && (p.pendingOathBreak || (p.oaths && p.oaths.poor))) {
+      OathSys.pendingResolve(p);
+    }
   },
 
   async gameOver(reason) {
@@ -473,6 +525,8 @@ const Game = {
     // v29 天年：坐化不再是一堵墙——可兵解转世（寿满天年额外 +1 印记），就此终了亦可
     // v32 修瑕（E49）：ESC/点遮罩关闭弹窗原回落 undefined → 走「就此终了」毁灭项——
     //          寿满 +1 印记的转世机缘一次误触即没。关闭一律回落主选项「兵解转世」。
+    // v38（E319）：一世报告先行——灯尽之际，回望来路
+    await ReincarnationSys.showLifeReport(p, '坐化');
     const choice = (await UI.popup({
       title: '✦ 坐 化 ✦',
       html: `寿元耗尽，天道无情。<br><br>${Utils.esc(p.name)}，${GameData.REALM_NAMES[p.realmIdx]}${GameData.LAYER_NAMES[p.layer]}修士，享年 ${p.age} 岁。<br><br>肉身虽朽，神魂尚清——是散去修为、投胎再修一世，还是就此归于天地？<br><span class="tip-line">· 兵解转世：此世尽付东流，传承却得延续，且因<b>寿满天年</b>额外多得一枚轮回印记。</span>`,
@@ -730,6 +784,9 @@ const Game = {
     'act-beast-dispatch': (d) => BeastSys.dispatch(Number(d.uid)),   // v20 灵兽派遣
     'act-beast-trip-claim': (d) => BeastSys.claimTrip(Number(d.uid)),   // v20 寻宝归来
     'act-arena': () => BeastSys.arena(),   // v20 斗兽场
+    'act-arena-champ': () => BeastSys.champFight(),   // v38（E313）：斗兽擂主战
+    'act-beast-breed': (d) => BeastSys.breed(Number(d.uid)),   // v38（E303）：灵兽结契繁育
+    'act-beast-hatch': () => BeastSys.hatchEgg(),   // v38（E303）：灵蛋破壳
     /* --- v20 出战技能盘 --- */
     'act-deck-toggle': (d) => {
       const p = Game.player;
@@ -740,23 +797,70 @@ const Game = {
       else { p.battleDeck.push(d.gf); UI.toast('已入出战战盘'); }
       Game.afterAction();
     },
+    /* --- v38（E315）：技能盘双预设——「存入守盘」与「攻⇄守切换」 --- */
+    'act-deck-save': () => {
+      const p = Game.player;
+      const cur = Array.isArray(p.battleDeck) ? p.battleDeck : [];
+      if (!cur.length) { UI.toast('当前战盘为空，无从存录'); return; }
+      p.battleDeckAlt = cur.slice();
+      UI.toast('当前配置已存入「守」盘——「攻⇄守」一键切换随时可用');
+      Game.afterAction();
+    },
+    'act-deck-swap': () => {
+      const p = Game.player;
+      const cur = Array.isArray(p.battleDeck) ? p.battleDeck.slice() : [];
+      const alt = Array.isArray(p.battleDeckAlt) ? p.battleDeckAlt.slice() : null;
+      if (!alt || !alt.length) { UI.toast('尚未存录「守」盘——先以「存入守盘」落定一套配置'); return; }
+      p.battleDeck = alt;
+      p.battleDeckAlt = cur;
+      UI.toast('攻守易势——出战技能盘已切换');
+      Game.afterAction();
+    },
     /* --- v13 战斗：自动 / 速度 / 驯服 --- */
     'bt-auto': () => {
       const B = Battle.active;
       if (!B || B.over) return;
       B.auto = !B.auto;
+      // v38（E326）：开关跨战斗记忆——偏好写入 autoCfg 同 key
+      Battle.autoCfg().auto = B.auto;
+      Battle.saveAutoCfg();
       Log.add(B.auto ? '【自动战斗】开启——你心神沉入本能，招式自行流转。' : '【自动战斗】关闭——你重新执掌每一招。', 'system');
       Battle.render();
       if (B.auto && !B.busy) Battle.autoNext();
     },
     'bt-speed': () => { Battle.setSpeed(Battle.speed >= 3 ? 1 : Battle.speed + 1); },
     'bt-ning': () => Battle.actNingshen(),   // v32（C7）：凝神——战意/真元互转与净化
+    'bt-burst': () => Battle.actBurst(),   // v38（E308）：战意爆发——满战意主动兑现一击
     'bt-tame': () => { if (typeof BeastSys !== 'undefined' && BeastSys.tame) BeastSys.tame(); else UI.toast('此兽野性难驯'); },
     /* --- 大道 / 天劫 / 因果 / 百艺（增量扩展） --- */
     'act-dao-open': () => DaoSys.openModal(),
     'dao-pick': (d) => DaoSys.pick(d.dao),
     'act-dao-change': () => DaoSys.changeDao(),
+    'act-gongfa-create': () => GongfaSys.createCustom(),   // v38（E301）：自创功法「悟法」开炉
+    'act-oath-open': () => OathSys.open(),   // v38（E306）：天道誓言
+    'act-oath-take': (d) => OathSys.take(d.oath),
+    'act-oath-break': (d) => OathSys.breakOath(d.oath),
+    'act-title-open': () => UI.titleModal(),   // v38（E340）：称号录
+    'act-title-wear': (d) => {
+      const p = Game.player;
+      const t = (GameData.TITLES || []).find(x => x.id === d.id);
+      if (!t) return;
+      if (t.cond && !t.cond(p)) { UI.toast('此称号的条件尚未达成'); return; }
+      p.title = p.title === t.id ? null : t.id;
+      if (p.title) Game.milestone('msTitle', '初 佩 称 号', '#e8d9a0');   // v38（E328）里程碑
+      Log.add(p.title ? `你将【${t.name}】之名悬于身侧——江湖相见，先见其名。` : '你摘下了称号——大隐于市，返璞归真。', 'system');
+      Game.afterAction();
+    },
+    'act-sect-drill': () => SectSys.qingyunDrill(),   // v38（E337）：青云剑冢演武
+    'act-sect-delegate': (d) => SectSys.delegate(Number(d.i)),   // v38（E344）：亲传代行差事
+    'act-sect-council': (d) => SectSys.councilVote(d.c),   // v38（E344）：长老季议
+    'act-yiwn': () => CaveSys.drillTrain(),   // v38（E338）：演武场每日一演
+    'act-court-claim': (d) => XianSys.claimTask(Number(d.i)),   // v38（E309）：仙庭差遣领赏
+    'act-court-buy': (d) => XianSys.courtBuy(Number(d.i)),   // v38（E309）：仙市易物
+    'bt-xianbing': () => Battle.xianbing(),   // v38（E309）：仙兵借用（每战一次）
+    'act-tower-auto': () => TowerSys.toggleAuto(),   // v38（E324）：登天塔连战
     'trib-strategy': (d) => Tribulation.choose(d.strategy),
+    'trib-stage': (d) => Tribulation.chooseStage(d.stage),   // v38（E304）：三段劫势——应/避/御逐重应对
     'trib-borrow': () => Tribulation.borrow(),   // v30：借天运
     'act-cave-dongtian': () => CaveSys.upgradeDongtian(),   // v30：洞天营造
     'act-slay': () => KarmaSys.slayCorpses(),
@@ -777,6 +881,12 @@ const Game = {
     'act-reroll': (d) => ForgeSys.reroll(d.slot),
     'act-forge': (d) => ForgeSys.forge(d.recipe),
     'act-forge-frag': (d) => ForgeSys.forge(d.recipe, true),   // v32（E6）：器胚残片入炉
+    'act-forge-iron': (d) => ForgeSys.forge(d.recipe, false, Number(d.extra) || 0),   // v38（E317）：添料锻造（配比倾向）
+    'act-cave-flag': (d) => CaveSys.toggleFlag(Number(d.idx)),   // v38（E305）：阵眼布设/取旗
+    'act-craft-experiment': () => CraftSys.experiment(),   // v38（E317）：以药试方
+    'act-avatar-toggle': () => AvatarSys.toggle(Game.player),   // v38（E302）：化身凝形/归窍
+    'act-avatar-up': () => AvatarSys.upgrade(Game.player),   // v38（E302）：神识晋级
+    'act-avatar-task': (d) => AvatarSys.setTask(Game.player, d.task, Number(d.slot) || 1),   // v38（E302）：化身差事
     'act-set-refine': (d) => ForgeSys.refineSet(d.set),   // v32（E4）：套装炼化
     /* --- v13 洞府 / 灵兽 --- */
     'act-cave-up': () => CaveSys.upgrade(),
@@ -811,6 +921,7 @@ const Game = {
     'act-realm-enter': (d) => DungeonSys.enter(Number(d.realm)),
     'act-realm-node': (d) => DungeonSys.resolve(Number(d.node)),
     'act-realm-retreat': () => DungeonSys.retreat(),
+    'act-dungeon-purify': (d) => DungeonSys.purify(d.mut),   // v38（E307）：净化一条秘境异变
     'act-realm-synth': () => DungeonSys.synth(),
     /* --- v3 江湖 --- */
     'npc-befriend': (d) => NpcSys.befriend(d.npc),

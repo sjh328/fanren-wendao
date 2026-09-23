@@ -130,8 +130,9 @@ const XianSys = {
   daozuCheck(p) {
     if (!this.isDaozu(p) || p.flags.daozu) return;
     p.flags.daozu = true;
-    p.counters.xianyuan = (p.counters.xianyuan || 0);
+    // v38（E284）：删除无效果死行 `p.counters.xianyuan = (p.counters.xianyuan || 0);`
     if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.grantMarks) ReincarnationSys.grantMarks(1, 'dao_zu');
+    if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.showLifeReport) ReincarnationSys.showLifeReport(p, '证道祖');   // v38（E319）：道祖小结
     Log.add(`<b>道祖之境</b>——大罗圆满，万道归一。人间修士穷尽想象的尽头，也不过是你此刻的起点。（轮回印记 +1）`, 'realm');
     // v36（E230）：证道祖之境配白金色 t3 档全屏异象（4.6s 上行长尾）+ 终局专属音色——最高里程碑
     // 的演出密度自此不低于普通突破；演出非阻塞（setTimeout 摘除），announce aria-live 读屏可达
@@ -162,6 +163,108 @@ const XianSys = {
     const d = GameData.XIAN_TIERS[idx - 1];
     const ln = this.layer(p) >= 3 ? '圆满' : GameData.XIAN_LAYER_NAMES[this.layer(p)];
     return `${d.name} · ${ln}`;
+  },
+
+  /* ========== v38（E309）：仙庭体系——仙界从挂机场变官场经营 ========== */
+  /* 仙功晋品（九品仙吏 → 一品仙尊）；差遣日三桩；仙市折扣；仙兵借用；心魔罢黜 */
+  PINS: [0, 300, 800, 1800, 3600, 6500, 11000, 18000, 30000],
+  PIN_NAMES: ['九品仙吏', '八品仙丞', '七品仙卫', '六品仙使', '五品仙官', '四品仙卿', '三品仙侯', '二品仙君', '一品仙尊'],
+  gong(p) { return (p.xianCourt && p.xianCourt.gong) || 0; },
+  pin(p) {
+    const g = this.gong(p);
+    let pin = 1;
+    for (let i = 1; i < this.PINS.length; i++) if (g >= this.PINS[i]) pin = i + 1;
+    return pin;
+  },
+  pinName(p) { return this.PIN_NAMES[this.pin(p) - 1] || '九品仙吏'; },
+  pinNext(p) { return this.pin(p) >= 9 ? null : this.PINS[this.pin(p)]; },
+  /** 云海深层解锁（品 ≥5） */
+  deepOpen(p) { return this.pin(p) >= 5; },
+  courtState(p) { return p.xianCourt || (p.xianCourt = { gong: 0, day: 0, claims: {}, base: {} }); },
+  /** 差遣三桩（日更）：巡察（胜 1 场）/ 上贡（炼丹 1 炉）/ 参拜（求签 1 次） */
+  TASKS: [
+    { id: 'patrol', name: '巡察妖患', desc: '胜一场战斗（妖氛清剿）', need: 1, counter: 'wins' },
+    { id: 'tribute', name: '上贡仙丹', desc: '开炉炼丹一炉（仙庭香火）', need: 1, counter: 'crafts' },
+    { id: 'alms',   name: '参拜仙官', desc: '黄历求签一次（诚心可鉴）', need: 1, counter: null },
+  ],
+  taskProg(p, t) {
+    const c = this.courtState(p);
+    if (t.id === 'alms') return p.signDay === Math.floor(p.day || 0) ? 1 : 0;
+    const base = (c.base || {})[t.counter] || 0;
+    return Math.max(0, ((p.counters || {})[t.counter] || 0) - base);
+  },
+  /** 日更钩子：差遣换日重掷基线 + 心魔罢黜（仙官也修心） */
+  courtDaily(p, auto = false) {
+    if (!this.unlocked(p) || p.dead) return;
+    const c = this.courtState(p);
+    const today = Math.floor(p.day || 0);
+    if (c.day !== today) {
+      c.day = today;
+      c.claims = {};
+      c.base = { wins: (p.counters || {}).wins || 0, crafts: (p.counters || {}).crafts || 0 };
+    }
+    // 罢黜：心魔 ≥80，仙功折一成（每日至多一次）
+    if ((p.xinmo || 0) >= 80 && c._dismissDay !== today) {
+      c._dismissDay = today;
+      const lost = Math.round(this.gong(p) * 0.1);
+      if (lost > 0) {
+        c.gong = Math.max(0, this.gong(p) - lost);
+        Log.add(`【仙庭】心魔深重（${Math.round(p.xinmo)}）——仙官名录上你的考功被朱笔一勾，仙功 -${lost}。仙官也须修心。`, 'loss');
+      }
+    }
+  },
+  claimTask(i) {
+    const p = Game.player;
+    if (!this.unlocked(p)) return;
+    const c = this.courtState(p);
+    const t = this.TASKS[i];
+    if (!t || c.claims[t.id]) return;
+    if (this.taskProg(p, t) < t.need) { UI.toast('此桩差遣尚未达成'); return; }
+    c.claims[t.id] = true;
+    const pinBefore = this.pin(p);
+    const gongGain = 60 + pinBefore * 10;
+    c.gong = this.gong(p) + gongGain;
+    // v38（E328）：仙官晋品——里程碑
+    if (this.pin(p) > pinBefore && typeof Game !== 'undefined' && Game.milestone) Game.milestone('msPin' + this.pin(p), `仙 官 晋 品 · ${this.pinName(p)}`, '#dfe8f5');
+    let extra = '';
+    if (Utils.chance(30)) {
+      const mat = Utils.pick(['m_leijing', 'm_xiancui', 'm_xianjing', 'm_danfang', 'm_gupian']);
+      Bag.addItem(mat, 1);
+      extra = `，仙庭另赐${GameData.ITEMS[mat].name} ×1`;
+    }
+    Log.add(`【仙庭差遣】「${t.name}」办得妥帖——仙功 +${gongGain}${extra}。${this.pinNext(p) ? `（距${this.PIN_NAMES[this.pin(p)]}晋${this.PIN_NAMES[this.pin(p) + 1] || ''}尚需仙功 ${Utils.fmtNum(Math.max(0, this.pinNext(p) - this.gong(p)))}）` : '（一品之尊，仙庭人臣之极）'}`, 'gain');
+    Game.afterAction();
+  },
+  /** 仙市：仙材专柜，仙石易物——品阶愈高折扣愈深 */
+  MARKET: [
+    { item: 'm_leijing', base: 150000 },
+    { item: 'm_xiancui', base: 120000 },
+    { item: 'm_xianjing', base: 50000, qty: 2 },
+    { item: 'm_danfang', base: 2600, qty: 2 },
+    { item: 'm_gupian', base: 6000, qty: 2 },
+  ],
+  marketPrice(p, row) {
+    const disc = 1 - (this.pin(p) - 1) * 0.04;
+    return Math.round(row.base * disc);
+  },
+  async courtBuy(i) {
+    const p = Game.player;
+    if (!this.unlocked(p)) return;
+    const row = this.MARKET[i];
+    if (!row) return;
+    const price = this.marketPrice(p, row);
+    const qty = row.qty || 1;
+    const def = GameData.ITEMS[row.item];
+    const ok = await UI.popup({
+      title: '仙市 · 易物',
+      html: `以灵石易仙材：<br>【${def.name}】×${qty}——索价 <span class="hl">${Utils.fmtNum(price)}</span> 灵石（${this.pinName(p)}仙市折 ${Math.round((1 - (this.pin(p) - 1) * 0.04) * 100)}%）。`,
+      options: [{ text: '易 之', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (!Bag.spendStones(price)) { UI.toast('灵石不足'); return; }
+    Bag.addItem(row.item, qty);
+    Log.add(`你在仙市易得【${def.name}】×${qty}——仙官只收灵石，不问来处。（-${Utils.fmtNum(price)}）`, 'gain');
+    Game.afterAction();
   },
 };
 window.XianSys = XianSys;

@@ -68,10 +68,14 @@ const BlackSys = {
       // v19 讨价还价：悟性/福缘判定（v28 联动：有效悟性/福缘——装备与讲道加成一并计入）
       // v29 修瑕：当日还价失败过再还必败——此前失败后关弹窗重开即可免费重掷，「触怒商人」形同虚设
       const shamed = (p._haggleFailDay || -1) === Math.floor(p.day);
-      const rate = shamed ? 0 : Utils.clamp(20 + Stat.compOf(p) * 4 + Stat.compute(p).luck * 4, 10, 75);
+      // v38（E337/E340）：万宝商会【商路情报】每日首谈必成；称号「散人不羁」黑市售价 -5%
+      const wanbao = p.sect && p.sect.id === 'wanbao' && p._wanbaoHaggleDay !== Math.floor(p.day);
+      const rate = shamed ? 0 : (wanbao ? 100 : Utils.clamp(20 + Stat.compOf(p) * 4 + Stat.compute(p).luck * 4, 10, 75));
       if (Utils.chance(rate)) {
+        if (wanbao) p._wanbaoHaggleDay = Math.floor(p.day);
+        if (Game.titleOn(p, 'freeRep')) cost = Math.round(cost * 0.95);
         cost = Math.round(cost * 0.75);
-        Log.add(`你巧舌如簧，蒙面商贾咬牙认了——索价降至 <b>${Utils.fmtNum(cost)}</b> 灵石。`, 'gain');
+        Log.add(`你巧舌如簧${wanbao ? '（商路情报在手，一锤定音）' : ''}，蒙面商贾咬牙认了——索价降至 <b>${Utils.fmtNum(cost)}</b> 灵石。`, 'gain');
       } else {
         cost = Math.round(cost * 1.15);
         p._haggleFailDay = Math.floor(p.day);

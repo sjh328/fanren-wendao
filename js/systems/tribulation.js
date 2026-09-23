@@ -4,8 +4,14 @@
  * ====================================================================== */
 const Tribulation = {
   state: null,
-  /** 天劫威力：100 为基准，随目标境界每阶 +10，孽障推高、气运削减 */
-  power(p, target = 2) { return Math.max(50, 100 + (target || 2) * 10 + (p.karma || 0) * 2.5 - (p.fortune || 0) * 2); },
+  /** 天劫威力：100 为基准，随目标境界每阶 +10，孽障推高、气运削减
+   *  v38（E304）：道基虚浮（三段劫势多避而成）者历劫难度 +10%；v38（E318）：劫难「天威难测」劫威 +15% */
+  power(p, target = 2) {
+    let base = Math.max(50, 100 + (target || 2) * 10 + (p.karma || 0) * 2.5 - (p.fortune || 0) * 2);
+    if (p.flags && p.flags.rootShallow) base = Math.round(base * 1.1);
+    if (p.reinc && Array.isArray(p.reinc.trials) && p.reinc.trials.includes('trib')) base = Math.round(base * 1.15);
+    return base;
+  },
   /** 境界劫难系数：目标境界越高，成算折损越重（金丹劫 −7% …… 真仙劫 −31.5%，下限 −50%） */
   realmPenalty(target) { return Utils.clamp(1 - (target || 2) * 0.035, 0.5, 1); },
   /** 护身法宝所需品级 ≈ 目标境界（筑基用灵级护心镜、金丹用玄级玄龟甲、元婴起用地级龙鳞宝甲） */
@@ -61,6 +67,9 @@ const Tribulation = {
       base: Cultivate.breakthroughChance(p, bonus + dujieBonus),
       power: this.power(p, effTarget),
       artifact: this.findArtifact(p, xian ? 4 : this.artifactGrade(target)),
+      // v38（E304）：三段劫势——三重劫象逐一公示，应/避/御逐重应对后方入三策定夺
+      stages: [0, 0, 0].map(() => Utils.pick(GameData.TRIB_OMENS || [])),
+      stageIdx: 0, stageRes: [], stress: 0, yingN: 0, biN: 0,
       busy: false, logs: [],
     };
     Log.add(xian
@@ -106,6 +115,49 @@ const Tribulation = {
     const S = this.state;
     if (!S) return;
     const p = Game.player;
+    // v38（E304）：三段劫势视图——劫象公示 + 应/避/御（三重毕方显三策）
+    if ((S.stageIdx || 0) < 3 && (S.stages || []).length >= 3) {
+      const om = S.stages[S.stageIdx] || {};
+      const stNow = Stat.compute(p);
+      const spd = stNow.speed || 0;
+      const biOdds = Utils.clamp(Math.round(35 + spd * 1.5), 25, 85);
+      const canYu = !!S.artifact || this.anyArmorArtifact(p);
+      const hpCost = Math.max(1, Math.round(stNow.maxHp * 0.06));
+      document.getElementById('trib-box').innerHTML = `
+      <div class="battle-head" style="color:var(--gold)">— ${S.xian ? '仙 劫' : '天 劫'} · 第 ${S.stageIdx + 1} / 3 重 —</div>
+      <div class="card-desc" style="margin-bottom:6px">劫云翻卷，劫象已显——每一重皆须亲身应对：</div>
+      <div style="text-align:center;margin:10px 0"><span style="font-size:2em" aria-hidden="true">${om.icon || '⚡'}</span><div style="color:var(--gold);font-weight:bold;margin-top:4px">${om.name || '雷劫'}</div><div class="tip-line">${om.desc || ''}</div></div>
+      <div class="trib-opts">
+        <button class="btn trib-opt" data-action="trib-stage" data-stage="ying" ${S.busy ? 'disabled' : ''}>
+          <span class="trib-name">逆势承应</span>
+          <span class="trib-chance">气血 -${hpCost} · 劫势 +1</span>
+          <span class="trib-note">以肉身硬撼此重劫威——胆气可嘉，渡劫成算每应一重 +2%（三重皆应者，功成得【根骨如渊】）</span>
+        </button>
+        <button class="btn trib-opt" data-action="trib-stage" data-stage="bi" ${S.busy ? 'disabled' : ''}>
+          <span class="trib-name">身法闪避</span>
+          <span class="trib-chance">成算 ${biOdds}%（身法 ${spd}）</span>
+          <span class="trib-note">以身法卸去此劫——成则无伤；失手则劫势 +2、小损气血（两重皆避者，道基虚浮）</span>
+        </button>
+        <button class="btn trib-opt" data-action="trib-stage" data-stage="yu" ${S.busy || !canYu ? 'disabled' : ''} title="${canYu ? '' : '需持一件护身法宝（防具）'}">
+          <span class="trib-name">法宝御劫</span>
+          <span class="trib-chance">无得无失</span>
+          <span class="trib-note">祭护身法宝挡下此重——不耗不损（法宝本体留待三策定夺时再论）</span>
+        </button>
+      </div>
+      <div class="card-desc" style="margin-top:6px">当前劫势 <b class="hl">${S.stress || 0}</b>（劫势愈高，三策成算愈低）</div>
+      <div id="trib-log" class="trib-log"></div>`;
+      const logBox = document.getElementById('trib-log');
+      if (logBox) {
+        for (const { html, cls } of S.logs) {
+          const div = document.createElement('div');
+          div.className = 'log-entry ' + cls;
+          div.innerHTML = html;
+          logBox.appendChild(div);
+        }
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+      return;
+    }
     const c = this.chances();
     const art = S.artifact ? GameData.ITEMS[S.artifact.id] : null;
     const gradeName = S.xian ? GameData.GRADE_NAMES[4] : GameData.GRADE_NAMES[this.artifactGrade(S.target)];
@@ -148,13 +200,64 @@ const Tribulation = {
       logBox.scrollTop = logBox.scrollHeight;
     }
   },
+  /** v38（E304）：御劫资格——包内或已穿任意护身法宝（防具）即可（御重不耗宝，宝本体留待三策） */
+  anyArmorArtifact(p) {
+    for (const id of Object.keys(p.bag || {})) {
+      const d = GameData.ITEMS[id];
+      if (d && d.type === 'artifact' && d.slot === 'armor') return true;
+    }
+    const eq = p.equipped && p.equipped.armor;
+    const eqDef = eq ? GameData.ITEMS[Utils.eqId(eq)] : null;
+    return !!(eqDef && eqDef.type === 'artifact');
+  },
+  /** v38（E304）：三段劫势逐重应对——ying 应 / bi 避 / yu 御 */
+  async chooseStage(a) {
+    const S = this.state;
+    const p = Game.player;
+    if (!S || S.busy || p.dead || (S.stageIdx || 0) >= 3) return;
+    const om = S.stages[S.stageIdx] || {};
+    if (a === 'ying') {
+      const stNow = Stat.compute(p);
+      const cost = Math.max(1, Math.round(stNow.maxHp * 0.06));
+      if (p.hp <= cost + stNow.maxHp * 0.1) { UI.toast('气血见底，硬撼此劫必殒——改以避或御'); return; }
+      p.hp -= cost;
+      S.yingN++; S.stress++;
+      this.log(`你屹立劫心，任${om.name || '劫威'}加身——气血 -${cost}，劫势 +1（渡劫成算 +2%）。`, 'log-warn');
+    } else if (a === 'bi') {
+      const spd = Stat.compute(p).speed || 0;
+      const odds = Utils.clamp(Math.round(35 + spd * 1.5), 25, 85);
+      if (Utils.chance(odds)) {
+        S.biN++;
+        this.log(`你身形一晃，自${om.name || '劫威'}缝隙间穿过——干净利落，不损分毫！`, 'log-gain');
+      } else {
+        S.stress += 2;
+        const stNow = Stat.compute(p);
+        const cost = Math.max(1, Math.round(stNow.maxHp * 0.03));
+        p.hp = Math.max(1, p.hp - cost);
+        this.log(`躲闪稍迟，${om.name || '劫威'}余威扫身——气血 -${cost}，劫势 +2。`, 'log-loss');
+      }
+    } else {
+      if (!S.artifact && !this.anyArmorArtifact(p)) { UI.toast('身无护身法宝，无从御劫'); return; }
+      this.log(`宝光乍现，${om.name || '劫威'}之势被挡在丈许之外——有惊无险。`, 'log-system');
+    }
+    S.stageIdx++;
+    if (S.stageIdx >= 3) {
+      const rootTxt = S.yingN >= 3 ? '三重皆应——若渡劫功成，可得【根骨如渊】厚赐（全属性再 +5%）'
+        : S.biN >= 2 ? '两重皆避——若渡劫功成，道基难免虚浮（此后历劫难度 +10%）'
+        : '根基如常';
+      this.log(`三重劫象已过（应 ${S.yingN} · 避 ${S.biN} · 劫势 ${S.stress}）。${rootTxt}——三策定夺，就在此刻。`, 'log-system');
+    }
+    this.render();
+  },
   async choose(strategy) {
     const S = this.state;
     const p = Game.player;
     if (!S || S.busy || p.dead) return;
     S.busy = true;
     const c = this.chances();
-    const chance = c[strategy];
+    // v38（E304）：三段劫势结算——应重各 +2% 成算、劫势每点 -1.5%（全应 ≈ +6%−劫势补偿；
+    // 多避多失手则净降）。带内 ±8%，与三段前后的整体期望偏差保持在 ±3% 量级
+    const chance = Utils.clamp(c[strategy] + Utils.clamp((S.yingN || 0) * 2 - (S.stress || 0) * 1.5, -8, 8), 3, 97);
     this.render();
     // 法宝挡劫：先耗去护身法宝
     if (strategy === 'artifact') {
@@ -168,9 +271,9 @@ const Tribulation = {
     const names = { endure: '以肉身硬抗天劫', artifact: '以法宝抵挡天劫', hide: '遁入地脉借地躲劫' };
     this.log(`你横下心来——${names[strategy]}！`, 'log-system');
     await Utils.sleep(700);
-    // 天劫异象（心魔之权重随孽障增长）
+    // 天劫异象（心魔之权重随孽障增长）；v38（E341）：「福泽绵长」遗风——紫气东来 ×1.5
     const phen = Utils.pickWeighted({
-      ziqi: 25,
+      ziqi: 25 * (((p.flags || {}).treeAuspicious) ? 1.5 : 1),
       xinmo: 15 + (p.karma || 0) * 0.5,
       xiangrui: 15,
       fanjie: 15 + ((p.karma || 0) >= 50 ? 10 : 0),
@@ -246,6 +349,16 @@ const Tribulation = {
       } else {
         p.karma = (p.karma || 0) + 10;
         Log.add('你遁地避雷，欺天而过——因果自负，孽障 +10。', 'warn');
+      }
+      // v38（E304）：三段劫势根基判定——全应者【根骨如渊】、多避者【道基虚浮】（与三策词缀叠加）
+      if (S.yingN >= 3) {
+        p.flags = p.flags || {};
+        p.flags.rootPeak = true;
+        Log.add('三重劫象皆以身承之——雷火淬尽凡胎杂质，得【根骨如渊】：全属性再 +5%。', 'gain');
+      } else if (S.biN >= 2) {
+        p.flags = p.flags || {};
+        p.flags.rootShallow = true;
+        Log.add('两重劫象皆以身法避过——道基终隔一层，【道基虚浮】：此后历劫难度 +10%。', 'warn');
       }
       UI.announce(`渡劫功成 · 晋入${GameData.REALM_NAMES[p.realmIdx]}期`, 'gold');   // v4
       UI.toast(`渡劫成功！${GameData.REALM_NAMES[p.realmIdx]}期`);

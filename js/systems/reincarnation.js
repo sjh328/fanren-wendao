@@ -49,16 +49,21 @@ const ReincarnationSys = {
    *  （E22 单源化不彻底），树名改动曾两处漂移。现效果与名字同表，TREE_NAMES 由其派生。
    *  apply(p2, ctx)：ctx = { kept（携入轮回的法宝 id）, origin（出身定义） } */
   TREE_EFFECTS: [
-    { name: '一世之家', desc: '初始灵石翻倍', apply: (p2, ctx) => { p2.stones.low += Math.round((ctx.origin ? ctx.origin.start.stones : 150) || 0); } },
+    { name: '一世之家', desc: '初始灵石翻倍', apply: (p2, ctx) => { p2.stones.low += Math.round((ctx.origin ? ctx.origin.start.stones : 300) || 0); } },
     // v36（E228）：四维层满值折算——属性未满走原加成（min(10,+n) 与旧版逐位一致）；已满（>=10）
     // 改授 cultGift（修炼效率 +2%/层），多周目后期四维满值后不再固定零收益
-    { name: '生而知之', desc: '悟性 +2', apply: (p2) => { if (p2.attrs.comp >= 10) { p2.cultGift = (p2.cultGift || 0) + 2; } else { p2.attrs.comp = Math.min(10, p2.attrs.comp + 2); } } },
+    // v38（E341）：四层「前世遗风」——数值保留，各叠一条同源机制（机制即前世留下的习惯）
+    { name: '生而知之', desc: '悟性 +2（遗风：参悟道境经验 +25%）', apply: (p2) => { if (p2.attrs.comp >= 10) { p2.cultGift = (p2.cultGift || 0) + 2; } else { p2.attrs.comp = Math.min(10, p2.attrs.comp + 2); } p2.flags = p2.flags || {}; p2.flags.treeSage = true; } },
     { name: '故物重携', desc: '多带一件法宝', apply: (p2, ctx) => { if (ctx.kept) p2.bag[ctx.kept] = (p2.bag[ctx.kept] || 0) + 1; } },
-    { name: '福缘深厚', desc: '福缘 +2', apply: (p2) => { if (p2.attrs.luck >= 10) { p2.cultGift = (p2.cultGift || 0) + 2; } else { p2.attrs.luck = Math.min(10, p2.attrs.luck + 2); } } },
+    { name: '福缘深厚', desc: '福缘 +2（遗风：奇遇权重 +5%）', apply: (p2) => { if (p2.attrs.luck >= 10) { p2.cultGift = (p2.cultGift || 0) + 2; } else { p2.attrs.luck = Math.min(10, p2.attrs.luck + 2); } p2.flags = p2.flags || {}; p2.flags.treeLuck = true; } },
     // 道基天成/道骨按各维分别判定：部分满则满的维折算（每满一维折 +0.5%，四维全满 +2% 与单维层对齐）
     { name: '道基天成', desc: '全属性 +1', apply: (p2) => { let full = 0; for (const k of ['gen', 'comp', 'luck', 'body']) { if (p2.attrs[k] >= 10) full++; else p2.attrs[k] = Math.min(10, p2.attrs[k] + 1); } if (full) p2.cultGift = (p2.cultGift || 0) + Math.round(2 * full / 4); } },
-    { name: '名门之后', desc: '初始声望 +30', apply: (p2) => { p2.reputation = (p2.reputation || 0) + 30; } },
-    { name: '福泽绵长', desc: '初始气运 +10', apply: (p2) => { p2.fortune = (p2.fortune || 0) + 10; } },
+    { name: '名门之后', desc: '初始声望 +30（遗风：开局有旧识相迎）', apply: (p2) => {
+      p2.reputation = (p2.reputation || 0) + 30;
+      const ids = Object.keys(p2.npcs || {});
+      if (ids.length) { const id = ids[Math.floor(Math.random() * ids.length)]; if (p2.npcs[id]) { p2.npcs[id].rel = Math.min(30, (p2.npcs[id].rel || 0) + 15); p2.flags = p2.flags || {}; p2.flags._oldFriend = id; } }
+    } },
+    { name: '福泽绵长', desc: '初始气运 +10（遗风：紫气东来 ×1.5）', apply: (p2) => { p2.fortune = (p2.fortune || 0) + 10; p2.flags = p2.flags || {}; p2.flags.treeAuspicious = true; } },
     { name: '骨血传玉', desc: '自带上古碎片', apply: (p2) => { p2.bag['m_gupian'] = (p2.bag['m_gupian'] || 0) + 1; } },
     { name: '道韵残响', desc: '保留一条前世道韵', apply: (p2) => { p2.flags.daoYunEcho = true; } },
     { name: '逆天改命', desc: '四维重掷取最优', apply: (p2) => { p2.rerollBest = true; } },
@@ -72,6 +77,51 @@ const ReincarnationSys = {
     { name: '轮回行者', desc: '每次兵解额外 +1 印记', apply: (p2) => { p2.flags.reincWalker = true; } },
   ],
   get TREE_NAMES() { return this.TREE_EFFECTS.map(t => `${t.name}（${t.desc}）`); },
+  /** v38（E319）：一世报告——坐化/兵解/飞升/证道祖四终局的总结屏（数据全取 counters/chronicle，零新状态） */
+  lifeReport(p, kind) {
+    const c = p.counters || {};
+    const legacy = this.readLegacy();
+    const marksThisLife = Math.max(0, (legacy.marksEarned || 0) - (c.marksStart != null ? c.marksStart : legacy.marksEarned));
+    const stones = p.stones ? (p.stones.low || 0) + (p.stones.mid || 0) * 100 + (p.stones.high || 0) * 10000 : 0;
+    const bosom = Object.values(p.npcs || {}).filter(s => s && s.rel >= 70).length;
+    const partners = [p.partner, ...(p.sworn || [])].filter(Boolean).map(id => ((typeof NpcSys !== 'undefined' && NpcSys.def(id) || {}).name) || '').filter(Boolean);
+    const stopRealm = (typeof XianSys !== 'undefined' && XianSys.unlocked(p) && XianSys.cur(p) > 0)
+      ? `${XianSys.label(p)}（仙籍）`
+      : `${GameData.REALM_NAMES[p.realmIdx] || '?'}${GameData.LAYER_NAMES[p.layer] || ''}`;
+    const events = (p.chronicle || []).slice(-3).map(x => x.txt || x).join('；') || '——';
+    const rows = [
+      ['一世止境', `<b class="hl">${stopRealm}</b>`],
+      ['红尘岁月', `${p.age || '?'} 岁（历 ${Math.floor(p.day || 0)} 日）`],
+      ['身家', `灵石 ${Utils.fmtNum(stones)}${p.sect ? ` · ${p.sect.contrib} 门中贡献` : ''}`],
+      ['因果', `气运 ${p.fortune || 0} · 孽障 ${p.karma || 0}${p.karma >= 100 ? '（曾斩三尸）' : ''}`],
+      ['杀伐', `${c.wins || 0} 胜 · 诛精英 ${c.killsElite || 0} · 秘境深处第 ${c.maxDepth || 0} 层`],
+      ['情谊', `${partners.length ? `与 ${partners.join('、')} 结伴` : '独来独往'} · 莫逆 ${bosom} 人`],
+      ['印记', `本世 ${marksThisLife} 枚（累计 ${legacy.marksEarned || 0}）`],
+      ['此世大事', events],
+    ];
+    const title = { '兵解转世': '一世总结 · 兵解之际', '坐化': '一世总结 · 灯尽之际', '白日飞升': '一世小结 · 飞升之际', '证道祖': '一世小结 · 道祖之境' }[kind] || '一世总结';
+    return {
+      brief: `${stopRealm} · ${c.wins || 0} 胜 · 印记 +${marksThisLife}`,
+      html: `<div class="seclude-report">${rows.map(([k, v]) => `<div class="sr-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`,
+      title,
+    };
+  },
+  /** v38（E319）：终局/里程碑报告弹窗（坐化/兵解/飞升/证道祖共用）
+   *  webdriver（E2E）环境下自动降级为日志行，不弹窗不阻塞测试链 */
+  async showLifeReport(p, kind) {
+    const rep = this.lifeReport(p, kind);
+    if (typeof navigator !== 'undefined' && navigator.webdriver) {
+      Log.add(`【${rep.title}】${(p.chronicle || []).slice(-1).map(x => x.txt || x).join('') || '此生行止，俱入年表。'}`, 'system');
+      return;
+    }
+    try {
+      await UI.popup({
+        title: `✦ ${rep.title} ✦`,
+        html: `${rep.html}<div class="tip-line" style="text-align:center">· 回望来路，字字皆途。</div>`,
+        options: [{ text: '谨 记', value: true, primary: true }],
+      });
+    } catch (e) { /* 弹窗被取消不阻塞流程 */ }
+  },
   grantMarks(n, why) {
     // v31 修瑕：去重集改存全局 legacy（跨档单键）——原存 Meta.data.marksGiven，随每次 Meta.load
     // 重建被丢弃，重进游戏后图鉴大成/个人线全通/白日飞升等印记全部可跨世重刷（多周目经济崩坏）。
@@ -239,9 +289,25 @@ const ReincarnationSys = {
         options: [{ text: `携 ${Utils.fmtNum(xy)} 仙元往生`, value: true, primary: true }, { text: '散于天地', value: false }],
       });
     }
-    await this.execute(p, legacy, kept, origin, opts.extraMarks || 0, carryXianyuan);
+    // v38（E318）：转世劫难（NG+）——自选 1~3 条劫难换取印记：只加难，不加速度
+    const TRIALS = [
+      { id: 'exp',  name: '大道多艰', desc: '修为需求 ×1.15——每一层都要多走三分路' },
+      { id: 'foe',  name: '群邪环伺', desc: '天下之敌气血、攻击 ×1.10——处处皆是恶战' },
+      { id: 'trib', name: '天威难测', desc: '劫威 +15%——天劫与仙劫皆更凶险' },
+    ];
+    const trials = [];
+    for (let i = 0; i < TRIALS.length; i++) {
+      const t = TRIALS[i];
+      const pickT = await UI.popup({
+        title: `转世劫难 · 第 ${i + 1}/${TRIALS.length} 重`,
+        html: `轮回镜前，你可自请劫难以砺道心——每请一重，兵解结算时<b>轮回印记 +1</b>。<br><span class="tip-line">· 已请 ${trials.length} 重；劫难贯穿整世，转世落定即生效。</span>`,
+        options: [{ text: `请此劫——${t.name}：${t.desc}`, value: t.id, primary: false }, { text: '不请此劫', value: null }],
+      });
+      if (pickT) trials.push(pickT);
+    }
+    await this.execute(p, legacy, kept, origin, opts.extraMarks || 0, carryXianyuan, trials);
   },
-  async execute(oldP, legacy, kept, origin, extraMarks = 0, carryXianyuan = false) {
+  async execute(oldP, legacy, kept, origin, extraMarks = 0, carryXianyuan = false, trials = []) {
     // 前世仇怨：只带走此生尚存的心结（已化解者不入轮回）
     const grudges = Object.keys(oldP.npcs || {}).filter(id => oldP.npcs[id].grudge && oldP.npcs[id].alive);
     // v32（D7）：兵解防重护栏——同一世（同 lifeUid）重复 execute 不再发印记与世数，
@@ -256,9 +322,11 @@ const ReincarnationSys = {
       const exKeys = Object.keys(legacy.executed);
       if (exKeys.length > 40) delete legacy.executed[exKeys[0]];   // 防无界增长
       const walkerBonus = (oldP.flags && oldP.flags.reincWalker) ? 1 : 0;   // v32（D2）传承树十五层
+      // v38（E318）：自请劫难之赏——每重劫难兵解结算 +1 印记（与 walker 同批入账，防重复兵解刷取）
+      const trialBonus = Array.isArray(trials) ? trials.length : 0;
       legacy.lives = (legacy.lives || 0) + 1;
-      legacy.marks = (legacy.marks || 0) + 1 + (extraMarks || 0) + walkerBonus;
-      legacy.marksEarned = (legacy.marksEarned || 0) + 1 + (extraMarks || 0) + walkerBonus;
+      legacy.marks = (legacy.marks || 0) + 1 + (extraMarks || 0) + walkerBonus + trialBonus;
+      legacy.marksEarned = (legacy.marksEarned || 0) + 1 + (extraMarks || 0) + walkerBonus + trialBonus;
     }
     legacy.kept = kept || null;
     legacy.grudges = grudges;
@@ -266,12 +334,16 @@ const ReincarnationSys = {
     legacy.towerBest = Math.max(legacy.towerBest || 0, (oldP.counters && oldP.counters.towerBest) || 0);
     // v30 轮回镜：前世编年归档（保留最近三世）；v32（D7）重复兵解不重复归档
     if (!reExecuted) {
+      // v38（E319）：一世报告随编年归档并弹屏
+      const rep = this.lifeReport(oldP, '兵解转世');
       legacy.pastLives = (legacy.pastLives || []).slice(-2);
       legacy.pastLives.push({
         no: legacy.lives,
         who: `${oldP.name}（${GameData.REALM_NAMES[oldP.realmIdx] || '?'}期）`,
         life: oldP.flags && oldP.flags.ascended ? '白日飞升，仙门之外' : (oldP.lifeCut ? `折寿 ${oldP.lifeCut} 年，抱憾而终` : '一生行止，留待后说'),
+        report: rep.brief,
       });
+      await this.showLifeReport(oldP, '兵解转世');
     }
     this.writeLegacy(legacy);
     // v20 道韵残响：传承树九层保留上一世最强的一条已激活道韵
@@ -298,9 +370,15 @@ const ReincarnationSys = {
       if (origin.tameSkill) p2.tameSkill = Math.max(p2.tameSkill || 0, origin.tameSkill);   // v19：驯手心得
     }
     p2.reinc = { lives: legacy.lives, marks: Math.min(30, legacy.marksEarned || 0), compPct: 10, grudges: grudges };   // v32（D1）：属性口径改累计获得（封顶 30），不随预约扣费回退
+    p2.reinc.trials = Array.isArray(trials) ? trials.slice() : [];   // v38（E318）：此世行劫（layerNeedT/buildMonster/Tribulation.power 三处消费）
     if (echo) p2.reinc.echo = echo;   // v20 道韵残响
     // v31 多周目变奏：前世残忆旗标——c2/c5/c7 开篇将演出「前世残忆」变体场景（story._vis req 路由）
     p2.story = { seen: {}, mid: {}, choices: {}, flags: { remembrance: true } };
+    // v38（E318）：此世行劫入轮回镜与日志
+    if (trials.length) {
+      const TRIAL_NAMES = { exp: '大道多艰', foe: '群邪环伺', trib: '天威难测' };
+      Log.add(`你自请的劫难随神魂入世——<b>${trials.map(t => TRIAL_NAMES[t] || t).join('、')}</b>，此世步步皆是修行。`, 'warn');
+    }
     // v31 来世预约兑现：legacy.plan 在新身落地（兑现后清除，防重复）
     if (legacy.plan === 'ring') { p2.bag['s_xy_huan'] = (p2.bag['s_xy_huan'] || 0) + 1; }
     else if (legacy.plan === 'layer3') { p2.layer = 2; }

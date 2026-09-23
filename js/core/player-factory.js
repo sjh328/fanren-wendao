@@ -33,7 +33,7 @@ const PlayerFactory = {
       attrs: { ...attrs },
       realmIdx: 0, layer: 0, exp: 0,
       hp: 0, mp: 0,
-      stones: { low: 150, mid: 0, high: 0 },
+      stones: { low: 300, mid: 0, high: 0 },   // v38（E322）：开局 150→300——早期经济扶正（练气丹药带可负担性，price-audit 前两境行复核在案）
       bag: { pill_juqi: 3, pill_liaoshang: 2, w_tiejian: 1, a_buyi: 1 },
       gongfa: { gf_tuna: { level: 1, exp: 0 } },
       equipped: { weapon: null, armor: null, accessory: null },
@@ -76,11 +76,20 @@ const PlayerFactory = {
       chronicle: [],  // v19 大事年表 [{d,txt}]
       personal: {},   // v19 个人线进度 {npcId: 已完成幕数}
       daoExp: {},   // v16 职业道境经验（六大职业独立积累，不随修为境界绑定）
+      daoPaths: {},   // v38（E300）：道途双脉——道境 3/6 重分岔 {3:'A'|'B', 6:'A'|'B'}，不可回改
+      daoChanged: 0,   // v38（E320）：转修次数（首次软化惩罚）
+      customGongfa: {},   // v38（E301）：自创功法配置 {custom_N: {name, gtype, mods}}（定义运行期注册进 ITEMS）
+      oaths: {},   // v38（E306）：天道誓言 {kill/dan/solo/poor/still: true}
+      oathBanDay: 0,   // v38（E306）：破誓禁立截止日
+      title: null,   // v38（E340）：佩戴称号 id（TITLES 单枚）
+      xianCourt: null,   // v38（E309）：仙庭 {gong, day, claims, base}（飞升后 XianSys.courtState 补默认）
+      avatar: { on: false, task: null, task2: null, lv: 1, cdDay: 0, day: 0 },   // v38（E302）：元神化身
       jade: 0,      // v18 残玉共鸣（0-9 重，主线每完结一章 +1）
       reputation: 0, // v18 江湖声望（RepSys 六档；v20 显式入模板，老档经 fresh 合并自动补齐）
       tameSkill: 0, // v13 驯熟练度（0-100，驯服成功率 +1%/10点；v20 显式入模板）
       xinmo: 0,     // v19 心魔值（v20 显式入模板，杜绝 undefined 参与钳制前的运算）
       battleDeck: [], // v20 出战技能盘（最多四招；空盘=全部法诀可用）
+      battleDeckAlt: null, // v38（E315）：第二技能盘预设（「守」盘；存录/切换见 act-deck-save/act-deck-swap）
       ultLv: {},    // v20 必杀熟练度 { 式id: 使用次数 }，每 8 次升一重（至三重）
       // v34（E127）：新档即当前版本——此前 create 不带迁移版本号，新档首次读档会全量跑旧档
       // 迁移链，v19-2 步骤把洞府 builds 重建成三键、v20 步骤只能从被剥对象补 0——
@@ -313,6 +322,21 @@ const PlayerFactory = {
         // v37（E237）：散修红点迁移——已过筑基仍未拜宗 = 事实拒宗，存量散修红点一次性熄灭
         //（本步只对旧档跑一次：新档 create 自带 sectDeclined:false 且迁移起点跳过全部步骤）
         if (!out.sect && (out.realmIdx || 0) >= 2 && out.flags) out.flags.sectDeclined = true;
+      },
+      // v38：新系统状态防御默认——化身/阵眼/双脉/转修计数/双预设/自创功法（E302/E305/E300/E320/E315/E301）。
+      // 顶层字段经 fresh 模板浅合并已补齐；cave 为旧档既有对象（浅合并整体保留），阵眼须显式补齐
+      (out) => {
+        out.daoPaths = (out.daoPaths && typeof out.daoPaths === 'object') ? out.daoPaths : {};
+        out.daoChanged = Math.max(0, Math.floor(Number(out.daoChanged)) || 0);
+        out.customGongfa = (out.customGongfa && typeof out.customGongfa === 'object') ? out.customGongfa : {};
+        out.battleDeckAlt = Array.isArray(out.battleDeckAlt) ? out.battleDeckAlt : null;
+        out.avatar = (out.avatar && typeof out.avatar === 'object') ? out.avatar : { on: false, task: null, task2: null, lv: 1, cdDay: 0, day: 0 };
+        out.oaths = (out.oaths && typeof out.oaths === 'object') ? out.oaths : {};
+        out.oathBanDay = Math.max(0, Math.floor(Number(out.oathBanDay)) || 0);
+        out.title = (out.title && (GameData.TITLES || []).some(t => t.id === out.title)) ? out.title : null;
+        if (out.cave && out.cave.formation === undefined) out.cave.formation = [null, null, null, null, null, null, null, null, null];
+        // v38（E288/E311）：灵田槽位定长 8——旧档 4 槽稀疏结构补齐（plotCount 仍按洞府层数限用可播槽数）
+        if (out.cave && Array.isArray(out.cave.plots)) while (out.cave.plots.length < 8) out.cave.plots.push(null);
       },
     ];
     // 基础：fresh 模板 + 展开合并

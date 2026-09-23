@@ -135,7 +135,8 @@ const SectSys = {
     if (p.sect) { UI.toast('你已拜入宗门，不可再改投他门'); return; }
     if (p.realmIdx < 1) { UI.toast('须至筑基期方可拜入宗门'); return; }
     const sect = GameData.SECTS.find(s => s.id === sectId);
-    p.sect = { id: sectId, contrib: 0, faction: null, rank: 'outer', tasks: [this.newTask(p), this.newTask(p), this.newTask(p)] };
+    // v38（E286）：删除死字段 rank:'outer'——职位全由 peakContrib 推导（SectSys.rank），该字段从不被读
+    p.sect = { id: sectId, contrib: 0, faction: null, tasks: [this.newTask(p), this.newTask(p), this.newTask(p)] };
     Log.add(`你焚香沐浴，正式拜入 <b>${sect.name}</b>！${sect.bonusText}。当前职位：<b>外门弟子</b>。`, 'system');
     Game.afterAction();
   },
@@ -175,6 +176,71 @@ const SectSys = {
     if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 1, '门派差事践诺');
     Log.add(`任务完成！获得 <b>贡献 ${r.contrib}</b> 点、灵石 ${Utils.fmtNum(r.stones)}。${streakBonus ? `（勤勉有赏 · 每三桩差事贡献 +${streakBonus}）` : ''}`, 'gain');   // v33（E111）：「连勤」实为终身累计每三桩，文案对齐语义
     p.sect.tasks[taskIdx] = this.newTask(p);
+    Game.afterAction();
+  },
+  /** v38（E337）：青云剑宗【剑冢演武】——每旬一次与剑傀免费对练：当日前两战开局战意 +10、必杀熟练 +2 */
+  qingyunDrill() {
+    const p = Game.player;
+    if (!p.sect || p.sect.id !== 'qingyun') { UI.toast('此乃青云剑宗弟子的机缘'); return; }
+    const xun = Math.floor((p.day || 0) / 10);
+    if ((p.flags || {})._drillXun === xun) { UI.toast('本旬已演武过——剑冢剑傀也要歇息'); return; }
+    p.flags = p.flags || {};
+    p.flags._drillXun = xun;
+    p._drillBuffDay = Math.floor(p.day || 0) + 1;
+    p._drillN = 0;
+    Time.add(1);
+    if (p.dead) return;
+    if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 6);
+    Log.add('【剑冢演武】你于剑冢之中与千年剑傀拆了三百招——招式熟极而流，明日出剑必有如神助（当日前两战：开局战意 +10、必杀熟练精进）。', 'gain');
+    Game.afterAction();
+  },
+  /** v38（E344）：亲传弟子·代行差事——指派门下弟子代行本桩：即刻了结，赏格七折、耗时两日 */
+  async delegate(taskIdx) {
+    const p = Game.player;
+    if (!p.sect) return;
+    const rk = this.rank(p);
+    if (!rk || (rk.id !== 'core' && rk.id !== 'elder')) { UI.toast('亲传弟子方有差事代行之权'); return; }
+    const t = p.sect.tasks[taskIdx];
+    if (!t || t.danger) { UI.toast('生死状大事，须亲身历险'); return; }
+    const today = Math.floor(p.day || 0);
+    if (p._claimDay !== today) { p._claimDay = today; p._claimCount = 0; }
+    if ((p._claimCount || 0) >= this.CLAIM_DAILY) { UI.toast(`今日差事赏格已领满（${this.CLAIM_DAILY} 桩）`); return; }
+    const ok = await UI.popup({
+      title: '代行差事',
+      html: `指派门下弟子代行本桩「${t.name}」——即刻了结，然<b>赏格七折、耗时两日</b>。<br><span class="tip-line">· 当了师父，自有人跑腿；但门中功过簿记得分明。</span>`,
+      options: [{ text: '遣弟子代行', value: true, primary: true }, { text: '亲身去办', value: false }],
+    });
+    if (!ok) return;
+    p._claimCount = (p._claimCount || 0) + 1;
+    const r = this.rewards(p, t);
+    const contrib = Math.round(r.contrib * 0.7);
+    const stones = Math.round(r.stones * 0.7);
+    p.sect.contrib += contrib;
+    p.sect.questsDone = (p.sect.questsDone || 0) + 1;
+    Bag.addStones(stones);
+    Time.add(2);
+    if (p.dead) return;
+    Log.add(`【代行】门中弟子替你办妥了「${t.name}」——贡献 +${contrib}、灵石 ${Utils.fmtNum(stones)}（七折赏格，耗时两日）。`, 'gain');
+    p.sect.tasks[taskIdx] = this.newTask(p);
+    Game.afterAction();
+  },
+  /** v38（E344）：长老·季议——每季一票，定全宗一季之方向（自己受益的宗门 buff） */
+  COUNCILS: [
+    { id: 'war',   name: '整军经武', desc: '战斗获胜修为 +5%（一季）' },
+    { id: 'trade', name: '通商惠工', desc: '坊市再享九七折（一季）' },
+    { id: 'cult',  name: '勤修不辍', desc: '修炼效率 +3%（一季）' },
+  ],
+  councilKey(p) { return `${Math.floor((p.day || 0) / 365)}-${typeof Art !== 'undefined' && Art.seasonOf ? Art.seasonOf(p) : 0}`; },
+  council(p) { return (p.sect && p.sect.council && p.sect.council.key === this.councilKey(p)) ? p.sect.council.choice : null; },
+  async councilVote(choice) {
+    const p = Game.player;
+    if (!p.sect) return;
+    const rk = this.rank(p);
+    if (!rk || rk.id !== 'elder') { UI.toast('长老家方有一票之权'); return; }
+    const c = this.COUNCILS.find(x => x.id === choice);
+    if (!c) return;
+    p.sect.council = { key: this.councilKey(p), choice };
+    Log.add(`【季议】你以长老之位投下关键一票——本季宗门施行<b>「${c.name}」</b>：${c.desc}。`, 'system');
     Game.afterAction();
   },
   /** 高危生死状：接状即战，敌对派系借刀杀人 */

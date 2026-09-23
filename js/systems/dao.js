@@ -32,6 +32,12 @@ const DaoSys = {
       Ambience.sfx('breakthrough');
       Log.add(`你于道途中再进一步——${def.name}晋入 <b>第${CN[after - 1]}重 · ${t.name}</b>！${t.desc}`, 'realm');
     }
+    // v38（E300）：道途分岔——3/6 重晋阶而未择脉者，置 pendingDaoPath 由 afterAction 收尾
+    // 统一弹「道途分岔」二选一（不可回改；挂机/闭关因弹窗挂起而自动等待，机缘不丢）
+    if ((after === 3 || after === 6) && !silent && !(p.daoPaths && p.daoPaths[after])) {
+      p.pendingDaoPath = after;
+      Log.add('道途在此裂作两脉——机缘稍纵即逝，须亲择其一！', 'system');
+    }
   },
   /** v16 道境信息：{ def, lv 已入重数, exp 当前经验, cur 当前重, next 下一重, nextNeed 还需经验 } */
   tierInfo(p) {
@@ -71,7 +77,99 @@ const DaoSys = {
     if (p.dao === 'pill') { b.atkPct -= 15; }
     if (p.dao === 'body') { b.hpPct += 100; b.defPct += 50; }
     if (p.dao === 'body' && DaoSys.tierLevel(p) >= 2) b.hpPct += 10;   // v10 般若六境·炼脏境
+    // v38（E300）：道途双脉属性面——体修 3 重 B 脉「血牛盘根」
+    if (p.dao === 'body' && this.hasPath(p, 3, 'xueNiu')) b.hpPct += 15;
     return b;
+  },
+  /* ========== v38（E300）：道途双脉 ==========
+   * 3/6 重晋阶各一次二选一，落定不可回改（转修清空）。消费端一律走 hasPath 单源判定，
+   * 禁止散读 p.daoPaths ——分岔的 strength 等价、玩法分化由 balance-sim 矩阵看门 */
+  pathDef(p, tier) {
+    if (!p || !p.dao || !p.daoPaths) return null;
+    const side = p.daoPaths[tier];
+    if (!side) return null;
+    return ((GameData.DAO_PATHS[p.dao] || {})[tier] || {})[side] || null;
+  },
+  hasPath(p, tier, key) {
+    const d = this.pathDef(p, tier);
+    return !!d && d.key === key;
+  },
+  /** 道途分岔弹窗（afterAction 收尾钩子触发；挂机/闭关循环因 UI._popupResolve 存在而自动挂起等待） */
+  async openPathModal(tier) {
+    const p = Game.player;
+    if (!p || !p.dao) return;
+    const pair = (GameData.DAO_PATHS[p.dao] || {})[tier];
+    if (!pair) return;
+    const d = GameData.DAO_CLASSES.find(x => x.id === p.dao);
+    const picked = await UI.popup({
+      title: `道途分岔 · 第${tier}重`,
+      html: `道境晋入第 ${tier} 重，脚下大道裂作两途——<b>此择终身不悔</b>（转修方可更张）。<br><span class="neg">请慎思：两条脉络强度相当，而道途迥异。</span>`,
+      options: [
+        { text: `${pair.A.name} —— ${pair.A.desc}`, value: 'A', primary: true },
+        { text: `${pair.B.name} —— ${pair.B.desc}`, value: 'B' },
+      ],
+    });
+    if (!picked) {   // 关闭弹窗=暂不抉择，机缘保留（下次行动再问）
+      p.pendingDaoPath = tier;
+      return;
+    }
+    p.daoPaths = p.daoPaths || {};
+    p.daoPaths[tier] = picked;
+    const chosen = pair[picked];
+    Log.add(`【道途分岔】你于第 ${tier} 重道境择定了 <b>${d.name} · ${chosen.name}</b>——${chosen.desc}`, 'realm');
+    UI.announce(`✦ 道途分岔 · ${chosen.name} ✦`, 'gold');
+    Story.chron(`道途分岔：择【${chosen.name}】`);
+    if (typeof Achieve !== 'undefined' && Achieve.check) Achieve.check();
+    Game.afterAction();
+  },
+  /** 转修他道：跌落一个大境界、清空当前境界修为、清除原大道
+   *  v38（E320）：转修惩罚软化——首次转修折寿 5→3 年、原道道境经验保留半数、旧道秘传不再作废
+   *  （转回复用，跨道仍不可用）；第二次起恢复全额惩罚。道脉分岔随转道清空（E300） */
+  async changeDao() {
+    const p = Game.player;
+    if (!p || !p.dao) return;
+    if (p.realmIdx < 1) { UI.toast('你尚未筑基，大道未成'); return; }
+    const first = !(p.daoChanged);   // 首次转修享软化
+    const ok = await UI.popup({
+      title: '转修他道',
+      html: `转道逆天，代价${first ? '首犯从宽' : '惨重'}：<br>· <span class="neg">跌落一个大境界</span>（${GameData.REALM_NAMES[p.realmIdx]} → ${GameData.REALM_NAMES[p.realmIdx - 1]}）<br>· <span class="neg">当前境界修为尽失</span><br>· ${first ? '原大道道境经验<b>保留半数</b>（首犯从宽）' : '<span class="neg">原大道的道境经验尽数散去</span>'}<br>· ${first ? '旧道秘传<b>不再作废</b>（转回可复用，跨道不可用）' : '原有大道加成尽数消散，旧道秘传随之崩解'}<br>· 道脉分岔随道基一同散去<br><br>确定弃道重修吗？`,
+      options: [{ text: '弃道重修', value: true }, { text: '罢了', value: false }],
+    });
+    if (!ok) return;
+    // v27 修瑕：转道清空原道 daoExp——此前重拾原道立即继承全部道境层数，「弃道重修」形同虚设
+    // v38（E320）：首次转修保留半数（软化）；再犯恢复全额
+    if (p.daoExp) {
+      if (first) p.daoExp[p.dao] = Math.floor((p.daoExp[p.dao] || 0) / 2);
+      else delete p.daoExp[p.dao];
+    }
+    // v30 修瑕：转道弃旧道秘传功法——原只拦「新学」，已修的旧道专属功法照吃加成，弃道不弃利
+    // v38（E320）：首次转修不再作废（转回复用、跨道不可用——canLearnGongfa 双闸仍拦新学）
+    if (!first && p.gongfa) {
+      const dropped = Object.keys(p.gongfa).filter(id => (GameData.ITEMS[id] || {}).daoLimit === p.dao);
+      for (const id of dropped) delete p.gongfa[id];
+      // 背包中未修习的旧道秘传同样作废（道途不合，留在袋中也是废纸）
+      for (const id of Object.keys(p.bag || {})) {
+        const def = GameData.ITEMS[id];
+        if (def && def.type === 'gongfa' && def.daoLimit === p.dao) delete p.bag[id];
+      }
+      if (dropped.length) Log.add(`旧道秘传随道基一同崩解：${dropped.map(id => (GameData.ITEMS[id] || {}).name || id).join('、')} 尽数散去。`, 'warn');
+    }
+    p.realmIdx -= 1; p.layer = 0; p.exp = 0; p.insight = 0; p.insightSrc = []; p.dao = null;   // v37（E264）：感悟清零时来源 FIFO 池同步清空（双池一致）
+    p.daoPaths = {}; p.pendingDaoPath = null;   // v38（E300）：道脉随道基散去
+    // v29 修瑕：转道名实相符——溢出折存/连败保底一并清去；自废道基折寿（v38 E320：首次 5→3 年）
+    p.expOverflow = 0; p.breakStreak = 0;
+    p.daoChanged = (p.daoChanged || 0) + 1;
+    Time.cutLife(p, first ? 3 : 5, first ? '初次逆转道基' : '自废道基，逆转阴阳');
+    const st = Stat.compute(p);
+    p.hp = Math.min(p.hp, st.maxHp); p.mp = Math.min(p.mp, st.maxMp);
+    Log.add(`你${first ? '初次' : ''}逆转道基！一声长啸中境界跌落、修为尽散——自此之后，前路重新来过。${first ? '（初犯从宽：折寿三年、旧道道境留半、秘传保留）' : ''}`, 'warn');
+    UI.toast('大道已弃，前尘尽消');
+    Game.afterAction();
+    // 转道后重新叩问大道（v29 修瑕：跌落练气者不弹——「筑基解锁大道」门槛不可绕过）
+    if (p.realmIdx >= 1) {
+      await Utils.sleep(400);
+      this.openModal();
+    }
   },
   /** 大道选择弹窗 */
   openModal() {
@@ -100,55 +198,10 @@ const DaoSys = {
     UI.toast(`大道既定：${d.name}`);
     Game.afterAction();
   },
-  /** 转修他道：跌落一个大境界、清空当前境界修为、清除原大道 */
-  async changeDao() {
-    const p = Game.player;
-    if (!p || !p.dao) return;
-    if (p.realmIdx < 1) { UI.toast('你尚未筑基，大道未成'); return; }
-    const ok = await UI.popup({
-      title: '转修他道',
-      html: `转道逆天，代价惨重：<br>· <span class="neg">跌落一个大境界</span>（${GameData.REALM_NAMES[p.realmIdx]} → ${GameData.REALM_NAMES[p.realmIdx - 1]}）<br>· <span class="neg">当前境界修为尽失</span><br>· <span class="neg">原大道的道境经验尽数散去</span><br>· 原有大道加成尽数消散，须重新叩问大道<br><br>确定弃道重修吗？`,
-      options: [{ text: '弃道重修', value: true }, { text: '罢了', value: false }],
-    });
-    if (!ok) return;
-    // v27 修瑕：转道清空原道 daoExp——此前重拾原道立即继承全部道境层数，「弃道重修」形同虚设
-    if (p.daoExp) delete p.daoExp[p.dao];
-    // v30 修瑕：转道弃旧道秘传功法——原只拦「新学」，已修的旧道专属功法照吃加成，弃道不弃利
-    if (p.gongfa) {
-      const dropped = Object.keys(p.gongfa).filter(id => (GameData.ITEMS[id] || {}).daoLimit === p.dao);
-      for (const id of dropped) delete p.gongfa[id];
-      // 背包中未修习的旧道秘传同样作废（道途不合，留在袋中也是废纸）
-      for (const id of Object.keys(p.bag || {})) {
-        const def = GameData.ITEMS[id];
-        if (def && def.type === 'gongfa' && def.daoLimit === p.dao) delete p.bag[id];
-      }
-      if (dropped.length) Log.add(`旧道秘传随道基一同崩解：${dropped.map(id => (GameData.ITEMS[id] || {}).name || id).join('、')} 尽数散去。`, 'warn');
-    }
-    p.realmIdx -= 1; p.layer = 0; p.exp = 0; p.insight = 0; p.insightSrc = []; p.dao = null;   // v37（E264）：感悟清零时来源 FIFO 池同步清空（双池一致）
-    // v29 修瑕：转道名实相符——溢出折存/连败保底一并清去；自废道基折寿五年
-    p.expOverflow = 0; p.breakStreak = 0;
-    Time.cutLife(p, 5, '自废道基，逆转阴阳');
-    const st = Stat.compute(p);
-    p.hp = Math.min(p.hp, st.maxHp); p.mp = Math.min(p.mp, st.maxMp);
-    Log.add('你自废道基，逆天转道！一声长啸中境界跌落、修为尽散——自此之后，前路重新来过。', 'warn');
-    UI.toast('大道已弃，前尘尽消');
-    Game.afterAction();
-    // 转道后重新叩问大道（v29 修瑕：跌落练气者不弹——「筑基解锁大道」门槛不可绕过）
-    if (p.realmIdx >= 1) {
-      await Utils.sleep(400);
-      this.openModal();
-    }
-  },
-  /** 体修不可修习玄级及以上法诀；v13 大道专属功法道途不合者不可修
-   *  v34（D1）：silent 参数——拍卖行掷拍品时也需此判定（静默过滤），原一律弹 toast 会在渲染期刷屏 */
+  /** v38（E316）：体修法诀解禁——原「体修不可修玄级及以上法诀」改为「可修，唯法诀伤害 ×0.7」
+   *  （battle.js skill 分支消费）；构筑自由度放宽，体修不再被排除在法诀流派之外。
+   *  v13 大道专属功法道途不合者不可修；v34（D1）silent 参数供拍卖行静默过滤 */
   canLearnGongfa(p, def, silent = false) {
-    if (p.dao === 'body' && def.grade >= 2) {
-      if (!silent) {
-        UI.toast('体修之躯，难悟玄级及以上法诀');
-        Log.add('你运转体修功法，只觉神识滞涩——高阶法诀与肉身之道相悖，无从修习。', 'warn');
-      }
-      return false;
-    }
     // v32 修瑕（E43）：分支序修正——原「道途不合」先于「须先择定大道」，未择道者永远撞上前者
     if (def.daoLimit && !p.dao) {
       if (!silent) {

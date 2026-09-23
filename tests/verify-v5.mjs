@@ -176,6 +176,7 @@ try {
   const tribVisible = await page.$eval('#tribulation-modal', el => !el.className.includes('hidden')).catch(() => false);
   tribVisible ? pass('B1 天劫弹窗弹出') : fail('B1 天劫弹窗', '未弹出');
   // v20 加固：覆盖层竞态下坐标点击会抛 not clickable——DOM 直点兜底
+  await walkTribStages(page);
   await page.evaluate(() => { const b = document.querySelector('[data-action="trib-strategy"][data-strategy="hide"]'); if (b) b.click(); });
   // 演出在结算阶段出现：轮询捕捉
   let showSeen = null;
@@ -351,3 +352,16 @@ const failCount = results.filter(r => r[0] === 'FAIL').length;
 console.log(`共 ${results.length} 项，失败 ${failCount} 项`);
 console.log(`控制台错误 ${consoleErrors.length} 条: ` + consoleErrors.slice(0, 5).join(' || '));
 process.exit(failCount > 0 || consoleErrors.length > 0 ? 1 : 0);
+/** v38（E304）兼容：三段劫势视图先行——点击 trib-strategy 前先以「避」连走三重劫象 */
+async function walkTribStages(page) {
+  await page.evaluate(async () => {
+    for (let i = 0; i < 3; i++) {
+      const S = (typeof Tribulation !== 'undefined') ? Tribulation.state : null;
+      if (!S || (S.stageIdx || 0) >= 3) break;
+      const btn = document.querySelector('[data-action="trib-stage"][data-stage="bi"]');
+      if (btn) btn.click();
+      await new Promise(r => setTimeout(r, 120));
+    }
+  });
+  await sleep(250);
+}

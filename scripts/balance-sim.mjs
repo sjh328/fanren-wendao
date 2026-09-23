@@ -167,6 +167,16 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
         { key: '探索', exp: 22 * eco / 2, stones: 15 * se / 2, gated: true, note: '同境战胜 22×eco / 每次探索 2 日' },
         { key: '秘境一轮', exp: dungeonExp, stones: -2 * se / 9, gated: true, note: '9 层×1 日；战斗节点期望 8×权重占比+boss，平价 22×eco（精英/深度跃迁未计，保守）；门票 2×stoneEco，宝箱灵石未计' },
         { key: '塔深爬', exp: 2 * cult / 3, stones: 100 * se, gated: true, note: 'v37（E273）：免费 1 次/日、整场计 3 日（TowerSys.enter Time.add(3)）、层奖修为日额度 2×修炼日均（EXP_ALLOW_MUL）——一场深爬修为封顶 2×cult、吞吐 1 场/3 日；层奖灵石 300×stoneEco/场同摊' },
+        { key: '化身·闭关', exp: (() => {
+            // v38（E302/E327）：化身代主闭关——主身日额度 × 并行效率（0.5→0.75 硬锚）；GATE cult 带
+            const av = (typeof AvatarSys !== 'undefined' && AvatarSys.eff) ? AvatarSys.eff(p) : 0.5;
+            return base / 3 * av;
+          })(), stones: 0, gated: true, note: 'v38（E302）：AvatarSys.daily cult 任务 = baseGain×(1+cultPct)/3 × eff（1级 0.5 → 9级 0.75 封顶）；离线同口径（E327）' },
+        { key: '仙庭差遣', exp: 0, stones: (() => {
+            // v38（E309）：日三桩合计仙功 60+pin×10（仙功非灵石不入灵石列）+ 30% 桩率掉仙材——
+            // 灵石面 0；修为面 0。行存在即实现面被盘点（pin 收益走仙功/仙材，balance-sim 现轴外记账）
+            return 0;
+          })(), gated: false, note: 'v38（E309）：巡察/上贡/参拜日三桩——产出仙功（60+pin×10/桩）与仙材，皆不入修为/灵石门禁轴；仙元面硬锚 ≤400/桩（XianSys.claimTask 在案）' },
       ],
     });
   }

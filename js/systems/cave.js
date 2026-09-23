@@ -18,10 +18,12 @@ const CaveSys = {
   ],
   BUILD_KEYS: ['beast', 'train', 'lib', 'forge', 'spring', 'treasury'],
   buildLv(p, id) { return (p.cave && p.cave.builds && p.cave.builds[id]) || 0; },
+  /** v38（E337）：磐岩谷【营造匠心】——营造/洞天/扩建费用 85 折 */
+  costMul(p) { return (p.sect && p.sect.id === 'panyan') ? 0.85 : 1; },
   buildCost(p, id) {
     const lv = this.buildLv(p, id);
     // v30：曲线族统一（原 2^min(4,r) 封顶 r4，与同族 2.2^r 不一致；r7+ 相对贬值 >99%）
-    return { stones: Math.round(4000 * Math.pow(3, lv) * GameData.sinkCurve(p.realmIdx) / 16), ore: 4 + lv * 3 };
+    return { stones: Math.round(4000 * Math.pow(3, lv) * GameData.sinkCurve(p.realmIdx) / 16 * this.costMul(p)), ore: 4 + lv * 3 };
   },
   async upgradeBuild(id) {
     const p = Game.player;
@@ -54,7 +56,7 @@ const CaveSys = {
   DONGTIAN_NAMES: ['洞天未辟', '一重 · 灵潮洞天', '二重 · 星槎洞天', '三重 · 太虚洞天', '四重 · 大罗洞天'],
   dongtianCost(p) {
     const lv = (p.cave && p.cave.dongtian) || 0;
-    return { stones: Math.round(4000 * Math.pow(3, lv) * GameData.sinkCurve(p.realmIdx)), ore: 20 + lv * 10 };
+    return { stones: Math.round(4000 * Math.pow(3, lv) * GameData.sinkCurve(p.realmIdx) * this.costMul(p)), ore: 20 + lv * 10 };
   },
   /** v30：洞府卡内「营造洞天」区块 */
   dongtianRow(p) {
@@ -137,23 +139,50 @@ const CaveSys = {
     // v32 修瑕（E62）：回环 afterAction 拆除——visitorEvent 由 dailySettle 调用，而 dailySettle
     // 在 afterAction 尾部，此处再调 afterAction 曾使整条收尾链（渲染/存档/成就/日更）双跑一遍
   },
+  /** v38（E338）：藏宝阁——每月凝一缕「寻宝灵机」（灵机入身，下次探索必遇宝箱且收获更丰） */
+  treasuryDaily(p, auto = false) {
+    if (!p.cave || !p.cave.builds || !p.cave.builds.treasury) return;
+    const mk = Math.floor((p.day || 0) / 30);
+    if ((p.cave._tmapMonth || -1) >= mk) return;
+    p.cave._tmapMonth = mk;
+    p.flags = p.flags || {};
+    p.flags.treasureHunt = (p.flags.treasureHunt || 0) + 1;
+    if (!auto) Log.add('【藏宝阁】阁中灵机一月一凝——一缕<b>寻宝灵机</b>入你眉宇（下次游历必遇宝箱，收获更丰）。', 'gain');
+  },
+  /** v38（E338）：演武场——练武之地每日一演：当日本日首战开局连击 +1、道境经验微增 */
+  async drillTrain() {
+    const p = Game.player;
+    if (!this.buildLv(p, 'train')) { UI.toast('先在洞府营造一座演武场'); return; }
+    const today = Math.floor(p.day || 0);
+    if (p._trainDay === today) { UI.toast('今日已演武过——筋骨也要歇息'); return; }
+    p._trainDay = today;
+    Time.add(1);
+    if (p.dead) return;
+    if (typeof DaoSys !== 'undefined') DaoSys.gain(p, 5);
+    Log.add('【演武】你在演武场与假人拆了半日招——拳脚生风，明日出手必有先手之利（本日首战：开局连击 +1）。', 'gain');
+    Game.afterAction();
+  },
   /** v20 聚灵加速：花灵石点燃聚灵阵，点燃后 3 日内修炼效率 ×1.5 */
-  /** v24 聚灵加速定价单源化：随境界走 stoneEco 曲线（解除 v20 的 4 境封顶，高境灵石有了日常去路） */
+  /** v24 聚灵加速定价单源化：随境界走 stoneEco 曲线（解除 v20 的 4 境封顶，高境灵石有了日常去路）
+   *  v38（E314）：洞天一重「灵潮」——聚灵窗口 3→4 日 */
+  RUSH_WINDOW() { const p = Game.player; return (p && p.cave && p.cave.dongtian >= 1) ? 4 : 3; },
   rushCost(p) { return Math.round(120 * GameData.stoneEco(p ? p.realmIdx : 0)); },
   async spiritRush() {
     const p = Game.player;
     if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
     const today = Math.floor(p.day || 0);
     // v36（E218）：3 日窗口口径——窗口未激活才可再点，防窗口内重复扣款顺延覆写 rushDay
-    const inWindow = p.rushDay != null && today - p.rushDay < 3;
-    if (inWindow) { UI.toast(`聚灵阵灵机未散（余 ${3 - (today - p.rushDay)} 日），无需再燃`); return; }
+    // v38（E314）：洞天一重「灵潮」——窗口延长至 4 日
+    const WIN = this.RUSH_WINDOW();
+    const inWindow = p.rushDay != null && today - p.rushDay < WIN;
+    if (inWindow) { UI.toast(`聚灵阵灵机未散（余 ${WIN - (today - p.rushDay)} 日），无需再燃`); return; }
     const cost = this.rushCost(p);
     // v36（E218）：净收益按场景实算——修炼增量 0.5×baseGain（窗口恰覆盖一轮）、闭关增量 8×baseGain（开局一次结算被窗口整段 ×1.5）
     const nextRound = Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 0.5));
     const secludeBonus = Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 8));
     const ok = await UI.popup({
       title: '聚灵加速',
-      html: `燃烧灵石为聚灵阵供能——<b>点燃后 3 日内修炼效率 ×1.5</b>（下一轮修炼约 +${nextRound} 修为；若即将闭关，整轮闭关约 +${secludeBonus} 修为）。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 灵机未散（3 日内）不可再燃；闭关与自动修炼同样受益。诚实账：挂机流净赚仅约 +${nextRound} 修为对 ${Utils.fmtNum(cost)} 灵石——聚灵的正确定位是闭关前点燃。</span>`,
+      html: `燃烧灵石为聚灵阵供能——<b>点燃后 ${WIN} 日内修炼效率 ×1.5</b>（下一轮修炼约 +${nextRound} 修为；若即将闭关，整轮闭关约 +${secludeBonus} 修为）。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 灵机未散（${WIN} 日内）不可再燃；闭关与自动修炼同样受益。诚实账：挂机流净赚仅约 +${nextRound} 修为对 ${Utils.fmtNum(cost)} 灵石——聚灵的正确定位是闭关前点燃。</span>`,
       options: [{ text: '点燃聚灵阵', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
@@ -163,17 +192,112 @@ const CaveSys = {
     Story.chron('点燃聚灵阵（日修加速）');
     Game.afterAction();
   },
-  /** v20 灵泉：每日首次入洞府自动涌出灵石（日界防重）；v27 auto=离线回放（只入账不逐日刷屏） */
+  /** v20 灵泉：每日首次入洞府自动涌出灵石（日界防重）；v27 auto=离线回放（只入账不逐日刷屏）
+   *  v38（E302）：化身「驻守护府」——灵泉产出 ×1.2 */
   springDaily(p, auto = false) {
     if (!p.cave || !p.cave.builds || !p.cave.builds.spring) return;
     const today = Math.floor(p.day || 0);
     if (p.cave._springDay === today) return;
     p.cave._springDay = today;
-    const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(6, p.realmIdx)));   // v29：封顶 4→6，后期灵泉不再是摆设
+    const guardOn = p.avatar && p.avatar.on && (p.avatar.task === 'guard' || (p.avatar.lv >= 9 && p.avatar.task2 === 'guard'));
+    const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(6, p.realmIdx)) * (guardOn ? 1.2 : 1));   // v29：封顶 4→6，后期灵泉不再是摆设；v38：驻守 ×1.2
     Bag.addStones(gain);
     if (auto && typeof Game !== 'undefined' && Game._offlineAgg) Game._offlineAgg.spring = (Game._offlineAgg.spring || 0) + gain;   // v34（E1）：灵泉离线入账并入日报——原只报「照常涌出」不给数额，玩家对不上账
-    if (!auto) Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。`, 'gain');
+    if (!auto) Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。${guardOn ? '（化身驻守，泉眼愈旺 ×1.2）' : ''}`, 'gain');
   },
+
+  /* ========== v38（E305）：洞府阵法与夜袭守御 ========== */
+  /** 阵眼内某旗的 Effective 面数——阵道 6 重 B 脉「地载万物」×1.3、周天阁「阵法传习」×1.25 */
+  flagCount(p, itemId) {
+    return ((p.cave && p.cave.formation) || []).filter(x => x === itemId).length;
+  },
+  flagPower(p, itemId) {
+    let n = this.flagCount(p, itemId);
+    if (!n) return 0;
+    if (p.dao === 'array' && typeof DaoSys !== 'undefined' && DaoSys.hasPath(p, 6, 'diZai')) n *= 1.3;
+    if (p.sect && p.sect.id === 'zhoutian') n *= 1.25;   // v38（E337）：周天阁「阵法传习」
+    return n;
+  },
+  /** 布阵 / 收旗（同一动作：格内有旗则取下，空格则放入袋中第一面旗） */
+  toggleFlag(idx) {
+    const p = Game.player;
+    if (!p.cave) return;
+    p.cave.formation = p.cave.formation || [null, null, null, null, null, null, null, null, null];
+    const cur = p.cave.formation[idx];
+    if (cur) {
+      p.cave.formation[idx] = null;
+      Bag.addItem(cur, 1);
+      Log.add(`你取下阵眼上的【${GameData.ITEMS[cur].name}】，阵光微黯。`, 'info');
+    } else {
+      const FLAG_ORDER = ['b_juling', 'b_yudi', 'b_cangfeng', 'b_lianxi'];
+      const have = FLAG_ORDER.find(id => Bag.count(id) > 0);
+      if (!have) { UI.toast('囊中并无阵旗——炼器坊可锻四方阵旗'); return; }
+      Bag.removeItem(have, 1);
+      p.cave.formation[idx] = have;
+      Log.add(`你将【${GameData.ITEMS[have].name}】插上第 ${idx + 1} 道阵眼——旗面灵光流转，阵成！`, 'gain');
+    }
+    Game.afterAction();
+  },
+  /** 夜袭判定（dailySettle 钩子）：宿敌 ≥2 者夜夜有险——藏锋旗每面 -15%（下限 0.5%） */
+  nightRaidCheck(p, auto = false) {
+    if (p.realmIdx < 1 || p.dead) return;
+    const grudges = (typeof NpcSys !== 'undefined' && NpcSys.grudgeCount) ? NpcSys.grudgeCount(p) : 0;
+    if (grudges < 2) return;
+    if (p.cave && p.cave._raidDay === Math.floor(p.day || 0)) return;   // 每日至多一袭
+    const chance = Math.max(0.5, 3 * (1 - 0.15 * this.flagCount(p, 'b_cangfeng')));
+    if (!Utils.chance(chance)) return;
+    p.cave = p.cave || {};
+    p.cave._raidDay = Math.floor(p.day || 0);
+    const ids = Object.keys(p.npcs || {}).filter(id => p.npcs[id] && p.npcs[id].grudge && p.npcs[id].alive);
+    const npcId = ids[Utils.rand(0, ids.length - 1)];
+    if (!npcId) return;
+    if (auto) { this.resolveNightRaid(p, npcId, true); return; }
+    // 在线：置挂起旗标，afterAction 收尾（无战斗无剧情弹窗时）结算——节庆同款时序防弹窗相撞
+    p.pendingNightRaid = npcId;
+  },
+  /** 夜袭结算：化身驻守可先挡一袭；守御=御敌旗+驻守+境差；胜反夺灵石、败损一茬庄稼 */
+  resolveNightRaid(p, npcId, auto = false) {
+    const s = p.npcs[npcId];
+    const d = (typeof NpcSys !== 'undefined' && NpcSys.def) ? NpcSys.def(npcId) : null;
+    if (!s || !d) return;
+    // 化身驻守：先替主身挡下（化身神识受挫，三日不可换差）
+    const guardOn = p.avatar && p.avatar.on && (p.avatar.task === 'guard' || (p.avatar.lv >= 9 && p.avatar.task2 === 'guard'));
+    if (guardOn && Utils.chance(45)) {
+      p.avatar.cdDay = Math.floor(p.day || 0) + AvatarSys.SWITCH_CD;
+      Log.add(`【夜袭】<b>${d.name}</b> 趁夜来犯——化身凝形拦在府门：「此地有我。」一场恶斗后贼人遁去（化身神识受挫，${AvatarSys.SWITCH_CD} 日不可换差）。`, 'warn');
+      return;
+    }
+    const myR = p.realmIdx * 4 + p.layer;
+    const hisR = (s.realmIdx || 0) * 4 + (s.layer || 0);
+    const yudi = this.flagPower(p, 'b_yudi');
+    const odds = Utils.clamp(Math.round(52 + yudi * 8 + (guardOn ? 8 : 0) + (myR - hisR) * 6), 15, 92);
+    if (Utils.chance(odds)) {
+      const stones = Math.round(40 * GameData.stoneEco(Math.min(6, p.realmIdx)));
+      Bag.addStones(stones);
+      s.rel = Utils.clamp((s.rel || 0) + 6, -100, 100);
+      const cleared = Utils.chance(30);
+      if (cleared) s.grudge = false;
+      Log.add(`【夜袭】<b>${d.name}</b> 趁夜来犯——阵旗灵光骤起，你早有防备！一番缠斗将其击退，反夺其随身灵石 <b>${Utils.fmtNum(stones)}</b>（交情 +6${cleared ? '，恩怨就此两清' : ''}；守御胜算 ${odds}%）。`, 'gain');
+      if (typeof Story !== 'undefined' && Story.chron) Story.chron(`${d.name} 夜袭洞府，被你击退`);
+    } else {
+      // 败：损失一茬将熟的庄稼 + 灵石小罚
+      const plots = this.plotsOf(p);
+      const ripe = plots.map((pl, i) => (pl && pl.seed) ? i : -1).filter(i => i >= 0);
+      let lossTxt = '田中并无作物，贼人空手掳去些许灵石';
+      if (ripe.length) {
+        const idx = ripe[Utils.rand(0, ripe.length - 1)];
+        const cropName = GameData.ITEMS[plots[idx].crop] ? GameData.ITEMS[plots[idx].crop].name : '作物';
+        plots[idx] = null;
+        lossTxt = `第 ${idx + 1} 田的【${cropName}】被连根掳去`;
+      }
+      const stTot = (p.stones ? (p.stones.low || 0) + (p.stones.mid || 0) * 100 + (p.stones.high || 0) * 10000 : 0);
+      const fine = Math.round(stTot * 0.05);
+      if (fine > 0) Bag.spendStonesMax(fine);
+      Log.add(`【夜袭】<b>${d.name}</b> 趁夜来犯——阵旗被其一剑挑落，你仓促应战不敌退走！${lossTxt}${fine > 0 ? `、散失灵石 ${Utils.fmtNum(fine)}` : ''}。（守御胜算 ${odds}%——多设御敌旗、遣化身驻守可固守御）`, 'loss');
+    }
+    if (auto && typeof Game !== 'undefined' && Game._offlineAgg) Game._offlineAgg.nightRaid = (Game._offlineAgg.nightRaid || 0) + 1;
+  },
+
   /** v34（F1）一键照料 + v35（U3）照料核心抽出：全田浇水 + 全兽抚摸 + 全田除虫——
    *  一键照料（洞府页）与一键行权（今日修行卡）共用同一 helper，行为严格一致。
    *  返回 { watered, patted, cured } 供两处各自汇总。 */
@@ -247,19 +371,22 @@ const CaveSys = {
     if (typeof Ambience !== 'undefined') Ambience.sfx('plant');   // v37（E232）：农事音
     Game.afterAction();
   },
-  /** v20 接线：每日一次的虫害检查（此前为无调用方的死代码） */
+  /** v20 接线：每日一次的虫害检查（此前为无调用方的死代码）
+   *  v38（E305）：敛息旗——每面虫害几率 -1%（下限 0.5%）；阵道地载万物 ×1.3、周天阁阵法传习 ×1.25 */
   checkPest(p) {
     if (!p.cave) return;
     const today = Math.floor(p.day || 0);
     if (p.cave._pestDay === today) return;
     p.cave._pestDay = today;
+    const pestChance = Math.max(0.5, 3 - this.flagPower(p, 'b_lianxi'));
     const plots = this.plotsOf(p);
     for (let i = 0; i < plots.length; i++) {
       const plot = plots[i];
       if (!plot || plot.pested) continue;
-      if (Utils.chance(3)) {
+      if (Utils.chance(pestChance)) {
         plot.pested = true;
-        Log.add(`第 ${i + 1} 田的【${GameData.ITEMS[plot.crop].name}】遭了虫害——必须除虫，否则收成将大减！`, 'warn');
+        const cropName = (GameData.ITEMS[plot.crop] || {}).name || '作物';
+        Log.add(`第 ${i + 1} 田的【${cropName}】遭了虫害——必须除虫，否则收成将大减！`, 'warn');
       }
     }
   },
@@ -273,18 +400,20 @@ const CaveSys = {
     Log.add(`你以灵药除去了第 ${idx + 1} 田的虫害，作物重焕生机。`, 'gain');
     Game.afterAction();
   },
-  freshCave() { return { lv: 1, plots: [null, null, null, null] }; },
+  freshCave() { return { lv: 1, plots: [null, null, null, null, null, null, null, null], formation: [null, null, null, null, null, null, null, null, null] }; },
   unlockText: '洞府 · 筑基期解锁',
   unlocked(p) { return p.realmIdx >= 1; },
   plotsOf(p) {
     if (!p.cave) p.cave = this.freshCave();
+    // v38（E288）防御：旧种子档/异构档 cave 无 plots 时回退空阵列——checkPest/照料不再被 .length 打断
+    if (!Array.isArray(p.cave.plots)) p.cave.plots = [null, null, null, null, null, null, null, null];
     return p.cave.plots;
   },
   plotCount(p) { return Math.min(8, 4 + (p.cave ? p.cave.lv - 1 : 0)); },
   upCost(p) {
     const lv = p.cave ? p.cave.lv : 1;
     return {
-      stones: Math.round(2000 * Math.pow(3, lv - 1) * GameData.sinkCurve(p.realmIdx) / 2.2),   // v30：曲线族统一
+      stones: Math.round(2000 * Math.pow(3, lv - 1) * GameData.sinkCurve(p.realmIdx) / 2.2 * this.costMul(p)),   // v30：曲线族统一；v38（E337）：磐岩谷匠心 85 折
       mats: lv === 1 ? null : { m_xuantie: 2 + lv, m_lingzhi: lv >= 3 ? 2 : 1 },
     };
   },
@@ -325,7 +454,8 @@ const CaveSys = {
     const p = Game.player;
     const plots = this.plotsOf(p);
     if (idx >= this.plotCount(p)) { UI.toast('此田尚未开垦（扩建洞府可增田）'); return; }
-    if (plots[idx]) { UI.toast('此田已有作物'); return; }
+    // v38（E311）：{lastCrop,streak} 土地记忆对象不算作物——仅 lastCrop/streak 字段的槽位可再播种
+    if (plots[idx] && plots[idx].seed) { UI.toast('此田已有作物'); return; }
     const seeds = Object.keys(p.bag).filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'seed');
     if (!seeds.length) { UI.toast('囊中没有种子——坊市杂货区有售'); return; }
     const opts = seeds.map(id => ({ text: `${GameData.ITEMS[id].name}（${GameData.ITEMS[id].days}日熟）`, value: id }));
@@ -338,12 +468,17 @@ const CaveSys = {
     if (!seedId) return;
     Bag.removeItem(seedId, 1);
     const sd = GameData.ITEMS[seedId];
-    plots[idx] = { seed: seedId, crop: sd.crop, days: sd.days, plantedDay: Math.floor(p.day) };
-    Log.add(`你在第 ${idx + 1} 田播下了【${sd.name}】，${sd.days} 日后可收。`, 'info');
+    // v38（E311）：轮作与连作——上茬同种则连作 streak+1；换种轮作则生长期 -20%（土地记忆随田不随茬）
+    const hist = plots[idx] || {};
+    const streak = (hist.lastCrop === seedId) ? (hist.streak || 0) + 1 : 1;
+    const rotDays = (hist.lastCrop && hist.lastCrop !== seedId) ? Math.max(1, Math.round(sd.days * 0.8)) : sd.days;
+    plots[idx] = { seed: seedId, crop: sd.crop, days: rotDays, plantedDay: Math.floor(p.day), lastCrop: seedId, streak };
+    Log.add(`你在第 ${idx + 1} 田播下了【${sd.name}】，${rotDays} 日后可收。${streak >= 3 ? '（此田已连作三茬——收成时有灵机变异之机）' : (rotDays < sd.days ? '（轮作得宜，生长期缩短两成）' : '')}`, 'info');
     if (typeof Ambience !== 'undefined') Ambience.sfx('plant');   // v37（E232）：农事音（死音效 plant 接线）
     Game.afterAction();
   },
-  /** 收获：进度按当前游戏日结算；过熟 20+ 日减半 */
+  /** 收获：进度按当前游戏日结算；过熟 20+ 日减半
+   *  v38（E311）：连作第 3 茬起 15% 灵机变异——收成 ×1.5 且多结一枚种子 */
   harvest(idx) {
     const p = Game.player;
     const plots = this.plotsOf(p);
@@ -356,12 +491,16 @@ const CaveSys = {
     if (over >= 20) qty = 1;
     if (plot.pested) qty = Math.max(0, qty - 1); // v18：虫害减产
     if (typeof Art !== 'undefined' && Art.seasonOf(p) === 2) qty += 1;   // v20 季秋丰收：产量 +1
-    plots[idx] = null;
+    const mutate = (plot.streak || 0) >= 3 && Utils.chance(15);
+    if (mutate) qty += 1;   // 变异 ×1.5（2→3 档）
+    const streakKeep = plot.streak || 0, lastCropKeep = plot.lastCrop || plot.seed;
+    plots[idx] = { lastCrop: lastCropKeep, streak: streakKeep };   // 土地记忆留田（下茬轮作/连作判定用）
     // v32 修瑕（E64）：qty=0 原仍 Bag.addItem(crop,0) 污染、harvests 照计数并播「收获 ×0」
     if (qty > 0) {
       Bag.addItem(plot.crop, qty);
+      if (mutate) Bag.addItem(plot.seed, 1);   // 变异之株自行结种
       p.counters.harvests = (p.counters.harvests || 0) + 1;   // v20 成就计数
-      Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}${typeof Art !== 'undefined' && Art.seasonOf(p) === 2 ? '（季秋丰收）' : ''}。`, 'gain');
+      Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】熟了——收获 ×${qty}${over >= 20 ? '（过熟日久，收成折半）' : ''}${typeof Art !== 'undefined' && Art.seasonOf(p) === 2 ? '（季秋丰收）' : ''}${mutate ? '。<b>灵机变异</b>——此株灵韵异于常种，多结一株收成并自结一枚种子！' : ''}。`, 'gain');
       if (typeof Ambience !== 'undefined') Ambience.sfx('plant');   // v37（E232）：农事音
     } else {
       Log.add(`第 ${idx + 1} 田的【${GameData.ITEMS[plot.crop].name}】颗粒无收——虫害把收成啃了个精光。`, 'warn');
@@ -374,7 +513,8 @@ const CaveSys = {
     const rows = [];
     for (let i = 0; i < n; i++) {
       const plot = plots[i];
-      if (!plot) {
+      // v38（E311）：{lastCrop, streak} 为土地记忆对象（无 seed）——渲染与空田同款，可再播种
+      if (!plot || !plot.seed) {
         rows.push(`
         <div class="shop-row plot-row">
           <div class="gf-info"><div class="gf-name">第 ${i + 1} 田 <span class="tag">空田</span></div>

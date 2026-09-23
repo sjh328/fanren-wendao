@@ -193,17 +193,18 @@ try {
     const p = Game.player;
     p.daoExp = { sword: 5000 };
     p.dao = 'sword';
+    p.daoChanged = 0;   // v38（E320）：首次转修走软化路径
     p.realmIdx = 2; p.layer = 1; p.exp = 100; p.insight = 10;
     const origPopup = UI.popup; UI.popup = async () => true;
     return DaoSys.changeDao().then(() => {
       UI.popup = origPopup;
-      const cleared = !p.daoExp || p.daoExp.sword == null;
+      const cleared = p.daoExp && p.daoExp.sword === 2500;   // v38（E320）：首次转修保留半数（5000 → 2500）
       p.realmIdx = 0; p.dao = null;
       return { cleared, daoNull: p.dao === null };
     });
   });
   d3.cleared && d3.daoNull
-    ? pass('D3 转道清空原道道境经验（弃道重修名副其实）') : fail('D3 转道清 daoExp', JSON.stringify(d3));
+    ? pass('D3 首次转修软化：原道道境经验保留半数（E320）') : fail('D3 转道清 daoExp', JSON.stringify(d3));
 
   const d4 = await page.evaluate(async () => {
     const p = Game.player;
@@ -223,7 +224,7 @@ try {
   const d5 = await page.evaluate(async () => {
     const p = Game.player;
     const before = p.xinmo || 0;
-    Battle.start(null, { enemy: buildMonster('m_yezhu', 0), mapName: '测试' });
+    Game.player._autoWin = 'off'; Battle.start(null, { enemy: buildMonster('m_yezhu', 0), mapName: '测试' });
     await new Promise(r => setTimeout(r, 120));
     await Battle.defeat();
     return { up: (p.xinmo || 0) - before };
@@ -448,7 +449,7 @@ try {
   const h6 = await page.evaluate(async () => {
     const p = Game.player;
     let endedWith = null;
-    Battle.start(null, { enemy: buildMonster('m_yezhu', -5), mapName: '剧情测试', story: { onEnd: (w) => { endedWith = w; } } });
+    Game.player._autoWin = 'off'; Battle.start(null, { enemy: buildMonster('m_yezhu', -5), mapName: '剧情测试', story: { onEnd: (w) => { endedWith = w; } } });
     await new Promise(r => setTimeout(r, 150));
     const origChance = Utils.chance; Utils.chance = () => true;   // 必遁走成功
     await Battle.act('flee');
@@ -461,7 +462,7 @@ try {
   const h7 = await page.evaluate(async () => {
     const p = Game.player;
     p.sect = { id: 'panyan', contrib: 0, tourney: { round: 0, wins: 0 } };
-    Battle.start(null, { enemy: buildMonster('m_yezhu', 0), tourney: true, mapName: '大比测试' });
+    Game.player._autoWin = 'off'; Battle.start(null, { enemy: buildMonster('m_yezhu', 0), tourney: true, mapName: '大比测试' });
     await new Promise(r => setTimeout(r, 150));
     const origChance = Utils.chance; Utils.chance = () => true;
     await Battle.act('flee');
@@ -476,7 +477,7 @@ try {
   const h8 = await page.evaluate(async () => {
     const p = Game.player;
     p.counters.hitlessWins = 0; p.counters.quickWins = 0; p.counters.upsetWins = 0;
-    Battle.start(null, { enemy: buildMonster('m_yezhu', 0), mapName: '计数测试' });
+    Game.player._autoWin = 'off'; Battle.start(null, { enemy: buildMonster('m_yezhu', 0), mapName: '计数测试' });
     await new Promise(r => setTimeout(r, 120));
     const B = Battle.active;
     B.enemy.power = p.realmIdx * 4 + p.layer + 5;   // 越境

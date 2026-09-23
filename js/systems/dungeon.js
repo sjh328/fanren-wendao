@@ -34,7 +34,19 @@ const DungeonSys = {
     if (!Bag.spendStones(ticket)) { UI.toast(`入秘境需备开门灵石 ${Utils.fmtNum(ticket)} 枚`); return; }
     Meta.see('realm', R.id);   // v6 图鉴
     if (R.rule) Log.add(`【地脉 · ${R.name}】${R.rule.txt}`, 'system');   // v32（F7）：入秘境先识地脉规则
-    p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS, choices: [], gains: [], stuck: false };
+    // v38（E307）：秘境异变——入秘 roll 1~2 条（30% 双异变），入口公示、可花灵石净化一条
+    const muts = [];
+    const mutPool = (GameData.DUNGEON_MUTATIONS || []).slice();
+    const mutN = Utils.chance(30) ? 2 : 1;
+    for (let i = 0; i < mutN && mutPool.length; i++) {
+      const m = mutPool.splice(Utils.rand(0, mutPool.length - 1), 1)[0];
+      muts.push(m.id);
+    }
+    const guZhou = muts.includes('guzhou');
+    p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS + (guZhou ? 1 : 0), choices: [], gains: [], stuck: false, muts };
+    if (muts.length) {
+      Log.add(`【异变】此行地气有异：${muts.map(id => { const d = (GameData.DUNGEON_MUTATIONS || []).find(x => x.id === id); return `<b>${d.name}</b>（${d.desc}）`; }).join('；')}。`, 'warn');
+    }
     this.genRoute(p.dungeon);
     this.genChoices(p.dungeon);
     Log.add(`你以 ${Utils.fmtNum(ticket)} 灵石付清开门之资，踏入 <b>${R.name}</b>——雾气在身后合拢，退路只剩来时那条。`, 'system');
@@ -54,7 +66,7 @@ const DungeonSys = {
       const w = { ...R.weights };
       const bias = d * 2;
       w.battle += bias;                                  // 愈深愈多战
-      w.trap += Math.floor(bias / 2);                    // 愈深愈多陷阱
+      w.trap += Math.floor(bias / 2) + (this.hasMut(D, 'huanzhen') ? 10 : 0);   // 愈深愈多陷阱；v38（E307）：幻阵迷踪 +10
       w.treasure = Math.max(6, w.treasure - Math.floor(bias / 3));
       const types = [];
       let guard = 0;
@@ -73,6 +85,21 @@ const DungeonSys = {
     D.choices = D.route[D.depth] || ['boss'];
     D.stuck = false;
   },
+  /** v38（E307）：异变判定单源 */
+  hasMut(D, id) { return !!(D && Array.isArray(D.muts) && D.muts.includes(id)); },
+  /** v38（E307）：净化一条异变（20×境界系数灵石） */
+  purify(id) {
+    const p = Game.player;
+    const D = p.dungeon;
+    if (!D || !this.hasMut(D, id)) return;
+    const cost = Math.round(20 * GameData.stoneEco(p.realmIdx));
+    if (!Bag.spendStones(cost)) { UI.toast(`净化异变需灵石 ${Utils.fmtNum(cost)}`); return; }
+    D.muts = D.muts.filter(x => x !== id);
+    if (id === 'guzhou') D.total = GameData.DUNGEON_TOTAL_LAYERS;   // 古咒净化：层数回落
+    const d = (GameData.DUNGEON_MUTATIONS || []).find(x => x.id === id);
+    Log.add(`你以灵石引动地气，将【${d.name}】异变生生磨平——秘境脉络为此清朗一分。（灵石 -${Utils.fmtNum(cost)}）`, 'gain');
+    Game.afterAction();
+  },
   makeEnemy(R, depth, forceElite = false) {
     const mid = Utils.pick(R.pool);
     const target = R.recRealm * 4 + Math.floor(depth * 0.8);
@@ -81,12 +108,20 @@ const DungeonSys = {
     const e = buildMonster(mid, Math.max(0, target - GameData.MONSTERS[mid].power), { elitePlus: wantElite });
     // v32（F7）秘境个性：每秘境一道地脉规则，守敌随之变形——秘境不再是换皮刷怪
     if (R.rule) {
-      if (R.rule.hp) e.hpMax = Math.round(e.hpMax * R.rule.hp);
-      if (R.rule.atk) e.atk = Math.round(e.atk * R.rule.atk);
-      if (R.rule.def) e.def = Math.round(e.def * R.rule.def);
-      if (R.rule.spd) e.spd = Math.round(e.spd * R.rule.spd);
-      e._realmRule = R.rule.txt;
+      // v38（E337）：周天阁【阵法传习】——守敌地脉加成（>1 项）削弱一档（偏移 ×0.6）
+      const wk = (Game.player.sect && Game.player.sect.id === 'zhoutian') ? 0.6 : 1;
+      const adj = v => v > 1 ? 1 + (v - 1) * wk : v;
+      if (R.rule.hp) e.hpMax = Math.round(e.hpMax * adj(R.rule.hp));
+      if (R.rule.atk) e.atk = Math.round(e.atk * adj(R.rule.atk));
+      if (R.rule.def) e.def = Math.round(e.def * adj(R.rule.def));
+      if (R.rule.spd) e.spd = Math.round(e.spd * adj(R.rule.spd));
+      e._realmRule = R.rule.txt + (wk < 1 ? '（周天阵法传习已削弱其地脉加成）' : '');
     }
+    // v38（E307）：异变改写守敌——血月攻 +10%、深寒速 +10%、古咒守关必双词缀
+    const D2 = Game.player.dungeon;
+    if (this.hasMut(D2, 'xueyue')) e.atk = Math.round(e.atk * 1.1);
+    if (this.hasMut(D2, 'shenhan')) e.spd = Math.round(e.spd * 1.1);
+    if (this.hasMut(D2, 'guzhou') && forceElite) e._forceFx2 = true;
     if (wantElite) {
       e.hpMax = Math.round(e.hpMax * 1.6);
       e.atk = Math.round(e.atk * 1.3);
@@ -118,6 +153,12 @@ const DungeonSys = {
     // v32 修瑕（A3）：战斗类节点原「先清 choices 再开战」——战斗中刷新/关页（或节庆年兽抢战被
     // Battle.start 静默丢弃）后读档，本层节点凭空消失只剩撤离，深入进度与门票沉没。
     // 改为：开战前置守卫 + 成功开战后才清空，失败回滚重掷本层。
+    // v38（E307）：逐层异变账——幻阵每层感悟 +1、天佑每层气血自复一成
+    if (this.hasMut(D, 'huanzhen')) Cultivate.addInsight(p, 1);
+    if (this.hasMut(D, 'tianyou')) {
+      const st0 = Stat.compute(p);
+      if (p.hp < st0.maxHp) p.hp = Math.min(st0.maxHp, p.hp + Math.round(st0.maxHp * 0.1));
+    }
     if (type === 'battle') {
       if (Battle.active) { this.genChoices(D); Game.afterAction(); return; }
       D.choices = [];
@@ -127,7 +168,9 @@ const DungeonSys = {
       if (p.dead) { UI.toast('岁月不饶人——你在秘境深处走到了天年尽头'); return; }
       const e = this.makeEnemy(R, D.depth);
       Log.add(`你循着灵光拐过一道石廊——<b>${e.name}</b> 自阴影中扑来！`, 'event');
-      Battle.start(null, { enemy: e, dungeon: { realm: D.realm, depth: D.depth }, mapName: R.name });
+      // v38（E307）：异变入战——剑冢攻防、瘴雾开局、孤勇禁协战、深寒 DOT
+      Battle.start(null, { enemy: e, dungeon: { realm: D.realm, depth: D.depth }, mapName: R.name,
+        mutJzz: this.hasMut(D, 'jianzhong'), noPet: this.hasMut(D, 'guyong'), startHpPct: this.hasMut(D, 'zhangwu') ? 0.9 : null, mutShenhan: this.hasMut(D, 'shenhan') });
       Game.afterAction();   // v32（A3）：afterAction 挪到开战之后——dailySettle 的节庆检查见 Battle.active 自会挂起
       return;
     }
@@ -138,7 +181,8 @@ const DungeonSys = {
       if (p.dead) { UI.toast('岁月不饶人——你在秘境深处走到了天年尽头'); return; }
       const e = this.makeEnemy(R, D.depth + 2, true);
       Log.add('雾气骤然退散——守关者自沉眠中睁开了眼睛！<b>此乃秘境最深处，胜则满载而归！</b>', 'system');
-      Battle.start(null, { enemy: e, dungeon: { realm: D.realm, depth: D.depth }, boss: true, mapName: R.name + ' · 最深处' });
+      Battle.start(null, { enemy: e, dungeon: { realm: D.realm, depth: D.depth }, boss: true, mapName: R.name + ' · 最深处',
+        mutJzz: this.hasMut(D, 'jianzhong'), noPet: this.hasMut(D, 'guyong'), startHpPct: this.hasMut(D, 'zhangwu') ? 0.9 : null, mutShenhan: this.hasMut(D, 'shenhan') });   // v38（E307）
       Game.afterAction();
       return;
     }
@@ -155,10 +199,13 @@ const DungeonSys = {
         this.gain(D, '宝箱妖反噬');
         result = { icon: '🎁', title: '宝 箱 · 箱中藏妖', cls: 'loss', lines: [`你掀开古匣，匣内竟藏着一口<b>宝箱妖</b>！它狠狠咬了你一口——气血 <span class="neg">-${dmg}</span>。`, '大意了……下次开箱前，先听三息动静。'] };
       } else {
-        const stones = Math.round(Utils.rand(14, 24) * GameData.stoneEco(R.recRealm) * dm);
+        // v38（E300）：阵道 3 重 A 脉「奇门遁甲」——秘境收获 +10%；v38（E307）：血月 ×1.2 / 孤勇 ×1.3
+        const qiMen = p.dao === 'array' && DaoSys.hasPath(p, 3, 'qiMen') ? 1.1 : 1;
+        const mutGain = (this.hasMut(D, 'xueyue') ? 1.2 : 1) * (this.hasMut(D, 'guyong') ? 1.3 : 1);
+        const stones = Math.round(Utils.rand(14, 24) * GameData.stoneEco(R.recRealm) * dm * qiMen * mutGain);
         Bag.addStones(stones);
         const parts = [`灵石 ${Utils.fmtNum(stones)}`];
-        if (Utils.chance(40 + depth2(D.depth))) {
+        if (Utils.chance((40 + depth2(D.depth)) * (this.hasMut(D, 'fukuan') ? 1.5 : 1))) {
           const mat = Utils.pick(GameData.matsByTier(Math.min(4, Math.floor(R.recRealm / 2) + 2)));
           Bag.addItem(mat, 1);
           parts.push(`${GameData.ITEMS[mat].name} ×1`);
@@ -172,7 +219,10 @@ const DungeonSys = {
         result = { icon: '🎁', title: '宝 箱 · 古匣开启', cls: 'gain', lines: [`你于第 ${D.depth + 1} 层寻得一只落满尘土的<b>古匣</b>，撬开铜锁——`, `获得 <b class="hl">${parts.join('、')}</b>。`, `（本层收益倍率 ×${dm.toFixed(2)}）`] };
       }
     } else if (type === 'fortune') {
-      const gain = Math.round(Utils.rand(70, 120) * GameData.eco(R.recRealm) * dm);
+      // v38（E300）：阵道 3 重 A 脉「奇门遁甲」——秘境收获 +10%；v38（E307）：灵潮 ×2 / 孤勇 ×1.3
+      const gain = Math.round(Utils.rand(70, 120) * GameData.eco(R.recRealm) * dm
+        * (p.dao === 'array' && DaoSys.hasPath(p, 3, 'qiMen') ? 1.1 : 1)
+        * (this.hasMut(D, 'lingchao') ? 2 : 1) * (this.hasMut(D, 'guyong') ? 1.3 : 1));
       Cultivate.addExp(p, gain);
       const insGain = Utils.rand(3, 7);
       Cultivate.addInsight(p, insGain);   // v33（E106）：走统一入口——原直写 min(100,·)，感悟满百时奇遇感悟静默蒸发

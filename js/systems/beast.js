@@ -159,7 +159,8 @@ const BeastSys = {
     // v32（C4）：协战策略三选（b.tactic 持久化，兽栏可切）——集火（敌残血追击欲 +30）/
     // 控场（+12 且缠敌更紧）/护主（主人危难时挺身，护主/回哺技效力 +50%）
     const tac = b.tactic || 'focus';
-    let chase = 28 + (B.combo || 0) * 5 + (b.bond || 0) * 0.2 + (B.lastAct === 'attack' ? 15 : 0) + (typeof B.lastSkillTag === 'string' ? 10 : 0);
+    let chase = 28 + (B.combo || 0) * 5 + (b.bond || 0) * 0.2 + (B.lastAct === 'attack' ? 15 : 0) + (typeof B.lastSkillTag === 'string' ? 10 : 0)
+      + (this.assistBonus ? this.assistBonus(p) : 0);   // v38（E340/E343）：御兽行家 +5、兽族忠勇 +8
     if (tac === 'focus' && B.enemy.hp <= B.enemy.hpMax * 0.3) chase += 30;
     if (tac === 'control') chase += 12;
     if (tac === 'guard' && p.hp < Stat.compute(p).maxHp * 0.4) chase += 15;
@@ -268,12 +269,20 @@ const BeastSys = {
         b.skills = b.skills || [];
         b.skills.unshift({ ...this.SPECIES_SKILLS[b.species] });
         extra = `，并领悟天生技【${b.skills[0].name}】`;
-      } else if (b.level === 9 && b.skills && b.skills.length && b.skills[0].pct) {
-        b.skills[0].pct = Math.round(b.skills[0].pct * 1.5 * 10) / 10;
-        extra = `，天生技【${b.skills[0].name}】威力精进`;
+      } else if (b.level === 9 && b.skills && b.skills.length) {
+        // v38（E280）修瑕：九阶精进原只认 skills[0].pct——天生技被继承技挤到非首位、或首位是
+        // 无 pct 的控制技（stun 类）时精进静默落空。改为优先锁定本物种天生技，其次首个带 pct 者
+        const spName = this.SPECIES_SKILLS[b.species] && this.SPECIES_SKILLS[b.species].name;
+        const tgt = b.skills.find(s => s && spName && s.name === spName && s.pct) || b.skills.find(s => s && s.pct);
+        if (tgt) {
+          tgt.pct = Math.round(tgt.pct * 1.5 * 10) / 10;
+          extra = `，天生技【${tgt.name}】威力精进`;
+        }
       }
       // v20 十阶开第二天生技
-      if (b.level >= 10 && (!b.skills || b.skills.length < 2) && this.SPECIES_SKILLS2[b.species]) {
+      // v38（E280）修瑕：原条件 skills.length<2 把「带 2 条继承技驯来」的灵兽永挡在第二天生技门外
+      // （E122 同族）——改按物种技名判重补插
+      if (b.level >= 10 && this.SPECIES_SKILLS2[b.species] && !(b.skills || []).some(s => s && s.name === this.SPECIES_SKILLS2[b.species].name)) {
         b.skills = b.skills || [];
         b.skills.push({ ...this.SPECIES_SKILLS2[b.species] });
         extra = `，并领悟第二天生技【${b.skills[b.skills.length - 1].name}】！`;
@@ -384,6 +393,8 @@ const BeastSys = {
       ],
     });
     if (!days) return;
+    // v38（E314）：洞天二重「星槎」——派遣时长 -20%（下限 3 日）
+    if (p.cave && p.cave.dongtian >= 2) days = Math.max(3, Math.ceil(days * 0.8));
     b.trip = { until: Math.floor(p.day || 0) + days, days };
     Log.add(`你系上小竹篓，<b>${b.name}</b> 欢快地窜入山林——${days} 日后归来。`, 'info');
     Game.afterAction();
@@ -440,6 +451,19 @@ const BeastSys = {
     const s = Utils.clamp(b.power, 1, 60) / 60 * 0.4 + (b.level / 10) * 0.3 + (b.evolved ? 0.15 : 0) + Math.min(1, (b.bond || 0) / 100) * 0.15;
     return Math.round(Utils.clamp(42 + 35 * s, 42, 77));
   },
+  /** v38（E343）：出战灵兽物种单源（战斗各物种招牌消费） */
+  speciesOf(p) {
+    const b = this.activeBeast(p);
+    return b ? b.species : null;
+  },
+  /** v38（E340/E343）：协战追击率加成——称号「御兽行家」+5%、兽族招牌「忠勇」+8 */
+  assistBonus(p) {
+    let n = 0;
+    if (Game.titleOn(p, 'beastAssist')) n += 5;
+    const sp = this.speciesOf(p);
+    if (sp === 'beast') n += 8;
+    return n;
+  },
   async arena() {
     const p = Game.player;
     const b = this.activeBeast(p);
@@ -467,21 +491,131 @@ const BeastSys = {
     p.counters.arena.n++;
     Time.add(1);
     const win = Utils.chance(winP);
+    // v38（E313）：斗兽连胜——连胜三场解锁「擂主战」（日一场，胜算 −8 对强敌）
     if (win) {
+      p.beastArena = p.beastArena || { streak: 0, champDay: 0 };
+      p.beastArena.streak = (p.beastArena.streak || 0) + 1;
       const prize = Math.round(cost * 1.6);
       Bag.addStones(prize);
       p.counters.arenaWins = (p.counters.arenaWins || 0) + 1;
-      Log.add(`⚔ 斗兽场——<b>${b.name}</b> 三招逼退对手，满场喝彩！彩头灵石 ${Utils.fmtNum(prize)}。（斗兽连胜 ${p.counters.arenaWins} 场）`, 'gain');
+      Log.add(`⚔ 斗兽场——<b>${b.name}</b> 三招逼退对手，满场喝彩！彩头灵石 ${Utils.fmtNum(prize)}。（斗兽连胜 ${p.counters.arenaWins} 场${p.beastArena.streak >= 3 ? ` · 场内连胜 ${p.beastArena.streak}——擂主战已解锁！` : ` · 场内连胜 ${p.beastArena.streak}/3`}）`, 'gain');
       if (p.counters.arenaWins % 5 === 0) { KarmaSys.addFortune(2); Log.add('驯兽的名声传开了——气运 +2。', 'gain'); }
     } else {
-      Log.add(`⚔ 斗兽场——<b>${b.name}</b> 苦战落败，垂头丧气地缩到你脚边。押注的 ${Utils.fmtNum(cost)} 灵石归了庄家。`, 'loss');
+      p.beastArena = p.beastArena || { streak: 0, champDay: 0 };
+      p.beastArena.streak = 0;
+      Log.add(`⚔ 斗兽场——<b>${b.name}</b> 苦战落败，垂头丧气地缩到你脚边。押注的 ${Utils.fmtNum(cost)} 灵石归了庄家。（场内连胜清零）`, 'loss');
     }
+    Game.afterAction();
+  },
+  /** v38（E313）：斗兽擂主赛——连胜三场解锁，日一场；对手随连胜递强（我方最强兽 ×1.15×(1+5%连胜)）
+   *  胜算沿用 arenaWinP 单点 −8 手感位（强敌 handicap）；奖励走既有资源阶梯，败则连胜清零 */
+  async champFight() {
+    const p = Game.player;
+    const b = this.activeBeast(p);
+    if (!b) { UI.toast('需先有一头出战灵兽'); return; }
+    p.beastArena = p.beastArena || { streak: 0, champDay: 0 };
+    if ((p.beastArena.streak || 0) < 3) { UI.toast('场内连胜三场，擂主方会应战'); return; }
+    const today = Math.floor(p.day || 0);
+    if (p.beastArena.champDay === today) { UI.toast('今日已挑战过擂主——擂主也要歇气，明日再来'); return; }
+    const best = p.beasts.list.reduce((m, x) => Math.max(m, x.power || 0), 0);
+    const foeP = Math.min(70, Math.round(best * 1.15 * (1 + 0.05 * (p.beastArena.streak || 0))));
+    const winP = Utils.clamp(this.arenaWinP(b) - 8, 30, 72);
+    const ok = await UI.popup({
+      title: `擂主战 · 第 ${p.beastArena.streak} 连胜`,
+      html: `场内连胜三场，<b>老擂主</b>亲自下场会你——其座下灵兽战力约 <b class="hl">${foeP}</b>（你方 ${b.name} 战力 ${b.power}）。<br>
+        <span class="tip-line">· 胜算预估 <b class="hl">${winP}%</b>（强敌让八分）<br>· 胜：玄铁 ×(3+连胜)、器魂 ×2、灵石 ${Utils.fmtNum(Math.round(200 * GameData.stoneEco(Math.min(5, p.realmIdx))))}；败：连胜清零。</span>`,
+      options: [{ text: '应 战', value: true, primary: true }, { text: '改日再战', value: false }],
+    });
+    if (!ok) return;
+    p.beastArena.champDay = today;
+    Time.add(1);
+    if (Utils.chance(winP)) {
+      const streak = p.beastArena.streak || 0;
+      const iron = 3 + streak, stones = Math.round(200 * GameData.stoneEco(Math.min(5, p.realmIdx)));
+      Bag.addItem('m_xuantie', iron);
+      p.qihun = (p.qihun || 0) + 2;
+      Bag.addStones(stones);
+      p.beastArena.streak = streak + 1;
+      Log.add(`⚔ 擂主战——<b>${b.name}</b> 力挫老擂主的座下灵兽，满堂彩声雷动！得玄铁矿 ×${iron}、器魂 +2、灵石 ${Utils.fmtNum(stones)}。（擂台连胜 ${streak + 1}）`, 'gain');
+      UI.toast('擂主战告捷！');
+    } else {
+      p.beastArena.streak = 0;
+      Log.add(`⚔ 擂主战——老擂主宝刀未老，<b>${b.name}</b> 苦战落败。（场内连胜清零，改日再图）`, 'loss');
+    }
+    Game.afterAction();
+  },
+  /* ========== v38（E303）：灵兽繁育——双十阶结契生蛋，技能遗传 2~4 门（超野生上限） ========== */
+  BREED_CD: 90,
+  HATCH_DAYS: 15,
+  async breed(uidA) {
+    const p = Game.player;
+    const a = p.beasts.list.find(x => x.uid === uidA);
+    if (!a) return;
+    if (a.level < 10) { UI.toast('结契双方皆须十阶圆满'); return; }
+    if (p.beasts.egg) { UI.toast('府中已有灵蛋待孵'); return; }
+    const today = Math.floor(p.day || 0);
+    if ((a.breedCd || 0) > today) { UI.toast(`${a.name} 元气未复（${a.breedCd - today} 日后方可结契）`); return; }
+    const cands = p.beasts.list.filter(x => x.uid !== uidA && x.level >= 10 && (x.breedCd || 0) <= today
+      && !(x.lineage || []).includes(uidA) && !(a.lineage || []).includes(x.uid));
+    if (!cands.length) { UI.toast('并无合适的结契对象（另需十阶、非血亲、休契期已满）'); return; }
+    const uidB = await UI.popup({
+      title: `结契繁育 · ${a.name}`,
+      html: '择一位十阶伴侣结契——两兽情投，诞下灵蛋（十五日可孵）：<br><span class="tip-line">· 后代天生技自双亲技能池遗传 2~4 门（野生至多三门，繁育可破四门）<br>· 资质 0.9~1.2 浮动；血亲（亲代/子嗣互配）不可结契；结契后双亲休契九十日</span>',
+      options: cands.map(x => ({ text: `${x.name}（${x.level} 阶${x.evolved ? ' · 蜕变' : ''} · 技能 ${(x.skills || []).length} 门）`, value: x.uid, primary: x.evolved })).concat([{ text: '作罢', value: null }]),
+    });
+    if (!uidB) return;
+    const b = p.beasts.list.find(x => x.uid === uidB);
+    if (!b) return;
+    const cost = Math.round(5000 * GameData.sinkCurve(p.realmIdx) / 2.2);
+    if (!Bag.spendStones(cost)) { UI.toast(`结契需灵石 ${Utils.fmtNum(cost)}`); return; }
+    a.breedCd = today + this.BREED_CD;
+    b.breedCd = today + this.BREED_CD;
+    p.beasts.egg = { hatchDay: today + this.HATCH_DAYS, parents: [uidA, uidB] };
+    Log.add(`【结契】${a.name} 与 ${b.name} 情投意合，于兽栏深处结契——一枚温润的<b>灵蛋</b>已入孵（${this.HATCH_DAYS} 日后可孵）。`, 'system');
+    Story.chron('灵兽结契，灵蛋入孵');
+    Game.afterAction();
+  },
+  async hatchEgg() {
+    const p = Game.player;
+    const egg = p.beasts && p.beasts.egg;
+    if (!egg) return;
+    const today = Math.floor(p.day || 0);
+    if (today < egg.hatchDay) { UI.toast(`灵蛋尚温（还差 ${egg.hatchDay - today} 日破壳）`); return; }
+    const pa = p.beasts.list.find(x => x.uid === egg.parents[0]);
+    const pb = p.beasts.list.find(x => x.uid === egg.parents[1]);
+    if (!pa || !pb) { p.beasts.egg = null; UI.toast('亲代已不在栏中，灵蛋灵机涣散——就此作罢'); return; }
+    // 后代：物种随亲、资质 0.9~1.2、技能自双亲技能池遗传 2~4 门（按名去重）、初始亲昵 40
+    const species = Utils.chance(50) ? pa.species : pb.species;
+    const baseId = Utils.chance(50) ? pa.id : pb.id;
+    const skillPool = [];
+    for (const par of [pa, pb]) for (const sk of (par.skills || [])) if (sk && !skillPool.some(s2 => s2.name === sk.name)) skillPool.push(sk);
+    const nSkills = Utils.rand(2, Math.min(4, skillPool.length));
+    const skills = skillPool.slice().sort(() => Math.random() - 0.5).slice(0, nSkills).map(s2 => ({ ...s2 }));
+    const power = Utils.clamp(Math.round(((pa.power + pb.power) / 2) * Utils.randF(0.9, 1.2)), 1, 60);
+    const uid = p.beasts.nextId++;
+    const child = {
+      uid, id: baseId, species, name: `${(GameData.MONSTERS[baseId] || {}).name || pa.name}·嗣`,
+      power, level: 1, exp: 0, bond: 40, skills, evolved: false, tactic: 'focus',
+      lineage: [egg.parents[0], egg.parents[1]],
+    };
+    p.beasts.list.push(child);
+    p.beasts.egg = null;
+    // v38（E328）：首只四技灵兽——里程碑
+    if (skills.length >= 4 && typeof Game !== 'undefined' && Game.milestone) Game.milestone('msBeast4', '四 技 灵 兽 · 天 生 王者');
+    if (typeof Meta !== 'undefined' && Meta.see) Meta.see('monster', baseId);
+    Log.add(`【破壳】灵蛋应声而裂——一头<b>${child.name}</b> 探出头来！资质 ${power}（亲代均值浮动），天生技遗传 ${skills.length} 门：${skills.map(s2 => s2.name).join('、')}。`, 'realm');
+    UI.announce('✦ 灵 兽 出 世 ✦', 'gold');
+    Story.chron(`灵蛋破壳，${child.name} 入栏`);
     Game.afterAction();
   },
   async free(uid) {
     const p = Game.player;
     const b = p.beasts.list.find(x => x.uid === uid);
     if (!b) return;
+    // v38（E281）修瑕：放归「派遣中」灵兽原无守卫——在途收益静默蒸发（trip.until 无人结算）
+    if (b.trip && b.trip.until > Math.floor(p.day || 0)) {
+      UI.toast(`${b.name} 正在外寻宝（旬后方归），归来方可放归`); return;
+    }
     const ok = await UI.popup({
       title: `放归 · ${b.name}`,
       html: `确定将 <b>${b.name}</b> 放归山林吗？此后它将重回天地，不再随你修行。`,
