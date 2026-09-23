@@ -66,7 +66,7 @@ node server.mjs     # http://localhost:8341/index.html
 
 ```bash
 npm run serve       # 先起本地服务器 :8341（套件靠它加载页面，不起必连接拒绝）
-npm run test:all    # 全量回归：build + check-actions 门禁 + 23 套 verify 专项（断言随版本增长）
+npm run test:all    # 全量回归：build + check-actions 门禁 + 24 套 verify 专项（断言随版本增长）
 npm run test:v15    # 单独运行某一版本专项
 npm run check-sync  # 手动校验 js/ 源码与 game.js 产物无分叉（build 前自动跑）
 ```
@@ -74,7 +74,7 @@ npm run check-sync  # 手动校验 js/ 源码与 game.js 产物无分叉（build
 ## 代码结构（v19 阶段十起：模块化源码 + 单体产物）
 
 ```
-js/          ★ 开发源码（51 个模块，按 scripts/modules.json 顺序拼接）
+js/          ★ 开发源码（53 个模块，按 scripts/modules.json 顺序拼接）
   core/      基建：utils/anim/art/narrative/ambience/meta/achieve/guide/autocult/codex
              /log/save/player-factory/stat/time
   data/      game-data.js（静态数据 + 剧情脚本库）

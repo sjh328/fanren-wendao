@@ -379,7 +379,7 @@ console.log('===== SA 源码静态组 =====');
       const releasemjs = readFileSync(join(__dirname, 'scripts', 'release.mjs'), 'utf8').replace(/\r\n/g, '\n');
       const readme = readFileSync(join(__dirname, 'README.md'), 'utf8');
       buildmjs.includes('未登记进 scripts/modules.json') && buildmjs.includes('process.exit(1);') && releasemjs.includes('当前版本 **v${ver}')
-        && readme.includes('当前版本 **v37') && readme.includes('51 个模块') && readme.includes('23 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
+        && readme.includes('当前版本 **v38') && readme.includes('53 个模块') && readme.includes('24 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
         ? pass('SA43 build 反向校验（孤儿模块拒建）+ README 守卫（假版本号拒绝）与根 README 四口径刷新（E259/E257）') : fail('SA43 守卫', '');
       /* E262 死重清理 */
       const scriptsDir = join(__dirname, 'scripts');

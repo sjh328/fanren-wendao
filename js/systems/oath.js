@@ -60,8 +60,18 @@ const OathSys = {
     p.oaths[id] = true;
     if (id === 'dan') p.poison = 0;   // 辟谷丹誓立时涤净丹毒
     Log.add(`【立誓】你指天道立下<b>${d.name}</b>——${d.desc}。${d.reward}。`, 'system');
+    this.partnerComment(p, `听闻你立下${d.name}——道心既定，愿君守之如初。`, '谈及誓言');
     Story.chron(`立下${d.name}`);
     Game.afterAction();
+  },
+  /** v38（E329）：挚友评语——道侣/结拜对立誓与破誓的专属态度（纯文案零数值） */
+  partnerComment(p, text, memTxt) {
+    const who = p.partner || (p.sworn || [])[0] || null;
+    if (!who) return;
+    const d = (typeof NpcSys !== 'undefined' && NpcSys.def) ? NpcSys.def(who) : null;
+    if (!d) return;
+    Log.add(`<b>${d.name}</b>：「${text}」，挚友之言，记在心里。`, 'event');
+    if (typeof NpcSys !== 'undefined' && NpcSys.mem) NpcSys.mem(p, who, 'story', memTxt || '谈及誓言');
   },
   async breakOath(id, reason) {
     const p = Game.player;
@@ -77,6 +87,7 @@ const OathSys = {
     if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 15, '破誓反噬');
     p.fortune = Math.max(0, (p.fortune || 0) - 20);
     Log.add(`【破誓】${this.NAMES[id]}就此而破——心魔滋生，气运溃散，天道默记此账。`, 'loss');
+    this.partnerComment(p, `誓约既碎……望君他日以行践诺。`, '谈及破誓');
     Story.chron(`破了${this.NAMES[id]}`);
     Game.afterAction();
   },
