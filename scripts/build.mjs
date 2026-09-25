@@ -104,3 +104,5 @@ try {
   rmSync(tmp, { force: true });   // v30：跨平台清理（原 del /q 仅 Windows 可用）；v35（E194）：失败路径亦清理
 }
 console.log(`✅ 构建完成：${OUT}（${(output.length / 1024).toFixed(0)} KB，${ORDER.length} 个模块）`);
+// v39（E365）：根目录 nul 防复发清理（bash 误写报错串历史问题）
+try { fs.rmSync('nul', { force: true }); } catch { /* ignore */ }

@@ -91,16 +91,17 @@ const ShopSys = {
   },
   convert(dir) {
     const s = Game.player.stones;
-    let converted = false;   // v37（E232）：任一档成交即鸣响
+    // v39（E353）：converted 死旗标删除（set 后无处置 true）——tryOp 成功回调内直接鸣成交音，
+    // 函数末补 Game.afterAction()（对齐 convertMulti/convertAll，修「单档兑换不刷新不存档」）
     const tryOp = (cond, fn, msg) => {
-      if (cond) { fn(); Log.add(msg, 'info'); }
+      if (cond) { fn(); Log.add(msg, 'info'); if (typeof Ambience !== 'undefined') Ambience.sfx('coin'); }
       else UI.toast('灵石不足，无法兑换');
     };
     if (dir === 'up1') tryOp(s.low >= 100, () => { s.low -= 100; s.mid++; }, '你将一百下品灵石兑换为一枚中品灵石。');
     if (dir === 'down1') tryOp(s.mid >= 1, () => { s.mid--; s.low += 100; }, '你将一枚中品灵石兑换为一百下品灵石。');
     if (dir === 'up2') tryOp(s.mid >= 100, () => { s.mid -= 100; s.high++; }, '你将一百中品灵石兑换为一枚上品灵石。');
     if (dir === 'down2') tryOp(s.high >= 1, () => { s.high--; s.mid += 100; }, '你将一枚上品灵石兑换为一百中品灵石。');
-    if (converted && typeof Ambience !== 'undefined') Ambience.sfx('coin');   // v37（E232）：成交音
+    Game.afterAction();
   },
   /** v37（E236）：批量兑换——×10 连兑（余额不足自动停）与「全兑」（低→中→高一兑到底，零头自留） */
   convertMulti(dir, times = 10) {

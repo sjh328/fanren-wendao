@@ -76,8 +76,8 @@ try {
     ? pass('TA21 重读不时光旅行 + 偏好合并写回') : fail('TA21 修瑕接线', '');
   js.includes("Game._tabSwitched") && js.includes('badge.textContent = ` ×${this._dupN + 1}`')
     ? pass('TA22 滚动只在切页时 + 日志相邻去重 ×N') : fail('TA22 体验件', '');
-  js.includes('SELL_CAP = 80') && js.includes("box.remove(); }, 5000)")
-    ? pass('TA23 出售区惰性渲染 + 结算卡 5s 可点击') : fail('TA23 体验件', '');
+  js.includes('SELL_CAP = 80') && js.includes('this.speed === 3 ? 1500 : 3500')
+    ? pass('TA23 出售区惰性渲染 + 战报一屏延迟收场（v39（E348）结算卡改挂卡后点击/限时收场）') : fail('TA23 体验件', '');
   /style\.css\?v=\d+/.test(html) && /game\.js\?v=\d+/.test(html) && html.includes('media="print"')
     ? pass('TA24 缓存号在位（版本无关 v32）+ 字体异步加载') : fail('TA24 缓存号/字体', '');
   /const VERSION = 'fanren-wd-v\d+';/.test(fs.readFileSync('sw.js', 'utf8'))

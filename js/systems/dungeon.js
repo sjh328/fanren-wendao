@@ -54,6 +54,8 @@ const DungeonSys = {
     Game.subTab = Game.subTab || {};
     Game.subTab.map = 'realm';   // v22 直达游历·秘境分栏
     Game.afterAction();
+    // v39（E362）：连推开启时入秘即自动起步（双路均可自动节点才推）
+    if (p.flags && p.flags.dungeonAuto) this.autoPush(p);
   },
   /** v22 预生成整条随机路线（每层二选一，末层守关）——供「前方预览」，亦兼容旧档补齐 */
   genRoute(D) {
@@ -258,7 +260,39 @@ const DungeonSys = {
     D.depth++;
     p.counters.maxDepth = Math.max(p.counters.maxDepth || 0, D.depth);   // v11 剧情计数
     this.genChoices(D);
-    if (result) await this.nodeResult(result, D, R);
+    // v39（E362）：连推模式下跳过结算演出卡（收益尽在日志），改由 autoPush 续推
+    if (result && !(p.flags && p.flags.dungeonAuto)) await this.nodeResult(result, D, R);
+    Game.afterAction();
+    // v39（E362）：秘境连推（E324 骨架）——非战斗/非抉择节点自动续推
+    if (p.flags && p.flags.dungeonAuto) this.autoPush(p);
+  },
+  /** v39（E362）：秘境连推单步——当前双路均为可自动节点（treasure/fortune/trap）时自动择路续推；
+   *  battle/boss/npc（抉择载体）必停亲手断；含陷阱路时血量 <35% 保险停。 */
+  autoPush(p) {
+    const D = p.dungeon;
+    if (!D || D.stuck || Battle.active || p.dead) return;
+    const AUTO = ['treasure', 'fortune', 'trap'];
+    if (!D.choices || !D.choices.length) return;
+    if (!D.choices.every(t => AUTO.includes(t))) return;   // 决策载体必停
+    const st = Stat.compute(p);
+    if (D.choices.includes('trap') && p.hp < st.maxHp * 0.35) {
+      Log.add('【连推】气血不足三成五——连推止步于此，且先调息。', 'warn');
+      return;
+    }
+    const pick = D.choices.indexOf('treasure') >= 0 ? D.choices.indexOf('treasure')
+      : D.choices.indexOf('fortune') >= 0 ? D.choices.indexOf('fortune')
+      : D.choices.indexOf('trap');
+    if (pick < 0) return;
+    this.resolve(pick);
+  },
+  /** v39（E362）：连推开关（秘境卡，默认关）——持久于 p.flags（既有子字段，零迁移） */
+  toggleAuto() {
+    const p = Game.player;
+    p.flags = p.flags || {};
+    p.flags.dungeonAuto = !p.flags.dungeonAuto;
+    Log.add(`【秘境连推】${p.flags.dungeonAuto ? '开——宝箱/奇遇/陷阱自动续推，战斗与遭遇仍需亲手' : '关——恢复逐节点手动抉择'}。`, 'system');
+    UI.toast(`秘境连推已${p.flags.dungeonAuto ? '开启' : '关闭'}`);
+    UI.renderAll();
     Game.afterAction();
   },
   /** v17 节点类型图标 */

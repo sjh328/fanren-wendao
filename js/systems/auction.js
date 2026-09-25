@@ -36,7 +36,8 @@ const AuctionSys = {
     const cap = Math.min(5, (p.realmIdx || 0) + 1);
     return this.MYSTERY_POOL.filter(x => x.grade <= cap);
   },
-  /** v29：古匣底价按当前奖池期望×0.85 定价——仍是赌博（有方差），但不再是印钞机 */
+  /** v29：古匣底价按当前奖池期望×0.95 定价（v39（E353）0.85→0.95：稳健出价 EV = 0.95−1.15×0.95²
+   *  ≈ −0.088×EV 转负，无风险套利封死、方差赌性回归；price-audit 第十路检测）——仍是赌博（有方差） */
   mysteryBase(p) {
     const pool = this.mysteryPool(p);
     if (!pool.length) return 500;
@@ -52,7 +53,54 @@ const AuctionSys = {
     };
     const wsum = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2, 0);
     const ev = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2 * valOf(x), 0) / wsum;
-    return Math.max(200, Math.round(ev * 0.85));
+    return Math.max(200, Math.round(ev * 0.95));
+  },
+  /** v39（E353）：可竞拍池单源（state 掷品与「换一批」共用）——境界门槛/功法双闸/过气价过滤三闸 */
+  usablePool(p) {
+    return this.LOT_POOL.filter(x => {
+      if ((x.minRealm || 0) > (p.realmIdx || 0)) return false;
+      const d2 = GameData.ITEMS[x.item];
+      if (d2 && d2.type === 'gongfa' && (p.gongfa && p.gongfa[x.item])) return false;
+      if (d2 && d2.type === 'gongfa' && typeof DaoSys !== 'undefined' && DaoSys.canLearnGongfa && !DaoSys.canLearnGongfa(p, d2, true)) return false;
+      // v39（E353）：过气拍品过滤——预估成交价（与 mul 同式）尚需 25×日均收入以上才能拿下
+      //（125×stoneEco，与 balance-sim 同式）者不入池：r3 时 m_danfang 预估 ≈22 万 > 17.1 万被滤出。
+      // 池空回落 LOT_POOL 原行为（不因过滤断拍）
+      const gate = Math.min(8, x.minRealm || 0);
+      const est = x.base * Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
+      if (est > 25 * 125 * GameData.stoneEco(p.realmIdx || 0)) return false;
+      return true;
+    });
+  },
+  /** v39（E353）：换一批——每期一次、花 20×stoneEco 请拍卖行换下本件拍品（拍期不变）。
+   *  复用 seq 种子（seq++ 后同式重掷）并重算 base/hot；rerollSeq 记「已换期的 until 印章」，
+   *  期号自然轮换时印章随新对象蒸发=下期可再换（老档无此子字段即视为本季未换，零迁移）。 */
+  async reroll() {
+    const p = Game.player;
+    const a = this.state(p);
+    if (a.item === 'mystery') { UI.toast('古匣之期无品可换——且开且珍惜'); return; }
+    if ((a.rerollSeq || -1) === (a.until || 0)) { UI.toast('本期已换过一批——下期再试'); return; }
+    const cost = Math.round(20 * GameData.stoneEco(p.realmIdx || 0));
+    const ok = await UI.popup({
+      title: '拍卖行 · 换一批',
+      html: `花 <span class="hl">${Utils.fmtNum(cost)}</span> 灵石请拍卖行把这件拍品撤下、换上新的（拍期不变，每期一次）。`,
+      options: [{ text: '换 一 批', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    const day = Math.floor(p.day || 0);
+    a.seq = (a.seq || 0) + 1;
+    a.rerollSeq = a.until;
+    const usable = this.usablePool(p);
+    const pool2 = usable.length ? usable : this.LOT_POOL;
+    const lot2 = pool2[Utils.hashStr('auction@' + day + '#' + a.seq) % pool2.length];
+    const gate = Math.min(8, lot2.minRealm || 0);
+    const mul = Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
+    a.item = lot2.item;
+    a.views = 1;   // 换品即归一（与 v33 E77 语义一致）
+    a.base = Math.round(lot2.base * mul);
+    const nm = (GameData.ITEMS[a.item] || {}).name || a.item;
+    Log.add(`拍卖行收起旧拍品，幕布再启——新拍品【<b>${nm}</b>】登场！（底价 ${Utils.fmtNum(a.base)} 灵石）`, 'info');
+    Game.afterAction();
   },
   state(p) {
     const day = Math.floor(p.day || 0);
@@ -64,17 +112,10 @@ const AuctionSys = {
       if (mystery) {
         p.auction = { item: 'mystery', seq, base: this.mysteryBase(p), until: day + this.PERIOD };
       } else {
-        // v31 修瑕（E41）：先按当前境界过滤可竞拍拍品再取模——原可在 60 日锁期内掷出整期不可竞拍的拍品，
-        // 低境玩家整期只能看着一件「不可用之物」
         // v34（D1）：已修习/道途不合的功法不再掷出——坊市买功法有判重与 canLearnGongfa 双闸，
         // 拍卖行此前两闸全绕（已修习者重复拍下=白烧钱无提示）
-        const usable = this.LOT_POOL.filter(x => {
-          if ((x.minRealm || 0) > (p.realmIdx || 0)) return false;
-          const d2 = GameData.ITEMS[x.item];
-          if (d2 && d2.type === 'gongfa' && (p.gongfa && p.gongfa[x.item])) return false;
-          if (d2 && d2.type === 'gongfa' && typeof DaoSys !== 'undefined' && DaoSys.canLearnGongfa && !DaoSys.canLearnGongfa(p, d2, true)) return false;
-          return true;
-        });
+        // v39（E353）：三闸+过气价过滤抽 usablePool 单源（换一批共用）
+        const usable = this.usablePool(p);
         const pool2 = usable.length ? usable : this.LOT_POOL;
         const lot2 = pool2[Utils.hashStr('auction@' + day + '#' + seq) % pool2.length];
         const gate = Math.min(8, lot2.minRealm || 0);

@@ -189,6 +189,7 @@ const WorldSys = {
       en.hpMax = Math.round(en.hpMax * 1.4); en.atk = Math.round(en.atk * 1.25);
       en.expGain = Math.round(en.expGain * 1.6); en.stoneGain = Math.round(en.stoneGain * 1.8);
       en.hp = en.hpMax;
+      if (typeof NpcSys !== 'undefined' && NpcSys.comradesRelBonus) NpcSys.comradesRelBonus(p, '共赴魔域前线');   // v39（E360）：共历折好感
       Battle.start(null, { enemy: en, weType: 'demon', mapName: '魔域前线' });
       Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
       return;
@@ -212,6 +213,7 @@ const WorldSys = {
       const nid = ids.length ? Utils.pick(ids) : null;
       if (nid) {
         Log.add('你投入宗门战团，与敌对修士战作一团！', 'event');
+        if (typeof NpcSys !== 'undefined' && NpcSys.comradesRelBonus) NpcSys.comradesRelBonus(p, '同投宗门战团');   // v39（E360）：共历折好感
         Battle.start(null, { enemy: NpcSys.buildEnemy(p, nid), npcId: nid, mode: 'war', mapName: '宗门战场' });
         Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
         return;
@@ -387,6 +389,8 @@ const WorldSys = {
       Time.add(10);
       Log.add(`你在星陨坑中翻捡十日——得【${GameData.ITEMS[mat].name}】×2、上古法宝碎片 ×1、灵石 ${Utils.fmtNum(stones4)}。`, 'gain');
     }
+    // v39（E360）：共历大事折好感——天下大事结算尾，在场相熟者交情 +2（随机 1~2 名）
+    if (typeof NpcSys !== 'undefined' && NpcSys.comradesRelBonus) NpcSys.comradesRelBonus(p, '共历天下大事');
     Game.afterAction();
   },
   /** 观望：不参与 */

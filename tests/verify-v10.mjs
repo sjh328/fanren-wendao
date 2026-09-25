@@ -614,7 +614,7 @@ try {
     }
     return min;
   });
-  x1 >= 17 ? pass('X1 台词矩阵：24 人六语境人均 17+ 句') : fail('X1 台词', String(x1));
+  x1 >= 16 ? pass('X1 台词矩阵：24 人六语境人均 16+ 句（v39（E360）gift 第三档 16 条复制句清退后锚点 17→16）') : fail('X1 台词', String(x1));
 
   // X2 背包排序三档 + 丹药批量服用 + 装备对比推荐标记
   const x2 = await page.evaluate(async () => {

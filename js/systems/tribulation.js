@@ -69,7 +69,7 @@ const Tribulation = {
       artifact: this.findArtifact(p, xian ? 4 : this.artifactGrade(target)),
       // v38（E304）：三段劫势——三重劫象逐一公示，应/避/御逐重应对后方入三策定夺
       stages: [0, 0, 0].map(() => Utils.pick(GameData.TRIB_OMENS || [])),
-      stageIdx: 0, stageRes: [], stress: 0, yingN: 0, biN: 0,
+      stageIdx: 0, stageRes: [], stress: 0, yingN: 0, biN: 0, perfectN: 0, biGood: 0,
       busy: false, logs: [],
     };
     Log.add(xian
@@ -210,25 +210,31 @@ const Tribulation = {
     const eqDef = eq ? GameData.ITEMS[Utils.eqId(eq)] : null;
     return !!(eqDef && eqDef.type === 'artifact');
   },
-  /** v38（E304）：三段劫势逐重应对——ying 应 / bi 避 / yu 御 */
+  /** v38（E304）：三段劫势逐重应对——ying 应 / bi 避 / yu 御
+   *  v39（E355）：劫象对策——所选对策与劫象 best 相符记 perfectN++ 并得小惠（应=免当段气血、
+   *  避=必成且免劫势、御=法宝灵光未损）；错配（选 worst 下策）劫势 +1；避成功记 biGood（成算 +1%/次） */
   async chooseStage(a) {
     const S = this.state;
     const p = Game.player;
     if (!S || S.busy || p.dead || (S.stageIdx || 0) >= 3) return;
     const om = S.stages[S.stageIdx] || {};
+    const perfect = om.best === a, worst = om.worst === a;
     if (a === 'ying') {
       const stNow = Stat.compute(p);
-      const cost = Math.max(1, Math.round(stNow.maxHp * 0.06));
-      if (p.hp <= cost + stNow.maxHp * 0.1) { UI.toast('气血见底，硬撼此劫必殒——改以避或御'); return; }
-      p.hp -= cost;
-      S.yingN++; S.stress++;
-      this.log(`你屹立劫心，任${om.name || '劫威'}加身——气血 -${cost}，劫势 +1（渡劫成算 +2%）。`, 'log-warn');
+      const cost = perfect ? 0 : Math.max(1, Math.round(stNow.maxHp * 0.06));
+      if (!perfect && p.hp <= cost + stNow.maxHp * 0.1) { UI.toast('气血见底，硬撼此劫必殒——改以避或御'); return; }
+      if (cost > 0) p.hp -= cost;
+      S.yingN++;
+      S.stress++;   // 应的本性是承受——perfect 亦不免劫势（小惠只在免当段气血）
+      if (perfect) { S.perfectN = (S.perfectN || 0) + 1; this.log(`劫象早在你意料之中——你凝劲硬撼${om.name || '劫威'}而分毫无损（对策全中：成算 +1%，气血无耗）！`, 'log-gain'); }
+      else this.log(`你屹立劫心，任${om.name || '劫威'}加身——气血 -${cost}，劫势 +1（渡劫成算 +2%）。`, 'log-warn');
     } else if (a === 'bi') {
       const spd = Stat.compute(p).speed || 0;
-      const odds = Utils.clamp(Math.round(35 + spd * 1.5), 25, 85);
+      const odds = perfect ? 100 : Utils.clamp(Math.round(35 + spd * 1.5), 25, 85);
       if (Utils.chance(odds)) {
         S.biN++;
-        this.log(`你身形一晃，自${om.name || '劫威'}缝隙间穿过——干净利落，不损分毫！`, 'log-gain');
+        if (perfect) { S.perfectN = (S.perfectN || 0) + 1; this.log(`心劫无形，你早已收敛心神——魔音穿身而过不留痕迹（对策全中：必成且免劫势）！`, 'log-gain'); }
+        else { S.biGood = (S.biGood || 0) + 1; this.log(`你身形一晃，自${om.name || '劫威'}缝隙间穿过——干净利落，不损分毫（身法成功：成算 +1%）！`, 'log-gain'); }
       } else {
         S.stress += 2;
         const stNow = Stat.compute(p);
@@ -238,14 +244,19 @@ const Tribulation = {
       }
     } else {
       if (!S.artifact && !this.anyArmorArtifact(p)) { UI.toast('身无护身法宝，无从御劫'); return; }
-      this.log(`宝光乍现，${om.name || '劫威'}之势被挡在丈许之外——有惊无险。`, 'log-system');
+      if (perfect) {
+        S.perfectN = (S.perfectN || 0) + 1;
+        S.yuPerfect = true;   // 小惠：终局选法宝挡劫时宝体无恙（磨损折半记为无损）
+        this.log(`天雷善走金铁——你早祭出法宝引雷入鞘（对策全中：成算 +1%，法宝灵光未损）！`, 'log-gain');
+      } else this.log(`宝光乍现，${om.name || '劫威'}之势被挡在丈许之外——有惊无险。`, 'log-system');
     }
+    if (worst) { S.stress++; this.log(`错配下策——${om.name || '劫威'}性恶此道，劫势再 +1。`, 'log-loss'); }
     S.stageIdx++;
     if (S.stageIdx >= 3) {
-      const rootTxt = S.yingN >= 3 ? '三重皆应——若渡劫功成，可得【根骨如渊】厚赐（全属性再 +5%）'
-        : S.biN >= 2 ? '两重皆避——若渡劫功成，道基难免虚浮（此后历劫难度 +10%）'
+      const rootTxt = (S.yingN >= 3 || (S.perfectN || 0) >= 3) ? '劫象尽在掌握——若渡劫功成，可得【根骨如渊】厚赐（全属性再 +5%）'
+        : (S.biN >= 2 && !(S.perfectN || 0)) ? '两重皆避——若渡劫功成，道基难免虚浮（此后历劫难度 +10%）'
         : '根基如常';
-      this.log(`三重劫象已过（应 ${S.yingN} · 避 ${S.biN} · 劫势 ${S.stress}）。${rootTxt}——三策定夺，就在此刻。`, 'log-system');
+      this.log(`三重劫象已过（应 ${S.yingN} · 避 ${S.biN} · 对策全中 ${S.perfectN || 0} · 劫势 ${S.stress}）。${rootTxt}——三策定夺，就在此刻。`, 'log-system');
     }
     this.render();
   },
@@ -257,16 +268,29 @@ const Tribulation = {
     const c = this.chances();
     // v38（E304）：三段劫势结算——应重各 +2% 成算、劫势每点 -1.5%（全应 ≈ +6%−劫势补偿；
     // 多避多失手则净降）。带内 ±8%，与三段前后的整体期望偏差保持在 ±3% 量级
-    const chance = Utils.clamp(c[strategy] + Utils.clamp((S.yingN || 0) * 2 - (S.stress || 0) * 1.5, -8, 8), 3, 97);
+    // v39（E355）：对策项入式——perfectN×1（对策全中）+ biGood×1（避成功补偿），与劫势罚项
+    // 同入内层 ±8 窗（防把成算顶出窗）；外层 clamp(3,97) 原样——双层钳制语义不变
+    const chance = Utils.clamp(c[strategy] + Utils.clamp((S.yingN || 0) * 2 + (S.perfectN || 0) * 1 + (S.biGood || 0) * 1 - (S.stress || 0) * 1.5, -8, 8), 3, 97);
     this.render();
     // 法宝挡劫：先耗去护身法宝
     if (strategy === 'artifact') {
       if (!S.artifact) { S.busy = false; this.render(); return; }
+      // v39（E355）：挡劫明示——列出将消耗的防具名+品阶，确认才吞、取消回选择
       const art = GameData.ITEMS[S.artifact.id];
-      if (S.artifact.from === 'bag') Bag.removeItem(S.artifact.id, 1);
-      else p.equipped.armor = null;
-      if (this._attemptSpend) this._attemptSpend.artifact = { ...S.artifact };
-      Log.add(`你祭出 <b>${art.name}</b>，宝光冲霄，替你硬撼天雷！`, 'info');
+      const gradeName2 = GameData.GRADE_NAMES[Utils.clamp(art.grade || 0, 0, 5)];
+      const keep = (S.perfectN || 0) > 0 && S.yuPerfect;   // v39（E355）：御劫对策全中小惠——宝体无恙（磨损折半记为无损）
+      const okArt = await UI.popup({
+        title: '法宝挡劫 · 明示',
+        html: `将祭出包中护身法宝 <b>【${art.name}】</b>（${gradeName2}）替你硬撼天雷。${keep ? '<br><span class="tip-line">· 御劫对策全中有灵——此宝灵光未损，渡劫后宝体无恙。</span>' : '<br><span class="neg">法宝将在劫中耗去。</span>'}`,
+        options: [{ text: '祭 宝', value: true, primary: true }, { text: '另择三策', value: false }],
+      });
+      if (!okArt) { S.busy = false; this.render(); return; }
+      if (!keep) {
+        if (S.artifact.from === 'bag') Bag.removeItem(S.artifact.id, 1);
+        else p.equipped.armor = null;
+        if (this._attemptSpend) this._attemptSpend.artifact = { ...S.artifact };
+      }
+      Log.add(`你祭出 <b>${art.name}</b>，宝光冲霄，替你硬撼天雷！${keep ? '（御劫全中——宝体无恙）' : ''}`, 'info');
     }
     const names = { endure: '以肉身硬抗天劫', artifact: '以法宝抵挡天劫', hide: '遁入地脉借地躲劫' };
     this.log(`你横下心来——${names[strategy]}！`, 'log-system');
@@ -350,15 +374,16 @@ const Tribulation = {
         p.karma = (p.karma || 0) + 10;
         Log.add('你遁地避雷，欺天而过——因果自负，孽障 +10。', 'warn');
       }
-      // v38（E304）：三段劫势根基判定——全应者【根骨如渊】、多避者【道基虚浮】（与三策词缀叠加）
-      if (S.yingN >= 3) {
+      // v38（E304）：三段劫势根基判定——v39（E355）：「对策全中」与「三重皆应」两条路都拿
+      //【根骨如渊】厚赐；纯乱避（多避且零对策全中）才吃【道基虚浮】
+      if (S.yingN >= 3 || (S.perfectN || 0) >= 3) {
         p.flags = p.flags || {};
         p.flags.rootPeak = true;
-        Log.add('三重劫象皆以身承之——雷火淬尽凡胎杂质，得【根骨如渊】：全属性再 +5%。', 'gain');
-      } else if (S.biN >= 2) {
+        Log.add(S.yingN >= 3 ? '三重劫象皆以身承之——雷火淬尽凡胎杂质，得【根骨如渊】：全属性再 +5%。' : '三重劫象尽在掌握、对策全中——天道亦叹服你的眼力，得【根骨如渊】：全属性再 +5%。', 'gain');
+      } else if (S.biN >= 2 && !(S.perfectN || 0)) {
         p.flags = p.flags || {};
         p.flags.rootShallow = true;
-        Log.add('两重劫象皆以身法避过——道基终隔一层，【道基虚浮】：此后历劫难度 +10%。', 'warn');
+        Log.add('两重劫象皆以身法乱避掠过——道基终隔一层，【道基虚浮】：此后历劫难度 +10%。', 'warn');
       }
       UI.announce(`渡劫功成 · 晋入${GameData.REALM_NAMES[p.realmIdx]}期`, 'gold');   // v4
       UI.toast(`渡劫成功！${GameData.REALM_NAMES[p.realmIdx]}期`);

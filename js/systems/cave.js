@@ -49,8 +49,9 @@ const CaveSys = {
     Ambience.sfx('forge');
     Game.afterAction();
   },
-  /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级；炼丹房（v18：每级+5%成丹率） */
-  cultBonus(p) { return p.cave ? p.cave.lv * 4 + (p.cave.dongtian || 0) * 3 : 0; },   // v30：洞天营造每层修炼 +3%
+  /** 洞府加成（Stat.compute 调用）：修炼效率 +4%/级；炼丹房（v18：每级+5%成丹率）
+   *  v39（E356）：聚灵旗三连阵图——修炼效率再 +5%（≤5% 档） */
+  cultBonus(p) { return p.cave ? p.cave.lv * 4 + (p.cave.dongtian || 0) * 3 + (this.hasPattern(p, 'b_juling') ? 5 : 0) : 0; },   // v30：洞天营造每层修炼 +3%
   /** v30 洞天营造：洞府五层之上再辟洞天（至四重）——r6+ 全幅缩放的灵石沉淀池 */
   DONGTIAN_MAX: 4,
   DONGTIAN_NAMES: ['洞天未辟', '一重 · 灵潮洞天', '二重 · 星槎洞天', '三重 · 太虚洞天', '四重 · 大罗洞天'],
@@ -162,35 +163,45 @@ const CaveSys = {
     Log.add('【演武】你在演武场与假人拆了半日招——拳脚生风，明日出手必有先手之利（本日首战：开局连击 +1）。', 'gain');
     Game.afterAction();
   },
-  /** v20 聚灵加速：花灵石点燃聚灵阵，点燃后 3 日内修炼效率 ×1.5 */
+  /** v20 聚灵加速：花灵石点燃聚灵阵，点燃后数日修炼效率 ×1.5（窗口随洞天灵潮延长，见 RUSH_WINDOW） */
   /** v24 聚灵加速定价单源化：随境界走 stoneEco 曲线（解除 v20 的 4 境封顶，高境灵石有了日常去路）
    *  v38（E314）：洞天一重「灵潮」——聚灵窗口 3→4 日 */
   RUSH_WINDOW() { const p = Game.player; return (p && p.cave && p.cave.dongtian >= 1) ? 4 : 3; },
   rushCost(p) { return Math.round(120 * GameData.stoneEco(p ? p.realmIdx : 0)); },
-  async spiritRush() {
+  /** v39（E346）：opts={ask:false} 静默点燃（一键行权 auto 口）——跳过弹窗，但窗口守卫与
+   *  扣款/点燃代码与手动口完全同源；返回是否点燃成功。 */
+  async spiritRush(opts = {}) {
+    const ask = opts.ask !== false;
     const p = Game.player;
-    if (!p.cave) { UI.toast('洞府尚未开辟'); return; }
+    if (!p.cave) { if (ask) UI.toast('洞府尚未开辟'); return false; }
     const today = Math.floor(p.day || 0);
-    // v36（E218）：3 日窗口口径——窗口未激活才可再点，防窗口内重复扣款顺延覆写 rushDay
-    // v38（E314）：洞天一重「灵潮」——窗口延长至 4 日
+    // v36（E218）：窗口口径——窗口未激活才可再点，防窗口内重复扣款顺延覆写 rushDay
+    // v38（E314）：洞天一重「灵潮」——窗口延长至 4 日（RUSH_WINDOW 单源）
     const WIN = this.RUSH_WINDOW();
     const inWindow = p.rushDay != null && today - p.rushDay < WIN;
-    if (inWindow) { UI.toast(`聚灵阵灵机未散（余 ${WIN - (today - p.rushDay)} 日），无需再燃`); return; }
+    if (inWindow) { if (ask) UI.toast(`聚灵阵灵机未散（余 ${WIN - (today - p.rushDay)} 日），无需再燃`); return false; }
     const cost = this.rushCost(p);
-    // v36（E218）：净收益按场景实算——修炼增量 0.5×baseGain（窗口恰覆盖一轮）、闭关增量 8×baseGain（开局一次结算被窗口整段 ×1.5）
-    const nextRound = Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 0.5));
-    const secludeBonus = Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 8));
-    const ok = await UI.popup({
-      title: '聚灵加速',
-      html: `燃烧灵石为聚灵阵供能——<b>点燃后 ${WIN} 日内修炼效率 ×1.5</b>（下一轮修炼约 +${nextRound} 修为；若即将闭关，整轮闭关约 +${secludeBonus} 修为）。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 灵机未散（${WIN} 日内）不可再燃；闭关与自动修炼同样受益。诚实账：挂机流净赚仅约 +${nextRound} 修为对 ${Utils.fmtNum(cost)} 灵石——聚灵的正确定位是闭关前点燃。</span>`,
-      options: [{ text: '点燃聚灵阵', value: true, primary: true }, { text: '作罢', value: false }],
-    });
-    if (!ok) return;
-    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+    if (ask) {
+      // v36（E218）：净收益按场景实算——修炼增量 0.5×baseGain（窗口恰覆盖一轮）、闭关增量 8×baseGain（开局一次结算被窗口整段 ×1.5）
+      const nextRound = Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 0.5));
+      const secludeBonus = Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 8));
+      const ok = await UI.popup({
+        title: '聚灵加速',
+        html: `燃烧灵石为聚灵阵供能——<b>点燃后 ${WIN} 日内修炼效率 ×1.5</b>（下一轮修炼约 +${nextRound} 修为；若即将闭关，整轮闭关约 +${secludeBonus} 修为）。<br>需灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。<br><span class="tip-line">· 灵机未散（${WIN} 日内）不可再燃；闭关与自动修炼同样受益。诚实账：挂机流净赚仅约 +${nextRound} 修为对 ${Utils.fmtNum(cost)} 灵石——聚灵的正确定位是闭关前点燃。</span>`,
+        options: [{ text: '点燃聚灵阵', value: true, primary: true }, { text: '作罢', value: false }],
+      });
+      if (!ok) return false;
+    }
+    if (!Bag.spendStones(cost)) {
+      if (ask) UI.toast('灵石不足');
+      else Log.add('聚灵阵静默着——灵石不足，今日便不点了。', 'info');
+      return false;
+    }
     p.rushDay = today;
-    Log.add(`聚灵阵轰然全开——3 日内修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
+    Log.add(`聚灵阵轰然全开——${WIN} 日内修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
     Story.chron('点燃聚灵阵（日修加速）');
     Game.afterAction();
+    return true;
   },
   /** v20 灵泉：每日首次入洞府自动涌出灵石（日界防重）；v27 auto=离线回放（只入账不逐日刷屏）
    *  v38（E302）：化身「驻守护府」——灵泉产出 ×1.2 */
@@ -218,6 +229,24 @@ const CaveSys = {
     if (p.sect && p.sect.id === 'zhoutian') n *= 1.25;   // v38（E337）：周天阁「阵法传习」
     return n;
   },
+  /** v39（E356）：阵眼成阵单源——扫 3×3 的行/列/两对角，同旗三连返回该旗 id 集合。
+   *  消费端：聚灵三连=修炼 +5%（cultBonus）；御敌三连=夜袭守御胜算 +10%；藏锋三连=夜袭减免
+   *  下限 0.5→0.35 且额外 −10%；敛息三连=虫害免疫。数值均 ≤5% 档（御敌为胜算加成口径）。 */
+  formationPatterns(p) {
+    const f = (p.cave && p.cave.formation) || [];
+    if (f.length < 9) return [];
+    const lines = [
+      [0, 1, 2], [3, 4, 5], [6, 7, 8],   // 行
+      [0, 3, 6], [1, 4, 7], [2, 5, 8],   // 列
+      [0, 4, 8], [2, 4, 6],              // 对角
+    ];
+    const hits = [];
+    for (const [a, b, c] of lines) {
+      if (f[a] && f[a] === f[b] && f[b] === f[c] && !hits.includes(f[a])) hits.push(f[a]);
+    }
+    return hits;
+  },
+  hasPattern(p, itemId) { return this.formationPatterns(p).includes(itemId); },
   /** 布阵 / 收旗（同一动作：格内有旗则取下，空格则放入袋中第一面旗） */
   toggleFlag(idx) {
     const p = Game.player;
@@ -238,15 +267,21 @@ const CaveSys = {
     }
     Game.afterAction();
   },
-  /** 夜袭判定（dailySettle 钩子）：宿敌 ≥2 者夜夜有险——藏锋旗每面 -15%（下限 0.5%） */
+  /** 夜袭判定（dailySettle 钩子）：宿敌 ≥2 者夜夜有险——藏锋旗每面 -15%（下限 0.5%）
+   *  v39（E346）：洞府守卫——夜袭袭的是洞府，未辟洞府者不遭夜袭。原 :249 的兜底赋值
+   *  会把 cave=null 的玩家（create 模板即 null）建成仅含 _raidDay 的退化对象，令 cultBonus
+   *  读 p.cave.lv 得 NaN、污染 stat.js 全线并落盘
+   *  v39（E356）：藏锋归 flagPower 乘区（修 E337 偏差——周天阁玩家吃 ×1.25 承诺口径），
+   *  藏锋三连阵图：减免下限 0.5→0.35 且额外 −10% */
   nightRaidCheck(p, auto = false) {
+    if (!p.cave) return;
     if (p.realmIdx < 1 || p.dead) return;
     const grudges = (typeof NpcSys !== 'undefined' && NpcSys.grudgeCount) ? NpcSys.grudgeCount(p) : 0;
     if (grudges < 2) return;
-    if (p.cave && p.cave._raidDay === Math.floor(p.day || 0)) return;   // 每日至多一袭
-    const chance = Math.max(0.5, 3 * (1 - 0.15 * this.flagCount(p, 'b_cangfeng')));
+    if (p.cave._raidDay === Math.floor(p.day || 0)) return;   // 每日至多一袭
+    let chance = Math.max(0.5, 3 * (1 - 0.15 * Math.min(3, this.flagPower(p, 'b_cangfeng'))));
+    if (this.hasPattern(p, 'b_cangfeng')) chance = Math.max(0.35, chance * 0.9);   // 藏锋三连：下限 0.35 且额外 −10%
     if (!Utils.chance(chance)) return;
-    p.cave = p.cave || {};
     p.cave._raidDay = Math.floor(p.day || 0);
     const ids = Object.keys(p.npcs || {}).filter(id => p.npcs[id] && p.npcs[id].grudge && p.npcs[id].alive);
     const npcId = ids[Utils.rand(0, ids.length - 1)];
@@ -270,7 +305,8 @@ const CaveSys = {
     const myR = p.realmIdx * 4 + p.layer;
     const hisR = (s.realmIdx || 0) * 4 + (s.layer || 0);
     const yudi = this.flagPower(p, 'b_yudi');
-    const odds = Utils.clamp(Math.round(52 + yudi * 8 + (guardOn ? 8 : 0) + (myR - hisR) * 6), 15, 92);
+    // v39（E356）：御敌旗三连阵图——守御胜算 +10%
+    const odds = Utils.clamp(Math.round(52 + yudi * 8 + (this.hasPattern(p, 'b_yudi') ? 10 : 0) + (guardOn ? 8 : 0) + (myR - hisR) * 6), 15, 92);
     if (Utils.chance(odds)) {
       const stones = Math.round(40 * GameData.stoneEco(Math.min(6, p.realmIdx)));
       Bag.addStones(stones);
@@ -279,6 +315,8 @@ const CaveSys = {
       if (cleared) s.grudge = false;
       Log.add(`【夜袭】<b>${d.name}</b> 趁夜来犯——阵旗灵光骤起，你早有防备！一番缠斗将其击退，反夺其随身灵石 <b>${Utils.fmtNum(stones)}</b>（交情 +6${cleared ? '，恩怨就此两清' : ''}；守御胜算 ${odds}%）。`, 'gain');
       if (typeof Story !== 'undefined' && Story.chron) Story.chron(`${d.name} 夜袭洞府，被你击退`);
+      // v39（E360）：共御夜袭折好感——在场相熟者随机 1~2 名交情 +2
+      if (typeof NpcSys !== 'undefined' && NpcSys.comradesRelBonus) NpcSys.comradesRelBonus(p, '共御夜袭');
     } else {
       // 败：损失一茬将熟的庄稼 + 灵石小罚
       const plots = this.plotsOf(p);
@@ -294,6 +332,7 @@ const CaveSys = {
       const fine = Math.round(stTot * 0.05);
       if (fine > 0) Bag.spendStonesMax(fine);
       Log.add(`【夜袭】<b>${d.name}</b> 趁夜来犯——阵旗被其一剑挑落，你仓促应战不敌退走！${lossTxt}${fine > 0 ? `、散失灵石 ${Utils.fmtNum(fine)}` : ''}。（守御胜算 ${odds}%——多设御敌旗、遣化身驻守可固守御）`, 'loss');
+      if (typeof Story !== 'undefined' && Story.chron) Story.chron(`${d.name} 夜袭洞府，守御失利`);   // v39（E348）：夜袭守御败亦入年表（与胜局句对称）
     }
     if (auto && typeof Game !== 'undefined' && Game._offlineAgg) Game._offlineAgg.nightRaid = (Game._offlineAgg.nightRaid || 0) + 1;
   },
@@ -372,12 +411,14 @@ const CaveSys = {
     Game.afterAction();
   },
   /** v20 接线：每日一次的虫害检查（此前为无调用方的死代码）
-   *  v38（E305）：敛息旗——每面虫害几率 -1%（下限 0.5%）；阵道地载万物 ×1.3、周天阁阵法传习 ×1.25 */
+   *  v38（E305）：敛息旗——每面虫害几率 -1%（下限 0.5%）；阵道地载万物 ×1.3、周天阁阵法传习 ×1.25
+   *  v39（E356）：敛息旗三连阵图——虫害免疫 */
   checkPest(p) {
     if (!p.cave) return;
     const today = Math.floor(p.day || 0);
     if (p.cave._pestDay === today) return;
     p.cave._pestDay = today;
+    if (this.hasPattern(p, 'b_lianxi')) return;   // 敛息三连：阵纹护田，虫害免疫
     const pestChance = Math.max(0.5, 3 - this.flagPower(p, 'b_lianxi'));
     const plots = this.plotsOf(p);
     for (let i = 0; i < plots.length; i++) {

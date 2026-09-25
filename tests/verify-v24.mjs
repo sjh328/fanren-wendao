@@ -96,7 +96,7 @@ console.log('===== SA 源码静态组 =====');
   /* ---- E304 三段天劫 ---- */
   has('E304 TRIB_OMENS 四劫象表', (gdata.match(/id: '(lei|huo|feng|xin)',/g) || []).length >= 4);
   has('E304 stageIdx<3 走劫势视图（三策后置）', /S\.stageIdx \|\| 0\) < 3/.test(trib));
-  has('E304 应 +2%/劫势 −1.5% 带内收敛', /yingN \|\| 0\) \* 2 - \(S\.stress \|\| 0\) \* 1\.5/.test(trib));
+  has('E304 应 +2%/劫势 −1.5% 带内收敛（v39（E355）对策项 perfectN×1+biGood×1 同式入 ±8 内层窗）', /yingN \|\| 0\) \* 2 \+ \(S\.perfectN \|\| 0\) \* 1 \+ \(S\.biGood \|\| 0\) \* 1 - \(S\.stress \|\| 0\) \* 1\.5/.test(trib) && /, -8, 8\)/.test(trib));
   has('E304 根骨如渊/道基虚浮旗标', /rootPeak = true/.test(trib) && /rootShallow = true/.test(trib));
   has('E304 stat rootPeak 全属性 +5%', /rootPct \+ rootPeak\) \/ 100/.test(stat));
 
@@ -119,11 +119,11 @@ console.log('===== SA 源码静态组 =====');
   has('E307 古咒层数 +1 / Boss 必双词缀', /guZhou \? 1 : 0/.test(dungeon) && /_forceFx2 = true/.test(dungeon));
   has('E307 异变入战 ctx（剑冢/孤勇/瘴雾/深寒）', /mutJzz: this\.hasMut\(D, 'jianzhong'\)/.test(dungeon) && /mutShenhan/.test(battle));
 
-  /* ---- E308 读招洞察与战意爆发 ---- */
-  has('E308 intentCounter 克制表（蓄力/杀招/自愈/强化）', /intentCounter\(intent\)/.test(battle) && /kind === 'charge'/.test(battle));
+  /* ---- E308 读招洞察与战意爆发（v39（E349）扩容+中性原则：strike 入表/charge 纳会心抢断/lenient 失据不扣层） ---- */
+  has('E308 intentCounter 克制表（蓄力/杀招/重击/自愈/强化 + lenient 中性）', /intentCounter\(intent\)/.test(battle) && /kind === 'charge'/.test(battle) && /kind === 'strike'/.test(battle) && /lenient: true/.test(battle) && /lenient: false/.test(battle));
   has('E308 满层破绽毕现（vuln 40 + _sureCrit）', /B\._sureCrit = true/.test(battle));
   has('E308 _sureCrit 三伤害口消费', (battle.match(/B\._sureCrit \|\| Utils\.chance/g) || []).length >= 3);
-  has('E308 战意爆发 ≥90/每场两次/1.8×+3 真元', /burstUsed \|\| 0\) >= 2/.test(battle) && /myAtk\(st\) \* 1\.8/.test(battle));
+  has('E308 战意爆发 ≥90/每场两次/1.8×+3 真元 + 会伤同口径', /burstUsed \|\| 0\) >= 2/.test(battle) && /myAtk\(st\) \* 1\.8/.test(battle) && /if \(crit\) dmg \*= 1\.7 \* this\.critDmgBonus\(p\);/.test(battle) && !/if \(crit\) dmg \*= 1\.7;/m.test(battle));
 
   /* ---- E309 仙庭 ---- */
   has('E309 九品 PINS 门槛表', (xian.match(/PINS: \[0, 300/) || []).length === 1);
@@ -162,7 +162,7 @@ console.log('===== SA 源码静态组 =====');
   /* ---- E318 劫难 ---- */
   has('E318 三劫难 + 每重 +1 印记（兵解防重护栏内）', /trials\.length/.test(reinc) && /trialBonus/.test(reinc));
   has('E318 layerNeedT ×1.15 统一入口（13+ 消费点）', /layerNeedT\(p, realmIdx, layer\)/.test(gdata) && (guide.match(/layerNeedT/g) || []).length >= 2 && (cult.match(/layerNeedT/g) || []).length >= 4);
-  has('E318 群邪环伺 buildMonster/buildEnemy ×1.10', /foeMul/.test(R('systems/status-fx.js')) && /foeMul/.test(npc));
+  has('E318 群邪环伺 buildMonster/buildEnemy ×1.10', /foeMul/.test(R('systems/explore.js')) && /foeMul/.test(npc));   // v39（E364）：buildMonster 迁往 explore.js，断言随迁
   has('E318 天威难测劫威 +15%', /trials\.includes\('trib'\)\) base = Math\.round\(base \* 1\.15\)/.test(trib));
 
   /* ---- E319 一世报告 ---- */

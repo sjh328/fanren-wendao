@@ -54,44 +54,44 @@ const BlackSys = {
   async buyAsync(id, cost) {
     const p = Game.player;
     const def = GameData.ITEMS[id];
+    // v39（E353）：首弹主按钮改「买 下（直购）」——直购自此一击成交；还价成功亦直接成交
+    //（原还价后还有一道最终确认弹窗，删除），收据统一走 Log
     const first = await UI.popup({
       title: '黑市 · 暗巷交易',
       html: `「识货的道友——」蒙面商贾掀开布角：<br><b>${def.name}</b><br>${def.desc}<br>索价 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石（坊市价高六成）。<br><span class="tip-line">· 亦可试着还价——成算视悟性与福缘而定，触怒了商人可是要涨价的。</span>`,
       options: [
-        { text: '买 下', value: 'buy', primary: true },
+        { text: '买 下（直购）', value: 'buy', primary: true },
         { text: '讨价还价', value: 'haggle' },
         { text: '摇头离去', value: 'leave' },
       ],
     });
     if (!first || first === 'leave') return;
-    if (first === 'haggle') {
-      // v19 讨价还价：悟性/福缘判定（v28 联动：有效悟性/福缘——装备与讲道加成一并计入）
-      // v29 修瑕：当日还价失败过再还必败——此前失败后关弹窗重开即可免费重掷，「触怒商人」形同虚设
-      const shamed = (p._haggleFailDay || -1) === Math.floor(p.day);
-      // v38（E337/E340）：万宝商会【商路情报】每日首谈必成；称号「散人不羁」黑市售价 -5%
-      const wanbao = p.sect && p.sect.id === 'wanbao' && p._wanbaoHaggleDay !== Math.floor(p.day);
-      const rate = shamed ? 0 : (wanbao ? 100 : Utils.clamp(20 + Stat.compOf(p) * 4 + Stat.compute(p).luck * 4, 10, 75));
-      if (Utils.chance(rate)) {
-        if (wanbao) p._wanbaoHaggleDay = Math.floor(p.day);
-        if (Game.titleOn(p, 'freeRep')) cost = Math.round(cost * 0.95);
-        cost = Math.round(cost * 0.75);
-        Log.add(`你巧舌如簧${wanbao ? '（商路情报在手，一锤定音）' : ''}，蒙面商贾咬牙认了——索价降至 <b>${Utils.fmtNum(cost)}</b> 灵石。`, 'gain');
-      } else {
-        cost = Math.round(cost * 1.15);
-        p._haggleFailDay = Math.floor(p.day);
-        Log.add(`还价触怒了商贾——「不识抬举！」索价涨至 <b>${Utils.fmtNum(cost)}</b> 灵石。${shamed ? '（他已认得你，今日休想再砍价）' : ''}`, 'warn');
-      }
+    if (first === 'buy') {
+      if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+      Bag.addItem(id, 1);
+      Log.add(`你在暗巷购得 <b>${def.name}</b>，花费 ${Utils.fmtNum(cost)} 灵石。蒙面人转身没入黑暗。`, 'info');
+      Game.afterAction();
+      return;
     }
-    const ok = await UI.popup({
-      title: '黑市 · 暗巷交易',
-      html: `【${def.name}】最终索价 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石。`,
-      options: [{ text: '成交', value: true, primary: true }, { text: '作罢', value: false }],
-    });
-    if (!ok) return;
-    if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
-    Bag.addItem(id, 1);
-    Log.add(`你在暗巷购得 <b>${def.name}</b>，花费 ${Utils.fmtNum(cost)} 灵石。蒙面人转身没入黑暗。`, 'info');
-    Game.afterAction();
+    // v19 讨价还价：悟性/福缘判定（v28 联动：有效悟性/福缘——装备与讲道加成一并计入）
+    // v29 修瑕：当日还价失败过再还必败——此前失败后关弹窗重开即可免费重掷，「触怒商人」形同虚设
+    const shamed = (p._haggleFailDay || -1) === Math.floor(p.day);
+    // v38（E337/E340）：万宝商会【商路情报】每日首谈必成；称号「散人不羁」黑市售价 -5%
+    const wanbao = p.sect && p.sect.id === 'wanbao' && p._wanbaoHaggleDay !== Math.floor(p.day);
+    const rate = shamed ? 0 : (wanbao ? 100 : Utils.clamp(20 + Stat.compOf(p) * 4 + Stat.compute(p).luck * 4, 10, 75));
+    if (Utils.chance(rate)) {
+      if (wanbao) p._wanbaoHaggleDay = Math.floor(p.day);
+      if (Game.titleOn(p, 'freeRep')) cost = Math.round(cost * 0.95);
+      cost = Math.round(cost * 0.75);
+      if (!Bag.spendStones(cost)) { UI.toast('灵石不足'); return; }
+      Bag.addItem(id, 1);
+      Log.add(`你巧舌如簧${wanbao ? '（商路情报在手，一锤定音）' : ''}，蒙面商贾咬牙认了——以 <b>${Utils.fmtNum(cost)}</b> 灵石成交，【<b>${def.name}</b>】入手。`, 'gain');
+      Game.afterAction();
+    } else {
+      cost = Math.round(cost * 1.15);
+      p._haggleFailDay = Math.floor(p.day);
+      Log.add(`还价触怒了商贾——「不识抬举！」索价涨至 <b>${Utils.fmtNum(cost)}</b> 灵石。${shamed ? '（他已认得你，今日休想再砍价）' : ''}`, 'warn');
+    }
   },
   /** 陷阱货：超低价的「来路不明」之物 */
   async buyMystery() {

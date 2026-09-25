@@ -67,7 +67,7 @@ console.log('===== SA 源码静态组 =====');
   battle.includes('const bound = !!(B.myFx && (StatusFx.has(B.myFx, \'stun\') || StatusFx.has(B.myFx, \'freeze\')))') && battle.includes('身被禁锢，无法施展') ? pass('SA7 被控按钮置灰+提示（E67）') : fail('SA7 置灰', '');
   sfx.includes("'vuln', 'atkup', 'agiup', 'critup'") ? pass('SA8 偷来的增益入敌方衰减表（E68）') : fail('SA8 衰减表', '');
   battle.includes('v33（E69）：道具断势') ? pass('SA9 道具断势重置（E69）') : fail('SA9 断势', '');
-  battle.includes("（真元已满，换气无益）") && battle.includes('...((B.zhenyuan || 0) < (B.zmax || 6) ? [{ text: \'20 战意 → 1 真元\', value: \'zy\' }] : [])') ? pass('SA10 凝神满元不供换气项（E70）') : fail('SA10 凝神', '');
+  battle.includes('真元已满，换气无益') && battle.includes('(B.zhenyuan || 0) >= (B.zmax || 6)') ? pass('SA10 凝神满元不白扣（E70；v39（E350）双钮置灰+直达守卫同守此门）') : fail('SA10 凝神', '');
   !battle.includes('if (!(B.morale || 0)) return;') ? pass('SA11 凝神永假死守卫清除（E70）') : fail('SA11 死守卫', '');
   battle.includes('B.ctx.waveIds && B.ctx.waveIds.length > 1') ? pass('SA12 多波战不可驯服（E71）') : fail('SA12 多波', '');
   beast.includes('Battle.gainBuff({ kind: \'shield\', pct: tac === \'guard\'') ? pass('SA13 护主金光走统一增益入口（E72）') : fail('SA13 金光', '');
@@ -249,16 +249,13 @@ try {
     const steal = [{ kind: 'atkup', pct: 30, rounds: 2 }];
     StatusFx.tick(steal, 'enemyEnd');
     out.e68 = steal.length === 0 || steal[0].rounds === 1;
-    // E70：凝神真元满不供换气项、不白扣
+    // E70：凝神真元满不白扣（v39（E350）双钮直达——置灰在钮、守卫在入口，行为一致）
     Battle.active = { enemy: Object.assign(buildMonster('m_yezhu'), { fx: [], hp: 100, hpMax: 100 }), ctx: {}, myFx: [{ kind: 'poison', pct: 3, rounds: 2 }], enemyFxIds: [], morale: 25, zhenyuan: 6, zmax: 6, _ningUsed: false, combo: 0, stats: { out: 0, in: 0, src: {} }, logs: [], floats: [], buffs: {}, defending: false };
-    const popBak = UI.popup;
-    UI.popup = async o => (o.options || []).some(x => x.value === 'zy') ? 'zy' : null;
-    await Battle.actNingshen();
-    out.e70a = Battle.active.morale === 25 && !Battle.active._ningUsed;   // 满元：无 zy 项可点
+    Battle.ningshenZY();
+    out.e70a = Battle.active.morale === 25 && !Battle.active._ningUsed;   // 满元：不扣战意不置已用
     Battle.active.zhenyuan = 5; Battle.active._ningUsed = false;
-    await Battle.actNingshen();
+    Battle.ningshenZY();
     out.e70b = Battle.active.zhenyuan === 6 && Battle.active.morale === 5;
-    UI.popup = popBak;
     Battle.active = null;
     // E73：古匣日限跨 state() 轮换存续
     const today = Math.floor(p.day);

@@ -157,24 +157,30 @@ const Cultivate = {
    *  v37（E264/E265）：感悟纯度折算——收益 = baseGain×2.5×(WUDAO_PUR_FLOOR + (1−WUDAO_PUR_FLOOR)×ρ)：
    *  自然链（ρ=1，纯调息感悟）2.5× 全额不变；纯购买链（ρ=0，筑基丹喂发）折底 ≈2.12× 修炼日均入带
    *  （现状 ×7.08）；听讲链（ρ=0.2）双带内。成本 20→20+2×realmIdx（wuDaoCost）。 */
-  async wuDao() {
+  async wuDao(opts = {}) {
     const p = Game.player;
-    if (!p || p.dead) return;
+    if (!p || p.dead) return null;
     const today = Math.floor(p.day || 0);
-    if (p._wuDaoDay === today) { UI.toast('今日已悟过一场——大道贵在日积月累'); return; }
+    if (p._wuDaoDay === today) { UI.toast('今日已悟过一场——大道贵在日积月累'); return null; }
     const cost = this.wuDaoCost(p);
-    if ((p.insight || 0) < cost) { UI.toast(`突破感悟不足 ${cost} 点`); return; }
+    if ((p.insight || 0) < cost) { UI.toast(`突破感悟不足 ${cost} 点`); return null; }
     const r9 = p.realmIdx >= 9;
     const rho = this.insightPurity(p, cost);
     const pur = this.WUDAO_PUR_FLOOR + (1 - this.WUDAO_PUR_FLOOR) * rho;
-    const estExp = Math.round(this.baseGain(p) * 2.5 * pur);
-    const estYuan = Math.round(1000 * pur);
-    const ok = await UI.popup({
-      title: '悟 道',
-      html: `闭目吐纳，将满溢的感悟淬入道基（每日一次）。<br>· 耗突破感悟 ${cost} 点${r9 ? `，炼作 <b>仙元 ≈${Utils.fmtNum(estYuan)}</b>` : `，炼作修为 <b>+${Utils.fmtNum(estExp)}</b>`}。<br><span class="tip-line">· 感悟纯度 ${Math.round(rho * 100)}%——打坐调息所生的感悟纯粹，丹药/听讲等外源感悟炼作折价。</span>`,
-      options: [{ text: '悟 道', value: true, primary: true }, { text: '再想想', value: false }],
-    });
-    if (!ok) return;
+    // v39（E362）：一键行权内嵌静默直悟——纯度预览 ≥30% 自动执行，不足则跳过（由行权小账如实回执）；
+    // 返回值：'done' 已行 / 'skip' 纯度不足未行 / 'cancel' 玩家选了再想想 / null 前置守卫未过
+    if (opts.silent) {
+      if (rho < 0.3) return 'skip';
+    } else {
+      const estExp = Math.round(this.baseGain(p) * 2.5 * pur);
+      const estYuan = Math.round(1000 * pur);
+      const ok = await UI.popup({
+        title: '悟 道',
+        html: `闭目吐纳，将满溢的感悟淬入道基（每日一次）。<br>· 耗突破感悟 ${cost} 点${r9 ? `，炼作 <b>仙元 ≈${Utils.fmtNum(estYuan)}</b>` : `，炼作修为 <b>+${Utils.fmtNum(estExp)}</b>`}。<br><span class="tip-line">· 感悟纯度 ${Math.round(rho * 100)}%——打坐调息所生的感悟纯粹，丹药/听讲等外源感悟炼作折价。</span>`,
+        options: [{ text: '悟 道', value: true, primary: true }, { text: '再想想', value: false }],
+      });
+      if (!ok) return 'cancel';
+    }
     p._wuDaoDay = today;
     const rho2 = this.spendInsight(p, cost);   // v37：实扣 FIFO 并取真实纯度（预览与实发同口径）
     const pur2 = this.WUDAO_PUR_FLOOR + (1 - this.WUDAO_PUR_FLOOR) * rho2;
@@ -188,6 +194,7 @@ const Cultivate = {
       Log.add(`你于蒲团上进入忘我之境——${cost} 点感悟淬入道基，修为 <b>+${Utils.fmtNum(expGain)}</b>（感悟纯度 ${Math.round(rho2 * 100)}%）。`, 'gain');
     }
     Game.afterAction();
+    return 'done';
   },
   normal() {
     const p = Game.player;
@@ -287,7 +294,9 @@ const Cultivate = {
     Log.add(`你寻一处灵气充裕之地打坐调息，气血灵力恢复大半${detox ? `，气机流转间化解了 ${detox} 点丹毒` : ''}，凝神之际偶有所悟（突破感悟 +2）。`, 'gain');
     Game.afterAction();
   },
-  secludeCost(p) { return Math.round(30 * GameData.stoneEco(p.realmIdx)); },
+  /** v39（E352）：闭关成本翻倍 30→60×stoneEco（0.24→0.48 日建模收入）——闭关日均 ≈1.6× 与
+   *  挂机/修炼日均的剪刀差收敛；AutoCult 择优逻辑不动。 */
+  secludeCost(p) { return Math.round(60 * GameData.stoneEco(p.realmIdx)); },
   async seclude() {
     const p = Game.player;
     const cost = this.secludeCost(p);
@@ -313,31 +322,10 @@ const Cultivate = {
     if (!ok) return;
     // v4：勾选后进入连续闭关，进阶即止；未勾选保持原有单轮闭关
     const cb = document.getElementById('seclude-until-level');
+    // v39（E364）：闭关双结算链合并——单轮与连续原是两份重复的扣费/丹毒/道境/溢流/afterAction
+    // 代码（cultivate.js 内两处各 40 行），现单轮=跑一轮 secludeLoop(1)，单点维护。
     if (cb && cb.checked) { await this.secludeLoop(); return; }
-    if (!Bag.spendStones(cost)) { UI.toast('灵石不足，付不起洞府开销'); return; }
-    const gain = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMult() * this.secludeMul(p));   // v20 隆冬蛰伏
-    if (p.dao === 'array') DaoSys.gain(p, 10);   // v16 阵道：聚灵
-    if (p.dao === 'demonic') DaoSys.gain(p, 20);   // v16 魔性：化功
-    Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
-    const yuanBefore = p.counters.xianyuan || 0;
-    this.addExp(p, gain);
-    const yuanGain = (p.counters.xianyuan || 0) - yuanBefore;   // v35（U5c）：圆满态溢流折算的仙元入账
-    UI.float(`修为 +${Utils.fmtNum(gain)} · 丹毒 -12`);   // v21 行动浮字
-    p.poison = Math.max(0, p.poison - 12);
-    Time.add(30);
-    if (p.dead) return;
-    let advanced = false;
-    if (p.layer === 3 && p.exp >= GameData.layerNeedT(p, p.realmIdx, 3)) {
-      await Utils.sleep(400);
-      const r0 = p.realmIdx, l0 = p.layer;
-      await this.breakthrough(10);
-      // v35（U5c）修瑕：r9 圆满时 breakthrough 早退（358 行 realmIdx>=9 直接 return），
-      // 原 advanced 恒置 true 吞掉结算报告——圆满态单轮闭关从此「无出关一纸账」。
-      // 现以境界是否真变迁为准。
-      advanced = p.realmIdx !== r0 || p.layer !== l0;
-    }
-    Game.afterAction();
-    if (!advanced) this.settleReport({ rounds: 1, exp: gain, xianyuan: yuanGain, days: 30, advanced: 0, from: null, to: this.realmLabel(p) });   // v21 结算报告
+    await this.secludeLoop(1);
   },
   /** v21：闭关结算报告——出关一纸小账，进益历历在目 */
   realmLabel(p) { return GameData.REALM_NAMES[p.realmIdx] + GameData.LAYER_NAMES[p.layer]; },
@@ -361,13 +349,14 @@ const Cultivate = {
     });
   },
   /** v4：连续闭关——每轮三十日，修为迈进新的小境界（进层或大境界突破成功）即自动出关；
-   *  灵石不济、寿元将尽或达成上限轮数时亦会中止。 */
-  async secludeLoop() {
+   *  灵石不济、寿元将尽或达成上限轮数时亦会中止。
+   *  v39（E364）：增 maxRounds 参数——单轮闭关（seclude 入口）跑一轮即出，双结算链合此一份。 */
+  async secludeLoop(maxRounds = 120) {
     let p = Game.player;
-    Log.add('你拂尘入室，立誓非至进境，不出此关。', 'system');
+    if (maxRounds > 1) Log.add('你拂尘入室，立誓非至进境，不出此关。', 'system');
     let rounds = 0;
     const rep = { rounds: 0, exp: 0, xianyuan: 0, days: 0, advanced: 0, from: this.realmLabel(p) };   // v21 结算报告累计（v35（U5c）：补仙元行）
-    while (rounds++ < 120) {
+    while (rounds++ < maxRounds) {
       if (!p || p.dead || Game.player !== p) return;   // 兵解/回溯等更换玩家对象时，旧循环立即作废
       // v29 修瑕：剧情/弹窗挂起时闭关暂停——此前节庆弹窗会被下一轮闭关的自动取消逻辑顶掉
       // v30 修瑕：天劫弹窗未决同样必须暂停——原守护只查剧情/弹窗，冲关劫决期间循环继续烧灵石岁月、
@@ -415,7 +404,8 @@ const Cultivate = {
       }
       // v32 修瑕（E37）：真仙圆满后修为轴已顶——原循环无「无可再进」出口，顶满 120 轮（约 3600 日）
       // 可一次刷出仙阶全线需求约 7 倍的仙元（节奏崩坏）。圆满态至多再闭六轮即请出关。
-      if (p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeed(9, 3) && rounds >= 6) {
+      // v39（E365）：layerNeed → layerNeedT 单源（自请「大道多艰」者不再被旧口径误踢出闭关）
+      if (p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeedT(p, 9, 3) && rounds >= 6) {
         Log.add('修为早已圆满，再往下只是水磨工夫——你收功出关，余韵自会炼作仙元。', 'system');
         break;
       }

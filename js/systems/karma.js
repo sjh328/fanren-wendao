@@ -55,12 +55,16 @@ const KarmaSys = {
  * 声望影响：悬赏品质 / 黑市价格 / NPC 初始关系 / 江湖称号
  * ====================================================================== */
 const RepSys = {
+  /** v39（E358）：显示档位统一——80 档改「声名鹊起」、新增 120「名动一方」档（v38 E312 承诺的
+   *  120 档名在显示层兑现，与 firstMeetBoost 120 门槛名实对齐）；机制阈值六处数值一律不动
+   *  （priceMul 30/80、bountyBonus 30/80/150、firstMeetBoost 120、stat.js rep≥60 折扣、explore rep≥90 奇遇） */
   LEVELS: [
     { min: -100, name: '声名狼藉', color: 'neg' },
     { min: -30,  name: '籍籍无名', color: 'dim' },
     { min: 0,    name: '初露头角', color: '' },
     { min: 30,   name: '小有名气', color: 'hl' },
-    { min: 80,   name: '名动一方', color: 'gold' },
+    { min: 80,   name: '声名鹊起', color: 'gold' },
+    { min: 120,  name: '名动一方', color: 'gold' },
     { min: 150,  name: '威震天下', color: 'grade-5' },
   ],
   level(p) {

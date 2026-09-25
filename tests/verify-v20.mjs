@@ -53,7 +53,7 @@ console.log('===== SA 源码静态组 =====');
   const stylecss = readFileSync(join(__dirname, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
   /* ---- A 节奏重校 ---- */
   gdata.includes('EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 3540000, 22000000, 137000000, 850000000]') ? pass('SA1 EXP_BASE ×5.4 重排（A1）') : fail('SA1 EXP_BASE', '');
-  gdata.includes("sinkCurve(r) { return Math.pow(3, Math.min(10,") ? pass('SA2 sinkCurve 封顶 8→10（D3）') : fail('SA2 sinkCurve', '');
+  gdata.includes('fr <= 5 ? Math.pow(3, fr) : 243 * Math.pow(3.8, fr - 5)') ? pass('SA2 sinkCurve 分段单源（D3；v39（E351）r≥6 段挂 3.8^(r-5) 与收入同速）') : fail('SA2 sinkCurve', '');
   cult.includes('const expGain = Math.round(this.baseGain(p) * 2.5 * pur2);') && !cult.includes('20 * 80 * GameData.eco') ? pass('SA3 悟道收益改 baseGain×2.5 自随缩放（A2；v37（E264）乘感悟纯度 pur2）') : fail('SA3 悟道', '');
   cult.includes('spill * this.baseGain(p) * 0.125') && !cult.includes('spill * 80 * GameData.eco') ? pass('SA4 感悟溢出汇率同悟道口径（A2）') : fail('SA4 溢出', '');
   cult.includes('daoGain >= 500 || p.counters.xianyuan % 500 < daoGain') ? pass('SA5 仙元溢流播报节流（A2）') : fail('SA5 节流', '');
@@ -101,8 +101,8 @@ console.log('===== SA 源码静态组 =====');
   battle.includes("onEnemyHit(B, st, dmg) {\n    const p = Game.player;") && battle.includes("e_reborn') && !B.enemy._rebornUsed") ? pass('SA28 敌方受击统一响应单源（C1/C2）') : fail('SA28 单源', '');
   battle.includes("atk *= 1 + StatusFx.pctOf(e.fx, 'atkup') / 100;") && battle.includes("spd *= 1 + StatusFx.pctOf(e.fx, 'agiup') / 100;") && battle.includes("Utils.chance(e.crit + StatusFx.pctOf(e.fx, 'critup'))") ? pass('SA29 偷来增益敌方三读端生效（C3）') : fail('SA29 偷益', '');
   battle.includes('身被禁锢，心神难凝') && !battle.includes("'slow', 'weaken', 'stun', 'freeze', 'vuln']") ? pass('SA30 凝神被控拦截+净化剔除控制（C4）') : fail('SA30 凝神', '');
-  battle.includes('v === null || v === undefined ? null :') || battle.includes('if (v && (B._ningUsed || B.over))') ? pass('SA31 凝神 resolve 后复查防双开（C4）') : fail('SA31 复查', '');
-  battle.includes('const extra = Math.max(1, Math.round(Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy))));') ? pass('SA32 法相追击走攻防口径（C5）') : fail('SA32 法相', '');
+  battle.includes("if (B._ningUsed) { UI.toast('凝神一转") ? pass('SA31 凝神已用守卫防双开（C4；v39（E350）去弹窗化后为同步直达守卫）') : fail('SA31 复查', '');
+  battle.includes("const extra = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy)), { src: 'attack' });") ? pass('SA32 法相追击走攻防口径（C5；v39（E364）落账随 dealToEnemy 单源）') : fail('SA32 法相', '');
   battle.includes('+ (B.fogDodge || 0) + (B.enemy.dodge || 0), 2, GameData.BALANCE.COMBAT.SKILL_MISS_MAX)') ? pass('SA33 雾战法诀闪避生效（C6）') : fail('SA33 雾战', '');
   battle.includes('if (mercyTxt) this.log(mercyTxt, \'log-system\');') ? pass('SA34 首战保底日志建档后入列（C7）') : fail('SA34 保底日志', '');
   battle.includes('if (turnFx.mpRegen > 0 && p.mp < st.maxMp)') && !battle.includes('mpRegen > 0 && p.mp > 0') ? pass('SA35 回灵 mp=0 复活（C8）') : fail('SA35 回灵', '');
@@ -213,7 +213,7 @@ try {
   });
   rA.expR2 === Math.round(2350 * 2.5) ? pass('RB1 曲线 r2 圆满=5875（A1）') : fail('RB1 曲线 r2', String(rA.expR2));
   rA.expR9 === Math.round(850000000 * 2.5) ? pass('RB2 曲线 r9 圆满=21.25 亿（A1）') : fail('RB2 曲线 r9', String(rA.expR9));
-  rA.sink9 === Math.pow(3, 9) && rA.sink8 === Math.pow(3, 8) ? pass('RB3 sinkCurve r9=19683 且 r8 不变（D3）') : fail('RB3 sinkCurve', `${rA.sink8}/${rA.sink9}`);
+  Math.round(rA.sink9) === Math.round(243 * Math.pow(3.8, 4)) && Math.round(rA.sink8) === Math.round(243 * Math.pow(3.8, 3)) ? pass('RB3 sinkCurve 分段（D3；v39（E351）r9=243×3.8^4≈50669、r8=243×3.8^3≈13334，与收入同速）') : fail('RB3 sinkCurve', `${rA.sink8}/${rA.sink9}`);
   rA.wudaoRewritten ? pass('RB4 悟道收益不再 80×eco（A2）') : fail('RB4 悟道', '');
   rA.eventFirst ? pass('RB5 世界大事首现 2~4 年（A3）') : fail('RB5 首现', '');
   rA.listenTime && rA.listenInsight ? pass('RB6 听讲耗时一日且得感悟（A2）') : fail('RB6 听讲', `${rA.listenTime}/${rA.listenInsight}`);
@@ -291,17 +291,17 @@ try {
   const rD = await page.evaluate(async () => {
     const p = Game.player;
     const out = {};
-    // C4：被控凝神拦截
+    // C4：被控凝神拦截（v39（E350）双钮直达——被控置灰在钮，直调守卫仍在，不扣战意不置已用）
     Battle.active = {
       enemy: { name: '试敌', hp: 100, hpMax: 100, fx: [] }, ctx: {}, busy: false, over: false,
       myFx: [{ kind: 'stun', rounds: 2 }], morale: 50, zhenyuan: 0, zmax: 6, logs: [], stats: { out: 0 },
       buffs: {}, _ningUsed: false, floats: [],
     };
-    await Battle.actNingshen();
-    await new Promise(r => setTimeout(r, 400));
-    const popupOpen = !document.getElementById('popup-modal').className.includes('hidden');
-    out.ningshenBlocked = !popupOpen && Battle.moraleStable !== false;
+    Battle.ningshenZY();
+    Battle.ningshenPurge();
+    out.ningshenBlocked = Battle.active.zhenyuan === 0 && !Battle.active._ningUsed;
     out.moraleKept = Battle.active.morale === 50;
+    out.btnGray = Battle.ningBlocked(Battle.active) === true;   // 置灰条件单源
     Battle.active = null;
     // C1：必杀路径不灭——构造一场战斗直接调 onEnemyHit
     Battle.active = {

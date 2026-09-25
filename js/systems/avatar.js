@@ -11,12 +11,18 @@ const AvatarSys = {
   UNLOCK_REALM: 4,
   LV_CAP: 9,
   SWITCH_CD: 3,
+  /** v39（E354）：主身闭关日均口径具名常量——闭关 30 日=baseGain×10×1.6=16×baseGain（cultivate.js
+   *  seclude 同式），日均即 16/30×baseGain；化身代主闭关满级 eff=0.75 时恰为「主身闭关日额度 ×0.75」 */
+  AVATAR_CULT_DAY_RATE: 16 / 30,
 
   unlocked(p) { return p.realmIdx >= this.UNLOCK_REALM; },
   lv(p) { return (p.avatar && p.avatar.lv) || 1; },
   /** 并行效率：1 级 0.5 → 9 级 0.75（每级 +3.1%，钳顶 0.75） */
   eff(p) { return Math.min(0.75, 0.5 + (this.lv(p) - 1) * 0.031); },
-  upCost(p) { return 30 * this.lv(p); },   // 晋级感悟（外源入池）
+  /** v39（E354）：神识晋升成本 min(100, 20+lv×10)（lv 为升级前等级：1→2 花 30 … 8→9 花 100 封顶）——
+   *  旧式 30×lv 在 lv4 需 120 > 感悟硬上限 100（cultivate.js 钳制），lv5~9 永不可达；
+   *  新式 lv1→9 共 8 次累计 520 感悟 ≈260 日调息，化神→飞升窗口内九重可达。 */
+  upCost(p) { const lv = this.lv(p); return Math.min(100, 20 + lv * 10); },   // 晋级感悟（外源入池）
   tasks(p) {
     const a = p.avatar || {};
     return [a.task, a.lv >= this.LV_CAP ? a.task2 : null].filter(Boolean);
@@ -50,7 +56,7 @@ const AvatarSys = {
     const a = this.state(p);
     const lv = a.lv || 1;
     if (lv >= this.LV_CAP) { UI.toast('神识已至九重圆满'); return; }
-    const cost = 30 * lv;
+    const cost = this.upCost(p);   // v39（E354）：min(100, 20+lv×10)——lv4 起 30×lv 式超感悟硬上限永不可达的病灶修复
     if ((p.insight || 0) < cost) { UI.toast(`感悟不足（需 ${cost}，现 ${p.insight || 0}）`); return; }
     Cultivate.spendInsight(p, cost);
     a.lv = lv + 1;
@@ -67,9 +73,12 @@ const AvatarSys = {
     a.day = today;
     for (const t of this.tasks(p)) {
       if (t === 'cult') {
-        // 代主闭关：主身修炼日额度 × 并行效率（走 addExp 单源，不冲关不积丹毒）
+        // 代主闭关：主身闭关日均口径 × 并行效率（走 addExp 单源，不冲关不积丹毒）
+        // v39（E354）：乘 AVATAR_CULT_DAY_RATE=16/30（主身闭关 30 日=16×baseGain 的日均，
+        // cultivate.js seclude 同式）——满级 eff=0.75 时恰为「主身闭关日额度 ×0.75」自述锚；
+        // 旧实现漏乘该系数，低神识等级日产虚高约一倍（中低级实削，UPDATE_NOTES 削弱明示）
         const st = Stat.compute(p);
-        const gain = Math.round(Cultivate.baseGain(p) * (1 + (st.cultPct || 0) / 100) * this.eff(p));
+        const gain = Math.round(Cultivate.baseGain(p) * (1 + (st.cultPct || 0) / 100) * AvatarSys.AVATAR_CULT_DAY_RATE * this.eff(p));
         Cultivate.addExp(p, gain, true);
         if (auto) { Game._offlineAgg = Game._offlineAgg || {}; Game._offlineAgg.avatarExp = (Game._offlineAgg.avatarExp || 0) + gain; }
         else Log.add(`【化身·闭关】元神行功不辍——修为 +${Utils.fmtNum(gain)}。`, 'gain');

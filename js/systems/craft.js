@@ -98,7 +98,8 @@ const CraftSys = {
     const gainMap = {};
     // v38（E337）：丹霞谷【丹房免炉】——每月首炉单炼免耗药材（试新方的底气）
     const mkMonth = Math.floor((p.day || 0) / 30);
-    const freeMats = times === 1 && tried === 0 && p.sect && p.sect.id === 'danxia' && p._danxiaFreeMonth !== mkMonth;
+    // v39（E365）：tried===0 恒真子句删除（循环前 tried 恒 0）
+    const freeMats = times === 1 && p.sect && p.sect.id === 'danxia' && p._danxiaFreeMonth !== mkMonth;
     if (freeMats) p._danxiaFreeMonth = mkMonth;
     while (tried < times) {
       if (!freeMats && !this.haveMats(p, r)) break;
@@ -169,25 +170,19 @@ const CraftSys = {
     const avg = pool.reduce((s2, id) => s2 + (GameData.ITEMS[id].price || 0), 0) / Math.max(1, pool.length);
     return Math.max(40, Math.round(this.expectedQty(p) * avg * 0.55 * GameData.stoneEco(p.realmIdx)));
   },
-  /** 同日连画阶梯（1×→5×）：一次画符即推进一日，实际仅在极窄窗口生效，保留以防未来时耗改动 */
-  drawMult(p) { return 1 + Math.min(4, (p._drawCount || 0) * 0.75); },
-  /** UI 显示价（成本 × 当日阶梯） */
-  drawPrice(p) { return Math.round(this.drawCost(p) * this.drawMult(p)); },
+  /** v39（E365）：同日连画阶梯删除——Time.add(1) 每画推进一日使 _drawCount 结构性归零，
+   *  1×→5× 阶梯自 v18 起即死机制（v35 已自认），画符成本恒 1×；drawMult 一并移除 */
+  drawPrice(p) { return Math.round(this.drawCost(p)); },
   /** 画符（符修专属）：耗灵石出符，可自用可售卖 */
   /** 画符（符修专属）：耗灵石出符，可自用可售卖；v13 起随境界逐步解锁新符箓
    *  v18：每日画符成本递增（首次 1×，每轮 +50%，最多 5 倍），防止印钞 */
   drawTalisman() {
     const p = Game.player;
     if (p.dao !== 'talisman') return;
-    // v18：当日画符次数累加（每日重置）
-    const today = Math.floor(p.day);
-    if (p._drawDay !== today) { p._drawDay = today; p._drawCount = 0; }
-    // v31 修瑕（E38）：扣款成功后才计数——原失败（灵石不足）也烧当日档位与成就轮次，
-    // 且把当日成本系数推高一档；显示价与实收同步（原按钮恒显首档价）
-    const costMult = 1 + Math.min(4, (p._drawCount || 0) * 0.75);
-    const cost = Math.round(this.drawCost(p) * costMult);
+    // v39（E365）：同日成本阶梯删除（Time.add(1) 每画推日使其结构性失效的死机制，v35 已自认）——
+    // 画符成本恒 1×；v31（E38）「失败不烧成就轮次」语义保留（失败不计数 talRounds）
+    const cost = this.drawPrice(p);
     if (!Bag.spendStones(cost)) { UI.toast('灵石不足，置不起朱砂灵纸'); return; }
-    p._drawCount = (p._drawCount || 0) + 1;
     p.counters.talRounds = (p.counters.talRounds || 0) + 1;   // v27 修瑕：画符轮次从未计数，成就「画符千张」永不可解锁
     Time.add(1);
     let qty = 2 + Utils.rand(0, 2) + (p.realmIdx >= 2 ? 1 : 0) + (DaoSys.tierLevel(p) >= 1 ? 1 : 0)
@@ -224,7 +219,8 @@ const CraftSys = {
     Bag.removeItem('m_lingcao', 2);
     Time.add(1);
     if (p.dead) return;
-    const chance = 12 + (p.attrs.luck || 0) * 0.5;   // 福缘愈高愈有灵光
+    // v39（E365）：改有效福缘口径（对齐 black.js 还价判定）——装备/传承树加成的幸运与气运计入
+    const chance = 12 + (Stat.compute(p).luck + (p.fortune || 0) / 20) * 0.5;   // 福缘愈高愈有灵光
     if (Utils.chance(chance)) {
       const rest = (GameData.EXP_RECIPES || []).filter(r => !discovered.includes(r.id));
       const got = rest[Utils.rand(0, rest.length - 1)];

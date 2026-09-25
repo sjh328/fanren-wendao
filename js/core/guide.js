@@ -147,6 +147,11 @@ LOCKS: {
     for (let l = 0; l < p.layer; l++) sum += GameData.layerNeedT(p, p.realmIdx, l);
     return sum + p.exp;
   },
+  /** v39（E362）：三态偏好读取单源——行权/悟道偏好存玩家档子字段 p._pref（零新顶层字段），
+   *  'ask'（默认，弹窗询问）/ 'always'（自动执行）/ 'skip'（跳过）。设置中心「每日动线」区可改。 */
+  prefMode(p, key) {
+    return (p && p._pref && p._pref[key]) || 'ask';
+  },
   /** v22 一键日常：求签 → 聚灵 → 采收灵田 → 照料（浇水/抚兽/除虫）→ 领悬赏 → 宗门领赏，一纸小账回报
    *  v35（U3）日常归一：原「一键行权」与洞府「一键照料」两张皮——各办一半日常，虫害无人接管；
    *  现行权吸收照料核心（共用 CaveSys.careCore，行为与一键照料严格一致）。
@@ -163,16 +168,19 @@ LOCKS: {
     }
     // 2 聚灵加速（v35（U3）：首日明示价格并征求同意，可选「以后不再询问」——原静默扣款，
     // 后期每日 137 万灵石的支出藏在家务按钮里）
-    // v36（E218）：聚灵 3 日窗口终态守卫——窗口未激活（!inWindow）才询问/点燃；inWindow 时整步
+    // v36（E218）：聚灵窗口终态守卫——窗口未激活（!inWindow）才询问/点燃；inWindow 时整步
     // 跳过（不弹窗不扣款）。E205 的单日跳过与三态偏好语义不变
-    const inWindow = p.rushDay != null && today - p.rushDay < 3;
+    // v39（E346）：窗口判定改消费 CaveSys.RUSH_WINDOW() 单源（洞天灵潮 4 日）；点燃改调
+    // spiritRush({ask:false}) 复用同一守卫与扣款/点燃代码，删除原直写 p.rushDay 的旁路
+    const WIN = CaveSys.RUSH_WINDOW();
+    const inWindow = p.rushDay != null && today - p.rushDay < WIN;
     if (p.cave && !inWindow && p._autoRush !== 'skip' && p._autoRushSkipDay !== today) {
       const cost = CaveSys.rushCost(p);
       let go = p._autoRush === 'always';
       if (!go) {
         const c = await UI.popup({
           title: '一键行权 · 聚灵加速',
-          html: `今日聚灵阵尚未点燃：燃 <b>${Utils.fmtNum(cost)}</b> 灵石，<b>点燃后 3 日内修炼效率 ×1.5</b>（下一轮修炼约 +${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 0.5))} 修为；若即将闭关，整轮闭关约 +${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 8))} 修为）。<br><span class="tip-line">选择「以后不再询问」后，一键行权将默认照常聚灵（灵石不足时自动跳过）；偏好随时可在设置中心修改。</span>`,
+          html: `今日聚灵阵尚未点燃：燃 <b>${Utils.fmtNum(cost)}</b> 灵石，<b>点燃后 ${WIN} 日内修炼效率 ×1.5</b>（下一轮修炼约 +${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 0.5))} 修为；若即将闭关，整轮闭关约 +${Utils.fmtNum(Math.round(Cultivate.baseGain(p) * 8))} 修为）。<br><span class="tip-line">选择「以后不再询问」后，一键行权将默认照常聚灵（灵石不足时自动跳过）；偏好随时可在设置中心修改。</span>`,
           options: [
             { text: `今日聚灵（-${Utils.fmtNum(cost)}）`, value: 'once', primary: true },
             { text: '以后都聚，不再询问', value: 'always' },
@@ -183,15 +191,7 @@ LOCKS: {
         else if (c === 'once') go = true;
         else if (c === 'skip') { p._autoRushSkipDay = today; }   // v36（E205）：仅当日——undefined（ESC/遮罩）不落任何偏好，下一行权自然重问
       }
-      if (go) {
-        if (Bag.spendStones(cost)) {
-          p.rushDay = today;
-          Log.add(`聚灵阵轰然全开——3 日内修炼效率 ×1.5！（灵石 -${Utils.fmtNum(cost)}）`, 'system');
-          done.push('聚灵加速');
-        } else {
-          Log.add('聚灵阵静默着——灵石不足，今日便不点了。', 'info');
-        }
-      }
+      if (go && await CaveSys.spiritRush({ ask: false })) done.push('聚灵加速');
     }
     // 3 采收成熟灵田
     if (p.cave && p.cave.plots) {
@@ -250,21 +250,41 @@ LOCKS: {
     if (!p.dead && p._restDay !== today && !Battle.active) {
       try { Cultivate.rest(); if (p._restDay === today) done.push('打坐调息'); } catch (e) {}
     }
-    if (!p.dead && (p._wuDaoDay || -1) !== today && (p.insight || 0) >= Cultivate.wuDaoCost(p) && !Battle.active) {
-      try { await Cultivate.wuDao(); if (p._wuDaoDay === today) done.push('悟道炼作'); } catch (e) {}
+    // v39（E362）：悟道挂三态偏好（fanren_wd_wudao）——ask 弹窗确认（原样，选「再想想」也如实回执）、
+    // always 静默直悟但纯度预览 <30% 自动跳过、skip 整步跳过；skip/不足均入小账「悟道：今日未行」
+    if (!p.dead && !Battle.active) {
+      const wdMode = this.prefMode(p, 'wudao');
+      const canWudao = (p.insight || 0) >= Cultivate.wuDaoCost(p);
+      if ((p._wuDaoDay || -1) !== today) {
+        if (wdMode === 'skip') { if (canWudao) done.push('悟道：今日未行'); }
+        else if (canWudao || wdMode === 'always') {
+          try {
+            const r = await Cultivate.wuDao({ silent: wdMode === 'always' });
+            if (r === 'done') done.push('悟道炼作');
+            else if (r === 'skip') done.push('悟道：今日未行');   // 纯度不足自动跳过
+          } catch (e) {}
+        }
+      }
     }
     if (!p.dead && p.sect && p.listenDay !== today && p.sect.contrib >= 300 && !Battle.active && Game.actions['act-sect-listen']) {
       try { await Game.actions['act-sect-listen']({}, null); if (p.listenDay === today) done.push('宗门听讲'); } catch (e) {}
     }
     if (!done.length) { UI.toast('今日诸事皆已办妥——安心修行便是'); return; }
-    await UI.popup({
-      title: '✦ 一键行权 · 小账',
-      html: done.map(x => `<div class="tip-line">· ${x} ✓</div>`).join('')
-        + '<div class="tip-line" style="margin-top:6px">· 各项收支明细见「游历记载」。</div>',
-      options: [{ text: '收 下', value: true, primary: true }],
-    });
+    // v39（E362）：小账挂三态偏好（fanren_wd_damode）——ask 弹窗（原样）、always toast 汇总不弹窗、
+    // skip 静默（明细尽在游历记载）；全偏好设置下行权 0 强制弹窗
+    const daMode = this.prefMode(p, 'damode');
+    if (daMode === 'always') UI.toast(`✦ 行权小账：${done.join('、')}`);
+    else if (daMode !== 'skip') {
+      await UI.popup({
+        title: '✦ 一键行权 · 小账',
+        html: done.map(x => `<div class="tip-line">· ${x} ✓</div>`).join('')
+          + '<div class="tip-line" style="margin-top:6px">· 各项收支明细见「游历记载」。</div>',
+        options: [{ text: '收 下', value: true, primary: true }],
+      });
+    }
     // v38（E325）：以武会友收尾——问剑优先，次切磋好感最高者（开战即止，战报自见）
-    if (!p.dead && !Battle.active && !Story.active && !UI._popupResolve) {
+    // v39（E346）：死链复活——原 `!Story.active` 恒真，剧情演出中也会开战把演出顶掉
+    if (!p.dead && !Battle.active && !Story.active() && !UI._popupResolve) {
       try {
         if ((p._wenjianDay || -1) !== today && typeof RankSys !== 'undefined' && RankSys.board) {
           const rk = RankSys.board(p);

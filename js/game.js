@@ -281,14 +281,15 @@ const Game = {
         const rushDayBak = p.rushDay; p.rushDay = null;
         const perRound = Cultivate.baseGain(p) * (1 + st.cultPct / 100);
         p.rushDay = rushDayBak;
-        // v37（E277）：聚灵窗口补乘——点燃后关游戏，离线日落在 3 日窗口内的部分按 ×1.5 计
-        //（v30 起整段剔除 rushDay，已付费的窗口日被离线整段烧光）。窗口剩余日 = rushDay+3 − 起始日，
+        // v37（E277）：聚灵窗口补乘——点燃后关游戏，离线日落在窗口内的部分按 ×1.5 计
+        //（v30 起整段剔除 rushDay，已付费的窗口日被离线整段烧光）。窗口剩余日 = rushDay+窗口 − 起始日，
         // 与离线段取交集；rushMul 为全段加权乘数（窗口日 ×1.5、其余 ×1）。
         // 跨批契约（B8 E253 门禁锚）：OFFLINE_EFF/rushMul 两个具名常量与可抽取表达式形态勿改
+        // v39（E346）：窗口长度改消费 CaveSys.RUSH_WINDOW() 单源（洞天灵潮 4 日离线同享）
         const OFFLINE_EFF = 0.6;   // 离线折算效率（v34 A4 定档 0.6，不随本版上调）
         let rushMul = 1;
         if (p.rushDay != null) {
-          const rushLeft = Utils.clamp(p.rushDay + 3 - Math.floor(p.day || 0), 0, realDays);
+          const rushLeft = Utils.clamp(p.rushDay + CaveSys.RUSH_WINDOW() - Math.floor(p.day || 0), 0, realDays);
           if (rushLeft > 0) rushMul = (realDays + 0.5 * rushLeft) / realDays;
         }
         offlineExp = Math.round(perRound / 3 * OFFLINE_EFF * rushMul * realDays);
@@ -445,6 +446,7 @@ const Game = {
   exitToStart() {
     UI.closeOverlays();   // 状态同步：清掉战斗 / 弹窗等覆盖层，避免遮罩滞留
     AutoCult.abort();   // v6
+    this._snapAt = null;   // v39（E365）：bak2 首拍重臂——换档/删档后会话首拍保护重新生效（save.js 口径）
     if (this._snapTimer) { clearInterval(this._snapTimer); this._snapTimer = null; }   // v37（E268）：滚动快照定时器随会话清理
     if (this.player && !this.player.dead) Save.autoSave(true);
     this.player = null;
@@ -501,13 +503,15 @@ const Game = {
       DaoSys.openPathModal(tier);
     }
     // v38（E305）：夜袭时序——宿敌叩门（Story/弹窗/战斗中延后，节庆同款挂起语义）
-    if (p.pendingNightRaid && !p.dead && !Battle.active && !Story.active && !UI._popupResolve) {
+    // v39（E346）：死链复活——Story.active 是函数（story.js:15），原 `!Story.active` 恒真，
+    // 剧情演出中宿敌照样叩门，v38 夜袭在线结算整段被顶掉
+    if (p.pendingNightRaid && !p.dead && !Battle.active && !Story.active() && !UI._popupResolve) {
       const npcId = p.pendingNightRaid;
       p.pendingNightRaid = null;
       CaveSys.resolveNightRaid(p, npcId, false);
     }
-    // v38（E306）：誓言清算——破戒待决 / 贫誓超限（异步弹窗，不阻塞收尾）
-    if (typeof OathSys !== 'undefined' && !p.dead && !Battle.active && !Story.active && !UI._popupResolve
+    // v38（E306）：誓言清算——破戒待决 / 贫誓超限（异步弹窗，不阻塞收尾）；v39（E346）：死链同修
+    if (typeof OathSys !== 'undefined' && !p.dead && !Battle.active && !Story.active() && !UI._popupResolve
       && (p.pendingOathBreak || (p.oaths && p.oaths.poor))) {
       OathSys.pendingResolve(p);
     }
@@ -648,9 +652,9 @@ const Game = {
     'act-battle-review': () => {
       const hist = Battle.history || [];
       if (!hist.length) { UI.toast('尚无战斗记录——先去打一场'); return; }
-      // v23：最近三场切换查看（最新一场默认展开）
+      // v23：最近三场切换查看（最新一场默认展开）；v39（E348）：标题渲染来由（history.from，会话内存零持久化）
       const sec = (h, i, open) => `<details class="fold" ${open ? 'open' : ''}>
-        <summary>第${['一', '二', '三'][i] || i + 1}场 · ${Utils.esc(h.foe || '?')} · ${h.won ? '胜' : '负/遁'}</summary>
+        <summary>第${['一', '二', '三'][i] || i + 1}场${h.from ? ` ·【${h.from}】` : ''} · ${Utils.esc(h.foe || '?')} · ${h.won ? '胜' : '负/遁'}</summary>
         <div style="max-height:38vh;overflow:auto">${(h.logs || []).map(l => `<div class="tip-line">· ${typeof l === 'string' ? l : l.html}</div>`).join('') || '<div class="tip-line">（无记录）</div>'}</div></details>`;
       UI.popup({ title: '⚔ 战斗回顾 · 最近三场', html: hist.map((h, i) => sec(h, i, i === 0)).join(''), options: [{ text: '合 上', value: true, primary: true }] });
     },
@@ -829,7 +833,8 @@ const Game = {
       if (B.auto && !B.busy) Battle.autoNext();
     },
     'bt-speed': () => { Battle.setSpeed(Battle.speed >= 3 ? 1 : Battle.speed + 1); },
-    'bt-ning': () => Battle.actNingshen(),   // v32（C7）：凝神——战意/真元互转与净化
+    'act-ning-zy': () => Battle.ningshenZY(),   // v39（E350）：凝神双钮直达——换气（20 战意 → 1 真元）
+    'act-ning-purge': () => Battle.ningshenPurge(),   // v39（E350）：凝神双钮直达——净化（15 战意 → 消散负面）
     'bt-burst': () => Battle.actBurst(),   // v38（E308）：战意爆发——满战意主动兑现一击
     'bt-tame': () => { if (typeof BeastSys !== 'undefined' && BeastSys.tame) BeastSys.tame(); else UI.toast('此兽野性难驯'); },
     /* --- 大道 / 天劫 / 因果 / 百艺（增量扩展） --- */
@@ -912,15 +917,18 @@ const Game = {
     /* --- v13 悬赏 / 黑市 --- */
     'act-bounty-submit': (d) => BountySys.submit(Number(d.i)),
     'act-bounty-claim': (d) => BountySys.claim(Number(d.i)),
+    'act-bounty-reroll': () => BountySys.reroll(),   // v39（E353）：悬赏换一批（每窗口一次免费）
     'act-black-buy': (d) => BlackSys.buy(d.item),
     'act-black-mystery': () => BlackSys.buyMystery(),
     'act-bid': (d) => AuctionSys.bid(d.mode),
+    'act-auction-reroll': () => AuctionSys.reroll(),   // v39（E353）：换一批（每期一次 20×eco）
     'act-donate': (d) => DonateSys.donate(d.d),
     'act-sect-command': () => SectSys.command(),
     /* --- v3 秘境 --- */
     'act-realm-enter': (d) => DungeonSys.enter(Number(d.realm)),
     'act-realm-node': (d) => DungeonSys.resolve(Number(d.node)),
     'act-realm-retreat': () => DungeonSys.retreat(),
+    'act-dung-auto': () => DungeonSys.toggleAuto(),   // v39（E362）：秘境连推开关
     'act-dungeon-purify': (d) => DungeonSys.purify(d.mut),   // v38（E307）：净化一条秘境异变
     'act-realm-synth': () => DungeonSys.synth(),
     /* --- v3 江湖 --- */

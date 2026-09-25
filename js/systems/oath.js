@@ -23,7 +23,7 @@ const OathSys = {
   banned(p) { return (p.oathBanDay || 0) > Math.floor(p.day || 0); },
   banLeft(p) { return Math.max(0, (p.oathBanDay || 0) - Math.floor(p.day || 0)); },
   poorCap(p) { return Math.round(this.POOR_CAP * GameData.stoneEco(p ? p.realmIdx : 0)); },
-  stonesTotal(p) { return p.stones ? (p.stones.low || 0) + (p.stones.mid || 0) * 100 + (p.stones.high || 0) * 10000 : 0; },
+  stonesTotal(p) { return Bag.stonesTotal(p); },   // v39（E365）：转调 Bag 单源
 
   /* ---- 属性面回报（stat.js 消费） ---- */
   cultBonus(p) { return this.active(p, 'still') ? 8 : 0; },
@@ -76,12 +76,29 @@ const OathSys = {
   async breakOath(id, reason) {
     const p = Game.player;
     if (!this.active(p, id)) return;
-    const ok = await UI.popup({
+    // v39（E358）：宽恕限次——每道誓一世宽恕限 2 次（p.oaths.mercy[id]），每次气运 −5；
+    // 第 3 次再犯时弹窗只剩「破誓担劫」——堵死「边杀野怪边点守住」零代价白嫖誓约 buff 的循环。
+    // 清贫誓的散财履约（poorCheck donate）属践诺而非宽恕，不计数。
+    const mercyN = (p.oaths.mercy && p.oaths.mercy[id]) || 0;
+    const canMercy = mercyN < 2;
+    const pick = await UI.popup({
       title: `破誓 · ${this.NAMES[id]}`,
-      html: `${reason || '你亲口立下的誓言，此刻就要亲手打破。'}<br><span class="neg">天道必偿：心魔 +15、气运 -20、${this.BAN_DAYS} 日禁立新誓。</span>`,
-      options: [{ text: '破誓担劫', value: true }, { text: '罢了，守住誓言', value: false }],
+      html: `${reason || '你亲口立下的誓言，此刻就要亲手打破。'}<br><span class="neg">破誓担劫：心魔 +15、气运 -20、${this.BAN_DAYS} 日禁立新誓。</span>${canMercy ? `<br><span class="tip-line">· 宽恕限次：此誓本世已宽恕 ${mercyN}/2 次——再宽一次气运 −5；第 3 次再犯唯余破誓。</span>` : '<br><span class="neg">此誓已宽恕两次，天道不再容情——唯余破誓担劫。</span>'}`,
+      options: [
+        ...(canMercy ? [{ text: `罢了，守住誓言（宽恕：气运 −5）`, value: 'mercy' }] : []),
+        { text: '破誓担劫', value: 'break' },
+      ],
     });
-    if (!ok) return;
+    if (pick === 'mercy') {
+      p.oaths.mercy = p.oaths.mercy || {};
+      p.oaths.mercy[id] = mercyN + 1;
+      p.fortune = Math.max(0, (p.fortune || 0) - 5);
+      Log.add(`【守誓】你向天道请罪，愿以气运偿此一失（气运 −5，此誓本世宽恕 ${mercyN + 1}/2 次）——誓约仍在，然天道记账，再犯必偿。`, 'warn');
+      this.partnerComment(p, `此番天道看在你的份上网开一面——下不为例。`, '谈及誓言宽恕');
+      Game.afterAction();
+      return;
+    }
+    if (pick !== 'break') { p.pendingOathBreak = id; return; }   // ESC/遮罩不结算——罪证回挂，下次收尾再审（堵「弹窗待决即无罪」的漏洞）
     p.oaths[id] = false;
     p.oathBanDay = Math.floor(p.day || 0) + this.BAN_DAYS;
     if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 15, '破誓反噬');
@@ -115,7 +132,9 @@ const OathSys = {
         p.stones[k] -= take; left -= take * u;
       }
       if (left > 0 && (p.stones.low || 0) > 0) p.stones.low -= Math.min(p.stones.low, left);
-      if (typeof KarmaSys !== 'undefined' && KarmaSys.add) KarmaSys.add(p, 1, '散财行善');
+      // v39（E358）：KarmaSys.add 本不存在（调用即 TypeError 静默吞）——改 RepSys.add 实发声望，
+      // 自带清贫誓 ×1.5：按 1 计入实得 1~2，文案如实括注
+      if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 1, '散财行善（誓约加成后 +1~2）');
       Log.add(`【守誓】你将超出的 ${Utils.fmtNum(excess)} 灵石尽数散予道旁修士与贫苦凡人——身无长物，心怀坦荡。`, 'gain');
     } else if (pick === 'break') {
       p.oaths.poor = false;

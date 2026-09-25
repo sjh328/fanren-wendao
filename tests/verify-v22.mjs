@@ -168,13 +168,15 @@ console.log('===== SA 源码静态组 =====');
       ? pass('SA94a 聚灵 3 游戏日窗口口径入 baseGain 单源（E218）') : fail('SA94a 窗口', '');
     cave.includes('聚灵阵灵机未散（余') && cave.includes('Cultivate.baseGain(p) * 0.5') && cave.includes('Cultivate.baseGain(p) * 8')
       ? pass('SA94b spiritRush 窗口守卫 + 弹窗净收益按场景实算 0.5/8×baseGain（E218）') : fail('SA94b 净收益', '');
-    guide.includes('const inWindow = p.rushDay != null && today - p.rushDay < 3;') && guide.includes('!inWindow && p._autoRush !== \'skip\' && p._autoRushSkipDay !== today') && guide.includes('点燃后 3 日内修炼效率 ×1.5')
-      ? pass('SA95 一键行权聚灵终态守卫 + 窗口口径弹窗（E205/E218）') : fail('SA95 行权聚灵', '');
+    // v39（E346）：窗口判定/文案全部消费 CaveSys.RUSH_WINDOW() 单源（洞天灵潮 4 日），断言随新口径修订
+    guide.includes('const inWindow = p.rushDay != null && today - p.rushDay < WIN;') && guide.includes('const WIN = CaveSys.RUSH_WINDOW();')
+      && guide.includes('!inWindow && p._autoRush !== \'skip\' && p._autoRushSkipDay !== today') && guide.includes('点燃后 ${WIN} 日内修炼效率 ×1.5')
+      ? pass('SA95 一键行权聚灵终态守卫 + 窗口口径弹窗（E205/E218；v39（E346）RUSH_WINDOW 单源化）') : fail('SA95 行权聚灵', '');
     ui.includes("label: '悟道'") && ui.includes("act: (!wudaoDone && canWudao) ? 'act-wudao' : ''") && ui.includes('感悟 ${p.insight}/${wdCost}')
       && gamejs.includes("'act-wudao': () => Cultivate.wuDao(),")
       ? pass('SA96a 悟道入今日修行卡三态 + act-wudao 行内接线（E219；v37（E265）门槛改随境 wdCost=20+2r 卡面/弹窗/实扣三处同源）') : fail('SA96a 悟道行', '');
-    ui.includes('已点燃 · 3 日内修炼 ×1.5')
-      ? pass('SA96b 今日修行卡聚灵行窗口口径与行权一致（E218）') : fail('SA96b 卡面', '');
+    ui.includes('rangeWin - (today - p.rushDay)') || ui.includes('rushWin - (today - p.rushDay)')
+      ? pass('SA96b 今日修行卡聚灵行窗口口径与行权一致（E218；v39（E346）rushWin 单源化——渲染 3/4 日随洞天）') : fail('SA96b 卡面', '');
     bal.includes('全行动效率横向表') && bal.includes('GATE = { cult: 2.2, seclude: 1.4 }') && bal.includes('process.exitCode = 1') && bal.includes('await NpcSys.discuss(\'n1\')')
       ? pass('SA97 balance-sim 横向表 + 门禁非零退出 + 论道行实调实现（E220）') : fail('SA97 门禁', '');
   }
@@ -262,9 +264,9 @@ console.log('===== SA 源码静态组 =====');
   /* ---- v22 新立：温书守卫 / 聚灵三态 / 切磋总限（处方 SA 清单点项） ---- */
   story.includes('if (c.readonly) return;') && story.includes('此战已成往事') && story.includes('温书回看')
     ? pass('SV1 温书守卫与纯文本渲染双收口（E199）') : fail('SV1 温书', '');
-  guide.includes("p._autoRushSkipDay !== today") && guide.includes("const inWindow = p.rushDay != null && today - p.rushDay < 3;")
+  guide.includes("p._autoRushSkipDay !== today") && guide.includes("const inWindow = p.rushDay != null && today - p.rushDay < WIN;")
     && guide.includes("!inWindow && p._autoRush !== 'skip' && p._autoRushSkipDay !== today")
-    ? pass('SV2 聚灵三态与 _autoRushSkipDay + 窗口守卫 inWindow（E205/E218）') : fail('SV2 聚灵', '');
+    ? pass('SV2 聚灵三态与 _autoRushSkipDay + 窗口守卫 inWindow（E205/E218；v39（E346）窗口消费 RUSH_WINDOW 单源）') : fail('SV2 聚灵', '');
   npc.includes('今日已三度以武会友') && npc.includes('p._sparCount = (p._sparCount || 0) + 1;')
     ? pass('SV3 切磋每日 3 场跨 NPC 总限（E198）') : fail('SV3 总限', '');
 }
@@ -544,10 +546,12 @@ try {
     // 藏经 perk：参悟所得 +15%（stub 弹窗与消耗，实调 studyRecipe）
     p.sect.faction = 'cangjing';
     Bag.addItem('m_danfang', 2);
+    p.insight = 0;   // 感悟满百上限免疫：从 0 起算，排除此前步骤遗留存量的干扰
+    const savedAA10 = Game.afterAction; Game.afterAction = () => {};   // 屏蔽 afterAction 随机奇遇对感悟的偶发干扰
     const ins0 = p.insight || 0;
     const op = UI.popup; UI.popup = async () => true;
     await CraftSys.studyRecipe('a1');
-    UI.popup = op;
+    UI.popup = op; Game.afterAction = savedAA10;
     out.cangjing = (p.insight || 0) - ins0 === Math.round(6 * 1.15);
     p.sect.faction = null;
     // 生死状战败扣减：dangerTask 败北 → 心魔 3+5、灵石多扣一成
@@ -650,13 +654,13 @@ try {
       const q0 = p.qihun || 0;
       await TowerSys.redeem('qihun');
       out.qihunOk = p.qihun === q0 + 5;
-      out.r9Cap = 2 * Math.round(120 * GameData.stoneEco(9)) <= Math.round(300 * GameData.stoneEco(9));   // 240×eco ≤ 300×eco
+      out.r9Cap = 2 * Math.round(60 * GameData.stoneEco(9)) <= Math.round(300 * GameData.stoneEco(9));   // v39（E352）纳财折半后 120×eco ≤ 300×eco
     } finally { UI.popup = op; }
     return out;
   });
   rB8.twoOk && rB8.thirdBlocked ? pass('RB23a 塔绩纳财：前两次各扣 15 绩、第 3 次被拦不计数（E221）') : fail('RB23a 日限', JSON.stringify(rB8));
   rB8.resetOk ? pass('RB23b 纳财计数跨日重置后放行（E221）') : fail('RB23b 重置', JSON.stringify(rB8));
-  rB8.qihunOk && rB8.r9Cap ? pass('RB23c 器魂 +5 入账 + r9 深爬 240×eco ≤ 层奖日额度 300×eco（E221/E225 联动）') : fail('RB23c 器魂', JSON.stringify(rB8));
+  rB8.qihunOk && rB8.r9Cap ? pass('RB23c 器魂 +5 入账 + r9 纳财折半后 120×eco ≤ 层奖日额度 300×eco（E221/E225 联动；v39（E352）折半）') : fail('RB23c 器魂', JSON.stringify(rB8));
 
 
   /* ---- v22 补：E200 塔挂起机制级行为（waitIdle 行为 + steps 弹窗挂起路径） ---- */

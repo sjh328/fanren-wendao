@@ -928,6 +928,8 @@ try {
       const T21_PATCH = { name: '挡劫人', realmIdx: 1, layer: 3, exp: 950, sect: null, insight: 100, dao: null, karma: 0, fortune: 0, rootDeep: false, rootWeak: false, bag: { a_xuangui: 1 }, stones: { low: 1000, mid: 0, high: 0 }, attrs: { gen: 5, comp: 10, luck: 5, body: 5 } };
       await walkTribStages(page);
       await clickSel(page, '[data-action="trib-strategy"][data-strategy="artifact"]');
+      await sleep(300);
+      await clickPopupBtn(0);   // v39（E355）：挡劫明示确认弹窗——祭宝才吞
       await sleep(3600);
       let t21 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
       if (!(t21.rootWeak === true && !t21.bag.a_xuangui)) {
@@ -939,6 +941,8 @@ try {
         await sleep(400);
         await walkTribStages(page);
         await clickSel(page, '[data-action="trib-strategy"][data-strategy="artifact"]');
+        await sleep(300);
+        await clickPopupBtn(0);
         await sleep(3600);
         t21 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
       }

@@ -25,6 +25,9 @@ const Bag = {
     if (p.bag[itemId] <= 0) delete p.bag[itemId];
   },
   count(itemId) { return Game.player.bag[itemId] || 0; },
+  /** v39（E365）：灵石折算总额单源——全仓 `low + mid*100 + high*10000` 内联收口至此，
+   *  防未来第四档面额漏改；空档安全（旧调用点多不做 null 兜底，此处统一 || 0）。 */
+  stonesTotal(p) { return p.stones ? (p.stones.low || 0) + (p.stones.mid || 0) * 100 + (p.stones.high || 0) * 10000 : 0; },
   addStones(amount) {
     const p = Game.player;
     // v18 道心烙印【霸/谋/借】：灵石获取加成
@@ -51,7 +54,7 @@ const Bag = {
    *  v27 修瑕：先验总额再做兑换——此前不足时会把中/上品尽数打散成下品仍返回失败（失败操作留副作用） */
   spendStones(amount) {
     const p = Game.player;
-    const total = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
+    const total = this.stonesTotal(p);
     if (total < amount) return false;
     if (p.stones.low < amount) {
       while (p.stones.low < amount && (p.stones.mid > 0 || p.stones.high > 0)) {
@@ -68,7 +71,7 @@ const Bag = {
   /** v26：尽力扣款——不足则倾囊全扣，返回实扣数（罚款/罚没类场景，杜绝「分文未扣却宣称赔了钱」） */
   spendStonesMax(amount) {
     const p = Game.player;
-    const total = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
+    const total = this.stonesTotal(p);
     const take = Math.min(total, amount);
     if (take <= 0) return 0;
     // 全部整兑到下品再扣，保证恰好扣掉 take

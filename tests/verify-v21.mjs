@@ -208,8 +208,8 @@ console.log('===== SA 源码静态组 =====');
     && autocult.includes('修为尽炼仙元')
     ? pass('SA47 AutoCult 圆满引导/转目标/仙元小结（U5/E150）') : fail('SA47 挂机圆满', '');
   cult.includes('const r9Full = p.realmIdx >= 9 && p.layer === 3') && cult.includes('仙元 ≈')
-    && cult.includes('advanced = p.realmIdx !== r0 || p.layer !== l0;')
-    ? pass('SA48 单轮闭关圆满口径：预估改仙元+结算报告不再被吞（U5/E151）') : fail('SA48 闭关口径', '');
+    && cult.includes('p.layer !== beforeLayer || p.realmIdx !== beforeRealm')
+    ? pass('SA48 单轮闭关圆满口径：预估改仙元+结算报告不再被吞（U5/E151；v39（E364）双链合并后进阶判定随 secludeLoop 单源）') : fail('SA48 闭关口径', '');
   cult.includes('...rep.xianyuan > 0') || cult.includes('rep.xianyuan > 0')
     ? pass('SA49 闭关结算报告补仙元行（U5）') : fail('SA49 报告仙元', '');
   cult.includes("document.getElementById('dao-modal') && !document.getElementById('dao-modal').classList.contains('hidden')")

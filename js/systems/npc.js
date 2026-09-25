@@ -290,7 +290,8 @@ const NpcSys = {
     this.mem(p, cand, 'save', '危难相救');   // v19 记忆
     return { id: cand, name: this.def(cand).name };
   },
-  /** v38（E312）：名动一方（声望 ≥120）——初见自带三分敬意（一次性，五点交情随初见入账） */
+  /** v38（E312）：名动一方（声望 ≥120）——初见自带三分敬意（一次性，五点交情随初见入账）
+   *  v39（E358）：120 门槛与 RepSys.LEVELS 新「名动一方」显示档对齐（机制数值不动，仅档名归位） */
   firstMeetBoost(p, id) {
     const s = this.state(p, id);
     if (!s || s.met) return 0;
@@ -307,6 +308,23 @@ const NpcSys = {
     if (won) s.rel = Utils.clamp(s.rel + Math.round(5 * (typeof OathSys !== 'undefined' ? OathSys.relMul(p) : 1)), -100, 100);   // v38（E306）：独行之道 ×1.3
     this.mem(p, id, 'spar', won ? '切磋获胜' : '切磋落败');   // v19 记忆
     if (won) s.sparWins = (s.sparWins || 0) + 1; else s.sparLoses = (s.sparLoses || 0) + 1;   // v20 切磋段位
+  },
+  /** v39（E360）：共历大事折好感——「一起打过的仗」补 70→90 磨段的被动来源。
+   *  在场相熟（rel≥30 且 <90）随机 1~2 名 rel+2 并记共历条目（mem 单源）。 */
+  comradesRelBonus(p, memTxt) {
+    const cands = Object.keys(p.npcs || {}).filter(id => {
+      const s = p.npcs[id];
+      return s && s.alive && s.met && (s.rel || 0) >= 30 && (s.rel || 0) < 90;
+    });
+    if (!cands.length) return;
+    const n = Math.min(cands.length, Utils.rand(1, 2));
+    for (let i = 0; i < n; i++) {
+      const id = cands.splice(Utils.rand(0, cands.length - 1), 1)[0];
+      const s = p.npcs[id];
+      s.rel = Utils.clamp((s.rel || 0) + 2, -100, 100);
+      this.mem(p, id, 'war', memTxt || '共历大事');
+      Log.add(`共历之事传到 ${this.def(id).name} 耳中——TA 与你的交情又深了一分（交情 +2）。`, 'info');
+    }
   },
   /** NPC 之敌（战斗用） */
   /** v36（E227）：NPC 综合战力估算——从 buildEnemy 属性基式（hp=(55+rp^1.6×5)×mod、atk=(6+rp×2.6)×mod、
@@ -476,12 +494,14 @@ const NpcSys = {
     // v28 联动：声望先于人先——名望高者结交更受欢迎，恶名远扬者见面先减三分
     const rep = p.reputation || 0;
     const repAdj = rep >= 80 ? 5 : rep >= 30 ? 3 : rep < -30 ? -5 : rep < 0 ? -2 : 0;
+    // v39（E360）：同门之谊——NPCS.sect 字段首次接线（青云 4/丹霞 3/万宝 4/磐岩 2/周天 2）
+    const sameSect = !!(d.sect && p.sect && d.sect === p.sect.id);
     const relBefore = s.rel;   // v30：日志改报本次增量（原打印累计总量，「交情 +37」实为 +8~14）
-    s.rel = Utils.clamp(s.rel + Utils.rand(8, 14) + repAdj, -100, 100);
+    s.rel = Utils.clamp(s.rel + Utils.rand(8, 14) + repAdj + (sameSect ? 5 : 0), -100, 100);
     p.counters.befriends = (p.counters.befriends || 0) + 1;   // v11 剧情计数
-    this.mem(p, id, 'chat', '结交之谊');   // v19 记忆
+    this.mem(p, id, 'chat', sameSect ? '同门之谊' : '结交之谊');   // v19 记忆
     const relDelta = s.rel - relBefore;
-    Log.add(`你以礼相待，与 ${d.name} 相谈甚欢。${repAdj ? `（${repAdj > 0 ? '你的名望令对方高看一眼，' : '你的恶名令对方心存戒备，'}交情 ${repAdj > 0 ? '+' : ''}${repAdj}）` : ''}（交情 ${relDelta > 0 ? '+' : ''}${relDelta}${s.rel ? `，现 ${s.rel}` : ''}）`, 'gain');
+    Log.add(`你以礼相待，与 ${d.name} 相谈甚欢。${sameSect ? '同门相见，倍觉亲切（<b>同门之谊</b>，交情 +5）。' : ''}${repAdj ? `（${repAdj > 0 ? '你的名望令对方高看一眼，' : '你的恶名令对方心存戒备，'}交情 ${repAdj > 0 ? '+' : ''}${repAdj}）` : ''}（交情 ${relDelta > 0 ? '+' : ''}${relDelta}${s.rel ? `，现 ${s.rel}` : ''}）`, 'gain');
     Game.afterAction();
   },
   async spar(id) {
@@ -506,6 +526,8 @@ const NpcSys = {
     if ((p._sparCount || 0) >= 3) { UI.toast('今日已三度以武会友——筋骨酸软，明日再战'); return; }
     s.sparDay = today;
     p._sparCount = (p._sparCount || 0) + 1;
+    // v39（E360）：同门切磋——首回合战意 +1（同门印证，气机相熟）
+    if (d.sect && p.sect && d.sect === p.sect.id) p._sameSectSpar = today;
     this.firstMeetBoost(p, id);   // v38（E312）：名动一方初见敬意
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴
@@ -723,6 +745,47 @@ const NpcSys = {
     if (after !== before) Ambience.sfx('rare');
     Game.afterAction();
   },
+  /** v39（E361）：道侣心事线——结发（rel=100）后的情谊溢出改记 heartPool，每累计 10 点推进一段
+   *  心事（共三段：旧物→攻击 +3% / 心结→双修感悟 +1/次 / 同修之约→双修修为 +5%，均 ≤5% 档）；
+   *  三段毕后溢出照旧 clamp 不再累积。返回 { rel: 实际交情增量, heart: 入池心事点 } */
+  heartGain(p, id, delta) {
+    const s = this.state(p, id);
+    if (!s) return { rel: 0, heart: 0 };
+    const before = s.rel;
+    s.rel = Utils.clamp(before + delta, -100, 100);
+    const relDelta = s.rel - before;
+    let heart = 0;
+    if (delta > 0 && relDelta < delta && p.partner === id && (s.heart || 0) < 3) {
+      heart = delta - relDelta;
+      s.heartPool = (s.heartPool || 0) + heart;
+      while ((s.heartPool || 0) >= 10 && (s.heart || 0) < 3) {
+        s.heartPool -= 10;
+        s.heart = (s.heart || 0) + 1;
+        this.heartEvent(p, id, s.heart);
+      }
+    }
+    return { rel: relDelta, heart };
+  },
+  /** v39（E361）：心事段事件——popup 二选 + mem + 年表（人物志单源 mem） */
+  async heartEvent(p, id, stage) {
+    const d = this.def(id);
+    const EVENTS = [
+      { name: '旧物', text: `${d.name} 从匣底取出一枚旧物，托在你掌心——那是TA踏入修行前最珍视的东西。「如今用不上了……予你。」`, opts: ['郑重收下，贴身佩戴', '为它系上一条新穗'] },
+      { name: '心结', text: `${d.name} 说起一桩积年的心结，说到一半又摇头：「罢了，都过去了。」你握住TA的手，没有追问。`, opts: ['静静听完', '陪TA走一段夜路'] },
+      { name: '同修之约', text: `${d.name} 望向云海尽头：「来日你我皆登高处，再回头看看今日。」——这是一场无声的约定。`, opts: ['击掌为誓', '「一言为定」'] },
+    ];
+    const ev = EVENTS[stage - 1] || EVENTS[0];
+    const FX = { 1: '旧物随身——道侣心意所系，攻击 +3%', 2: '心结既解——此后每次双修感悟 +1', 3: '同修之约既立——此后双修修为 +5%' };
+    const pick = await UI.popup({
+      title: `道侣心事 · ${ev.name}（${stage}/3）`,
+      html: `${ev.text}<br><span class="tip-line">· ${FX[stage]}</span>`,
+      options: [...ev.opts.map((t, i) => ({ text: t, value: i, primary: i === 0 })), { text: '藏在心里', value: -1 }],
+    });
+    this.mem(p, id, 'story', `道侣心事 · ${ev.name}`);
+    if (typeof Story !== 'undefined' && Story.chron) Story.chron(`道侣心事 · ${ev.name}`);
+    Log.add(`【心事 · ${ev.name}】你与 ${d.name} 之间又近了一层——${FX[stage]}。${pick >= 0 ? `（你选择了「${ev.opts[pick]}」）` : ''}`, 'event');
+    Game.afterAction();
+  },
   /** v20 道侣共修：每三十日一次双修机缘；偶发心愿 */
   async companionCheck(p) {
     if (!p || !p.partner || Battle.active) return;
@@ -734,10 +797,16 @@ const NpcSys = {
     p._daoCultDay = today;
     const d = this.def(p.partner);
     const gain = Math.round(70 * GameData.eco(p.realmIdx) * (0.8 + d.talent * 0.08) * 2);
-    Cultivate.addExp(p, gain);
-    s.rel = Utils.clamp(s.rel + 2, -100, 100);
+    // v39（E361）：心事段奖励——段3 双修修为 +5%、段2 双修感悟 +1/次
+    const hg = this.heartGain(p, p.partner, 2);
+    const bonusGain = Math.round(gain * ((s.heart || 0) >= 3 ? 0.05 : 0));
+    const realGain = gain + bonusGain;
+    Cultivate.addExp(p, realGain);
+    if ((s.heart || 0) >= 2) Cultivate.addInsight(p, 1, false);
     this.mem(p, p.partner, 'chat', '双修机缘');
-    Log.add(`【双修】你与 ${d.name} 席地对坐，两道真气交缠共进——修为 +${Utils.fmtNum(gain)}。（交情 +2）`, 'gain');
+    // v39（E361）：结发后交情已满——溢出走心事线，不再播报虚假「交情 +N」
+    const relTxt = hg.rel > 0 ? `交情 +${hg.rel}` : (hg.heart > 0 ? `情意愈笃（心事 +${hg.heart}）` : '情意愈笃');
+    Log.add(`【双修】你与 ${d.name} 席地对坐，两道真气交缠共进——修为 +${Utils.fmtNum(realGain)}。（${relTxt}${(s.heart || 0) >= 2 ? '、感悟 +1' : ''}）`, 'gain');
     if (Utils.chance(20)) await this.companionOuting(p, d, s);   // v30：道侣出游
     if (Utils.chance(30)) await this.companionWish(p, d, s);
   },
@@ -746,7 +815,7 @@ const NpcSys = {
     const spots = [
       { name: '夜市灯河', act: '提灯逛一圈夜市', ok: () => { KarmaSys.addFortune(2); return '人间的灯火映在TA眼底——你忽然觉得，修行路上最难得的不是机缘，是有人陪你看灯火。（气运 +2）'; } },
       { name: '秘泉野浴', act: '寻一处无人的灵泉', ok: () => { p.hp = Stat.compute(p).maxHp; p.mp = Stat.compute(p).maxMp; return '灵泉洗去一路风尘，气血灵力尽复，连经脉都暖了几分。（状态尽复）'; } },
-      { name: '断崖论剑', act: '与TA印证一场', ok: () => { Cultivate.addInsight(p, 4, false); s.rel = Utils.clamp(s.rel + 3, -100, 100); return '胜负不重要——重要的是TA接住了你每一剑。印证归来，彼此又懂了几分。（感悟 +4，交情 +3）'; } },
+      { name: '断崖论剑', act: '与TA印证一场', ok: () => { Cultivate.addInsight(p, 4, false); this.heartGain(p, p.partner, 3); return '胜负不重要——重要的是TA接住了你每一剑。印证归来，彼此又懂了几分。（感悟 +4，交情/心事 +3）'; } },
     ];
     const spot = Utils.pick(spots);
     const ok = await UI.popup({
@@ -787,11 +856,12 @@ const NpcSys = {
     } else if (w.cost) {
       if (!Bag.spendStones(w.cost)) { UI.toast('灵石不足，心愿暂且记下'); return; }
     }
-    s.rel = Utils.clamp(s.rel + w.rel, -100, 100);
+    const hgW = this.heartGain(p, p.partner, w.rel);
     this.mem(p, p.partner, 'story', `了却心愿：${w.text}`);
     if (w.ok) w.ok();
     KarmaSys.addFortune(1);
-    Log.add(`你了却了 ${d.name} 的心愿——TA 笑得像捡到了整个春天。（交情 +${w.rel}，气运 +1）`, 'gain');
+    const wishRelTxt = hgW.rel > 0 ? `交情 +${w.rel}` : (hgW.heart > 0 ? `情意愈笃（心事 +${hgW.heart}）` : '情意愈笃');
+    Log.add(`你了却了 ${d.name} 的心愿——TA 笑得像捡到了整个春天。（${wishRelTxt}，气运 +1）`, 'gain');
     Story.chron(`道侣心愿：${w.text}`);
     Game.afterAction();
   },
@@ -834,7 +904,7 @@ const NpcSys = {
     const today = Math.floor(p.day || 0);
     if (s._discussDay === today) { UI.toast(`今日已与${d.name}论道过——大道贵悟不贵频，明日再叙`); return; }
     s._discussDay = today;
-    const insight = tier.id === 'sworn' ? 4 : tier.id === 'bosom' ? 3 : 2;
+    const insight = (tier.id === 'sworn' ? 4 : tier.id === 'bosom' ? 3 : 2) + (d.sect && p.sect && d.sect === p.sect.id ? 1 : 0);   // v39（E360）：同门论道 +1 感悟
     const gain = Math.round(Cultivate.baseGain(p) * (1.0 + d.talent * 0.08));   // v36（E197）：自随乘数——talent 1~5 → 1.08~1.4× baseGain，收益与 rel 解耦断「越论道越要论道」自增强环
     Cultivate.addExp(p, gain);
     Cultivate.addInsight(p, insight, false);   // v37（E264）：感悟增发收口单源（论道=外源感悟）

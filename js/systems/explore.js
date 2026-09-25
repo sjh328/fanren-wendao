@@ -1,4 +1,49 @@
 
+/* ======================================================================
+ * §13 探索与随机事件
+ * v39（E364）：buildMonster 自 status-fx.js 迁入——怪物构造本就是探索/战斗投喂的
+ * 「§13 探索」域事物，原与 StatusFx 同文件纯属搬家期错位（纯迁移，零行为变更）。
+ * ====================================================================== */
+const buildMonster = (id, delta = 0, opts = {}) => {
+  const d = GameData.MONSTERS[id];
+  const rp = Utils.clamp(d.power + delta, 0, 60);
+  const realmIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
+  // v31 修瑕：elitePlus（秘境 forced 精英/魔域入侵/夺宝怪）并入对象构造——原修复写在 return 之后
+  // 且把取整函数 m 误当怪物对象，整段不可达，手工精英整体退化为「隐形精英」（有词缀无基线）。
+  // 数据精英（d.elite）吃全部倍率；elitePlus 只补精英旗标与 crit 基线（调用方自带数值倍率，不叠乘）
+  const dataElite = !!d.elite;
+  const e = dataElite || !!opts.elitePlus;
+  // v20 习性模板：同一妖兽不同个体养成不同打法（无模板为主，五种习性均摊）
+  const tplId = Utils.pickWeighted(GameData.MONSTER_TEMPLATE_WEIGHTS);
+  const tpl = GameData.MONSTER_TEMPLATES.find(t => t.id === tplId) || null;
+  const m = (v, k) => Math.round(v * ((tpl && tpl[k]) || 1));
+  // v38（E318）：转世劫难「群邪环伺」——天下之敌 hp/atk ×1.10（全部怪物统一入口）
+  const foeMul = (typeof Game !== 'undefined' && Game.player && Game.player.reinc && Array.isArray(Game.player.reinc.trials) && Game.player.reinc.trials.includes('foe')) ? 1.1 : 1;
+  return {
+    id,
+    name: d.name,
+    elite: e,
+    power: rp,
+    species: d.species || 'beast',
+    tpl: tpl ? tpl.id : null,
+    tplName: tpl ? tpl.name : null,
+    skills: (d.skills || []).map(s => ({ ...s })),
+    realmLabel: GameData.REALM_NAMES[realmIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
+    hpMax: Math.round(m(Math.round((55 + Math.pow(rp, 1.6) * 5) * (d.hp || 1) * (dataElite ? 1.7 : 1)), 'hp') * foeMul),
+    atk: Math.round(m(Math.round((6 + rp * 2.6) * (d.atk || 1) * (dataElite ? 1.35 : 1)), 'atk') * foeMul),
+    def: m(Math.round((3 + rp * 1.6) * (d.def || 1)), 'def'),
+    spd: m(Math.round((6 + rp * 0.9) * (d.spd || 1)), 'spd'),
+    dodge: d.dodge || 0,
+    crit: (e ? 10 : 4) + ((tpl && tpl.crit) || 0),
+    expGain: Math.round(22 * GameData.eco(realmIdx) * (dataElite ? 2.2 : 1)),
+    stoneGain: Math.round(Utils.rand(10, 20) * GameData.stoneEco(realmIdx) * (d.stoneMul || 1) * (dataElite ? 2.5 : 1)),
+    dropTier: Math.min(4, Math.floor(realmIdx / 2) + 1),
+    rareDrop: d.rareDrop || null,
+    rareDrop2: d.rareDrop2 || null,   // v32（E7）：第二稀有掉落（仙缘套装补源）
+    hp: 0,
+  };
+};
+
 const Explore = {
   async go(mapId) {
     const p = Game.player;
@@ -29,9 +74,6 @@ const Explore = {
     // v38（E338）：藏宝阁「寻宝灵机」——灵机在身，此行必遇宝箱
     let huntForce = false;
     if (p.flags && p.flags.treasureHunt > 0) { p.flags.treasureHunt--; huntForce = true; Log.add('【寻宝灵机】眉宇间的灵机微微一烫——你循着感应直奔藏宝之地！', 'system'); }
-    const type0 = huntForce ? 'treasure' : Utils.pickWeighted(weights);
-    const type = type0;
-    if (huntForce) { p.flags = p.flags || {}; p.flags._huntJustNow = true; }
     // v20 天时与深耕：雾日机缘↑、隆冬遇敌↓、兽潮妖患↑、深耕宝箱↑
     const wx0 = Art.weatherOf(p, map.id);
     if (wx0.sky === 'fog' && weights.fortune) weights.fortune *= 1.5;
@@ -40,6 +82,10 @@ const Explore = {
     const deepN = (p.counters.mapExplores || {})[map.id] || 0;
     const deepTier = deepN >= 100 ? 3 : deepN >= 50 ? 2 : deepN >= 20 ? 1 : 0;
     if (deepTier > 0 && weights.treasure) weights.treasure += deepTier * 3;
+    // v39（E359）：掷点移到天时/深耕修正之后——四条 v20 起从未生效的修正（pickWeighted 原在其前
+    // 掷点，修正全成马后炮）自此复活，E331「季节宜忌」公示兑现（与 SEASON_TIPS 对账）
+    const type = huntForce ? 'treasure' : Utils.pickWeighted(weights);
+    if (huntForce) { p.flags = p.flags || {}; p.flags._huntJustNow = true; }
     switch (type) {
       case 'battle': {
         const eliteChance = (under ? 14 : 8) + deepTier * 4;   // v20 深耕：精英率 +

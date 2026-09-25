@@ -14,21 +14,18 @@ const TowerSys = {
     { id: 'twb_hp',     name: '蚀灵血煞', desc: '塔内守影气血 -12%', mod: { hp: 0.88 } },
     { id: 'twb_spd',    name: '迟滞咒纹', desc: '塔内守影身法 -15%', mod: { spd: 0.85 } },
     { id: 'twb_all',    name: '塔灵低语', desc: '塔内守影全属性 -5%', mod: { all: 0.95 } },
-    { id: 'twb_stone',  name: '点石成金', desc: '层奖灵石 +40%', mod: { stone: 1.4 } },
-    { id: 'twb_stone2', name: '聚宝盆纹', desc: '层奖灵石 +25%（可与点石成金叠乘）', mod: { stone: 1.25 } },
-    { id: 'twb_exp',    name: '顿悟钟声', desc: '层奖修为 +50%', mod: { exp: 1.5 } },
-    { id: 'twb_exp2',   name: '壁上残篇', desc: '层奖修为 +25%（可与顿悟钟声叠乘）', mod: { exp: 1.25 } },
-    { id: 'twb_heal',   name: '回春玉露', desc: '每层战后半炷香回复 10% 气血', mod: { heal: 0.10 } },
-    { id: 'twb_heal2',  name: '深泉心露', desc: '每层战后半炷香回复 18% 气血', mod: { heal: 0.18 } },
+    { id: 'twb_stone',  name: '点石成金', desc: '层奖灵石增丰——+40%，偶得聚宝盆纹 +25% 或点金神手 ×2（三档随缘）', mod: { stone: 1.4 },
+      tiers: [{ pct: 1.4, weight: 60 }, { pct: 1.25, weight: 30 }, { pct: 2, weight: 10 }] },   // v39（E364）：twb_stone/stone2/stone3 三条并为一条带 tiers
+    { id: 'twb_exp',    name: '顿悟钟声', desc: '层奖修为增丰——+50%，偶得壁上残篇 +25% 或大悟碑文 ×2（三档随缘）', mod: { exp: 1.5 },
+      tiers: [{ pct: 1.5, weight: 60 }, { pct: 1.25, weight: 30 }, { pct: 2, weight: 10 }] },   // v39（E364）：twb_exp/exp2/exp3 三条并为一条带 tiers
+    { id: 'twb_heal',   name: '回春玉露', desc: '每层战后半炷香回复气血——10%，偶得深泉 18% 或生生 26%（三档随缘）', mod: { heal: 0.10 },
+      tiers: [{ pct: 0.10, weight: 60 }, { pct: 0.18, weight: 30 }, { pct: 0.26, weight: 10 }] },   // v39（E364）：twb_heal/heal2/heal3 三条并为一条带 tiers
     { id: 'twb_chest',  name: '剥灵之手', desc: '宝箱所获翻倍', mod: { chest: 2 } },
     { id: 'twb_healc',  name: '避劫福纹', desc: '每逢五层的大回复额外 +15%', mod: { healChest: 0.15 } },
     { id: 'twb_risk',   name: '破釜沉舟', desc: '塔内守影防御 -30%，但攻击 +8%', mod: { def: 0.70, atk: 1.08 } },
     { id: 'twb_guard',  name: '金刚护体', desc: '塔内守影攻击再 -8%', mod: { atk: 0.92 } },
-    /* ---- v30 天塔 roguelike：扩池至 25（含诅咒祝福：拿牺牲换强力） ---- */
+    /* ---- v30 天塔 roguelike：扩池（含诅咒祝福：拿牺牲换强力）；v39（E364）：三档词条已并入上方 tiers，不再单列 ---- */
     { id: 'twb_all2',   name: '万象俱蚀', desc: '塔内守影全属性 -10%（罕见）', mod: { all: 0.90 } },
-    { id: 'twb_stone3', name: '点金神手', desc: '层奖灵石 ×2（罕见）', mod: { stone: 2 } },
-    { id: 'twb_exp3',   name: '大悟碑文', desc: '层奖修为 ×2（罕见）', mod: { exp: 2 } },
-    { id: 'twb_heal3',  name: '生生玉露', desc: '每层战后回复 26% 气血（罕见）', mod: { heal: 0.26 } },
     { id: 'twb_def3',   name: '碎玉崩雷', desc: '塔内守影防御 -35%（罕见）', mod: { def: 0.65 } },
     { id: 'twb_hp2',    name: '摄魂蚀魄', desc: '塔内守影气血 -25%', mod: { hp: 0.75 } },
     { id: 'twb_cgreed', name: '贪狼血誓', desc: '层奖灵石 +80%，守影攻击 +10%（诅咒祝福）', mod: { stone: 1.8, atk: 1.10 }, curse: true },
@@ -41,6 +38,20 @@ const TowerSys = {
     { id: 'twb_rund',  name: '塔心不灭', desc: '塔内每场战斗首次致死伤害保留一息生机（规则祝福）', mod: { undying: 1 }, rule: true },
   ],
 
+  /** v39（E364）：授予祝福单源——带 tiers 的合并词条在授予时掷档（权重随 tiers[].weight），
+   *  档位落 run.tiers（既有 run 对象子字段，老档无此键回落第 0 档）。 */
+  grant(run, id) {
+    run.buffs.push(id);
+    const b = this.BUFFS.find(x => x.id === id);
+    if (b && b.tiers) {
+      run.tiers = run.tiers || {};
+      const total = b.tiers.reduce((s, t) => s + (t.weight || 1), 0);
+      let r = Math.random() * total, idx = b.tiers.length - 1;
+      for (let i = 0; i < b.tiers.length; i++) { r -= (b.tiers[i].weight || 1); if (r <= 0) { idx = i; break; } }
+      run.tiers[id] = idx;
+    }
+  },
+
   unlockOk(p) { return p.realmIdx >= 1; },
   extraCost(p) { return Math.round(80 * GameData.stoneEco(p.realmIdx)); },
   /** v37（E273）：层奖修为每日额度 = EXP_ALLOW_MUL × 修炼日均等效。
@@ -51,7 +62,7 @@ const TowerSys = {
 
   /** v30 塔绩兑换所：塔绩 = p.counters.towerWins（累计胜层），兑换扣除；最高层纪录不受影响 */
   REDEEMS: [
-    { id: 'stones', name: '塔灵纳财', cost: 15, desc: '灵石 120×境界经济（日限两次）' },
+    { id: 'stones', name: '塔灵纳财', cost: 15, desc: '灵石 60×境界经济 + 玄铁矿 ×4（日限两次）' },   // v39（E352）：纳财折半分流，玄铁矿补点击价值
     { id: 'ore',    name: '玄铁一匣', cost: 20, desc: '玄铁矿 ×8' },
     { id: 'pill',   name: '培元丹一炉', cost: 30, desc: '培元丹 ×1' },
     { id: 'qihun', name: '器魂五枚', cost: 40, desc: '器魂 ×5——塔中金石之精，淬器之魂' },
@@ -77,7 +88,7 @@ const TowerSys = {
       // 日灵石进账 240×eco ≤ 层奖日额度 300×eco 同量级，口子封死
       if (p.tower.today.stonesRedeemDay === today && (p.tower.today.stonesRedeemN || 0) >= 2) { UI.toast('塔灵今日的纳财已尽（日限两次）——塔库也要细水长流，明日再来'); return; }
     }
-    if ((p.counters.towerWins || 0) < cost) { UI.toast('塔绩不足'); return; }
+    // v39（E365）：删 popup 前的塔绩预检——保留 popup 后复查（防等待期间余额变化，对齐 C4 双开防护语义）
     const ok = await UI.popup({
       title: `塔绩兑换 · ${r.name}`,
       html: `${r.desc}。<br>需塔绩 <b>${cost}</b>（当前 ${p.counters.towerWins || 0}）。`,
@@ -90,7 +101,11 @@ const TowerSys = {
     if (r.id === 'stones') {
       p.tower.today.stonesRedeemDay = Math.floor(p.day || 0);
       p.tower.today.stonesRedeemN = (p.tower.today.stonesRedeemN || 0) + 1;
-      const s = Math.round(120 * GameData.stoneEco(p.realmIdx)); Bag.addStones(s); Log.add(`塔灵倾囊——灵石 +${Utils.fmtNum(s)}。`, 'gain');
+      // v39（E352）：纳财折半分流——120×eco/次 → 60×eco/次 + 玄铁矿 ×4（点击价值仍存），
+      // 塔日灵石吞吐 ≈340×eco（层奖摊 300 + 纳财 240）压至 ≈220×eco/日
+      const s = Math.round(60 * GameData.stoneEco(p.realmIdx));
+      Bag.addStones(s); Bag.addItem('m_xuantie', 4);
+      Log.add(`塔灵倾囊——灵石 +${Utils.fmtNum(s)}、玄铁矿 ×4（塔基深处所凝，与灵石同出）。`, 'gain');
     }
     else if (r.id === 'ore') { Bag.addItem('m_xuantie', 8); Log.add('塔灵奉上玄铁矿 ×8——塔基深处所凝。', 'gain'); }
     else if (r.id === 'pill') { Bag.addItem('pill_peiyuan', 1); Log.add('塔灵奉上培元丹 ×1——塔中丹房的陈年存货。', 'gain'); }
@@ -142,7 +157,8 @@ const TowerSys = {
     UI.renderAll();
   },
 
-  /** 已持祝福的乘算模组 */
+  /** 已持祝福的乘算模组（v39（E364）：带 tiers 的合并词条按授予时掷得的档位取值——
+   *  老档 run.tiers 缺键回落第 0 档，即原基础档语义） */
   modsOf(p) {
     const run = this.state(p).run;
     const mods = {};
@@ -150,7 +166,14 @@ const TowerSys = {
     for (const id of run.buffs) {
       const b = this.BUFFS.find(x => x.id === id);
       if (!b) continue;
-      for (const [k, v] of Object.entries(b.mod)) {
+      let mod = b.mod;
+      if (b.tiers) {
+        const idx = (run.tiers && run.tiers[b.id] != null) ? run.tiers[b.id] : 0;
+        const t = b.tiers[idx] || b.tiers[0];
+        mod = {};
+        for (const k of Object.keys(b.mod)) mod[k] = t.pct;
+      }
+      for (const [k, v] of Object.entries(mod)) {
         mods[k] = k === 'heal' || k === 'healChest' ? (mods[k] || 0) + v : (mods[k] || 1) * v;
       }
     }
@@ -395,7 +418,7 @@ const TowerSys = {
     const gift = giftPool.length ? Utils.pick(giftPool) : null;
     // v38（E324）：连战自动——有赐福收赐福，血虚入灵泉，否则径直登层（商人与血祭须亲断）
     if ((this.state(p) || {}).auto) {
-      if (gift) { run.buffs.push(gift.id); Log.add(`【连战】塔灵赐福自动收下——【<b>${gift.name}</b>】入体：${gift.desc}`, 'gain'); }
+      if (gift) { this.grant(run, gift.id); Log.add(`【连战】塔灵赐福自动收下——【<b>${gift.name}</b>】入体：${gift.desc}`, 'gain'); }
       else if (p.hp < Stat.compute(p).maxHp * 0.7) { const stA = Stat.compute(p); p.hp = Math.min(stA.maxHp, p.hp + Math.round(stA.maxHp * 0.6)); Log.add('【连战】自动入灵泉石台——气血回复六成。', 'gain'); }
       else Log.add('【连战】奇遇层匆匆一瞥——径直登层。', 'info');
       if (advance) this.nextFloor();
@@ -421,7 +444,7 @@ const TowerSys = {
       if (!Bag.spendStones(price)) { UI.toast('灵石不足，商人耸耸肩走了'); }
       else { Bag.addItem(vendorMat, 3); Log.add(`行脚商人收了灵石，从褡裢里摸出【${GameData.ITEMS[vendorMat].name}】×3：「塔里的东西，比下面划算。」`, 'gain'); }
     } else if (v === 'gift' && gift) {
-      run.buffs.push(gift.id);
+      this.grant(run, gift.id);
       Log.add(`塔灵低语一声——【<b>${gift.name}</b>】入体：${gift.desc}`, 'gain');
       UI.toast(`✦ 塔灵赐福：${gift.name}`);
     } else if (v === 'blood') {
@@ -432,7 +455,7 @@ const TowerSys = {
       const pool2 = unowned.filter(b2 => b2.rule).length ? unowned.filter(b2 => b2.rule) : unowned;
       const pick2 = pool2.length ? Utils.pick(pool2) : null;
       if (pick2) {
-        run.buffs.push(pick2.id);
+        this.grant(run, pick2.id);
         Log.add(`你割掌祭血（气血 -${cost}）——塔灵低啸一声，【<b>${pick2.name}</b>】入体：${pick2.desc}`, 'gain');
         UI.toast(`✦ 血祭得福：${pick2.name}`);
       } else Log.add('你割掌祭血（气血 -' + cost + '）——塔灵静默良久，似是福缘已尽。', 'warn');
@@ -453,7 +476,7 @@ const TowerSys = {
     // v38（E324）：连战自动择优——规则祝福 > 非诅咒首项 > 首项（诅咒仅在唯一项时取）
     if ((this.state(p) || {}).auto) {
       const pickB = picks.find(b => b.rule) || picks.find(b => !b.curse) || picks[0];
-      run.buffs.push(pickB.id);
+      this.grant(run, pickB.id);
       Log.add(`【连战】自动择定祝福【<b>${pickB.name}</b>】——${pickB.desc}`, 'gain');
       if (advance) this.nextFloor();
       return false;
@@ -471,7 +494,7 @@ const TowerSys = {
       if (advance) this.nextFloor();
       return false;
     }
-    run.buffs.push(v);
+    this.grant(run, v);
     const b = this.BUFFS.find(x => x.id === v);
     UI.toast(`✦ 塔心祝福：${b.name}`);
     Log.add(`塔心祝福入体：<b>${b.name}</b>——${b.desc}。`, 'gain');

@@ -96,7 +96,7 @@ const QuestSys = {
       steps: [
         { desc: '成功突破化神期', done: p => p.realmIdx >= 4, prog: p => `${p.realmIdx >= 4 ? 1 : 0}/1` },
         { desc: '精英授首（累计击败精英妖兽八头）', done: p => (p.counters.killsElite || 0) >= 8, prog: p => `${Math.min(8, p.counters.killsElite || 0)}/8` },
-        { desc: '家底殷实（灵石积蓄十万）', done: p => (p.stones.low + p.stones.mid * 100 + p.stones.high * 10000) >= 100000, prog: p => `${Utils.fmtNum(Math.min(100000, p.stones.low + p.stones.mid * 100 + p.stones.high * 10000))}/10万` },
+        { desc: '家底殷实（灵石积蓄十万）', done: p => Bag.stonesTotal(p) >= 100000, prog: p => `${Utils.fmtNum(Math.min(100000, Bag.stonesTotal(p)))}/10万` },
       ],
       ending: '名单在手，你反而冷静下来。棋盘比你想的大——但你已不是当年那个采药少年。金丹已固，化神已稳，接下来，该让某些人睡不着了。',
       bonus: { desc: '奇货可居（拍卖行竞得一件拍品）', go: 'shop:odd', done: p => (p.counters.auctionWins || 0) >= 1, prog: p => `${Math.min(1, p.counters.auctionWins || 0)}/1`, reward: { fortune: 6 } },
@@ -178,7 +178,7 @@ const QuestSys = {
       id: 's4', title: '万商护标', minRealm: 3,
       story: '万宝商会贴出悬赏：一队送往北域的宝镖，需要一位足以服众的高手押标。管事上下打量你：「行。但商会只认实力与信誉——家底与人心，你得让大伙服气。」',
       steps: [
-        { desc: '家资巨万（灵石积蓄五万）', done: p => (p.stones.low + p.stones.mid * 100 + p.stones.high * 10000) >= 50000 },
+        { desc: '家资巨万（灵石积蓄五万）', done: p => Bag.stonesTotal(p) >= 50000 },
         { desc: '江湖人脉（结交两位修士）', done: p => (p.counters.befriends || 0) >= 2 },
       ],
       ending: '宝镖一路平安。结算之日，管事奉上厚酬，并递给你一枚商会金纹：「北域之外还有南疆——来日商会开到南疆，还需道友这般人物。」',
@@ -359,7 +359,7 @@ const QuestSys = {
       reward: { stones: 3000, fortune: 4, items: { tw_sand: 1 } },
     },
   ],
-  stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
+  stonesTotal(p) { return Bag.stonesTotal(p); },   // v39（E365）：转调 Bag 单源
   /** v12 每章各目标对应的功能页签（供焦点条「前往」直达；v22 支持子页签深链 tab:sub） */
   GO: {
     c1: ['cultivate', 'map:atlas', 'map:atlas'],

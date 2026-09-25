@@ -89,6 +89,29 @@ const Ambience = {
         UI.toast(e.target.value === 'always' ? '聚灵偏好：总是聚灵' : e.target.value === 'skip' ? '聚灵偏好：从不聚灵' : '聚灵偏好：每次询问');
       });
     }
+    // v39（E362）：行权小账/悟道三态偏好——同 p._pref 子字段（默认 ask），面板可见可改
+    const damode = document.getElementById('amb-damode');
+    if (damode) {
+      this.syncDailyPrefs();
+      damode.addEventListener('change', e => {
+        const p = Game.player;
+        if (!p) return;
+        p._pref = p._pref || {};
+        p._pref.damode = e.target.value === 'ask' ? undefined : e.target.value;
+        UI.toast(e.target.value === 'always' ? '行权小账：toast 汇总不弹窗' : e.target.value === 'skip' ? '行权小账：静默' : '行权小账：每次弹出');
+      });
+    }
+    const wudao = document.getElementById('amb-wudao');
+    if (wudao) {
+      this.syncDailyPrefs();
+      wudao.addEventListener('change', e => {
+        const p = Game.player;
+        if (!p) return;
+        p._pref = p._pref || {};
+        p._pref.wudao = e.target.value === 'ask' ? undefined : e.target.value;
+        UI.toast(e.target.value === 'always' ? '行权悟道：纯度 ≥30% 自动' : e.target.value === 'skip' ? '行权悟道：跳过' : '行权悟道：每次询问');
+      });
+    }
     // v13 设置中心：战斗速度
     const spd = document.getElementById('amb-speed');
     if (spd) {
@@ -322,5 +345,14 @@ const Ambience = {
     if (!rush) return;
     const p = Game.player;
     rush.value = (p && p._autoRush) || 'ask';
+    this.syncDailyPrefs();
+  },
+  /** v39（E362）：行权小账/悟道三态偏好回显（p._pref 子字段，默认 ask） */
+  syncDailyPrefs() {
+    const p = Game.player;
+    const da = document.getElementById('amb-damode');
+    if (da) da.value = (p && p._pref && p._pref.damode) || 'ask';
+    const wd = document.getElementById('amb-wudao');
+    if (wd) wd.value = (p && p._pref && p._pref.wudao) || 'ask';
   },
 };

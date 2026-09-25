@@ -234,18 +234,49 @@ const ReincarnationSys = {
     ];
     const curPlan = legacy.plan || null;
     const curPlanCost = curPlan ? ((PLANS.find(x => x.id === curPlan) || {}).cost || 0) : 0;
-    const pickPlan = await UI.popup({
-      title: '来世预约',
-      html: `轮回镜前，你可以此生的印记，为来世预约一份底气（现印记 <b>${legacy.marks || 0}</b>）。<br><span class="tip-line">· 预约即时生效、仅此一次；换约自动退掉旧约印记、补扣差额。</span>`,
-      options: PLANS.map(pl => {
-        const owned = curPlan === pl.id;
-        const net = pl.cost - (owned ? 0 : curPlanCost);   // v33（E84）：换约退差价——原换约不退旧价（6 枚旧约换 2 枚新约实付 8 枚）
-        const afford = (legacy.marks || 0) >= Math.max(0, net);
-        return { text: `${owned ? '✓ 已预约 · ' : ''}${pl.name}（${owned ? '已约' : `${net >= 0 ? pl.cost : `退 ${curPlanCost} 补 ${pl.cost}`}`} 印记）——${pl.desc}${!owned && !afford ? '（印记不足）' : ''}`, value: owned ? null : pl.id };
-      }).concat([{ text: curPlan ? '维持现有预约' : '不作预约', value: null }]),
+    // 择法宝入轮回（候选：品阶最高的至多六件）
+    const arts = Object.keys(p.bag)
+      .filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'artifact')
+      .sort((a, b) => (GameData.ITEMS[b].grade || 0) - (GameData.ITEMS[a].grade || 0))
+      .slice(0, 6);
+    // v38（E318）：转世劫难（NG+）——自请 0~3 重换取印记：只加难，不加速度
+    const TRIALS = [
+      { id: 'exp',  name: '大道多艰', desc: '修为需求 ×1.15——每一层都要多走三分路' },
+      { id: 'foe',  name: '群邪环伺', desc: '天下之敌气血、攻击 ×1.10——处处皆是恶战' },
+      { id: 'trib', name: '天威难测', desc: '劫威 +15%——天劫与仙劫皆更凶险' },
+    ];
+    // v37（E246）：携仙元往生——仙元死货币闭环（与轮回印记并行的第二条遗产线）
+    const xy = (p.counters && p.counters.xianyuan) || 0;
+    // v39（E357）：兵解筹备单屏——原 预约/法宝/出身/携仙元/三重劫难 至多八连弹窗，
+    // 并为一张「轮回筹备」表单（UI.form 首用）：一次确认后按原各自结算逻辑依次执行，
+    // 结算结果与逐项弹窗版完全一致；交互 10+ 击降至 ≤3 步（兵解确认→筹备→一世报告）。
+    const planField = {
+      key: 'plan', label: `来世预约（现印记 ${legacy.marks || 0}${curPlan ? ` · 已约【${(PLANS.find(x => x.id === curPlan) || {}).name}】` : ''}；换约自动退旧补差）`, type: 'radio',
+      options: [{ value: '', label: curPlan ? '维持现有预约' : '不作预约' },
+        ...PLANS.map(pl => {
+          const owned = curPlan === pl.id;
+          const net = pl.cost - curPlanCost;
+          const afford = (legacy.marks || 0) >= Math.max(0, net);
+          return { value: pl.id, label: `${owned ? '✓ 已预约 · ' : ''}${pl.name}（${owned ? '已约' : `净 ${net >= 0 ? net : 0} 枚`}）——${pl.desc}${!owned && !afford ? '（印记不足）' : ''}` };
+        })],
+    };
+    const xyGain = xy >= 1000 ? `气运 +${Math.min(3, Math.floor(xy / 1000))}${xy >= 2000 ? `、悟性 +${Math.min(2, Math.floor(xy / 2000))}` : ''}` : '';
+    const form = await UI.form({
+      title: '轮回筹备',
+      html: `轮回镜前，为来世落定最后一笔：<br><span class="tip-line">· 现累计印记 ${legacy.marksEarned || 0} 枚（全属性 +${Math.min(30, legacy.marksEarned || 0)}%）、传承树 ${this.baseTier(legacy)}/15 层。</span>`,
+      fields: [
+        planField,
+        { key: 'origin', label: '投胎出身', type: 'radio', options: [...GameData.ORIGINS.map(o => ({ value: o.id, label: `${o.name} · ${o.desc}` })), { value: '', label: '随遇而安（不择出身）' }] },
+        ...TRIALS.map(t => ({ key: 'trial_' + t.id, label: `自请劫难——${t.name}`, hint: `；${t.desc}（兵解结算 印记 +1）`, type: 'check' })),
+        ...(xy >= 1000 ? [{ key: 'carry', label: `携 ${Utils.fmtNum(xy)} 仙元往生（${xyGain}；当世仙元尽数清零）`, type: 'check' }] : []),
+        ...(arts.length ? [{ key: 'kept', label: '携带入轮回的法宝', type: 'radio', options: [...arts.map(id => ({ value: id, label: `${(GameData.ITEMS[id] || {}).name}（${['凡', '灵', '玄', '地', '天', '仙'][(GameData.ITEMS[id] || {}).grade || 0]}级）` })), { value: '', label: '不带法宝' }] }] : []),
+      ],
+      confirm: '落 定',
     });
-    if (pickPlan) {
-      const pl = PLANS.find(x => x.id === pickPlan);
+    if (!form) return;
+    // 预约结算（原逐项弹窗结算逻辑原样保留）
+    if (form.plan) {
+      const pl = PLANS.find(x => x.id === form.plan);
       if (pl && curPlan !== pl.id) {
         const net = pl.cost - curPlanCost;
         if ((legacy.marks || 0) >= Math.max(0, net)) {
@@ -256,55 +287,11 @@ const ReincarnationSys = {
         } else UI.toast('印记不足（换约需补差额）');
       }
     }
-    // 择法宝入轮回
-    const arts = Object.keys(p.bag)
-      .filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'artifact')
-      .sort((a, b) => (GameData.ITEMS[b].grade || 0) - (GameData.ITEMS[a].grade || 0))
-      .slice(0, 6);
-    let kept = null;
-    if (arts.length) {
-      kept = await UI.popup({
-        title: '携带入轮回',
-        html: '择一件法宝，以本命精血温养护持，随身入轮回：',
-        options: [...arts.map(id => ({ text: GameData.ITEMS[id].name, value: id })), { text: '不带法宝', value: null }],
-      });
-    }
-    // 择出身
-    const originId = await UI.popup({
-      title: '转世 · 投胎出身',
-      html: '神魂坠入轮回，可择来世出身：',
-      options: [...GameData.ORIGINS.map(o => ({ text: `${o.name} · ${o.desc}`, value: o.id })), { text: '随遇而安（不择出身）', value: null }],
-    });
-    if (originId === undefined) return;
+    const originId = form.origin || null;
     const origin = GameData.ORIGINS.find(o => o.id === originId) || null;
-    // v37（E246）：携仙元往生——仙元死货币闭环：兵解之际可折作来世根基（与轮回印记并行的第二条遗产线）
-    const xy = (p.counters && p.counters.xianyuan) || 0;
-    let carryXianyuan = false;
-    if (xy >= 1000) {
-      const fGain = Math.min(3, Math.floor(xy / 1000));
-      const cGain = Math.min(2, Math.floor(xy / 2000));
-      carryXianyuan = await UI.popup({
-        title: '携仙元往生',
-        html: `你此世炼有 <b class="hl">${Utils.fmtNum(xy)}</b> 仙元。兵解之际，仙元可随神魂折作来世根基：<br>· 每 <b>1000</b> 仙元 → 来世<b>气运 +1</b>（至多 +3）<br>· 每 <b>2000</b> 仙元 → 来世<b>悟性 +1</b>（至多 +2）<br>· 本世折算：<b>气运 +${fGain}</b>${cGain ? `、<b>悟性 +${cGain}</b>` : ''}${xy % 1000 ? '，余数逸散' : ''}<br><span class="neg">携往则当世仙元尽数清零——天予不取，反受其咎。</span>`,
-        options: [{ text: `携 ${Utils.fmtNum(xy)} 仙元往生`, value: true, primary: true }, { text: '散于天地', value: false }],
-      });
-    }
-    // v38（E318）：转世劫难（NG+）——自选 1~3 条劫难换取印记：只加难，不加速度
-    const TRIALS = [
-      { id: 'exp',  name: '大道多艰', desc: '修为需求 ×1.15——每一层都要多走三分路' },
-      { id: 'foe',  name: '群邪环伺', desc: '天下之敌气血、攻击 ×1.10——处处皆是恶战' },
-      { id: 'trib', name: '天威难测', desc: '劫威 +15%——天劫与仙劫皆更凶险' },
-    ];
-    const trials = [];
-    for (let i = 0; i < TRIALS.length; i++) {
-      const t = TRIALS[i];
-      const pickT = await UI.popup({
-        title: `转世劫难 · 第 ${i + 1}/${TRIALS.length} 重`,
-        html: `轮回镜前，你可自请劫难以砺道心——每请一重，兵解结算时<b>轮回印记 +1</b>。<br><span class="tip-line">· 已请 ${trials.length} 重；劫难贯穿整世，转世落定即生效。</span>`,
-        options: [{ text: `请此劫——${t.name}：${t.desc}`, value: t.id, primary: false }, { text: '不请此劫', value: null }],
-      });
-      if (pickT) trials.push(pickT);
-    }
+    const trials = TRIALS.filter(t => form['trial_' + t.id]).map(t => t.id);
+    const carryXianyuan = !!form.carry;
+    const kept = form.kept || null;
     await this.execute(p, legacy, kept, origin, opts.extraMarks || 0, carryXianyuan, trials);
   },
   async execute(oldP, legacy, kept, origin, extraMarks = 0, carryXianyuan = false, trials = []) {
@@ -374,6 +361,9 @@ const ReincarnationSys = {
     if (echo) p2.reinc.echo = echo;   // v20 道韵残响
     // v31 多周目变奏：前世残忆旗标——c2/c5/c7 开篇将演出「前世残忆」变体场景（story._vis req 路由）
     p2.story = { seen: {}, mid: {}, choices: {}, flags: { remembrance: true } };
+    // v39（E357）：本世印记基线——兵解奖励（含自请劫难/ extraMarks）入账 legacy 之后再补设，
+    // 一世报告「本世印记 = 累计获得 − 基线」自此真实计数（原仅 enterGame 设基线，转世者报告恒少计）
+    p2.counters.marksStart = legacy.marksEarned || 0;
     // v38（E318）：此世行劫入轮回镜与日志
     if (trials.length) {
       const TRIAL_NAMES = { exp: '大道多艰', foe: '群邪环伺', trib: '天威难测' };

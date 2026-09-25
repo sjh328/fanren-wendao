@@ -354,10 +354,102 @@ const report = await page.evaluate(() => {
       }
     }
   }
-  return { rows: rows.length, zeroPrice, problems, auctionProblems, betProblems, betSamples, betTotal, betEv23, sectProblems, sectPillRatioProblems, sectPillRatios, drawProblems, auctionGradeProblems, tierProblems, top10, boardProblems, boardAll: actionBoard.length, boardV37N: actionBoard.filter(x => x.v37).length, bountyLoopProblems };
+  // v39（E351）第九路「大额 sink 日数比带」——大额消费折算「建模日均收入日数」逐境界实测：
+  // r6~r9 每样本须在 [0.3, 2.5] 日带内、相邻境界比值变化 ≤1.3×（cost 与收入同速时应恒 1.00），
+  // 出带报警；r10 为投影行（境界轴真仙 r9 为顶，不可达——仅验证 3.8^(r-5) 段增长稳定、无无界漂移）。
+  // 日均收入分母 = 125×stoneEco（与 balance-sim dayIn 同式：三战 45 + 悬赏 60 + 杂项 20）。
+  // 采样面 = grep `sinkCurve(` 实测 12 处随动面（forge 五处/beast 蜕变与结契/cave 三处/auction 布施/
+  // gongfa 自创），公式与实现逐式同源。
+  // 豁免纪律：出带项必须显式列名豁免理由（下方 EXEMPT 表）或调系数入带——两方式择一，不许静默放行。
+  // 已知出带项处置（PLAN_V39 E351 预案）：灵兽蜕变 r9≈8.9 日、自创功法 r9≈4.9 日豁免；实测另发现
+  // 布施/洞天/结契/本命/重铸五处带外，逐项核由入豁免表（理由在案），未豁免出带即 process.exitCode=1。
+  const sinkBand = { samples: [], proj10: [], exempted: [], problems: [] };
+  {
+    const income = r => 125 * G.stoneEco(r);
+    const ENH = G.BALANCE.ENHANCE;
+    const SITES = [
+      { id: '强化+5(grade3)', where: 'forge.js:44', f: r => Math.round((ENH.BASE_COST + 5 * ENH.COST_PER_LV) * (1 + 3 * ENH.COST_GRADE_FACTOR) * G.sinkCurve(r) / ENH.COST_REALM_FACTOR) },
+      { id: '洗练(grade3)', where: 'forge.js:397', f: r => Math.round(300 * G.sinkCurve(r) / 2.2) },
+      { id: '重铸', where: 'forge.js:476', f: r => Math.round(150 * G.sinkCurve(r) / 2.2) },
+      { id: '器魂匣(lv0)', where: 'forge.js:546', f: r => Math.round(2000 * 1 * G.sinkCurve(r) / 2.2) },
+      { id: '本命升一阶(lv0)', where: 'forge.js:582', f: r => Math.round(3000 * 1 * G.sinkCurve(r) / 2.2) },
+      { id: '聚灵升级(lv0)', where: 'cave.js:26', f: r => Math.round(4000 * 1 * G.sinkCurve(r) / 16) },
+      { id: '洞天升级(lv0)', where: 'cave.js:59', f: r => Math.round(4000 * 1 * G.sinkCurve(r)) },
+      { id: '灵田营造(lv1)', where: 'cave.js:430', f: r => Math.round(2000 * 1 * G.sinkCurve(r) / 2.2) },
+      { id: '布施(large)', where: 'auction.js:189', f: r => Math.round(50000 * Math.max(1, G.sinkCurve(r) / 2.2)) },
+      { id: '灵兽蜕变', where: 'beast.js:346', f: r => Math.round(8000 * G.sinkCurve(r) / 2.2) },
+      { id: '结契', where: 'beast.js:569', f: r => Math.round(5000 * G.sinkCurve(r) / 2.2) },
+      { id: '自创功法(灵石段)', where: 'gongfa.js:147', f: r => Math.round(2000 * G.sinkCurve(r)) },
+    ];
+    const EXEMPT = [
+      { match: '灵兽蜕变', reason: '十阶终局大项——灵兽蜕变一名额一锤子买卖（PLAN_V39 E351 预案内豁免），r9≈8.9 日属终局沉淀设计' },
+      { match: '自创功法', reason: '一世 3 部名额制——终局大额一次性消费（PLAN_V39 E351 预案内豁免），r9≈4.9 日属名额制沉淀' },
+      { match: '布施', reason: '消孽功能性定价——布施是孽障/声望的清偿出口（v29 注「大后期仍是消孽出口」），非装备线 sink，带外 55.8 日属功能定位' },
+      { match: '洞天升级', reason: 'v30 设计定位即「r6+ 全幅缩放的灵石沉淀池」（cave.js 洞天注释原文），大额沉淀正是其存在目的' },
+      { match: '结契', reason: '一次性契约——每灵兽限结契一次，属灵兽线终局消费而非可循环 sink' },
+      { match: '本命升一阶', reason: '元婴起 9 阶长线养成，费用随阶线性递增（3000×(lv+1)），首阶 3.35 日为长线定价起点而非单点墙' },
+      { match: '重铸', reason: '工具型低价高频 sink——r9 端 0.17 日（v39 前仅 0.065 日，本曲线已收敛 2.6×），带下缺口非本轮剪刀差病灶' },
+    ];
+    for (let r = 6; r <= 9; r++) {
+      for (const s of SITES) {
+        const days = s.f(r) / income(r);
+        sinkBand.samples.push({ r, id: s.id, where: s.where, days: +days.toFixed(2), cost: s.f(r), inBand: days >= 0.3 && days <= 2.5 });
+      }
+    }
+    for (const s of SITES) sinkBand.proj10.push({ id: s.id, days: +(s.f(10) / income(10)).toFixed(2) });
+    for (const s of SITES) {
+      for (let r = 6; r < 9; r++) {
+        const a = s.f(r) / income(r), b = s.f(r + 1) / income(r + 1);
+        if (a > 0 && (b / a > 1.3 + 1e-9 || b / a < 1 / 1.3 - 1e-9)) sinkBand.problems.push(`[邻境跳变] ${s.id} r${r}→r${r + 1} 日数比 ×${(b / a).toFixed(2)}（门 ≤1.3×）`);
+      }
+    }
+    for (const s of sinkBand.samples) {
+      if (s.inBand) continue;
+      const ex = EXEMPT.find(x => s.id.includes(x.match));
+      if (ex) sinkBand.exempted.push(`r${s.r} ${s.id}（${s.where}）= ${s.days} 日 出带——豁免：${ex.reason}`);
+      else sinkBand.problems.push(`[sink 日数出带] r${s.r} ${s.id}（${s.where}）= ${s.days} 日 ∉ [0.3, 2.5]`);
+    }
+  }
+  // v39（E353）第十路「古匣稳健出价 EV」——稳健 95% 成交、落标退款，EV = 0.95×(EV_pool − 出价)。
+  // 出价 = 1.15×base，base = mysteryBase = 系数×EV_pool：系数 0.95 时 EV = 0.95×EV_pool×(1−1.15×0.95)
+  // ≈ −0.088×EV_pool < 0（无风险套利封死）；系数 0.85 时 EV 转正 → 本路报警（注入锚：回 0.85 证红）。
+  // EV_pool 独立复算（与 mysteryBase 同池同权重同估值，不含系数）——不从 base 反推，防循环自证。
+  const mysteryProblems = [];
+  {
+    for (let r = 0; r <= 6; r++) {
+      const fp = { ...fake, realmIdx: r };
+      const pool = AuctionSys.mysteryPool(fp);
+      if (!pool.length) continue;
+      const valOf = (x) => {
+        const d = G.ITEMS[x.id];
+        if (!d) return 500;
+        let v = d.price || 0;
+        if (!v) v = G.GRADE_FALLBACK[Math.min(5, Math.max(0, d.grade || 0))] || 500;
+        if (d.ecoPrice) v = Math.round(v * G.stoneEco(r));
+        return v;
+      };
+      const wsum = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2, 0);
+      const evPool = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2 * valOf(x), 0) / wsum;
+      const base = AuctionSys.mysteryBase(fp);
+      const steady = Math.round(base * 1.15);
+      const ev = 0.95 * (evPool - steady);
+      if (ev >= 0) mysteryProblems.push(`[古匣稳健正期望] r${r} 底价 ${base} 稳健出价 ${steady} EV_pool ${Math.round(evPool)} 期望 +${Math.round(ev)}（应 <0）`);
+    }
+  }
+  return { rows: rows.length, zeroPrice, problems, auctionProblems, betProblems, betSamples, betTotal, betEv23, sectProblems, sectPillRatioProblems, sectPillRatios, drawProblems, auctionGradeProblems, tierProblems, top10, boardProblems, boardAll: actionBoard.length, boardV37N: actionBoard.filter(x => x.v37).length, bountyLoopProblems, sinkBand, mysteryProblems };
 });
 
 await browser.close();
+// v39（E351/E353）第九/第十路门禁：未豁免出带、邻境跳变、古匣稳健正期望 → 非零退出（豁免项已在报告显式列名）
+const gateLines = [];
+if (report.sinkBand.problems.length) gateLines.push(...report.sinkBand.problems.map(p => '⚠ 第九路 ' + p));
+if (report.mysteryProblems.length) gateLines.push(...report.mysteryProblems.map(p => '⚠ 第十路 ' + p));
+if (gateLines.length) {
+  console.error(gateLines.join('\n'));
+  process.exitCode = 1;
+} else {
+  console.log(`✓ 第九路 sink 日数比带全零（出带 ${report.sinkBand.exempted.length} 条均已显式列名豁免）· 第十路古匣稳健 EV 全负`);
+}
 let md = `# v20 经济审计报告（scripts/price-audit.mjs 自动生成）\n\n采样画像：realm3、行情中位。\n\n- 物品总数：${report.rows}\n- 定价为 0 的稀有物（无坊市渠道，按品阶折算黑市价）：${report.zeroPrice.join('、') || '无'}\n\n## 问题清单（${report.problems.length}）\n`;
 md += report.problems.length ? report.problems.map(p => `- ${p}`).join('\n') + '\n' : '- 无套利路径与定价倒挂。\n';
 md += `\n## v34 扩容检测\n\n- 拍卖池倒挂（${report.auctionProblems.length}）：\n` + (report.auctionProblems.length ? report.auctionProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
@@ -375,6 +467,23 @@ md += `- 第七路·同表档位单调性（${report.tierProblems.length}）：\
 md += `- 第八路·per-action 现金流榜（采样 ${report.boardAll} 行，其中 v37 新增 ${report.boardV37N} 行=悬赏·收集+宗门兑换，参与榜单与 300×eco 绝对线；中位基线钉死 v36 行集见源码注）：\n`;
 md += (report.top10.length ? report.top10.map((x, i) => `  ${i + 1}. ${x.action} —— 净 ${Math.round(x.perDay).toLocaleString()} 灵石/日`).join('\n') + '\n' : '  - 无。\n');
 md += `- 第八路·榜报警（${report.boardProblems.length}）：\n` + (report.boardProblems.length ? report.boardProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无越 300×eco 线或 Top1/中位 >8× 的离群动作。\n');
+md += `\n## v39 扩容检测（E351/E352）\n\n`;
+md += `- 第九路·大额 sink 日数比带（采样 grep \`sinkCurve(\` 实测 12 处随动面 × r6~r9；带 [0.3, 2.5] 日、邻境日数比变化 ≤1.3×；分母 = 建模日均收入 125×stoneEco，与 balance-sim dayIn 同式；r10 为投影行——境界轴真仙 r9 为顶，仅验证曲线增长稳定）：\n`;
+{
+  const realms = [6, 7, 8, 9];
+  md += `  - 实测日数表（日）：\n\n    | 采样点 | 出处 | r6 | r7 | r8 | r9 | 带内 |\n    |---|---|---|---|---|---|---|\n`;
+  for (const s of report.sinkBand.samples.filter(x => x.r === 6)) {
+    const row = realms.map(r => report.sinkBand.samples.find(x => x.r === r && x.id === s.id));
+    md += `    | ${s.id} | ${s.where} | ${row.map(x => x.days).join(' | ')} | ${row.every(x => x.inBand) ? '✓' : '出带（见豁免/报警）'} |\n`;
+  }
+  const p10 = report.sinkBand.proj10;
+  md += `  - r10 投影（不可达境，曲线稳定性行）：${p10.map(x => `${x.id} ${x.days} 日`).join('、')}\n`;
+  md += `  - 邻境比值：新曲线段（r≥6）各样本日数比恒 1.00（cost 与收入同速 3.8×/境）——设计目标本身，勿与 r5→r6 接缝比混读（接缝口径见 PLAN_V39 E351.2）。\n`;
+  md += `  - 出带豁免显式列名（${report.sinkBand.exempted.length} 条——不许静默放行）：\n` + (report.sinkBand.exempted.length ? report.sinkBand.exempted.map(p => `    - ${p}`).join('\n') + '\n' : '    - 无。\n');
+  md += `  - 第九路报警（${report.sinkBand.problems.length}，未豁免出带/邻境跳变即非零退出）：\n` + (report.sinkBand.problems.length ? report.sinkBand.problems.map(p => `    - ${p}`).join('\n') + '\n' : '    - 无未豁免出带。\n');
+  md += `- 第十路·古匣稳健出价 EV（mysteryBase 0.95：稳健 95% 成交长期期望应 <0，无风险套利封死）：\n`;
+  md += (report.mysteryProblems.length ? report.mysteryProblems.map(p => `    - ${p}`).join('\n') + '\n' : '    - r0~r6 稳健出价长期期望全负（EV ≈ −0.088×base），套利封死。\n');
+}
 console.log(md);
 fs.mkdirSync('docs', { recursive: true });
 fs.writeFileSync('docs/price-audit.md', md);

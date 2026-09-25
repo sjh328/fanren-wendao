@@ -112,15 +112,15 @@ const SectSys = {
     return { contrib, stones };
   },
   /** 生成任务并按派系立场折算高危生死状 */
-  newTask(p) { return this.wrapDanger(this.genTask(p), p); },
+  newTask(p) { return this.genTask(p); },   // v39（E365）：普通分支删除——genTask 已内置生死状支，wrapDanger 仅留入派立威 force 支
   /** 敌对派系借刀杀人：派系成员偶接高危任务（战时概率大涨）；force 用于入派当日立威（无视原任务类型）。
    *  v37（E242）：普通 kill/collect 生成支已删——普通任务（cult/explore/sign）永非 kill，在此自然短路；
    *  生死状改由 genTask 独占生成支直出（已带 danger=true，此處不再二次掷点改派目标）。
    *  force 入派立威路径继续生效。 */
-  wrapDanger(t, p, force = false) {
+  /** v39（E365）：wrapDanger 缩减为「入派立威」单支——普通分支已死（genTask 自 v37 起内置
+   *  生死状生成支，sect.js 顶部掷点前置），force 直掷生死状并入调用点 joinFaction。 */
+  wrapDanger(t, p) {
     if (!t || !p.sect || !p.sect.faction) return t;
-    if (t.danger && !force) return t;
-    if (!force && (t.type !== 'kill' || !Utils.chance(WorldSys.warActive(p) ? 55 : 26))) return t;
     const rp = p.realmIdx * 4 + p.layer;
     const elites = Object.entries(GameData.MONSTERS)
       .filter(([, m]) => m.elite && m.power >= rp - 1 && m.power <= rp + 4).map(([id]) => id);
@@ -443,10 +443,28 @@ const SectSys = {
     Story.chron('宗门大比开幕');
     UI.announce('⚔ 宗门大比开幕', 'gold');
   },
-  /** 生成当轮对手：同门弟子（兽形灵技拟态），一轮强过一轮 */
+  /** 生成当轮对手：v39（E360）大比 NPC 化——本宗同门按境界贴近取材（不再用怪物拟态改名），
+   *  敌式复用 NpcSys.buildEnemy（E282 已对齐 buildEnemy 基式），点到为止不结怨；
+   *  本宗无可出战之同门时回落兽形拟态旧制。 */
   tourneyOpponent(p, round) {
     const rp = p.realmIdx * 4 + p.layer;
     const delta = Math.min(round, 1);   // v29 修瑕：对手至多 +1 档——决胜轮原为 rp+2，刚突破新境界时最难受
+    const target = rp + delta;
+    const ids = GameData.NPCS.filter(d => d.sect === p.sect.id).map(d => d.id)
+      .filter(id => { const s = p.npcs[id]; return s && s.alive && id !== p.partner && !(p.sworn || []).includes(id); });
+    if (ids.length) {
+      ids.sort((a, b) => {
+        const pa = p.npcs[a] || {}, pb = p.npcs[b] || {};
+        const da = Math.abs((pa.realmIdx || 0) * 4 + (pa.layer || 0) - target);
+        const db = Math.abs((pb.realmIdx || 0) * 4 + (pb.layer || 0) - target);
+        return da - db || (pb.realmIdx || 0) - (pa.realmIdx || 0);
+      });
+      const nid = ids[0];
+      if (p.sect.tourney) p.sect.tourney.lastFoe = nid;   // 魁首贺语取材
+      const e = NpcSys.buildEnemy(p, nid);
+      e.elite = false;
+      return e;
+    }
     const pool = this.taskMonsters(rp + delta);
     const mid = pool.length ? Utils.pick(pool) : Utils.pick(Object.keys(GameData.MONSTERS));
     const e = buildMonster(mid, Math.max(0, rp + delta - GameData.MONSTERS[mid].power));
@@ -487,6 +505,16 @@ const SectSys = {
         p.rankHonor = (p.rankHonor || 0) + 1;   // v37（E244）：魁首折算天骄榜功勋 +1——排名成为可运营资产
         KarmaSys.addFortune(8, true);
         Log.add('<b>三轮全胜，大比魁首！</b>掌门亲授魁首玉佩，门中扬名——气运 +8。（生涯魁首 ' + p.flags.tourneyChamp + ' 次）', 'realm');
+        // v39（E360）：魁首贺语——决胜轮对手（本宗 NPC）lineFor realm 池贺语一句 + 记忆
+        const foeId = T.lastFoe;
+        if (foeId && typeof NpcSys !== 'undefined' && NpcSys.def) {
+          const fd = NpcSys.def(foeId);
+          if (fd) {
+            const line = NpcSys.lineFor(p, foeId, 'realm') || '「三阵连克，魁首之名，实至名归——他日山下再会，还请手下留情。」';
+            NpcSys.mem(p, foeId, 'story', '大比折服于你');
+            Log.add(`<b>${fd.name}</b> 上前抱拳，心服口服：${line}`, 'event');
+          }
+        }
         Story.chron('宗门大比 · 魁首');
         UI.announce('⚔ 大比魁首 · 三连胜', 'gold');
         p.sect.tourney = null;

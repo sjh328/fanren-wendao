@@ -31,9 +31,10 @@ console.log('===== SA 源码静态组 =====');
   const battle = R('battle/battle.js');
   battle.includes("AUG_MINE: ['defdown'") || battle.includes('tick(B.myFx') ? pass('SA5 状态引擎统一衰减（A3/C1）') : fail('SA5 状态引擎', '');
   battle.includes("tick(B.myFx, 'mineEnd')") && battle.includes("tick(e.fx, 'enemyEnd')") ? pass('SA6 敌我回合末走 tick（A3/C1）') : fail('SA6 tick 接线', '');
+  // v39（E348）战报一屏新形态：卡片挂载先于 end() 且 end() 已无死实参（原 this.end(false) ×14 清理）
   const btSum = battle.indexOf('bt-summary');
-  const btEnd = battle.indexOf('this.end(false);', btSum - 400 > 0 ? btSum - 400 : 0);
-  btSum > 0 && btEnd > btSum ? pass('SA7 结算卡先于 end()（A4）') : fail('SA7 结算卡顺序', `sum@${btSum} end@${btEnd}`);
+  const btEnd = battle.indexOf('this.end();', btSum - 400 > 0 ? btSum - 400 : 0);
+  btSum > 0 && btEnd > btSum && !battle.includes('this.end(false)') ? pass('SA7 结算卡先于 end() 且 end() 无参（A4；v39（E348/E364）新形态）') : fail('SA7 结算卡顺序', `sum@${btSum} end@${btEnd}`);
   battle.includes("pctOf(e.fx, 'weaken')") ? pass('SA8 敌方虚弱生效（E1）') : fail('SA8 虚弱', '');
   battle.includes("kind: 'cursed'") || battle.includes('cursed: () =>') ? pass('SA9 咒雷处理器（E2）') : fail('SA9 cursed', '');
   battle.includes("fk === 'vuln'") && battle.includes("fk === 'ward'") ? pass('SA10 破阵/真罡符（C1 新状态）') : fail('SA10 新符', '');
@@ -68,7 +69,7 @@ console.log('===== SA 源码静态组 =====');
   const cave = R('systems/cave.js');
   cave.includes('upgradeDongtian') && cave.includes('sinkCurve') ? pass('SA33 洞天营造+曲线统一（E）') : fail('SA33 洞天', '');
   const gdata = R('data/game-data.js');
-  gdata.includes('sinkCurve(r) { return Math.pow(3, Math.min(10') ? pass('SA34 sinkCurve 单源（E；v34 封顶 8→10）') : fail('SA34 sinkCurve', '');
+  gdata.includes('fr <= 5 ? Math.pow(3, fr) : 243 * Math.pow(3.8, fr - 5)') ? pass('SA34 sinkCurve 单源（E；v39（E351）分段：r≤5 逐字节不变、r≥6 挂 3.8^(r-5)）') : fail('SA34 sinkCurve', '');
   gdata.includes("id: 'f19'") && gdata.includes("id: 'f22'") ? pass('SA35 毕业装炼器配方（D6）') : fail('SA35 配方', '');
   gdata.includes('codex_tier_') ? pass('SA36 图鉴分档奖励（G6）') : fail('SA36 图鉴分档', '');
   gdata.includes('SECT_QUEST_FLAVOR') ? pass('SA37 宗门特色差事（G4）') : fail('SA37 差事', '');
@@ -100,7 +101,7 @@ console.log('===== SA 源码静态组 =====');
   const gd2 = R('data/game-data.js');
   gd2.includes("fx: { cultPct: 3 }") ? pass('SA54 苏白线键名修正（E42）') : fail('SA54 键名', '');
   const sfx = R('systems/status-fx.js');
-  sfx.includes('elitePlus') && R('systems/dungeon.js').includes('elitePlus') ? pass('SA55 手工精英统一口径（E6）') : fail('SA55 精英', '');
+  R('systems/explore.js').includes('elitePlus') && R('systems/dungeon.js').includes('elitePlus') ? pass('SA55 手工精英统一口径（E6；v39（E364）buildMonster 迁往 explore.js）') : fail('SA55 精英', '');
   const trib2 = R('systems/tribulation.js');
   trib2.includes('道侣安慰') && trib2.includes('共渡天劫') ? pass('SA56 道侣共渡天劫安慰（补遗）') : fail('SA56 道侣劫', '');
   const gamejs2 = readFileSync(join(__dirname, 'js', 'game.js'), 'utf8');
@@ -166,13 +167,13 @@ if (browser) {
         personalN: Object.keys(g.PERSONAL).length,
         worldN: g.WORLD_EVENTS.length,
         festN: g.FESTIVALS.length,
-        sink6: g.sinkCurve(6), sink0: g.sinkCurve(0), sink8: g.sinkCurve(9),
+        sink6: g.sinkCurve(6), sink0: g.sinkCurve(0), sink8: g.sinkCurve(9), sink5: g.sinkCurve(5), sink3: g.sinkCurve(3),
         lifespan: g.LIFESPAN.slice(),
       };
     });
     d1.ratio > 5.2 && d1.ratio < 5.6 ? pass(`RB1 EXP 曲线每境 ×${d1.ratio.toFixed(2)}（F1；v34 ×5.4）`) : fail('RB1 EXP 曲线', String(d1.ratio));
     d1.xianzunInLeiyu ? pass('RB2 仙尊残念入雷狱妖池（A5）') : fail('RB2 仙尊', '');
-    d1.towerBuffs >= 25 && d1.cursed >= 4 ? pass(`RB3 塔祝福池 ${d1.towerBuffs}（诅咒 ×${d1.cursed}）（C4）`) : fail('RB3 塔祝福', JSON.stringify({ n: d1.towerBuffs, c: d1.cursed }));
+    d1.towerBuffs >= 22 && d1.cursed >= 4 ? pass(`RB3 塔祝福池 ${d1.towerBuffs}（诅咒 ×${d1.cursed}）（C4；v39（E364）三档词条并入 tiers 后 28→22）`) : fail('RB3 塔祝福', JSON.stringify({ n: d1.towerBuffs, c: d1.cursed }));
     d1.newTal ? pass('RB4 新符箓入库（C1）') : fail('RB4 新符', '');
     d1.mpRegen >= 2 ? pass('RB5 回灵/凝气 mpRegen 键（A7）') : fail('RB5 mpRegen', String(d1.mpRegen));
     d1.perAffix >= 3 ? pass('RB6 两段式词缀 ×' + d1.perAffix + '（D1）') : fail('RB6 两段式', String(d1.perAffix));
@@ -180,7 +181,7 @@ if (browser) {
     d1.personalN === 24 ? pass('RB8 个人线 24 位（G1）') : fail('RB8 个人线', String(d1.personalN));
     d1.worldN >= 12 ? pass('RB9 世界大事 ' + d1.worldN + ' 种（G5）') : fail('RB9 大事', String(d1.worldN));
     d1.festN >= 7 ? pass('RB10 节庆 ' + d1.festN + ' 个（G5）') : fail('RB10 节庆', String(d1.festN));
-    d1.sink6 === 729 && d1.sink0 === 1 && d1.sink8 === 19683 ? pass('RB11 sinkCurve 数值（E；v34 r9=3^9）') : fail('RB11 sinkCurve', JSON.stringify([d1.sink6, d1.sink0, d1.sink8]));
+    Math.round(d1.sink6) === 923 && d1.sink0 === 1 && Math.round(d1.sink8) === 50669 && d1.sink5 === 243 && d1.sink3 === 27 ? pass('RB11 sinkCurve 数值（E；v39（E351）分段曲线：r6=243×3.8≈923、r9=243×3.8^4≈50669，r3/r5 与 v38 一致）') : fail('RB11 sinkCurve', JSON.stringify([d1.sink6, d1.sink0, d1.sink8]));
 
     /* ---- 行为组：状态引擎 / 连招 / 套装 / 词缀 ---- */
     const b1 = await page.evaluate(() => {

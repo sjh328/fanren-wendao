@@ -53,15 +53,10 @@ const Tutorial = {
     } catch (e) { /* ignore */ }
     if (Game.player) {
       Game.player.flags.tutorialDone = true;
-      // v20 三分钟上手清单：引导结束后给一张速览卡
+      // v20 三分钟上手：v39（E365）与手册首节双源合一——引导毕直开玩法手册（首节同源渲染）
       UI.popup({
-        title: '✦ 三分钟上手清单',
-        html: `<div class="tip-line">· <b>修炼</b>攒修为，圆满后冲关；练气→筑基无天劫，金丹起有三策博弈。</div>
-          <div class="tip-line">· <b>游历</b>探地图搏机缘，遇敌注意敌方「下一手」意图——蓄力就防御或破招。</div>
-          <div class="tip-line">· <b>坊市</b>买丹药法宝；丹毒将满（左栏提示）就停口或服解毒丹。</div>
-          <div class="tip-line">· 筑基后解锁 <b>洞府/宗门/江湖</b>：种田、领任务、结交修士（可结为道侣）。</div>
-          <div class="tip-line">· 每章主线完结送残玉共鸣（全属性+1.5%），跟主线走不吃亏。</div>
-          <div class="tip-line">· 卡住了就点左栏「当前建议」——它会告诉你下一步。</div>`,
+        title: '✦ 玩法手册 · 三分钟上手',
+        html: UI.helpModal(),
         options: [{ text: '踏上仙途', value: true, primary: true }],
       });
       Save.autoSave();

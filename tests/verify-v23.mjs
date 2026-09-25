@@ -210,10 +210,11 @@ console.log('===== SA 源码静态组 =====');
       const noDeadW = !/kill:|collect:/.test(sectWBlock);
       const flavorBlock = (gdata.slice(gdata.indexOf('SECT_QUEST_FLAVOR'), gdata.indexOf('SECT_EXCHANGE')).match(/\{[^{}]*\}/g) || []).join('|');
       const noDeadFlavor = !/kill:|collect:/.test(flavorBlock) && (flavorBlock.match(/cult:/g) || []).length === 5;
-      const wrapKept = sect.includes('wrapDanger(t, p, force = false)') && sect.includes('if (t.danger && !force) return t;') && sect.includes('onKill(monsterId)');
+      // v39（E365）：wrapDanger 缩为「入派立威」单支——force 参数删除、短路收窄为非派系守卫，newTask 直出 genTask
+      const wrapKept = sect.includes('wrapDanger(t, p) {') && sect.includes('if (!t || !p.sect || !p.sect.faction) return t;') && sect.includes('onKill(monsterId)') && sect.includes('newTask(p) { return this.genTask(p); }');
       const submitGone = !sect.includes('submit(taskIdx)') && !gamejs.includes("'act-task-submit'");
       factionBranch && noKillCollectGen && noDeadW && noDeadFlavor && wrapKept && submitGone && ui.includes('门中差事只留<b>修行/历练/问签</b>三门')
-        ? pass('SA24 差事/悬赏池互斥：生死状独占生成支（派系限定+战时 55/26）+ kill/collect 支与权重/名目死配置清除 + wrapDanger 短路与 force 保留 + onKill/claim 存续 + submit 删除 + 分工文案（E242）') : fail('SA24 池互斥', JSON.stringify({ factionBranch, noKillCollectGen, noDeadW, noDeadFlavor, wrapKept, submitGone }));
+        ? pass('SA24 差事/悬赏池互斥：生死状独占生成支（派系限定+战时 55/26）+ kill/collect 支与权重/名目死配置清除 + wrapDanger 入派立威单支且普通路径不绕行 + onKill/claim 存续 + submit 删除 + 分工文案（E242；v39 E365 新语义）') : fail('SA24 池互斥', JSON.stringify({ factionBranch, noKillCollectGen, noDeadW, noDeadFlavor, wrapKept, submitGone }));
     }
 
     /* ================= B3 周目纵深与终局去处 ================= */
@@ -379,7 +380,7 @@ console.log('===== SA 源码静态组 =====');
       const releasemjs = readFileSync(join(__dirname, 'scripts', 'release.mjs'), 'utf8').replace(/\r\n/g, '\n');
       const readme = readFileSync(join(__dirname, 'README.md'), 'utf8');
       buildmjs.includes('未登记进 scripts/modules.json') && buildmjs.includes('process.exit(1);') && releasemjs.includes('当前版本 **v${ver}')
-        && readme.includes('当前版本 **v38') && readme.includes('53 个模块') && readme.includes('24 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
+        && readme.includes('当前版本 **v39') && readme.includes('53 个模块') && readme.includes('24 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
         ? pass('SA43 build 反向校验（孤儿模块拒建）+ README 守卫（假版本号拒绝）与根 README 四口径刷新（E259/E257）') : fail('SA43 守卫', '');
       /* E262 死重清理 */
       const scriptsDir = join(__dirname, 'scripts');
@@ -757,20 +758,19 @@ try {
       let anyDanger = false;
       for (let i = 0; i < 40; i++) { if (SectSys.genTask(p).danger) anyDanger = true; }
       out.nonFactionSafe = !anyDanger;
-      // force 入派立威：普通任务被折算为生死状（force 语义含派系成员身份前提）
+      // 入派立威：任务被折算为生死状（v39（E365）wrapDanger 缩为立威单支，force 参数删除）
       p.sect.faction = 'tianshu';
-      const t2 = SectSys.wrapDanger({ type: 'cult', target: null, need: 100, progress: 0 }, p, true);
+      const t2 = SectSys.wrapDanger({ type: 'cult', target: null, need: 100, progress: 0 }, p);
       out.forceOk = t2.type === 'kill' && t2.danger === true;
-      // 普通任务自然短路：wrapDanger 不再改派 cult 任务
-      const t3 = SectSys.wrapDanger({ type: 'cult', target: null, need: 100, progress: 0 }, p);
-      out.normalShort = t3.type === 'cult' && !t3.danger;
+      // 普通生成路径不再绕行 wrapDanger（newTask 直出 genTask，cult/explore/sign 任务不经立威折算）
+      out.normalShort = !SectSys.newTask.toString().includes('wrapDanger');
     } finally {
       Utils.chance = savedChance; Game.afterAction = savedAA; p.sect = null;
     }
     return out;
   });
   rb12.genDanger && rb12.progressed && rb12.doublePay && rb12.slotReplaced && rb12.nonFactionSafe && rb12.forceOk && rb12.normalShort
-    ? pass('RB12 生死状线回归：派系生成→击杀推进→双倍赏格→换新、非派系 40 采样零生死状、force 立威与普通短路并存（E242）') : fail('RB12 生死状线', JSON.stringify(rb12));
+    ? pass('RB12 生死状线回归：派系生成→击杀推进→双倍赏格→换新、非派系 40 采样零生死状、wrapDanger 缩为入派立威单支且 newTask 普通路径不再绕行（E242；v39 E365 新语义）') : fail('RB12 生死状线', JSON.stringify(rb12));
 
   /* ---- RB13 E243：时代时长重校迁移（min 收缩 + 防重入） ---- */
   const rb13 = await page.evaluate(() => {

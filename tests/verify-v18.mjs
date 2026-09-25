@@ -84,7 +84,7 @@ console.log('===== SA 源码静态组 =====');
   gdata.includes('use: { purge: 1 }') && bag.includes('if (effect.purge)') && bag.includes('StatusFx.purge(Battle.active.myFx)') ? pass('SA19 清心丹实装（E1）') : fail('SA19 清心丹', '');
   beast.includes('checkThirdSkill(b)') && beast.includes('独立检查') ? pass('SA20 第三天生技独立补发（E2）') : fail('SA20 第三技', '');
   beast.includes('p.beasts.active != null && p.beasts.active2 === uid') ? pass('SA21 双槽互斥（E3）') : fail('SA21 双槽', '');
-  battle.includes('B.stats.out += dotDmg;   // v32 修瑕（E4）') ? pass('SA22 敌方 DOT 入总伤（E4）') : fail('SA22 DOT 统计', '');
+  battle.includes("this.dealToEnemy(B, st, dotDmg, { src: 'dot' })") ? pass('SA22 敌方 DOT 入总伤（E4；v39（E364）落账随 dealToEnemy 单源）') : fail('SA22 DOT 统计', '');
   beast.includes('if (B && B.busy) return;   // v32 修瑕（E5）') ? pass('SA23 驯服 busy 守卫（E5）') : fail('SA23 busy', '');
   battle.includes('【阵旗重张】') ? pass('SA24 续波重掷阵法压制（E6）') : fail('SA24 阵道续波', '');
   battle.includes('塔心不灭原只在 enemyStrike 直伤结算内拦截') ? pass('SA25 塔心不灭挪收口（E7）') : fail('SA25 不灭', '');
@@ -164,11 +164,11 @@ console.log('===== SA 源码静态组 =====');
   beast.includes("TACTICS: { focus: '集火', control: '控场', guard: '护主' }") && ui.includes('act-beast-tactic') && gamejs.includes("'act-beast-tactic'") ? pass('SA87 协战策略三选（C4）') : fail('SA87 策略', '');
   battle.includes('运功逼毒') && battle.includes('偷梁换柱') ? pass('SA88 敌方自状态管理（C5）') : fail('SA88 自管理', '');
   tower.includes('跳层赌约') && tower.includes('血祭塔灵') && tower.includes('run.riskAtk') ? pass('SA89 塔风险赌约+血祭（C6）') : fail('SA89 塔赌约', '');
-  battle.includes('async actNingshen()') && battle.includes('bt-ning') && gamejs.includes("'bt-ning'") ? pass('SA90 凝神（C7）') : fail('SA90 凝神', '');
+  battle.includes('ningshenZY()') && battle.includes('ningshenPurge()') && gamejs.includes("'act-ning-zy'") && gamejs.includes("'act-ning-purge'") ? pass('SA90 凝神双钮直达（C7；v39（E350）去弹窗化 act-ning-zy/purge）') : fail('SA90 凝神', '');
 
   /* ---- D 印记分账与仙途 ---- */
   autocult.includes('value="xian"') && autocult.includes("t.kind === 'xian'") && autocult.includes('p2.flags && p2.flags.ascended') ? pass('SA91 AutoCult 仙元目标+飞升不停（D4）') : fail('SA91 挂机', '');
-  cult.includes('async wuDao()') && gamejs.includes("'act-wudao'") && ui.includes('act-wudao') ? pass('SA92 悟道入口（D5）') : fail('SA92 悟道', '');
+  cult.includes('async wuDao(opts = {})') && gamejs.includes("'act-wudao'") && ui.includes('act-wudao') ? pass('SA92 悟道入口（D5）') : fail('SA92 悟道', '');
   trib.includes('p.counters.xianyuan -= 50') ? pass('SA93 仙劫借天运燃仙元（D6）') : fail('SA93 借天运', '');
   reinc.includes('TREE_EFFECTS.filter((t2, i2) => treeTier >= i2 + 1)') ? pass('SA94 树 11~15 效果接入（D2）') : fail('SA94 树层', '');
   pfac.includes('lifeUid') ? pass('SA95 每世指纹（D7）') : fail('SA95 指纹', '');
@@ -415,17 +415,14 @@ try {
     Battle.active = { enemy: Object.assign(buildMonster('m_yezhu'), { fx: [] }), ctx: {}, myFx: [], buffs: {}, defending: false, stats: { out: 0, in: 0, src: {} } };
     out.estTxt = Battle.intentEstimate({ kind: 'strike', heavy: true });
     Battle.active = null;
-    // C7：凝神
+    // C7：凝神双钮（v39（E350）去弹窗化——直达入口，原 popup 三步并一步）
     Battle.active = { enemy: Object.assign(buildMonster('m_yezhu'), { fx: [] }), ctx: {}, myFx: [{ kind: 'poison', pct: 3, rounds: 2 }], enemyFxIds: [], morale: 25, zhenyuan: 0, zmax: 6, _ningUsed: false, combo: 0, stats: { out: 0, in: 0, src: {} }, logs: [], floats: [], buffs: {}, defending: false };
-    UI.popup = async o => (o.options || []).some(x => x.value === 'zy') ? 'zy' : null;
-    await Battle.actNingshen();
+    Battle.ningshenZY();
     out.ning = Battle.active.zhenyuan === 1 && Battle.active.morale === 5 && Battle.active._ningUsed === true;
     // 净化支
     Battle.active.morale = 20; Battle.active._ningUsed = false;
-    UI.popup = async o => (o.options || []).some(x => x.value === 'purge') ? 'purge' : null;
-    await Battle.actNingshen();
+    Battle.ningshenPurge();
     out.ningPurge = !StatusFx.has(Battle.active.myFx, 'poison') && Battle.active.morale === 5;
-    UI.popup = popBak;
     Battle.active = null;
     // D4：AutoCult xian 目标
     AutoCult.target = { kind: 'xian', need: 10 };

@@ -34,6 +34,18 @@ const BountySys = {
     }
     return p.bounties;
   },
+  /** v39（E353）：悬赏换一批——每 3 日窗口一次免费重掷（窗口 day 不变仅换 list）。
+   *  rerolledDay 印章挂在 p.bounties 本体上，窗口轮换时整个对象被 stateOf 重置=印章自然蒸发，
+   *  新窗口可再换（老档无此子字段即视为本窗口未换，零迁移）。 */
+  reroll() {
+    const p = Game.player;
+    const B = this.stateOf(p);
+    if (B.rerolledDay != null) { UI.toast('本窗口已换过一批——三日后自会换新'); return; }
+    B.list = this.freshBounties(p);
+    B.rerolledDay = Math.floor(p.day || 0);
+    Log.add('你请悬赏行脚把旧榜揭下，换上一批新悬赏——机缘总有更合眼的一场。', 'info');
+    Game.afterAction();
+  },
   rewards(p) {
     const realm = p.realmIdx;
     let stones = Math.round(60 * GameData.stoneEco(realm));

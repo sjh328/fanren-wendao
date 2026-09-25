@@ -131,7 +131,7 @@ try {
   // 10. 江湖声望
   await page.evaluate(() => {
     const p = Game.player;
-    p.reputation = 100;   // v18 数据：名动一方 min=80
+    p.reputation = 120;   // v39（E358）：LEVELS 新增 120「名动一方」显示档（机制阈值不动）
     const level = RepSys.level(p);
     return level.name;
   }).then(name => {

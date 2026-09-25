@@ -5,7 +5,7 @@
  * ====================================================================== */
 const Achieve = {
   CATS: { realm: '境界', dao: '职业', battle: '战斗', exp: '奇遇', reinc: '转世' },
-  stonesTotal(p) { return p.stones.low + p.stones.mid * 100 + p.stones.high * 10000; },
+  stonesTotal(p) { return Bag.stonesTotal(p); },   // v39（E365）：转调 Bag 单源
   rewardText(r) { return r.fortune ? `气运 +${r.fortune}` : `灵石 +${Utils.fmtNum(r.stones)}`; },
   /** v29：成就灵石奖励随境界经济缩放——固定面值在大后期形同虚设 */
   rewardOf(d, p) {

@@ -155,8 +155,10 @@ const Stat = {
       * (1 + ((gf.hpPct || 0) + (eq.hpPct || 0) + (sb.hpPct || 0) + (dao.hpPct || 0) + (beastPass.hpPct || 0) + (dx.hpPct || 0) + (pl.hpPct || 0)) / 100) * finalScale);   // v27 修瑕：宗门/职位的 hpPct 此前从未生效
     const maxMp = Math.round((40 + compEff * 8 + rp * 4 + (eq.mp || 0))
       * (1 + ((gf.mpPct || 0) + (eq.mpPct || 0) + (sb.mpPct || 0) + (dao.mpPct || 0)) / 100) * finalScale);   // v27 修瑕：装备/宗门 mpPct 此前从未生效
+    // v39（E361）：道侣心事段一「旧物」——旧物随身，攻击 +3%（≤5% 档；道侣结发后心事线奖励之一）
+    const partnerHeart1 = !!(p.partner && p.npcs && p.npcs[p.partner] && (p.npcs[p.partner].heart || 0) >= 1);
     const atk = Math.round((8 + A.gen * 2 + rp * 3 + (eq.atk || 0))
-      * (1 + ((gf.atkPct || 0) + (eq.atkPct || 0) + (sb.atkPct || 0) + (dao.atkPct || 0) + (beastPass.atkPct || 0) + (dx.atkPct || 0) + (pl.atkPct || 0) + trainPct) / 100) * finalScale);
+      * (1 + ((gf.atkPct || 0) + (eq.atkPct || 0) + (sb.atkPct || 0) + (dao.atkPct || 0) + (beastPass.atkPct || 0) + (dx.atkPct || 0) + (pl.atkPct || 0) + trainPct + (partnerHeart1 ? 3 : 0)) / 100) * finalScale);
     const def = Math.round((4 + A.body * 1.2 + rp * 1.8 + (eq.def || 0))
       * (1 + ((gf.defPct || 0) + (eq.defPct || 0) + (sb.defPct || 0) + (dao.defPct || 0) + (dx.defPct || 0) + (pl.defPct || 0) + trainPct) / 100) * finalScale);   // v27 修瑕：宗门/职位 defPct 此前从未生效
     const speed = Math.round((8 + (A.gen + A.body) / 2 + rp * 0.8 + (eq.spd || 0))

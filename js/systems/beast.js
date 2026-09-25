@@ -555,8 +555,10 @@ const BeastSys = {
     if (p.beasts.egg) { UI.toast('府中已有灵蛋待孵'); return; }
     const today = Math.floor(p.day || 0);
     if ((a.breedCd || 0) > today) { UI.toast(`${a.name} 元气未复（${a.breedCd - today} 日后方可结契）`); return; }
+    // v39（E360）：血亲拦截补全——除直系祖链外，双方 lineage 共享任一亲代 id（同父母兄弟姊妹）亦拦截
+    const sharesKin = x => (x.lineage || []).some(u => (a.lineage || []).includes(u));
     const cands = p.beasts.list.filter(x => x.uid !== uidA && x.level >= 10 && (x.breedCd || 0) <= today
-      && !(x.lineage || []).includes(uidA) && !(a.lineage || []).includes(x.uid));
+      && !(x.lineage || []).includes(uidA) && !(a.lineage || []).includes(x.uid) && !sharesKin(x));
     if (!cands.length) { UI.toast('并无合适的结契对象（另需十阶、非血亲、休契期已满）'); return; }
     const uidB = await UI.popup({
       title: `结契繁育 · ${a.name}`,
