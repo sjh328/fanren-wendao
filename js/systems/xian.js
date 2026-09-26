@@ -8,20 +8,14 @@
  * 寿元：入阶续仙寿（GameData.XIAN_TIERS[].life）。
  * ====================================================================== */
 const XianSys = {
-  /** 仙阶数据（未入阶 idx=0） */
-  tiers() { return GameData.XIAN_TIERS; },
+  /** v40（E373）：无消费死方法 tiers()/nextNeed() 删除（缺陷猎手 deadscan 复核全仓零调用，
+   *  数据直读 GameData.XIAN_TIERS[].layerNeed） */
   cur(p) { return (p.xianjie && p.xianjie.idx) || 0; },
   layer(p) { return (p.xianjie && p.xianjie.layer) || 0; },
   def(p) { return this.cur(p) === 0 ? null : (GameData.XIAN_TIERS[this.cur(p) - 1] || null); },   // v32 修瑕（E28）：idx=0 原错回地仙定义——advanceLayer 的 enterFirst 分支成死代码（无籍也可「晋层」的语义陷阱）
   yuan(p) { return (p.counters && p.counters.xianyuan) || 0; },
   /** 已晋层数（全属性/修炼效率消费）；v32 修瑕（E36）：未飞升而残留仙籍的脏档不再吃加成 */
   layersTotal(p) { return (this.unlocked(p) && this.cur(p) > 0) ? (this.cur(p) - 1) * 3 + this.layer(p) : 0; },
-  /** 下一层所需仙元（阶内补层）；阶满返回 0 */
-  nextNeed(p) {
-    const d = this.def(p);
-    if (!d || this.layer(p) >= 3) return 0;
-    return d.layerNeed;
-  },
   /** 是否开启（白日飞升之后） */
   unlocked(p) { return !!(p && p.flags && p.flags.ascended); },
   /** 大罗圆满（道祖之境） */
@@ -43,10 +37,14 @@ const XianSys = {
       UI.toast(this.cur(p) >= 4 ? '大罗已圆满——可证道祖之境；仙元可于转世时携往生' : `${d.name}已圆满——引动仙劫方可晋入${(GameData.XIAN_TIERS[this.cur(p)] || {}).name || '下一阶'}；余下仙元可于转世时携往生`);
       return;
     }
-    const need = d.layerNeed;
-    if (this.yuan(p) < need) { UI.toast(`仙元不足（需 ${Utils.fmtNum(need)}）`); return; }
+    const need = Math.round(d.layerNeed * this.yuanCostMul(p));   // v40（E398）：考功不足（merit < 品阶×4）时仙元 ×1.5 软门槛
+    if (this.yuan(p) < need) {
+      UI.toast(`仙元不足（需 ${Utils.fmtNum(need)}）${need > d.layerNeed ? '——考功政绩不足，仙元消耗 ×1.5（先行考功可免）' : ''}`);
+      return;
+    }
     p.counters.xianyuan -= need;
     p.xianjie.layer++;
+    if (need > d.layerNeed) Log.add('【仙庭】因考功政绩不足，此次晋层多耗了五成仙元——官声不可轻慢。', 'warn');
     // v35（E146）修瑕：播报原读「晋升前」的层名（names[layer-1]）——晋入中期播成「初期」、
     // 晋入圆满播成「后期」，与 label()（layer>=3 → 圆满）口径差一位
     const ln2 = this.layer(p) >= 3 ? '圆满' : GameData.XIAN_LAYER_NAMES[this.layer(p)];
@@ -170,6 +168,17 @@ const XianSys = {
   PINS: [0, 300, 800, 1800, 3600, 6500, 11000, 18000, 30000],
   PIN_NAMES: ['九品仙吏', '八品仙丞', '七品仙卫', '六品仙使', '五品仙官', '四品仙卿', '三品仙侯', '二品仙君', '一品仙尊'],
   gong(p) { return (p.xianCourt && p.xianCourt.gong) || 0; },
+  /** v40（E398）：官声轴——merit（考功政绩）/ demerit（罢黜记录）。晋品仙元需求不变，
+   *  merit 不足（<晋品需求的 40%）时仙元消耗 ×1.5 软门槛（不锁死）；demerit 高则官市折法 */
+  merit(p) { return (p.xianCourt && p.xianCourt.merit) || 0; },
+  demerit(p) { return (p.xianCourt && p.xianCourt.demerit) || 0; },
+  addMerit(p, n) {
+    const c = this.courtState(p);
+    if (n >= 0) { c.merit = (c.merit || 0) + n; }
+    else { c.merit = (c.merit || 0) + n; c.demerit = (c.demerit || 0) - n; }   // 负值扣政绩+记过
+  },
+  /** v40（E398）②：晋品仙元软门槛——考功不足（merit < pin×4）时晋层仙元消耗 ×1.5（不锁死） */
+  yuanCostMul(p) { return this.merit(p) < this.pin(p) * 4 ? 1.5 : 1; },
   pin(p) {
     const g = this.gong(p);
     let pin = 1;
@@ -180,20 +189,39 @@ const XianSys = {
   pinNext(p) { return this.pin(p) >= 9 ? null : this.PINS[this.pin(p)]; },
   /** 云海深层解锁（品 ≥5） */
   deepOpen(p) { return this.pin(p) >= 5; },
+  /** v40（E398）③：每品专属特权单源（仙庭页与消费端共用）——
+   *  六品=仙市行情预告（仙市页显示明日行情方向）/ 四品=每日一次镇心魔 −10（ courtDaily 消费）
+   *  / 二品=差遣四桩（TASKS 可领四桩）/ 一品=仙市七五折（marketPrice 折扣加深） */
+  PRIVS: [
+    { pin: 4, id: 'marketHint', name: '仙市行情预告', desc: '仙市页可见坊市行情走向' },
+    { pin: 6, id: 'calmXinmo', name: '每日镇心魔', desc: '每日一次心魔 −10（仙庭页执行）' },
+    { pin: 8, id: 'fourTasks', name: '差遣四桩', desc: '每日可领四桩差遣' },
+    { pin: 9, id: 'market75', name: '仙市七五折', desc: '仙市易物七五折' },
+  ],
+  hasPriv(p, id) {
+    const pin = this.pin(p);
+    return this.PRIVS.some(x => x.id === id && pin >= x.pin);   // v40（E398）：数字越大品越高
+  },
   courtState(p) { return p.xianCourt || (p.xianCourt = { gong: 0, day: 0, claims: {}, base: {} }); },
-  /** 差遣三桩（日更）：巡察（胜 1 场）/ 上贡（炼丹 1 炉）/ 参拜（求签 1 次） */
+  /** 差遣三桩（日更）：巡察（胜 1 场）/ 上贡（炼丹 1 炉）/ 参拜（求签 1 次）；
+   *  v40（E398）二品特权「差遣四桩」：追加第四桩「巡夜」（夜巡护佑） */
   TASKS: [
     { id: 'patrol', name: '巡察妖患', desc: '胜一场战斗（妖氛清剿）', need: 1, counter: 'wins' },
     { id: 'tribute', name: '上贡仙丹', desc: '开炉炼丹一炉（仙庭香火）', need: 1, counter: 'crafts' },
     { id: 'alms',   name: '参拜仙官', desc: '黄历求签一次（诚心可鉴）', need: 1, counter: null },
   ],
+  TASK_EXTRA: { id: 'night', name: '巡夜护佑', desc: '入夜巡行一次（洞府巡夜）', need: 1, counter: 'explores' },
+  taskList(p) {
+    return this.hasPriv(p, 'fourTasks') ? [...this.TASKS, this.TASK_EXTRA] : this.TASKS;
+  },
   taskProg(p, t) {
     const c = this.courtState(p);
     if (t.id === 'alms') return p.signDay === Math.floor(p.day || 0) ? 1 : 0;
     const base = (c.base || {})[t.counter] || 0;
     return Math.max(0, ((p.counters || {})[t.counter] || 0) - base);
   },
-  /** 日更钩子：差遣换日重掷基线 + 心魔罢黜（仙官也修心） */
+  /** 日更钩子：差遣换日重掷基线 + 心魔罢黜（仙官也修心）+
+   *  v40（E398）四品特权「每日镇心魔 −10」（手动在仙庭页执行，此处只重置 privUsed） */
   courtDaily(p, auto = false) {
     if (!this.unlocked(p) || p.dead) return;
     const c = this.courtState(p);
@@ -201,25 +229,54 @@ const XianSys = {
     if (c.day !== today) {
       c.day = today;
       c.claims = {};
-      c.base = { wins: (p.counters || {}).wins || 0, crafts: (p.counters || {}).crafts || 0 };
+      c.base = { wins: (p.counters || {}).wins || 0, crafts: (p.counters || {}).crafts || 0, explores: (p.counters || {}).explores || 0 };
     }
-    // 罢黜：心魔 ≥80，仙功折一成（每日至多一次）
+    // 罢黜：心魔 ≥80 → v40（E398）改走官声：demerit+3 且仙功折一成；merit<0 停差遣（claims 清空）
     if ((p.xinmo || 0) >= 80 && c._dismissDay !== today) {
       c._dismissDay = today;
+      c.demerit = (c.demerit || 0) + 3;
+      c.merit = Math.max(-10, (c.merit || 0) - 2);   // v40（E398）：罢黜扣政绩——merit<0 停差遣分支自此可达
       const lost = Math.round(this.gong(p) * 0.1);
       if (lost > 0) {
         c.gong = Math.max(0, this.gong(p) - lost);
-        Log.add(`【仙庭】心魔深重（${Math.round(p.xinmo)}）——仙官名录上你的考功被朱笔一勾，仙功 -${lost}。仙官也须修心。`, 'loss');
+        Log.add(`【仙庭】心魔深重（${Math.round(p.xinmo)}）——仙官名录上你的考功被朱笔一勾：官声受损（demerit +3），仙功 -${lost}。仙官也须修心。`, 'loss');
+      }
+      if (this.merit(p) < 0 && c.day === today) {
+        c.claims = {};
+        Log.add('【仙庭】官声狼藉——今日差遣暂停，先行修心赎功。', 'warn');
       }
     }
+  },
+  /** v40（E398）四品特权：每日一次镇心魔 −10（仙庭页按钮，日一次） */
+  calmXinmo() {
+    const p = Game.player;
+    if (!this.unlocked(p) || !this.hasPriv(p, 'calmXinmo')) { UI.toast('四品仙卿方可行此特权'); return; }
+    const c = this.courtState(p);
+    const today = Math.floor(p.day || 0);
+    if (c._calmDay === today) { UI.toast('今日已镇过心魔——明日再来'); return; }
+    c._calmDay = today;
+    p.xinmo = Math.max(0, (p.xinmo || 0) - 10);
+    Log.add(`【仙庭特权】仙官诵静心咒镇魂——心魔 -10（现 ${Math.round(p.xinmo)}）。`, 'gain');
+    Game.afterAction();
+  },
+  /** v40（E398）①考功评级：领赏时按当日超额量评级（超额 ≥1 倍需求=优异 merit+2；达标=称职 +1；
+   *  领赏时不足（progress 超 need 由 claim 保证）——此处只按超额倍数分档 */
+  meritGrade(p, t) {
+    const prog = this.taskProg(p, t);
+    if (prog >= t.need * 2) return { grade: '优异', delta: 2 };
+    if (prog >= t.need) return { grade: '称职', delta: 1 };
+    return { grade: '欠缺', delta: 0 };
   },
   claimTask(i) {
     const p = Game.player;
     if (!this.unlocked(p)) return;
     const c = this.courtState(p);
-    const t = this.TASKS[i];
+    const t = this.taskList(p)[i];
     if (!t || c.claims[t.id]) return;
     if (this.taskProg(p, t) < t.need) { UI.toast('此桩差遣尚未达成'); return; }
+    // v40（E398）①：考功评级——超额倍数定 merit（欠缺不扣，称职+1、优异+2）
+    const mg = this.meritGrade(p, t);
+    if (mg.delta > 0) this.addMerit(p, mg.delta);
     c.claims[t.id] = true;
     const pinBefore = this.pin(p);
     const gongGain = 60 + pinBefore * 10;
@@ -232,7 +289,7 @@ const XianSys = {
       Bag.addItem(mat, 1);
       extra = `，仙庭另赐${GameData.ITEMS[mat].name} ×1`;
     }
-    Log.add(`【仙庭差遣】「${t.name}」办得妥帖——仙功 +${gongGain}${extra}。${this.pinNext(p) ? `（距${this.PIN_NAMES[this.pin(p)]}晋${this.PIN_NAMES[this.pin(p) + 1] || ''}尚需仙功 ${Utils.fmtNum(Math.max(0, this.pinNext(p) - this.gong(p)))}）` : '（一品之尊，仙庭人臣之极）'}`, 'gain');
+    Log.add(`【仙庭差遣】「${t.name}」考功${mg.grade}（官声 +${mg.delta}）——仙功 +${gongGain}${extra}。${this.pinNext(p) ? `（距${this.PIN_NAMES[this.pin(p)]}晋${this.PIN_NAMES[this.pin(p) + 1] || ''}尚需仙功 ${Utils.fmtNum(Math.max(0, this.pinNext(p) - this.gong(p)))}）` : '（一品之尊，仙庭人臣之极）'}`, 'gain');
     Game.afterAction();
   },
   /** 仙市：仙材专柜，仙石易物——品阶愈高折扣愈深 */
@@ -244,7 +301,8 @@ const XianSys = {
     { item: 'm_gupian', base: 6000, qty: 2 },
   ],
   marketPrice(p, row) {
-    const disc = 1 - (this.pin(p) - 1) * 0.04;
+    // v40（E398）一品特权「仙市七五折」：乘法叠加——一品品阶折 0.68 × 特权 0.75 ≈ 0.51
+    const disc = (1 - (this.pin(p) - 1) * 0.04) * (this.hasPriv(p, 'market75') ? 0.75 : 1);   // v40（E398）：乘法叠加
     return Math.round(row.base * disc);
   },
   async courtBuy(i) {

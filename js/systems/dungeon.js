@@ -5,13 +5,15 @@
 const DungeonSys = {
   /** 深度收益倍率 */
   dm(depth) { return 1 + depth * 0.25; },
-  /** v18：侦查符预览节点风险（消耗一张符箓） */
+  /** v18：侦查符预览节点风险（消耗一张符箓）
+   *  v40（E372）：原为全工程零调用的死方法（连带 E245 心魔「窥探符 +2」来源永不触发）——
+   *  现接回秘境节点卡「窥 探」按钮，花一张符换本层岔路情报 */
+  hasTalisman(p) { return Object.keys(p.bag || {}).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman'); },
   scout() {
     const p = Game.player;
     const D = p.dungeon;
-    if (!D || D.stuck) return;
-    const hasTal = Object.keys(p.bag).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman');
-    if (!hasTal) { UI.toast('需消耗一张符箓以施展窥探秘术'); return; }
+    if (!D || Battle.active) return;
+    if (!this.hasTalisman(p)) { UI.toast('需消耗一张符箓以施展窥探秘术'); return; }
     const talId = Object.keys(p.bag).filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman').sort((a, b) => (GameData.ITEMS[a].price || 0) - (GameData.ITEMS[b].price || 0))[0];   // v35（E155）：改耗价最低的符——原取首个命中，可能无声烧掉金光符等保命高符
     Bag.removeItem(talId, 1);
     const nodeNames = { battle: '⚔ 战斗', treasure: '🎁 宝箱', fortune: '✨ 奇遇', trap: '⚠ 陷阱', npc: '🗣 遭遇', boss: '☠ 守关' };
@@ -43,7 +45,7 @@ const DungeonSys = {
       muts.push(m.id);
     }
     const guZhou = muts.includes('guzhou');
-    p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS + (guZhou ? 1 : 0), choices: [], gains: [], stuck: false, muts };
+    p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS + (guZhou ? 1 : 0), choices: [], gains: [], muts };
     if (muts.length) {
       Log.add(`【异变】此行地气有异：${muts.map(id => { const d = (GameData.DUNGEON_MUTATIONS || []).find(x => x.id === id); return `<b>${d.name}</b>（${d.desc}）`; }).join('；')}。`, 'warn');
     }
@@ -85,7 +87,6 @@ const DungeonSys = {
   genChoices(D) {
     if (!D.route) this.genRoute(D);
     D.choices = D.route[D.depth] || ['boss'];
-    D.stuck = false;
   },
   /** v38（E307）：异变判定单源 */
   hasMut(D, id) { return !!(D && Array.isArray(D.muts) && D.muts.includes(id)); },
@@ -97,7 +98,13 @@ const DungeonSys = {
     const cost = Math.round(20 * GameData.stoneEco(p.realmIdx));
     if (!Bag.spendStones(cost)) { UI.toast(`净化异变需灵石 ${Utils.fmtNum(cost)}`); return; }
     D.muts = D.muts.filter(x => x !== id);
-    if (id === 'guzhou') D.total = GameData.DUNGEON_TOTAL_LAYERS;   // 古咒净化：层数回落
+    if (id === 'guzhou') {
+      D.total = GameData.DUNGEON_TOTAL_LAYERS;   // 古咒净化：层数回落
+      // v40（E369）修瑕：预生成路线随层数同裁且末位重置守关——原只改 total，route 不变，
+      // 第 9 层若为战斗节点，onVictory 的 depth>=total 分支会直接清空 p.dungeon：
+      // Boss 战与专属大奖无声蒸发（同一操作因节点类型不同两种结局）。净化后必然仍以 Boss 战收束。
+      if (Array.isArray(D.route)) { D.route.length = D.total; D.route[D.total - 1] = ['boss']; }
+    }
     const d = (GameData.DUNGEON_MUTATIONS || []).find(x => x.id === id);
     Log.add(`你以灵石引动地气，将【${d.name}】异变生生磨平——秘境脉络为此清朗一分。（灵石 -${Utils.fmtNum(cost)}）`, 'gain');
     Game.afterAction();
@@ -147,7 +154,7 @@ const DungeonSys = {
   async resolve(i) {
     const p = Game.player;
     const D = p.dungeon;
-    if (!D || D.stuck || Battle.active) return;
+    if (!D || Battle.active) return;   // v40（E373）：stuck 守卫随 stuck 分支删除而收窄
     const type = D.choices[i];
     if (!type) return;
     const R = GameData.SECRET_REALMS[D.realm];
@@ -270,7 +277,7 @@ const DungeonSys = {
    *  battle/boss/npc（抉择载体）必停亲手断；含陷阱路时血量 <35% 保险停。 */
   autoPush(p) {
     const D = p.dungeon;
-    if (!D || D.stuck || Battle.active || p.dead) return;
+    if (!D || Battle.active || p.dead) return;
     const AUTO = ['treasure', 'fortune', 'trap'];
     if (!D.choices || !D.choices.length) return;
     if (!D.choices.every(t => AUTO.includes(t))) return;   // 决策载体必停
@@ -320,10 +327,13 @@ const DungeonSys = {
     const p = Game.player;
     const kind = Utils.pickWeighted({ merchant: 35, senior: 35, wounded: 30 });
     if (kind === 'merchant') {
-      const pool = ['w_sanqing', 'a_xuangui', 'z_qiankun', 'w_zhuxian', 'a_longlin', 'z_taiji', 'gf_lieyang', 'gf_xuantian', 'gf_tiangang'];
-      const item = Utils.pick(pool);
-      const def = GameData.ITEMS[item];
-      const cost = Math.round((def.price || 8000) * 0.65);
+      // v40（E404）：改调 RowMerchant 单源（池与折扣单源，秘境场景差异由 tier 参数保底）
+      const offer = RowMerchant.offer(3);
+      if (!offer) { Log.add('散商收了摊位——错过了。', 'info'); }
+      else {
+      const item = offer.item;
+      const def = offer.def;
+      const cost = offer.cost;
       const buy = await UI.popup({
         title: '秘境散商',
         html: `石室内竟有一位摆摊的散修，货架上只有一件东西：<br><b>${def.name}</b> —— ${def.desc}<br>索价 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石。`,
@@ -341,6 +351,7 @@ const DungeonSys = {
       }
       Log.add('你摇了摇头，散商也不恼，化作一道遁光去了。', 'info');
       return { icon: '🗣', title: '遭 遇 · 秘境散商', cls: 'info', lines: ['你摇了摇头——此物虽好，与你无缘。', '散商也不恼，化作一道遁光去了。'] };
+      }   // v40（E404）：else (offer) 闭合
     } else if (kind === 'senior') {
       const gain = Math.round(Utils.rand(60, 100) * GameData.eco(R.recRealm) * dm);
       Cultivate.addExp(p, gain);
@@ -428,7 +439,8 @@ const DungeonSys = {
       return;
     }
     this.gain(D, `战斗得利（第${D.depth}层）`);
-    if (p.dao === 'array') DaoSys.gain(p, 15);   // v16 阵道：探秘
+    if (p.dao === 'array') DaoSys.gain(p, 15);   // v16 阵道：探秘（v40 评审修正：恢复）
+    if (typeof SectSys !== 'undefined' && SectSys.onDungeonLayer) SectSys.onDungeonLayer();   // v40（E392）：秘境协防差事进度
     if (D.depth >= D.total) { p.dungeon = null; return; }
     this.genChoices(D);
   },
@@ -451,13 +463,15 @@ const DungeonSys = {
     });
     Log.add('再睁眼时，你已躺在山门外。秘境无情，来日再战。', 'warn');
   },
-  /** 战斗中遁走：困在原地，只能撤离 */
+  /** 战斗中遁走：v40（E373）原置 stuck「困在原地只能撤离」——stuck 不惩罚不阻止任何事，
+   *  纯维护负担；改为直接走撤离语义（提示后清空秘境进度，已掠所得尽入囊中） */
   onFlee() {
     const p = Game.player;
-    if (!p.dungeon) return;
-    p.dungeon.stuck = true;
-    p.dungeon.choices = [];
-    Log.add('你退出争斗，藏进石隙——此地不宜久留，趁早撤离为上。', 'warn');
+    const D = p.dungeon;
+    if (!D) return;
+    const R = GameData.SECRET_REALMS[D.realm];
+    p.dungeon = null;
+    Log.add(`你退出争斗，藏进石隙，循来路悄然退出了${R ? R.name : '秘境'}——深入 ${D.depth} 层，全身而退。`, 'warn');
   },
   /** 撤离：带走当前收益 */
   async retreat() {

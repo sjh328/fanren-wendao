@@ -16,7 +16,7 @@ const ShopSys = {
     if (def.type === 'artifact' && (def.grade || 0) >= 1) {
       const row = (GameData.SHOP || []).find(r => r.item === itemId);
       const minR = row ? (row.minRealm || 0) : 0;
-      base = Math.round(base * Utils.clamp(1 + 0.66 * (p.realmIdx - minR), 1, 3));   // v31（E47）：线性爬坡——原 3.8^(r-minR) 恒在 r=minR+1 跳顶 3 倍，『微涨』名不副实
+      base = Math.round(base * Utils.clamp(1 + 0.66 * (p.realmIdx - minR), 1, 5));   // v31（E47）：线性爬坡——原 3.8^(r-minR) 恒在 r=minR+1 跳顶 3 倍，『微涨』名不副实；v40（E390）：封顶 3→5（r8 装备=0.24 场收入的倒挂回正）
     }
     // v24 声望接线：名望高者坊市给面子（买价九折/九二折，劣迹昭彰者吃溢价）；卖价不受声望影响
     const repMul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
@@ -31,6 +31,10 @@ const ShopSys = {
     // 符箓为时价之物：随境界经济浮动
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
     let v = Math.max(1, Math.floor(base * 0.45));   // v32（E16）：卖价基数 0.4→0.45 微补偿——获取加成自此不吃卖价（斩断倒卖套利）
+    // v40（E389）：手作溢价——炼丹/研创/炼器配方产出（CRAFT_OUT 派生集合）卖价 ×1.12，
+    // 「炼」获得经济闭环。溢价位于道途/行情乘区之前；基数 0.45 与买价同源保证「买→即卖」
+    // 仍严格亏损（转卖套利不成立，取舍见 UPDATE_NOTES；防套利两路见 price-audit E389 路）
+    if (GameData.craftOutSet && GameData.craftOutSet().has(itemId)) v = Math.round(v * 1.12);
     // 丹道：出售丹药价格提升两成五
     if (p.dao === 'pill' && def.type === 'pill') v = Math.round(v * 1.25);
     if (p.dao === 'pill' && def.type === 'pill' && DaoSys.tierLevel(p) >= 2) v = Math.round(v * 1.15);   // v10 丹道六境·药理境

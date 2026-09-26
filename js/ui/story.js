@@ -80,12 +80,14 @@ const Story = {
   setFlag(k, v = true) { this.flags()[k] = v; },
   hasFlag(k) { return !!this.flags()[k]; },
   /** v19：大事年表（问道录 · 年表用） */
-  chron(txt) {
+  chron(txt, opts) {
     const p = Game.player;
     if (!p) return;
     if (!p.chronicle) p.chronicle = [];
-    p.chronicle.push({ d: Math.floor(p.day || 0), txt });
-    if (p.chronicle.length > 80) p.chronicle.splice(0, p.chronicle.length - 80);
+    const e = { d: Math.floor(p.day || 0), txt };
+    if (opts && opts.m) e.m = 1;   // v40（E400/E408）：里程碑旗标（一世报告 m 旗标优先）
+    p.chronicle.push(e);
+    if (p.chronicle.length > 200) p.chronicle.splice(0, p.chronicle.length - 200);   // v40（E408）：上限 200
   },
   /** v19：场景可见性（req：需持有旗标；noFlag：需未持有。可为字符串或数组） */
   _vis(sc) {

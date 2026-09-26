@@ -211,7 +211,10 @@ const CaveSys = {
     if (p.cave._springDay === today) return;
     p.cave._springDay = today;
     const guardOn = p.avatar && p.avatar.on && (p.avatar.task === 'guard' || (p.avatar.lv >= 9 && p.avatar.task2 === 'guard'));
-    const gain = Math.round(80 * p.cave.builds.spring * GameData.stoneEco(Math.min(6, p.realmIdx)) * (guardOn ? 1.2 : 1));   // v29：封顶 4→6，后期灵泉不再是摆设；v38：驻守 ×1.2
+    // v40（E383）：灵泉降档——80×spring×stoneEco(min(6,r)) → 45×min(4,spring)×stoneEco(min(4,r))：
+    // r6 裸值 72.26 万→2.81 万/日（−96.1%），「挂一口泉即富」翻转为主动收入大头（实收/建模比行监控）；
+    // 驻守 ×1.2 保留单列（化身身份差异，不参与降档口径）
+    const gain = Math.round(45 * Math.min(4, p.cave.builds.spring) * GameData.stoneEco(Math.min(4, p.realmIdx)) * (guardOn ? 1.2 : 1));
     Bag.addStones(gain);
     if (auto && typeof Game !== 'undefined' && Game._offlineAgg) Game._offlineAgg.spring = (Game._offlineAgg.spring || 0) + gain;   // v34（E1）：灵泉离线入账并入日报——原只报「照常涌出」不给数额，玩家对不上账
     if (!auto) Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。${guardOn ? '（化身驻守，泉眼愈旺 ×1.2）' : ''}`, 'gain');
@@ -247,7 +250,25 @@ const CaveSys = {
     return hits;
   },
   hasPattern(p, itemId) { return this.formationPatterns(p).includes(itemId); },
-  /** 布阵 / 收旗（同一动作：格内有旗则取下，空格则放入袋中第一面旗） */
+  /** v40（E406）：一键布阵——同旗三连摆入 0/3/6 行（横排首三格），或清空全部阵眼 */
+  bulkFill(flagId) {
+    const p = Game.player;
+    if (!p.cave) return;
+    p.cave.formation = p.cave.formation || [null, null, null, null, null, null, null, null, null];
+    if (!flagId) {
+      // 清空
+      for (let i = 0; i < 9; i++) p.cave.formation[i] = null;
+      Log.add('阵眼尽数收拢——灵纹归寂。', 'info');
+    } else {
+      if (Bag.count(flagId) < 3) { UI.toast(`需 ${GameData.ITEMS[flagId].name} ×3（一排三眼）`); return; }
+      Bag.removeItem(flagId, 3);
+      for (let i = 0; i < 9; i++) { if (p.cave.formation[i]) Bag.addItem(p.cave.formation[i], 1); p.cave.formation[i] = null; }
+      for (let i = 0; i < 3; i++) p.cave.formation[i] = flagId;
+      Log.add(`一键布阵——${GameData.ITEMS[flagId].name} 三连入阵！`, 'system');
+    }
+    Game.afterAction();
+  },
+    /** 布阵 / 收旗（同一动作：格内有旗则取下，空格则放入袋中第一面旗） */
   toggleFlag(idx) {
     const p = Game.player;
     if (!p.cave) return;
@@ -259,6 +280,7 @@ const CaveSys = {
       Log.add(`你取下阵眼上的【${GameData.ITEMS[cur].name}】，阵光微黯。`, 'info');
     } else {
       const FLAG_ORDER = ['b_juling', 'b_yudi', 'b_cangfeng', 'b_lianxi'];
+      // v40（E406）：一键布阵四钮 + 清空已实装（ui.js action-row + act-cave-bulk），单格 toggle 保留微调
       const have = FLAG_ORDER.find(id => Bag.count(id) > 0);
       if (!have) { UI.toast('囊中并无阵旗——炼器坊可锻四方阵旗'); return; }
       Bag.removeItem(have, 1);
@@ -297,7 +319,7 @@ const CaveSys = {
     if (!s || !d) return;
     // 化身驻守：先替主身挡下（化身神识受挫，三日不可换差）
     const guardOn = p.avatar && p.avatar.on && (p.avatar.task === 'guard' || (p.avatar.lv >= 9 && p.avatar.task2 === 'guard'));
-    if (guardOn && Utils.chance(45)) {
+    if (guardOn) {   // v40（E401）：驻守必挡（原 chance(45)——驻守身份做实防御性差异）
       p.avatar.cdDay = Math.floor(p.day || 0) + AvatarSys.SWITCH_CD;
       Log.add(`【夜袭】<b>${d.name}</b> 趁夜来犯——化身凝形拦在府门：「此地有我。」一场恶斗后贼人遁去（化身神识受挫，${AvatarSys.SWITCH_CD} 日不可换差）。`, 'warn');
       return;
@@ -419,6 +441,7 @@ const CaveSys = {
     if (p.cave._pestDay === today) return;
     p.cave._pestDay = today;
     if (this.hasPattern(p, 'b_lianxi')) return;   // 敛息三连：阵纹护田，虫害免疫
+    if (p.avatar && p.avatar.on && (p.avatar.task === 'guard' || (p.avatar.lv >= 9 && p.avatar.task2 === 'guard'))) return;   // v40（E401）：化身驻守巡田——灵田免虫害
     const pestChance = Math.max(0.5, 3 - this.flagPower(p, 'b_lianxi'));
     const plots = this.plotsOf(p);
     for (let i = 0; i < plots.length; i++) {

@@ -54,7 +54,11 @@ const GameData = {
    *  目标境界越高，劫威与成算折损越高——天劫难度随修为水涨船高。 */
   TRIB_START: 2,
   /** 每个大境界第 1 层所需修为（后续层数乘以 LAYER_MULT） */
-  EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 3540000, 22000000, 137000000, 850000000],   // v34 节奏再校：每境 ×6.2→×5.4（v30 实算漏计闭关 1.6×与多源入账，实玩一周目仅 5~6 年——r8+r9 白占 49% 时长且无新机制；×5.4 后实玩 ≈3 年至飞升、后期占比降至 34%，配合世界大事重定时激活世界活性轴）
+  // v40（E391）削尾：r6~r9 改 ×4.2 梯（v34 注释宣称 ×5.4 却从未落进数据，实测 r1 起每境 ×6.21——
+  // r6~r9 白占全程 73.5% 修为轮数且机制零增量）。实削 −32.4/−54.3/−69.2/−79.1%，占比 73.5%→49.7%，
+  // r6~r9 每境轮数 −8.7%（≤10% 门）；省下时长由 E392 每境机制补位（新劫象/秘境协防/本境解锁）承接。
+  // r0~r5 逐字节不变。
+  EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 2394000, 10054800, 42230160, 177366672],
   LAYER_MULT: [1, 1.5, 2, 2.5],
   /** 各境界寿元上限（岁） */
   LIFESPAN: [120, 240, 500, 1000, 2000, 4000, 8000, 16000, 32000, 99999],
@@ -70,15 +74,37 @@ const GameData = {
   eco(r) { return Math.pow(4.6, r); },
   /** 灵石经济系数 */
   stoneEco(r) { return Math.pow(3.8, r); },
-  /** v30 消费端曲线族单源：大额灵石 sink——r≤5 段 3^floor(r)（v38 及以前一字不动），r≥6 段挂
-   *  243×3.8^(floor(r)-5)，与收入曲线 stoneEco=3.8^r 同速——抹平「后期装备线消费相对收入贬值
-   *  (3/3.8)^9≈0.12」的剪刀差（v39（E351）收敛；随动面 12 处：forge 五处/beast 蜕变与结契/
-   *  cave 三处/auction 布施/gongfa 自创，UPDATE_NOTES「削弱明示」逐项列名）。
+  /** v30 消费端曲线族单源：大额灵石 sink——r≤5 段 v40（E384）改 3.4^floor(r)（v38~v39 为 3^fr，
+   *  中段消费相对收入贬值 (3/3.8)^5≈0.31 的剪刀差由此补位：r3 27→39、r5 243→454），r≥6 段挂
+   *  243×3.8^(floor(r)-5) 一字不动（v39（E351）与收入曲线 stoneEco=3.8^r 同速）——r5→r6 接缝比
+   *  由 ×3.80 变 ×2.03（口径在案，接缝比不入断言）。随动面 12 处：forge 五处/beast 蜕变与结契/
+   *  cave 三处/auction 布施/gongfa 自创，UPDATE_NOTES「削弱明示」逐项列名。
    *  原封顶语义（v34 D3 的 min(10,·)）随境界轴弃留：真仙为顶（r≤9），r10+ 无境可达；后续若增境
    *  须给 3.8^(r-5) 段设界防无界增长。 */
   sinkCurve(r) {
     const fr = Math.max(0, Math.floor(r) || 0);
-    return fr <= 5 ? Math.pow(3, fr) : 243 * Math.pow(3.8, fr - 5);
+    return fr <= 5 ? Math.round(Math.pow(3.4, fr)) : 243 * Math.pow(3.8, fr - 5);
+  },
+  /** v40（E386）：同 tier 材料均价单源（matsByTier 派生，代码算不手写）——收集悬赏的兜底
+   *  赏格按此计价：材料只决定交什么，同 tier 赏格带宽 ≤2×（price-audit 带宽路检测） */
+  tierAvg(tier) {
+    const mats = this.matsByTier(tier);
+    if (!mats.length) return 0;
+    return Math.round(mats.reduce((s, id) => s + (this.ITEMS[id].price || 0), 0) / mats.length);
+  },
+  /* ---------- v40（E389）：手作产出单源集合（炼丹/研创/炼器配方 out 字段代码派生，零手写） ----------
+   * shop.sellPrice 对集合内 id ×1.12 手作溢价——「炼」获得经济闭环。防套利两路见 price-audit：
+   * ①逐配方 Σ材料坊市购价 > sellPrice(out) 即报警（买料炼出必亏卖）；②sellPrice(out) ≤ 坊市直购价
+   * （买→即卖仍严格亏损，由卖价基数 0.45 与买价同源保证）。craft.js 只作配方派生源不改代码。 */
+  CRAFT_OUT_SET: null,
+  craftOutSet() {
+    if (!this.CRAFT_OUT_SET) {
+      this.CRAFT_OUT_SET = new Set();
+      for (const r of this.ALCHEMY_RECIPES || []) if (r.out) this.CRAFT_OUT_SET.add(r.out);
+      for (const r of this.EXP_RECIPES || []) if (r.out) this.CRAFT_OUT_SET.add(r.out);
+      for (const r of this.FORGE_RECIPES || []) if (r.out) this.CRAFT_OUT_SET.add(r.out);
+    }
+    return this.CRAFT_OUT_SET;
   },
   layerNeed(realmIdx, layer) {
     return this.EXP_BASE[realmIdx] * this.LAYER_MULT[layer];
@@ -108,14 +134,16 @@ const GameData = {
   BALANCE: {
     // 战斗
     COMBAT: {
-      AFTER_DEF_DENOM: 140,       // 防御减伤常数：atk * (1 - def/(def + 140))
+      AFTER_DEF_DENOM: 140,       // 防御减伤常数：atk * (1 - def/(def + 140×(1+受方rp/6)))——v40（E376）分母随境界
       DMG_RAND_MIN: 0.85,         // 伤害随机下限
       DMG_RAND_MAX: 1.15,         // 伤害随机上限
       CRIT_MULT: 1.7,             // 暴击倍率
       ENEMY_CRIT_MULT: 1.6,       // 敌方暴击倍率
-      PLAYER_MISS_MAX: 40,        // 玩家普攻失手上限（法诀 35：SKILL_MISS_MAX——两档差异 v34 起有数据出处）
-      SKILL_MISS_MAX: 35,         // 玩家法诀失手上限
-      ENEMY_DODGE_MAX: 70,        // 敌方闪避上限（玩家侧攻击命中钳制 2~40/35，此处封敌方闪避收益）
+      CRIT_DMG_CAP: 2.0,          // v40（E380）：暴击总乘数封顶（1.7/1.9 × 会伤加成 ≤ 此值）
+      PLAYER_MISS_MAX: 25,        // 玩家普攻失手上限（v40（E377）：40→25 命中对称；法诀同钳 SKILL_MISS_MAX）
+      SKILL_MISS_MAX: 25,         // 玩家法诀失手上限（v40（E377）：35→25 与普攻同钳）
+      ENEMY_MISS_BASE: 3,         // v40（E377）：敌方基线失手%（原敌方恒命中——身法坍缩成打木桩）
+      ENEMY_DODGE_MAX: 70,        // 敌方闪避上限（玩家侧攻击命中钳制 2~25，此处封敌方闪避收益）
       BLOCK_REDUCTION: 0.45,      // 格挡后伤害系数
       DEFEND_REDUCTION: 0.4,      // 防御姿态伤害系数
       MORALE_PER_POINT: 0.004,    // 每点战意伤害加成
@@ -124,6 +152,20 @@ const GameData = {
       COMBO_MAX: 5,               // 连击上限
       GUARD_DEF_BASE: 40,         // 铁壁基础防御加成%（敌方招式未带 def 时）
       FLEE_BASE: 45,              // 遁走基础成功率
+      /* v40（E374）：人形对手装备当量——同境「裸装玩家」Stat.power 基准（r0~r9，一层中位；
+       * 由裸装基式 atk=18+3rp/def=10+1.8rp/hp=165+6rp^1.6/spd=18+0.8rp/crit8/block8 复算生成，
+       * 修数据时以 node 复算表同步）。parity = 0.8 + 0.5×min(1, 玩家power/本表) */
+      PARITY_BENCH: [145, 205, 279, 365, 463, 568, 682, 802, 930, 1067],
+      /* v40（E374）：问剑/雷台/大比对手按玩家 Stat.power 带生成——三档校准比（估算与实战同口径）。
+       * HP_EDGE/ATK_EDGE 为镜像量纲上的补偿系数（玩家先手+法诀/战意/连击的输出优势抵偿；
+       * 由 verify-v26 三档胜率复算标定：中配 vs 可敌带 ≈ 五五、TTK 比 ∈ [0.8,2.5]，调整须同步复算） */
+      RIVAL_HP_EDGE: 6.4,
+      RIVAL_ATK_EDGE: 0.8,
+      RIVAL_BANDS: [
+        { name: '可敌', ratio: 1.0 },
+        { name: '略逊', ratio: 0.9 },
+        { name: '远逊', ratio: 0.78 },
+      ],
     },
     // 突破
     // 属性上限
@@ -237,7 +279,7 @@ const GameData = {
     pill_yanshou2: { name: '培元延寿丹', type: 'pill', grade: 5, price: 180000, desc: '温养源婴、天梯再续——寿元 +25 年。', use: { life: 25 }, poison: 15 },
     pill_yanshou3: { name: '天元续命丹', type: 'pill', grade: 5, price: 500000, desc: '夺天地一线生机，寿元 +50 年。', use: { life: 50 }, poison: 25 },
     pill_dujie:    { name: '渡劫丹',   type: 'pill', grade: 4, price: 400000, desc: '以雷晶为引淬炼道基——下次渡劫成算 +5（服后印记留于识海，一丹一劫）。', use: { dujie: 1 }, poison: 12 },
-    m_qipei:       { name: '器胚残片', type: 'material', tier: 2, price: 0, desc: '炼器炸炉后残留的器胚碎块——集齐六片，可在炼器坊抵一次炸炉之厄（六片抵半份材料）。' },
+    m_qipei:       { name: '器胚残片', type: 'material', tier: 2, price: 400, desc: '炼器炸炉后残留的器胚碎块——集齐六片，可在炼器坊抵一次炸炉之厄（六片抵半份材料）。' },
     pill_tianyuan: { name: '天元造化丹', type: 'pill', grade: 5, price: 280000, desc: '丹道至高造化，服之得卅二万点修为。', use: { exp: 320000 }, poison: 85 },   // v36（E222）：exp 250000→320000——原单价 1.12 被 zaohua 三维压制成死品；现 0.875 与 zaohua 持平（毒 85<90、上架晚一境 minRealm 7），定位「圆满期收官大丹」
     fruit_tianji:  { name: '天机果', type: 'pill', grade: 4, price: 52000, desc: '天地灵机所凝的异果，服之可令一项先天属性突破十点桎梏（至多十二点）。', use: { stat12: 1 }, poison: 30 },
     /* ---- 符箓（符修可画可售，战斗中人人可祭出）---- */
@@ -400,11 +442,11 @@ const GameData = {
   MONSTERS: {
     m_yezhu:     { name: '野猪',         power: 0,  hp: 1.1,  atk: 0.9, species: 'beast', skills: [{ name: '獠牙冲撞', w: 25, kind: 'bleed', pct: 2, rounds: 2 }] },
     m_dushe:     { name: '毒蛇',         power: 1,  hp: 0.8,  atk: 1.15, spd: 1.3, dodge: 6, species: 'snake', skills: [{ name: '淬毒牙', w: 40, kind: 'poison', pct: 3, rounds: 3 }] },
-    m_shanlang:  { name: '山狼',         power: 2,  hp: 1.0,  atk: 1.05, species: 'beast', skills: [{ name: '撕咬', w: 30, kind: 'bleed', pct: 2, rounds: 2 }] },
+    m_shanlang:  { name: '山狼',         power: 2,  hp: 1.0,  atk: 1.05, species: 'beast', rareDrop: 'w_qinggang', rareRate: 2, skills: [{ name: '撕咬', w: 30, kind: 'bleed', pct: 2, rounds: 2 }] },   // v40（E382）：狼群偶衔猎物兵刃（2% 低几率）——前期稀有不再只挂必败精英
     m_zeiren:    { name: '采药贼人',     power: 3,  hp: 1.0,  atk: 1.1, def: 1.1, stoneMul: 1.4, species: 'human', skills: [{ name: '撒石灰', w: 25, kind: 'slow', pct: 20, rounds: 2 }] },
     m_toumu:     { name: '山贼头目',     power: 4,  hp: 1.15, atk: 1.1, elite: true, rareDrop: 'w_qinggang', species: 'human', skills: [{ name: '开山刀势', w: 30, kind: 'weaken', pct: 15, rounds: 2 }] },
     m_qingbei:   { name: '青背狼',       power: 3,  hp: 1.0,  atk: 1.05, species: 'beast', skills: [{ name: '狼爪连环', w: 30, kind: 'bleed', pct: 2, rounds: 2 }] },
-    m_linghou:   { name: '灵猴',         power: 4,  hp: 0.9,  spd: 1.35, dodge: 8, stoneMul: 1.2, species: 'beast', skills: [{ name: '挠心爪', w: 25, kind: 'bleed', pct: 2, rounds: 2 }] },
+    m_linghou:   { name: '灵猴',         power: 4,  hp: 0.9,  spd: 1.35, dodge: 8, stoneMul: 1.2, species: 'beast', rareDrop: 'gf_jifeng', rareRate: 2, skills: [{ name: '挠心爪', w: 25, kind: 'bleed', pct: 2, rounds: 2 }] },   // v40（E382）：灵猴窃得的身法残页（2% 低几率）
     m_tiexia:    { name: '铁甲犀',       power: 5,  hp: 1.35, def: 1.45, spd: 0.7, species: 'beast', skills: [{ name: '铁甲铿锵', w: 35, kind: 'guard', def: 35, rounds: 2 }] },
     m_luopo:     { name: '落魄散修',     power: 6,  hp: 1.0,  atk: 1.1, stoneMul: 1.5, species: 'human', skills: [{ name: '破绽指', w: 25, kind: 'defdown', pct: 20, rounds: 2 }] },
     m_qingluan:  { name: '青鸾',         power: 8,  hp: 1.1,  atk: 1.2, elite: true, rareDrop: 'gf_jifeng', species: 'beast', skills: [{ name: '清唳慑魂', w: 30, kind: 'weaken', pct: 20, rounds: 2 }] },
@@ -480,7 +522,7 @@ const GameData = {
    * 阶满引动「仙劫」（复用天劫三策），大罗圆满证道祖之境。
    * ====================================================================== */
   XIAN_TIERS: [
-    { id: 1, name: '地仙', layerNeed: 5000,  life: 2000,  ascendText: '脱去凡骨，初证仙班——山河在望，云路初开。', aura: '#7cc7a1' },
+    { id: 1, name: '地仙', layerNeed: 17500, life: 2000,  ascendText: '脱去凡骨，初证仙班——山河在望，云路初开。', aura: '#7cc7a1' },   // v40（E397）：5000→17500——落名首轮溢流即晋层沦为一次长按，首阶须 ≥2 游戏日（仙阶行在案）
     { id: 2, name: '天仙', layerNeed: 12000, life: 5000,  ascendText: '御风而行，天门在侧——雷部闻其名，星官识其路。', aura: '#6aa8e8' },
     { id: 3, name: '金仙', layerNeed: 30000, life: 12000, ascendText: '金光铸体，万劫不磨——一念之间，沧海化桑田。', aura: '#e8c56a' },
     { id: 4, name: '大罗', layerNeed: 80000, life: 30000, ascendText: '跳出三界外，不在五行中——大罗天上，再无拘束。', aura: '#c77ce8' },
@@ -611,7 +653,7 @@ const GameData = {
     { item: 'gf_tumo',        cost: 2500 },
     { item: 'gf_dayan',       cost: 2500 },
     { item: 'gf_bumie',       cost: 2500 },
-    { item: 'pill_jiuzhuan',  cost: 1200 },
+    { item: 'pill_jiuzhuan',  cost: 4000 },   // v40（E390）：1200→4000 与丹鼎阁 exclusive 同价（同物双价检测路）
     /* ---- v30 次级货币小汇率网：贡献单向有损折稀缺物/声望（r7+ 过剩贡献的去处） ---- */
     { item: '_rep_gift',      cost: 2000, special: 'rep', qty: 25 },
     { item: '_qihun_pill',    cost: 1200, special: 'qihun', qty: 10 },
@@ -641,9 +683,9 @@ const GameData = {
     { item: 'gf_xuesha',      cost: 3200 },
     { item: 'pill_dahuan',    cost: 900 },
     { item: 'pill_yuanshen',  cost: 6000, minRealm: 5 },
-    { item: 's_xt_jian',      cost: 20000 },
-    { item: 's_xt_jia',       cost: 20000 },
-    { item: 's_xt_pei',       cost: 20000 },
+    { item: 's_xt_jian',      cost: 10000 },   // v40（E390）：20000→10000（套装≈71 差事 ≈ 入宗一季一件大件）
+    { item: 's_xt_jia',       cost: 10000 },
+    { item: 's_xt_pei',       cost: 10000 },
     { item: 's_cx_jian',      cost: 22000 },
     { item: 's_cx_pao',       cost: 22000 },
     { item: 's_cx_gou',       cost: 22000 },
@@ -663,12 +705,12 @@ const GameData = {
     { item: 'tal_huoshe', minRealm: 0 }, { item: 'tal_zilei', minRealm: 2 },
     { item: 'tal_jinguang', minRealm: 1 }, { item: 'tal_jifengfu', minRealm: 1 },
     { item: 'tal_fuling', minRealm: 2 }, { item: 'tal_shigu', minRealm: 2 }, { item: 'tal_pozhen', minRealm: 1 }, { item: 'tal_zhengang', minRealm: 1 }, { item: 'tal_bingpo', minRealm: 3 }, { item: 'tal_posha', minRealm: 4 },
-    { item: 'w_tiejian', minRealm: 0 }, { item: 'w_qinggang', minRealm: 1 }, { item: 'w_sanqing', minRealm: 2 }, { item: 'w_zhuxian', minRealm: 3 },
-    { item: 'w_tulong', minRealm: 1 }, { item: 'w_hanshuang', minRealm: 2 },
-    { item: 'a_buyi', minRealm: 0 }, { item: 'a_huxin', minRealm: 1 }, { item: 'a_xuangui', minRealm: 2 }, { item: 'a_longlin', minRealm: 3 },
-    { item: 'a_xingyi', minRealm: 2 },
-    { item: 'z_juling', minRealm: 0 }, { item: 'z_pingan', minRealm: 0 }, { item: 'z_jifengxue', minRealm: 1 }, { item: 'z_qiankun', minRealm: 2 }, { item: 'z_taiji', minRealm: 3 },
-    { item: 'z_xingpan', minRealm: 2 },
+    { item: 'w_tiejian', minRealm: 0, maxRealm: 4 }, { item: 'w_qinggang', minRealm: 1, maxRealm: 5 }, { item: 'w_sanqing', minRealm: 2, maxRealm: 6 }, { item: 'w_zhuxian', minRealm: 3, maxRealm: 7 },
+    { item: 'w_tulong', minRealm: 1, maxRealm: 5 }, { item: 'w_hanshuang', minRealm: 2, maxRealm: 6 },
+    { item: 'a_buyi', minRealm: 0, maxRealm: 4 }, { item: 'a_huxin', minRealm: 1, maxRealm: 5 }, { item: 'a_xuangui', minRealm: 2, maxRealm: 6 }, { item: 'a_longlin', minRealm: 3, maxRealm: 7 },
+    { item: 'a_xingyi', minRealm: 2, maxRealm: 6 },
+    { item: 'z_juling', minRealm: 0, maxRealm: 4 }, { item: 'z_pingan', minRealm: 0, maxRealm: 4 }, { item: 'z_jifengxue', minRealm: 1, maxRealm: 5 }, { item: 'z_qiankun', minRealm: 2, maxRealm: 6 }, { item: 'z_taiji', minRealm: 3, maxRealm: 7 },
+    { item: 'z_xingpan', minRealm: 2, maxRealm: 6 },
     { item: 'gf_tuna', minRealm: 0 }, { item: 'gf_canghai', minRealm: 0 }, { item: 'gf_tiebu', minRealm: 0 },
     { item: 'gf_lieyang', minRealm: 1 }, { item: 'gf_xuantian', minRealm: 1 }, { item: 'gf_jifeng', minRealm: 1 }, { item: 'gf_tiangang', minRealm: 2 },
     { item: 'm_lingcao', minRealm: 0 }, { item: 'm_xuantie', minRealm: 0 },
@@ -992,6 +1034,12 @@ const GameData = {
     { id: 'feng', name: '风劫', icon: '🌪️', desc: '罡风如刀，削肉剔骨裂金躯。', best: 'ying', worst: 'bi' },
     { id: 'xin',  name: '心劫', icon: '🫀', desc: '心湖翻涌，魔音灌耳试道心。', best: 'bi',   worst: 'yu' },
   ],
+  /* v40（E392）：合体期（目标境 ≥6）起劫象扩池——复用 best 对策框架零新机制：
+   * 仙元潮汐（御=法宝引潮入鞘灵光未损/应=凝神免当段伤）、道伤反噬（应=燃修为代伤/避=身法卸劫） */
+  TRIB_OMENS_HIGH: [
+    { id: 'chaoxi',   name: '仙元潮汐', icon: '🌊', desc: '天外仙元如潮汐倒灌，蛮横霸烈难以硬撼。', best: 'yu',   worst: 'ying' },
+    { id: 'daoshang', name: '道伤反噬', icon: '🕳️', desc: '道基裂隙反噬真元，伤势沿经脉寸寸爬行。', best: 'ying', worst: 'yu' },
+  ],
 
   /* ---------- v38（E300）：道途双脉——六大道在道境 3/6 重各一次分岔，二选一不可回改。
    *  同档双脉强度等价、玩法分化；key 为实现侧消费键（DaoSys.hasPath 单源判定） ---------- */
@@ -1184,7 +1232,7 @@ const GameData = {
     { id: 'tianshu',  name: '天枢殿', motto: '征伐之道，以战养战', desc: '主战长老一脉，崇尚以杀止杀。', perkText: '每战获胜修为 +10%',
       giftText: '入门赐灵石三百与【天枢战纹】信物', gift: { stones: 300, item: 'z_tianshu' }, exclusive: [{ item: 'gf_tumo', cost: 1900 }] },
     { id: 'danding',  name: '丹鼎阁', motto: '丹火不熄，道火不灭', desc: '执掌丹房的长老一脉，丹药管够。', perkText: '炼丹成丹率 +8%',
-      giftText: '入门赐【破境丹】×2 与【丹心玉佩】信物', gift: { stones: 100, item: 'z_danxin', extra: { pill_pojing: 2 } }, exclusive: [{ item: 'pill_jiuzhuan', cost: 900 }] },
+      giftText: '入门赐【破境丹】×2 与【丹心玉佩】信物', gift: { stones: 100, item: 'z_danxin', extra: { pill_pojing: 2 } }, exclusive: [{ item: 'pill_jiuzhuan', cost: 4000 }] },   // v40（E390）：900→4000 与通用列同价   // v40（E390）：900→4000 与通用列同价,
     { id: 'cangjing', name: '藏经楼', motto: '典藏万法，开卷有益', desc: '看守藏经楼的长老一脉，典籍为尊。', perkText: '参悟所得 +15%',
       giftText: '入门赐一部攻防典籍与【藏经阁印】信物', gift: { stones: 100, item: 'z_cangjing', gongfa: ['gf_lieyang', 'gf_xuantian'] }, exclusive: [{ item: 'gf_dayan', cost: 1900 }] },
   ],
@@ -1349,7 +1397,7 @@ const GameData = {
       { y: '三百年前 · 秋', t: '黑玉令出，九宗围杀血河故道。满门三百七十一口，药堂执事陈拾携玉突围。' },
       { y: '三百年前 · 冬', t: '帝渊携万魂丹炉遁入故道水底；玄影客 begin 代主追缉。上古残魂封九枚炼魂石于诸秘境。' },
       { y: '此后 · 每一代', t: '残玉择主而栖。历代携带者皆在飞升雷台前夜「暴毙」——无人知道那是收魂。' },
-      { y: '本代 · 序', t: '青溪村药翁陈拾油尽灯枯，半枚残玉传入你手。问道九章，自此始。' },
+      { y: '本代 · 序', t: '青溪村药翁陈拾油尽灯枯，半枚残玉传入你手。问道十章，自此始。' },
     ],
     factions: [
       { name: '青云剑宗', stance: '愧', desc: '当年围杀主力之一。掌门一脉讳莫如深，唯白鹤真人欲补此过。' },
@@ -1896,7 +1944,7 @@ const GameData = {
   },
 
   /* ======================================================================
-   * v15 剧情脚本库 STORIES（问道九章 · 每章三段：开篇卷轴 / 中段插章 / 章末演出）
+   * v15 剧情脚本库 STORIES（问道十章 · 每章三段：开篇卷轴 / 中段插章 / 章末演出）
    * 场景格式见 Story 引擎注释。pick(value) 返回结算旁白行数组。
    * ====================================================================== */
   STORIES: {

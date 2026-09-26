@@ -79,7 +79,7 @@ console.log('===== SA 源码静态组 =====');
     const okIdx = trib.indexOf('UI.toast(`渡劫成功！${GameData.REALM_NAMES[p.realmIdx]}期`);');
     const retIdx = okIdx >= 0 ? trib.indexOf('Game.afterAction();', okIdx) : -1;
     const elseIdx = trib.indexOf('    } else {', okIdx >= 0 ? okIdx : 0);
-    const cutIdx = trib.indexOf("Time.cutLife(p, 10, '天劫反噬')");
+    const cutIdx = trib.indexOf("Time.cutLife(p, cutYears, '天劫反噬')");   // v40（E395）：比例折寿
     okIdx >= 0 && retIdx > okIdx && retIdx < elseIdx && cutIdx > elseIdx
       ? pass('SA7 渡劫成功自持收场+return，失利收尾移入 else（E130 P0）') : fail('SA7 渡劫收尾', `${okIdx}/${retIdx}/${elseIdx}/${cutIdx}`);
   }
@@ -153,7 +153,7 @@ console.log('===== SA 源码静态组 =====');
   {
     const exploreSwap = (() => { const a = explore.indexOf('Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambId)'); const b = explore.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
     const worldSwap = (() => { const a = world.indexOf("Battle.start(null, { enemy: en, weType: 'demon'"); const b = world.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
-    const npcSwap = (() => { const a = npc.indexOf("Battle.start(null, { enemy: this.buildEnemy(p, id, fury), npcId: id, mode: 'confront', showdown: true"); const b = npc.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
+    const npcSwap = (() => { const a = npc.indexOf("Battle.start(null, { enemy: this.buildEnemy(p, id, fury, { ratio: band.ratio, bandName: band.name }), npcId: id, mode: 'confront', showdown: true"); const b = npc.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
     const sectSwap = (() => { const s = R('systems/sect.js'); const a = s.indexOf("Battle.start(t.target, { mapName: '宗门生死状'"); const b = s.indexOf('Game.afterAction();', a); return a >= 0 && b > a && b - a < 200; })();
     exploreSwap && worldSwap && npcSwap && sectSwap ? pass('SA25 开战先于 afterAction（E143 节庆竞态）') : fail('SA25 竞态', `${exploreSwap}/${worldSwap}/${npcSwap}/${sectSwap}`);
   }
@@ -172,9 +172,11 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA30 拍卖功法按品阶重定价（E147）') : fail('SA30 功法定价', '');
   auction.includes("{ item: 'm_danfang', base: 4000, minRealm: 0 }") ? pass('SA31 拍卖 r0 可用拍品（E174）') : fail('SA31 r0 死池', '');
   auction.includes('p.auction.until = -1;') ? pass('SA32 中标改 until=-1 断第 0 日复购炸弹（E175）') : fail('SA32 哨兵', '');
-  black.includes('Math.min(75, 25 + luck * 4)') ? pass('SA33 赌袋胜率钳顶 75（E148）') : fail('SA33 赌袋', '');
-  priceaudit.includes('[0, 10, 17.5, 23]') && priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
-    && priceaudit.includes('auctionGradeProblems') ? pass('SA34 price-audit 门禁四路扩容（U6）') : fail('SA34 门禁扩容', '');
+  // v40（E387）：赌袋功能整体删除——胜率钳顶锚随功能退役
+  !black.includes('Math.min(75, 25 + luck * 4)') && !black.includes('buyMystery') ? pass('SA33 赌袋随 E387 删除（胜率锚一并退役）') : fail('SA33 赌袋', '');
+  // v40（E387）：赌袋采样点标记随路退役，改验 E388 第十二路标记
+  priceaudit.includes('[三档效率散布超限]') && priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
+    && priceaudit.includes('auctionGradeProblems') && priceaudit.includes('auctionSpreadProblems') ? pass('SA34 price-audit 门禁扩容（U6；v40 第十二路三档期望成本在链）') : fail('SA34 门禁扩容', '');
 
   /* ---- E 升级包 ---- */
   npc.includes('socialEco(p, s) { return GameData.stoneEco(Math.min(p.realmIdx || 0, s.realmIdx || 0)); }')

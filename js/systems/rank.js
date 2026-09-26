@@ -50,9 +50,11 @@ const RankSys = {
     const st = p.npcs[ahead.id];
     if (!st || !st.alive) { UI.toast('身前一位无从问剑'); return; }
     if (NpcSys.isAway(p, ahead.id)) { UI.toast(`${ahead.name} 行游在外，旬末方归`); return; }
-    // 三档成算：npcCombatPower（buildEnemy 口径反推）vs Stat.power（E227 同档位口径）
-    const ratio = NpcSys.npcCombatPower(p, ahead.id) / Math.max(1, Stat.power(p));
-    const odds = ratio >= 0.9 ? '胜算五五 · 势均力敌' : ratio >= 0.7 ? '胜算偏低 · 略处下风' : '胜算在握 · 可堪一战';
+    // v40（E374）：三档带——npcCombatPower（已并入 parity 乘区）vs Stat.power 定带，
+    // 对手属性按带生成（可敌 ≈1.00 / 略逊 ≈0.90 / 远逊 ≈0.78），估算与实战同口径
+    const band = NpcSys.rivalBand(p, ahead.id);
+    // v40（E374）：带比语义 = 对手战力/我方战力——略逊即敌弱我一筹，胜算文案随带走
+    const odds = band.name === '可敌' ? '胜算五五 · 势均力敌' : band.name === '略逊' ? '胜算偏高 · 敌略逊一筹' : '胜算在握 · 可堪一战';
     const ok = await UI.popup({
       title: `问剑 · ${ahead.name}`,
       html: `你修书一封问剑帖，递与身前一位——点到为止的强化切磋，<b>胜则榜序对调</b>。<br>· 对手：<b>${Utils.esc(ahead.name)}</b>（${GameData.REALM_NAMES[Math.min(9, Math.floor(ahead.power / 4))]}${GameData.LAYER_NAMES[Utils.clamp(ahead.power % 4, 0, 3)]}）<br>· 成算：<b>${odds}</b><br><span class="tip-line">· 每日一问；落败无折损，唯榜上留名未改。当前功勋 ${this.honorOf(p)} 层。</span>`,
@@ -61,7 +63,7 @@ const RankSys = {
     if (!ok) return;
     Log.add(`你向 <b>${ahead.name}</b> 递上问剑帖——一战定榜！`, 'event');
     if (typeof Story !== 'undefined' && Story.chron) Story.chron(`向 ${ahead.name} 问剑`);
-    Battle.start(null, { enemy: NpcSys.buildEnemy(p, ahead.id), npcId: ahead.id, spar: true, wenjian: true, mapName: '问剑台' });
+    Battle.start(null, { enemy: NpcSys.buildEnemy(p, ahead.id, 0, { ratio: band.ratio, bandName: band.name }), npcId: ahead.id, spar: true, wenjian: true, mapName: '问剑台' });
     Game.afterAction();   // v35（E143）：先 start 后 afterAction——防节庆在开战前触发后被静默丢弃
   },
   /** v37（E244）：问剑胜局——榜序对调：功勋补足「恰越身前一位」的小层差 */

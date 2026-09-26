@@ -1,8 +1,8 @@
 # 凡人问道 · 文字修仙
 
 网页版文字修仙放置游戏。零依赖、纯前端：HTML + CSS + 原生 JavaScript，美术为程序化 SVG，音效为 Web Audio 合成。
-当前版本 **v40「淬炼」**（不加新系统——48 条 E（E366~E413）六路收拢：接缝修复让自创功法读档失效/古咒秘境多走一层/强化补偿三口径/黑市死链/季议注释吞行复活，战斗再平衡敌闪 50%→3 与克制洞察战意成型，经济收敛灵泉按境缩放+坊市爬坡封顶+craftOut 溢价+拍卖三模式单源，节奏反馈后期 EXP 放缓+一键布阵+一指禅扩容，玩法深化官声四特权+义聚忠义金兰+斗兽确定性擂台+斩三尸洗髓，整合删减 RowMerchant/tryForgeFailure/BID_MODES 单源并一与死按钮死字段清除，详见 `UPDATE_NOTES.md`；
-v39「贯通」主链接活见 `docs/update-notes/UPDATE_NOTES_V39.md`，v38「大衍」深度扩版见 `docs/update-notes/UPDATE_NOTES_V38.md`，v37「清源」经济封堵见 `docs/update-notes/UPDATE_NOTES_V37.md`，更早版本归档在同目录。
+当前版本 **v40「淬炼」**（不加新系统——把 v38 铺开的系统接活：三处死链修复让夜袭在线结算/破誓清算/行权收尾复活、技能盘驱动自动战斗+盘序周天、战报一屏、经济大额 sink 与收入同速收敛、化身神识九重可达、兵解单屏/行权真一键/秘境连推，总时长不变，详见 `UPDATE_NOTES.md`；
+v38「大衍」深度扩版见 `docs/update-notes/UPDATE_NOTES_V38.md`，v37「清源」经济封堵见 `docs/update-notes/UPDATE_NOTES_V37.md`，更早版本归档在同目录。
 
 ## 仓库与同步
 

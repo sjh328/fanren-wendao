@@ -241,6 +241,7 @@ const Game = {
     if (!data || !data.player) { UI.toast('没有可回退的备份'); return false; }
     AutoCult.abort();
     this.player = PlayerFactory.migrate(data.player);
+    GongfaSys.syncCustom(this.player);   // v40（E367）：回溯不经过 enterGame——落盘前自创功法定义须在册（幂等）
     UI.renderAll();
     Save.autoSave();
     Log.add('因果倒卷，时光回流——你回到了引动天劫之前的那一刻。', 'system');
@@ -265,8 +266,8 @@ const Game = {
     // auto 档计，防「读陈旧手动档白拿 30 日离线」），手动档与 auto 的 ts 差本就是防刷语义的一部分。
     const elapsedMs = Date.now() - data.meta.ts;
     if (elapsedMs < 60000) return; // 少于 1 分钟不算离线
-    // 按真实时间推算游戏天数（现实 1 分钟 ≈ 游戏 1 天，v34（A4）上限 30→120 日）
-    const realDays = Math.min(120, Math.floor(elapsedMs / 60000));
+    // 按真实时间推算游戏天数（现实 1 分钟 ≈ 游戏 1 天；v34（A4）上限 120 日，v40（E393）拉平待遇 120→240 日）
+    const realDays = Math.min(240, Math.floor(elapsedMs / 60000));
     // v27 修瑕：不再回拨熟期——作物按真实日数自然生长与过熟（原 Math.max 回拨让
     // 「过熟廿日减半」的规则在长离线下永远无法成立）
     const offlineCrops = (p.cave && p.cave.plots || []).filter(pl => pl && pl.seed).length;
@@ -284,9 +285,11 @@ const Game = {
         // v37（E277）：聚灵窗口补乘——点燃后关游戏，离线日落在窗口内的部分按 ×1.5 计
         //（v30 起整段剔除 rushDay，已付费的窗口日被离线整段烧光）。窗口剩余日 = rushDay+窗口 − 起始日，
         // 与离线段取交集；rushMul 为全段加权乘数（窗口日 ×1.5、其余 ×1）。
-        // 跨批契约（B8 E253 门禁锚）：OFFLINE_EFF/rushMul 两个具名常量与可抽取表达式形态勿改
+        // 跨批契约（B8 E253 门禁锚）：OFFLINE_EFF/rushMul 两个具名常量与可抽取表达式形态勿改——
+        // v40（E393）权益变动：0.6→0.85（挂机/离线待遇拉平，与在线挂机剪刀差收敛；E253 注释同步、
+        // UI.FACTS.offlineEff 与 verify 断言随版更新，增益已并入「增益明示」）
         // v39（E346）：窗口长度改消费 CaveSys.RUSH_WINDOW() 单源（洞天灵潮 4 日离线同享）
-        const OFFLINE_EFF = 0.6;   // 离线折算效率（v34 A4 定档 0.6，不随本版上调）
+        const OFFLINE_EFF = 0.85;   // 离线折算效率（v34 A4 定档 0.6；v40 E393 上调 0.85）
         let rushMul = 1;
         if (p.rushDay != null) {
           const rushLeft = Utils.clamp(p.rushDay + CaveSys.RUSH_WINDOW() - Math.floor(p.day || 0), 0, realDays);
@@ -323,7 +326,7 @@ const Game = {
     // v34（E1）：离线小结——回家一份四行账的「仪式」，收益不再藏在默认折叠的日志红点后
     if (!p.dead && realDays >= 1 && (offlineExp > 0 || aggSnap.spring || aggSnap.disciple || aggSnap.xianVisit || aggSnap.avatarExp || aggSnap.avatarStones || aggSnap.nightRaid)) {
       const rows = [
-        [`离线时长`, `${realDays} 日`],
+        [`离线时长`, `${realDays} 日（现实 ${Math.floor(elapsedMs / 60000)} 分钟，效率 ${UI.FACTS.offlineEff}）`],
         // v37（E277）：小结拆「基础/聚灵加护」两段——窗口补乘的收益明示
         ...(offlineExp > 0 ? (offlineRushBonus > 0 ? [
           [`修行精进（基础）`, `<b class="hl">+${Utils.fmtNum(offlineBase)}</b> 修为`],
@@ -373,6 +376,7 @@ const Game = {
     try { if (typeof FestivalSys !== 'undefined') FestivalSys.check(p, auto); } catch (err) { console.error('节庆检查异常:', err); }   // v20：节庆触发
     try { if (typeof SectSys !== 'undefined' && SectSys.tourneyCheck) SectSys.tourneyCheck(p); } catch (err) { console.error('大比检查异常:', err); }   // v22：宗门大比（每五年一届）
     if (!auto) { try { if (typeof NpcSys !== 'undefined' && NpcSys.companionCheck) NpcSys.companionCheck(p); } catch (err) { console.error('共修检查异常:', err); } }   // v20：道侣共修
+    try { if (!auto && typeof NpcSys !== 'undefined' && NpcSys.oathGatherTick) NpcSys.oathGatherTick(p); } catch (err) { console.error('义聚检查异常:', err); }   // v40（E402）：义聚 30 日节拍
     try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
     // v24：日常结算统一收口到行动后（原先藏在各页签渲染函数里，打开页面才结算）
     try { if (typeof RankSys !== 'undefined' && RankSys.dailyReward && RankSys.isTop(p)) RankSys.dailyReward(p); } catch (err) { console.error('登顶日赏异常:', err); }
@@ -419,8 +423,9 @@ const Game = {
     // v30 修瑕：离线逐日回放中寿元坐化时，不再闪一下游戏界面再弹回开始界面——坐化结算直接接住
     if (this.player && this.player.dead) { UI.renderStart(); return; }
     // v32 修瑕（A3）：秘境「先清 choices 再开战」竞态残留自愈——战斗中刷新/关页后读档，
-    // 本层节点凭空消失只剩撤离（深入进度与门票沉没）。空 choices 且未卡死则重掷本层。
-    if (this.player && this.player.dungeon && !this.player.dungeon.stuck && !(this.player.dungeon.choices || []).length) {
+    // 本层节点凭空消失只剩撤离（深入进度与门票沉没）。空 choices 则重掷本层。
+    // v40（E373）：stuck 守卫随 stuck 分支删除而收窄
+    if (this.player && this.player.dungeon && !(this.player.dungeon.choices || []).length) {
       DungeonSys.genChoices(this.player.dungeon);
     }
     // v37（E272）：章末演出中断补偿——「章末→下章开篇」连播间隙被中断时，下章开篇永久丢失。
@@ -664,7 +669,8 @@ const Game = {
     'save-export': () => UI.exportSave(),
     'save-import': () => UI.importSave(),
     /* --- 修炼 --- */
-    'act-cultivate': () => Cultivate.normal(),
+    'act-cultivate': () => Cultivate.normal({ manual: true }),   // v40（E396）：亲修偶得——悟性 ×2% 追加灵机判定
+    'act-autocult-pace': (d) => { AutoCult.setPace(d.pace); UI.renderAll(); },   // v40（E394）：挂机节奏三选（快/常/缓）
     'act-rest': () => Cultivate.rest(),
     'act-seclude': () => Cultivate.seclude(),
     'act-wudao': () => Cultivate.wuDao(),   // v32（D5）：悟道——感悟的主动出口
@@ -857,10 +863,12 @@ const Game = {
       Game.afterAction();
     },
     'act-sect-drill': () => SectSys.qingyunDrill(),   // v38（E337）：青云剑冢演武
-    'act-sect-delegate': (d) => SectSys.delegate(Number(d.i)),   // v38（E344）：亲传代行差事
+    // v40（E403）：代行差事并入化身第四桩（旧入口删）
     'act-sect-council': (d) => SectSys.councilVote(d.c),   // v38（E344）：长老季议
     'act-yiwn': () => CaveSys.drillTrain(),   // v38（E338）：演武场每日一演
     'act-court-claim': (d) => XianSys.claimTask(Number(d.i)),   // v38（E309）：仙庭差遣领赏
+    'act-court-calm': () => XianSys.calmXinmo(),   // v40（E398）：四品特权·每日镇心魔 −10
+
     'act-court-buy': (d) => XianSys.courtBuy(Number(d.i)),   // v38（E309）：仙市易物
     'bt-xianbing': () => Battle.xianbing(),   // v38（E309）：仙兵借用（每战一次）
     'act-tower-auto': () => TowerSys.toggleAuto(),   // v38（E324）：登天塔连战
@@ -888,6 +896,7 @@ const Game = {
     'act-forge-frag': (d) => ForgeSys.forge(d.recipe, true),   // v32（E6）：器胚残片入炉
     'act-forge-iron': (d) => ForgeSys.forge(d.recipe, false, Number(d.extra) || 0),   // v38（E317）：添料锻造（配比倾向）
     'act-cave-flag': (d) => CaveSys.toggleFlag(Number(d.idx)),   // v38（E305）：阵眼布设/取旗
+    'act-cave-bulk': (d) => CaveSys.bulkFill(d.flag || null),   // v40（E406）：一键布阵/清空
     'act-craft-experiment': () => CraftSys.experiment(),   // v38（E317）：以药试方
     'act-avatar-toggle': () => AvatarSys.toggle(Game.player),   // v38（E302）：化身凝形/归窍
     'act-avatar-up': () => AvatarSys.upgrade(Game.player),   // v38（E302）：神识晋级
@@ -919,7 +928,6 @@ const Game = {
     'act-bounty-claim': (d) => BountySys.claim(Number(d.i)),
     'act-bounty-reroll': () => BountySys.reroll(),   // v39（E353）：悬赏换一批（每窗口一次免费）
     'act-black-buy': (d) => BlackSys.buy(d.item),
-    'act-black-mystery': () => BlackSys.buyMystery(),
     'act-bid': (d) => AuctionSys.bid(d.mode),
     'act-auction-reroll': () => AuctionSys.reroll(),   // v39（E353）：换一批（每期一次 20×eco）
     'act-donate': (d) => DonateSys.donate(d.d),
@@ -928,6 +936,7 @@ const Game = {
     'act-realm-enter': (d) => DungeonSys.enter(Number(d.realm)),
     'act-realm-node': (d) => DungeonSys.resolve(Number(d.node)),
     'act-realm-retreat': () => DungeonSys.retreat(),
+    'dmn-scout': () => DungeonSys.scout(),   // v40（E372）：窥探符接回——耗一符窥见本层岔路（E245 心魔来源随之生效）
     'act-dung-auto': () => DungeonSys.toggleAuto(),   // v39（E362）：秘境连推开关
     'act-dungeon-purify': (d) => DungeonSys.purify(d.mut),   // v38（E307）：净化一条秘境异变
     'act-realm-synth': () => DungeonSys.synth(),

@@ -6,6 +6,23 @@
  * ====================================================================== */
 const AutoCult = {
   active: false, target: null,
+  // v40（E394）：挂机节奏三档（快/常/缓）——纯体验零数值变动；偏好落 localStorage（与战斗速度同款）
+  PACE_KEY: 'fanren_wd_apace',
+  PACES: { fast: 80, normal: 280, slow: 600 },
+  loadPace() {
+    let v = 'normal';
+    try { v = (Save.storage.getItem ? Save.storage.getItem(this.PACE_KEY) : Save.mem[this.PACE_KEY]) || 'normal'; } catch (e) {}
+    return ['fast', 'normal', 'slow'].includes(v) ? v : 'normal';
+  },
+  paceMs() {
+    let v = 'normal';
+    try { v = (Save.storage.getItem ? Save.storage.getItem(this.PACE_KEY) : Save.mem[this.PACE_KEY]) || 'normal'; } catch (e) {}
+    return this.PACES[v] || 280;
+  },
+  setPace(v) {
+    try { if (Save.storage.setItem) Save.storage.setItem(this.PACE_KEY, String(v)); else Save.mem[this.PACE_KEY] = String(v); } catch (e) { /* ignore */ }
+    UI.toast(`挂机节奏：${{ fast: '快（80ms/轮）', normal: '常（280ms/轮）', slow: '缓（600ms/轮）' }[v] || '常（280ms/轮）'}`);
+  },
   rounds: 0, startExp: 0, startDay: 0, startReal: 0,
   async open() {
     const p = Game.player;
@@ -24,7 +41,8 @@ const AutoCult = {
           <select id="auto-realm">${realmOpts}</select>
           <input id="auto-val" type="number" min="1" placeholder="数值" class="hidden">
         </div>
-        <div class="tip-line">· 修为圆满或遭遇战斗时将<b>自动停下</b>，等待你亲手冲关／应对。</div>`,
+        <div class="tip-line">· 修为圆满或遭遇战斗时将<b>自动停下</b>，等待你亲手冲关／应对。</div>
+        <div class="tip-line">· 挂机节奏：<button class="btn btn-sm ${this.paceMs() === 80 ? 'btn-primary' : ''}" data-action="act-autocult-pace" data-pace="fast">快（80ms）</button> <button class="btn btn-sm ${this.paceMs() === 280 ? 'btn-primary' : ''}" data-action="act-autocult-pace" data-pace="normal">常（280ms）</button> <button class="btn btn-sm ${this.paceMs() === 600 ? 'btn-primary' : ''}" data-action="act-autocult-pace" data-pace="slow">缓（600ms）</button></div>`,
       options: [{ text: '开 始', value: true, primary: true }, { text: '取 消', value: false }],
     });
     // v26 修瑕：按目标类型显隐输入控件（攒修为/限时两目标此前输入框恒隐藏，形同不可用）。
@@ -96,7 +114,31 @@ const AutoCult = {
         await Utils.sleep(300);
         continue;
       }
-      Cultivate.normal();   // 一轮普通修炼（自带日志 / 时间 / 收尾渲染）
+      // v40（E393）：与离线流同待遇——三偏好接线
+      // ① 聚灵偏好 ≠skip：窗口过期即续（ask 首问弹窗挂起本循环等待玩家作答；当日已拒不再问）
+      if (p.cave && p._autoRush !== 'skip') {
+        const winNow = (typeof CaveSys !== 'undefined' && CaveSys.RUSH_WINDOW) ? CaveSys.RUSH_WINDOW() : 3;
+        const inWin = p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < winNow;
+        if (!inWin && this._rushTriedDay !== Math.floor(p.day || 0)) {
+          this._rushTriedDay = Math.floor(p.day || 0);
+          const go = p._autoRush === 'always' ? true : await CaveSys.spiritRush({ ask: true });
+          if (!go && p._autoRush !== 'always') p._autoRushSkipDay = Math.floor(p.day || 0);   // 当日拒答不再问（与行权同语义）
+          if (!this.active) return;
+        }
+      }
+      // ② 悟道偏好 always：感悟满百静默直悟
+      if (typeof Guide !== 'undefined' && Guide.prefMode(p, 'wudao') === 'always'
+        && (p.insight || 0) >= Cultivate.wuDaoCost(p) && (p._wuDaoDay || -1) !== Math.floor(p.day || 0)) {
+        try { await Cultivate.wuDao({ silent: true }); } catch (e) {}
+        if (!this.active) return;
+      }
+      // ③ 日界内嵌一次静默行权（求签/照料/悬赏/听讲等，与离线流同待遇；小账按偏好静默）
+      if (this._dailyDay !== Math.floor(p.day || 0)) {
+        this._dailyDay = Math.floor(p.day || 0);
+        try { if (!p.dead && !Battle.active && typeof Guide !== 'undefined' && Guide.dailyAll) await Guide.dailyAll({ silent: true }); } catch (e) {}
+        if (!this.active) return;
+      }
+      Cultivate.normal({ manual: false });   // 一轮普通修炼（自带日志 / 时间 / 收尾渲染）——挂机不带亲修
       // v34（G2）：abort（读档/返回开始界面）后当轮成果无人落盘——settle 已 force 存过、
       // 循环下轮即退，本轮 normal 的修为随关页蒸发。检测到已停即补一次落盘再退。
       if (!this.active) { if (typeof Save !== 'undefined') Save.autoSave(true); return; }
@@ -116,7 +158,7 @@ const AutoCult = {
             Log.add('修为轴已至尽头——自动修炼转为持续炼化仙元，随时可手动停下。', 'system');
           }
           if (this.reached(p2)) { this.finish('目标达成'); return; }
-          await Utils.sleep(280);
+          await Utils.sleep(this.paceMs());   // v40（E394）：挂机节奏三档（快 80/常 280/缓 600）
           continue;
         }
         // v38（E326）：静修境（金丹前）圆满自动冲关——静修无劫无碍，挂机链全通
@@ -146,7 +188,7 @@ const AutoCult = {
         return;
       }
       if (this.reached(p2)) { this.finish('目标达成'); return; }
-      await Utils.sleep(280);
+      await Utils.sleep(this.paceMs());   // v40（E394）：挂机节奏三档（快 80/常 280/缓 600）
     }
     } catch (err) {
       // v30 自愈：单轮异常不再让循环静默死亡（active 挂真）——记日志、停表、交回手动

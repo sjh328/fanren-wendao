@@ -195,10 +195,11 @@ console.log('===== SA 源码静态组 =====');
     craft.includes("q += (typeof Art !== 'undefined' && Art.seasonOf(p) === 1 ? 2 * 91 / 365 : 0);")
       && paudit.includes('for (const season of [0, 1, 2, 3])')
       ? pass('SA101 画符仲夏期望摊入 expectedQty + 审计四季复扫（E224）') : fail('SA101 画符季节', '');
-    paudit.includes('Math.max(0, 0.6 - winRate)') && !paudit.includes('if (loseRate < 0) continue')
+    // v40（E387）：赌袋模型标记随路退役，改验第八路重写标记
+    paudit.includes('tierAvg(t) * 0.45 * 1.2') && !paudit.includes('if (loseRate < 0) continue')
       && paudit.includes('第七路') && paudit.includes('配方对倒挂') && paudit.includes('种子档位') && paudit.includes('符箓档位')
-      && paudit.includes('per-action 现金流榜')
-      ? pass('SA102 赌袋模型修 + 第七路三族 + 第八路现金流榜（E225）') : fail('SA102 审计扩容', '');
+      && paudit.includes('per-action 现金流榜') && paudit.includes('购料环正期望')
+      ? pass('SA102 第七路三族 + 第八路现金流榜 + 购料环路（E225；v40 E386 第八路重写为 tierAvg 渠道口径）') : fail('SA102 审计扩容', '');
   }
 
   /* ---- v36 U4 升级包 E226~E228 ---- */
@@ -215,7 +216,7 @@ console.log('===== SA 源码静态组 =====');
     sect.includes('dangerTask: true') && battle.includes('if (B.ctx.dangerTask)')
       && battle.includes('Math.round(totalStones * 0.1 * mul)') && battle.includes("'生死状折损'")
       ? pass('SA104 生死状战败真实代价：ctx 旗标 + 灵石一成 + 心魔 +5（v36 E226）') : fail('SA104 生死状', '');
-    gdata.includes("{ item: 'gf_tumo', cost: 1900 }") && gdata.includes("{ item: 'gf_dayan', cost: 1900 }") && gdata.includes("{ item: 'pill_jiuzhuan', cost: 900 }")
+    gdata.includes("{ item: 'gf_tumo', cost: 1900 }") && gdata.includes("{ item: 'gf_dayan', cost: 1900 }") && gdata.includes("{ item: 'pill_jiuzhuan', cost: 4000 }")   // v40（E390）：900→4000 与通用列同价
       && sect.includes('七五折兑换派系秘藏') && sect.includes('战败折损甚重，且不可改换门庭')
       ? pass('SA105 exclusive 七五折重锚 1900/900/1900 + 站队文案（v36 E226）') : fail('SA105 秘藏', '');
     npc.includes('npcCombatPower(p, id)') && rank.includes("'可敌' : (ratio >= 0.7 && ratio <= 1.3) ? '略逊' : '远逊'")

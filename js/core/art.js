@@ -177,12 +177,7 @@ const Art = {
     const night = (Math.floor(p.day || 0) % 10) < 3;   // 全局时辰：每十日三夜（约 30%）
     return { sky, night };
   },
-  /** 天气名（游历页标签用） */
-  weatherName(w) {
-    if (!w) return '';
-    const sky = { rain: '雨', fog: '雾', clear: '' }[w.sky] || '';
-    return (w.night ? '夜' : '') + sky;
-  },
+  // v40（E373）：无消费死方法 weatherName 删除（缺陷猎手 deadscan 复核全仓零调用；天气对象仍由 weatherOf 单源产出）
 
   /** v19：人物半身像（CHARACTERS.look 参数化渲染；剧情演出与人物志共用）
    *  look = { robe 袍色, hair 发色, item 标志物, aura 灵光色 } */

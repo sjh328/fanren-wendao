@@ -210,7 +210,7 @@ const PlayerFactory = {
       },
       // v19: 剧情旗标 / 大事年表 / 个人线 / NPC 记忆
       (out) => {
-        out.chronicle = Array.isArray(out.chronicle) ? out.chronicle.slice(-80) : [];
+        out.chronicle = Array.isArray(out.chronicle) ? out.chronicle.slice(-200) : [];   // v40（E408）：上限 80→200（存量档已被裁掉的早期条目不可恢复，UPDATE_NOTES 注明）
         out.personal = (out.personal && typeof out.personal === 'object') ? out.personal : {};
         if (!out.story || typeof out.story !== 'object') out.story = { seen: {}, mid: {}, choices: {} };
         if (!out.story.flags || typeof out.story.flags !== 'object') out.story.flags = {};
@@ -329,6 +329,11 @@ const PlayerFactory = {
         out.daoPaths = (out.daoPaths && typeof out.daoPaths === 'object') ? out.daoPaths : {};
         out.daoChanged = Math.max(0, Math.floor(Number(out.daoChanged)) || 0);
         out.customGongfa = (out.customGongfa && typeof out.customGongfa === 'object') ? out.customGongfa : {};
+        // v40（E398/E402）：官声轴与义聚子字段兜底
+        if (out.xianCourt && typeof out.xianCourt === 'object') { out.xianCourt.merit = out.xianCourt.merit || 0; out.xianCourt.demerit = out.xianCourt.demerit || 0; }
+        if (out.slayBonus === undefined) out.slayBonus = null;
+        for (const nv of Object.values(out.npcs || {})) { if (nv && typeof nv === 'object') { if (!nv.loyalty) nv.loyalty = 20;   // v40（E402 修正）：老档已结拜 NPC loyalty 补 20（≥义聚门槛）
+          if (nv.goldlan === undefined) nv.goldlan = false; } }
         out.battleDeckAlt = Array.isArray(out.battleDeckAlt) ? out.battleDeckAlt : null;
         out.avatar = (out.avatar && typeof out.avatar === 'object') ? out.avatar : { on: false, task: null, task2: null, lv: 1, cdDay: 0, day: 0 };
         out.oaths = (out.oaths && typeof out.oaths === 'object') ? out.oaths : {};
@@ -368,6 +373,11 @@ const PlayerFactory = {
       if (def && isFinite(qty) && qty > 0) bag[id] = Math.min(qty, 9999);
     }
     out.bag = bag;
+    // v40（E367）修瑕：自创功法定义先于功法清洗重新注册——custom_N 的注册（syncCustom→buildCustom）
+    // 原在 enterGame 时序（migrate 之后），下方清洗以 ITEMS 存在为前提，玩家花 80 感悟+上古碎片+
+    // 大额灵石悟出的本命之学在读档时被当脏数据永久剔除（p.customGongfa 残留诱导重复付费）。
+    // buildCustom 幂等（gongfa.js 同名注释自证），此处先注册、enterGame 再调不重复。
+    GongfaSys.syncCustom(out);
     // 功法清洗
     const gf = {};
     const srcGf = (p.gongfa && typeof p.gongfa === 'object') ? p.gongfa : {};

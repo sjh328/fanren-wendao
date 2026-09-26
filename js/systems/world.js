@@ -12,7 +12,7 @@ const WorldSys = {
   },
   year(p) { return Math.floor((p.day || 0) / 365) + 1; },
   isMagic(p, mapId) { const w = p.world; return !!(w && w.magicMaps && w.magicMaps.includes(mapId)); },
-  preachActive(p) { const w = p.world; return !!(w && w.preachUntil && this.year(p) <= w.preachUntil); },
+  preachActive(p) { const w = p.world; return !!(w && w.preachUntil && this.year(p) <= w.preachUntil); },   // v40（E373）：stat.compOf 改调此单源（原内联判式双写）
   ruinsActive(p) { const w = p.world; return !!(w && w.ruinsUntil && this.year(p) <= w.ruinsUntil); },
   warActive(p) { const w = p.world; return !!(w && w.warUntil && this.year(p) <= w.warUntil); },
   /** v20 灵潮 / 兽潮判定 */

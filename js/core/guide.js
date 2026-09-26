@@ -9,7 +9,7 @@ const Guide = {
     /** v19 分阶段教学：大境界首次抵达时给一段要诀提示 */
   REALM_TIPS: {
     1: '【筑基要诀】可拜入宗门、开辟洞府、择定大道——江湖页可结交修士，坊市可置办法宝。',
-    2: '【金丹要诀】自此突破需渡天劫：硬抗/法宝/借地三策各有所得，劫前记得备份存档！',
+    2: '【金丹要诀】自此突破需渡天劫：硬抗/法宝/借地三策各有所得，法宝挡劫可保法宝不损。',
     3: '【元婴要诀】秘境碎片可铸本命法宝——集齐九枚，魔魂可克。交情深者可结拜、结侣。',
     4: '【化神要诀】登天塔「塔心祝福」与天级炼器图纸已就绪——高阶材料秘境更深处分出。',
     5: '【炼虚要诀】龙渊海眼已开——雷狱级材料在此；道境六重与必杀熟练是战力新轴。',
@@ -156,7 +156,9 @@ LOCKS: {
    *  v35（U3）日常归一：原「一键行权」与洞府「一键照料」两张皮——各办一半日常，虫害无人接管；
    *  现行权吸收照料核心（共用 CaveSys.careCore，行为与一键照料严格一致）。
    *  聚灵扣款不再静默：首日弹一次确认（可选「以后不再询问」），花钱决策回到明面上。 */
-  async dailyAll() {
+  /** v40（E393）：opts.silent——AutoCult 日界内嵌行权时抑制小账弹窗（明细尽在游历记载）；
+   *  聚灵「ask 首问」不受 silent 压制（花钱决策仍当面问） */
+  async dailyAll(opts = {}) {
     const p = Game.player;
     if (!p || p.dead) return;
     const done = [];
@@ -273,6 +275,7 @@ LOCKS: {
     // v39（E362）：小账挂三态偏好（fanren_wd_damode）——ask 弹窗（原样）、always toast 汇总不弹窗、
     // skip 静默（明细尽在游历记载）；全偏好设置下行权 0 强制弹窗
     const daMode = this.prefMode(p, 'damode');
+    if (opts.silent) return;   // v40（E393）：内嵌静默
     if (daMode === 'always') UI.toast(`✦ 行权小账：${done.join('、')}`);
     else if (daMode !== 'skip') {
       await UI.popup({
@@ -301,7 +304,9 @@ LOCKS: {
           const cand = Object.entries(p.npcs || {})
             .filter(([id, s]) => s && s.alive && s.met && s.rel >= 8 && s.sparDay !== today && !(typeof NpcSys !== 'undefined' && NpcSys.isAway && NpcSys.isAway(p, id)))
             .sort((a, b) => b[1].rel - a[1].rel)[0];
-          if (cand) { await NpcSys.spar(cand[0]); return; }
+          if (cand) { const go = await UI.popup({ title: '切磋确认', html: '即将与 <b>' + (NpcSys.def(cand[0]) || {}).name + '</b> 切磋——是否应战？', options: [{ text: '应 战', value: true, primary: true }, { text: '取 消', value: false }] });
+      if (!go) return;   // v40（E410 修正）：取消不代打
+      await NpcSys.spar(cand[0]); return; }
         }
       } catch (e) {}
     }

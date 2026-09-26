@@ -20,8 +20,7 @@ const Narrative = {
   tribFail() { const f = this.flavor(); return f ? Utils.pick(f.tribFail) : null; },
   /** 遇常驻修士时的礼数括注 */
   greet() { const f = this.flavor(); return f ? f.greet : null; },
-  /** 陌生修士观察句 */
-  observe() { const f = this.flavor(); return (f && f.observe) ? Utils.pick(f.observe) : null; },
+  /** v40（E373）：无消费死方法 observe() 删除（缺陷猎手 deadscan 复核全仓零调用，语料仍留 DAO_FLAVOR 不动） */
   /** 红尘劫三选文案：随道途而变，value 与顺序与原版完全一致（数值逻辑不变） */
   dilemmaOptions() {
     const f = this.flavor();

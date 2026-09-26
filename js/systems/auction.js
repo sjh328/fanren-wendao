@@ -15,15 +15,24 @@ const AuctionSys = {
     { item: 'm_danfang', base: 4000, minRealm: 0 },
     { item: 'gf_zhoutian', base: 10000, minRealm: 3 }, { item: 'gf_leishen', base: 48000, minRealm: 5 },
     { item: 'gf_hunyuan', base: 20000, minRealm: 4 }, { item: 'gf_niepan', base: 46000, minRealm: 5 },
-    { item: 'w_sanqing', base: 12000, minRealm: 3 }, { item: 'pill_zaohua', base: 160000, minRealm: 6 },
+    // v40（E388）：w_sanqing/pill_zaohua 坊市同款拍品剔除（拍卖实为「限时折扣坊市」）；
+    // m_gupian 同批剔除——E386 tier 均价 floor 下，竞拍廉价 tier4 料交收集悬赏构成套利环
+
     // v34（D1）：造化仙丹底价 15000/minRealm4 → 160000/6——原与坊市价 350000（转卖 157500）脱钩 23 倍、
     // 门槛还低两境：r4 落槌 17250 转手 157500，60 日一轮零风险套利。现稳健出价已高于转卖价，倒挂归负。
 
-    { item: 'gf_dayan', base: 12000, minRealm: 3 }, { item: 'm_gupian', base: 10000, minRealm: 3 },
+    { item: 'gf_dayan', base: 12000, minRealm: 3 },
     { item: 'gf_wangchen', base: 22000, minRealm: 4 }, { item: 'gf_feixian', base: 10000, minRealm: 3 },
     { item: 'fruit_tianji', base: 22000, minRealm: 4 },   // v20 天机果（先天破桎）
   ],
   PERIOD: 60,
+  /** v40（E388）：三档出价参数单源——稳健 ×1.3/85%（原 ×1.15/95% 无脑最优，重定为争夺）、
+   *  激进 ×0.9/60%、天价 ×1.6/100%；bid() 与 price-audit 第十二路同源消费 */
+  BID_MODES: {
+    steady: { mul: 1.3, rate: 85, label: '稳健出价' },
+    bold: { mul: 0.9, rate: 60, label: '激进出价' },
+    dump: { mul: 1.6, rate: 100, label: '天价收购' },
+  },
   /** v20 神秘拍品：一成几率拍的是未鉴定之物（低价购入，鉴定为按境界分层的物品） */
   MYSTERY_POOL: [
     { id: 'pill_juqi', grade: 0 }, { id: 'm_lingcao', grade: 1 }, { id: 'tal_huoshe', grade: 1 },
@@ -154,12 +163,8 @@ const AuctionSys = {
       }
     }
     const def = isMystery ? { name: '未鉴定·蒙尘古匣', desc: '匣上封皮剥落，看不出内里乾坤——可能是废纸，也可能是仙家至宝。' } : (GameData.ITEMS[a.item] || { name: a.item, desc: '' });   // v33（E80）：脏档残留已下架 id 时不再 TypeError
-    // 三档：稳健 ×1.15 必成九成五 / 激进 ×0.9 六成 / 天价 ×1.6 必成
-    const opts = {
-      steady: { mul: 1.15, rate: 95, label: '稳健出价' },
-      bold: { mul: 0.9, rate: 60, label: '激进出价' },
-      dump: { mul: 1.6, rate: 100, label: '天价收购' },
-    }[mode];
+    // 三档：v40（E388）稳健 ×1.3 成八成五（原 ×1.15 必成九成五近乎无脑最优）/ 激进 ×0.9 六成 / 天价 ×1.6 必成
+    const opts = this.BID_MODES[mode];   // v40（E388）：三档参数单源（price-audit 第十二路同源消费）
     if (!opts) return;
     // v28 联动：激进出价吃「鉴宝眼光」——有效悟性与气运抬升成算（封顶 +15，稳健/天价不动）
     if (mode === 'bold') {
@@ -205,8 +210,8 @@ const AuctionSys = {
     } else {
       // v27 修瑕：退款走原额入账（不吃灵石获取加成）——此前退款被加成放大，落标反而净赚
       Bag.addStonesRaw(price);
-      // v32（E5）影子竞价·截胡：激进出价失利后，两成五几率有神秘修士抬价——底价上浮一成
-      if (mode === 'bold' && Utils.chance(25)) {
+      // v32（E5）影子竞价·截胡：v40（E388）稳健/激进出价失利后均两成五几率有神秘修士抬价——底价上浮一成
+      if ((mode === 'bold' || mode === 'steady') && Utils.chance(25)) {
         p.auction.base = Math.round(a.base * 1.1);
         Log.add('竞价失利——人群中另有神秘修士志在必得，底价被抬上一成！', 'warn');
       } else {

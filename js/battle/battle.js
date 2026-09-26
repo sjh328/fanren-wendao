@@ -48,7 +48,7 @@ const Battle = {
     B.intent = null;
     p.counters.breaks = (p.counters.breaks || 0) + 1;   // v27 修瑕：破招计数（成就「破招行家」）
     if (B.stats) B.stats.brkN = (B.stats.brkN || 0) + 1;   // v39（E348）：关键转折「破招」计数
-    const brk = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy)) * Utils.randF(0.9, 1.1), { src: src || 'attack' });
+    const brk = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy), B.enemy.power) * Utils.randF(0.9, 1.1), { src: src || 'attack' });
     this.pushFloat('enemy', `-${brk}`, 'crit');
     this.log(`【破招】会心正中蓄力破绽——${B.enemy.name} 的杀招被硬生生打断，再受 <b>${brk}</b> 点伤害！`, 'log-crit');
   },
@@ -60,10 +60,13 @@ const Battle = {
     if (p.hp <= 0) p.hp = 1;
     const enemy = ctx.enemy || buildMonster(monsterId);
     // v20 首战保底：敌方整体削弱（ctx.mercy < 1）
+    // v40（E382）：mercy 扩为全属性（def/spd 一并折算）——前二图精英 0.75 同走此口
     let mercyTxt = '';
     if (ctx.mercy && ctx.mercy < 1) {
       enemy.hpMax = Math.round(enemy.hpMax * ctx.mercy);
       enemy.atk = Math.round(enemy.atk * ctx.mercy);
+      enemy.def = Math.round((enemy.def || 0) * ctx.mercy);
+      enemy.spd = Math.round((enemy.spd || 0) * ctx.mercy);
       // v34（C7）：日志挪到 active 建档之后——原在 this.log 时刻 B.logs 容器尚不存在，
       // 渲染只回放 B.logs，这条开局削弱提示从未显示过
       mercyTxt = '【初入江湖】对方见你面生，未出全力——这是一场善意的较量。';
@@ -109,6 +112,7 @@ const Battle = {
     if (typeof UI !== 'undefined' && UI.syncAnnouncePos) UI.syncAnnouncePos();   // v21 公告让位
     if (typeof Ambience !== 'undefined' && Ambience.setMood) Ambience.setMood(ctx.boss ? 'boss' : 'battle');   // v19 情境配乐（守关 Boss 独立情境）
     this.log(`⚔ 于${ctx.mapName || '荒野'}遭遇 <b class="grade-0">${enemy.name}</b>（${enemy.realmLabel}${enemy.elite ? ' · 精英' : ''}）！`, 'warn');
+    if (enemy.bandName) this.log(`【称量】对手成算——<b>${enemy.bandName}</b>（双方战力经称量落带，估算与实战同口径）。`, 'log-system');   // v40（E374）：三档校准带公示
     if (enemy._storyBark) this.log(enemy._storyBark, 'log-event');   // v19 剧情战入场台词
     if (ctx.spar) this.log('此为切磋较技，点到为止，不伤性命。', 'log-system');
     else if (ctx.mode === 'hunt') this.log('来者与你恩怨纠葛，今番不死不休！', 'log-warn');
@@ -374,12 +378,24 @@ const Battle = {
     const B = this.active;
     return st.crit + (B ? StatusFx.pctOf(B.myFx, 'critup') : 0);
   },
-  /** v38（E339/E300）：会心伤害加成——赤霄套「燎原之意」+8%、剑脉「杀剑·夺命」+25%（乘算叠加） */
-  critDmgBonus(p) {
+  /** v38（E339/E300）：会心伤害加成——赤霄套「燎原之意」+8%、剑脉「杀剑·夺命」+25%（乘算叠加）
+   *  v40（E380）：暴击溢出折会伤——75 上限外的暴击率每点折 0.5% 会伤（至多折 50 点 = +25%），
+   *  凝神/煞威/通明类词条与丹药自此是「第二轴」而非空气（总乘数另受 CRIT_DMG_CAP 封顶） */
+  critDmgBonus(p, st) {
     let b = 1;
     if (typeof ForgeSys !== 'undefined' && ForgeSys.hasSetTech && ForgeSys.hasSetTech(p, 'liaoyuan')) b *= 1.08;
     if (typeof DaoSys !== 'undefined' && DaoSys.hasPath(p, 3, 'critDmg25')) b *= 1.25;
+    const over = (st && st.critOver) || 0;
+    if (over > 0) b *= 1 + Math.min(over, 50) * 0.005;
     return b;
+  },
+  /** v40（E379）：必会心存量单源——破绽毕现存 2 发（原布尔单发），各出手口令先取用即耗 */
+  takeSureCrit() {
+    const B = this.active;
+    if (!B || !B._sureCrit) return false;
+    B._sureCrit--;
+    if (B._sureCrit <= 0) B._sureCrit = false;
+    return true;
   },
   /** v13：敌方有效攻防（计入狂暴/铁壁/玩家施加的破防迟滞/虚弱）
    *  v34（C3）：补读被「偷梁换柱」转嫁到己身的玩家增益（atkup/agiup/critup）——
@@ -635,7 +651,7 @@ const Battle = {
       mult = SKILL_MULT[k];
       if (mult == null) return '';
     }
-    const base = Stat.afterDef(this.enAtk(B.enemy) * mult, this.myDef(st));
+    const base = Stat.afterDef(this.enAtk(B.enemy) * mult, this.myDef(st), Game.player.realmIdx * 4 + Game.player.layer);   // v40（E376）：预估同走受方 rp 口径
     return ` ≈${Math.max(1, Math.round(base * 0.85))}~${Math.round(base * 1.15)}`;
   },
 
@@ -695,10 +711,9 @@ const Battle = {
     const hits = sk.hits || 1;
     if (sk.selfHp) { p.hp = Math.max(1, Math.round(p.hp * (1 - sk.selfHp))); this.log(`你燃血催招，气血降至 ${p.hp}！`, 'log-warn'); }
     for (let h = 0; h < hits && B.enemy.hp > 0; h++) {
-      let dmg = Stat.afterDef(this.myAtk(st) * (sk.mult || 1) * mstMul * (p.dao === 'demonic' && DaoSys.hasPath(p, 6, 'tianMo') ? 1.15 : 1), this.enDef(B.enemy)) * Utils.randF(0.95, 1.2) * this.moraleMul();   // v38（E300）：天魔解体·极 +15%
-      const crit = B._sureCrit || Utils.chance(this.myCrit(st) + (sk.crit || 0) + (typeof Stat !== 'undefined' && Stat.activeEchoes(p).has('ult') ? 5 : 0) + StatusFx.pctOf(B.enemy.fx, 'vuln'));   // v30：破绽加成会心；v38（E308）破绽毕现；v38（E342）：涅槃/追星「锋芒」必杀会心 +5%
-      if (B._sureCrit) B._sureCrit = false;
-      if (crit) dmg *= 1.7 * this.critDmgBonus(p);
+      let dmg = Stat.afterDef(this.myAtk(st) * (sk.mult || 1) * mstMul * (p.dao === 'demonic' && DaoSys.hasPath(p, 6, 'tianMo') ? 1.15 : 1), this.enDef(B.enemy), B.enemy.power) * Utils.randF(0.95, 1.2) * this.moraleMul();   // v38（E300）：天魔解体·极 +15%
+      const crit = this.takeSureCrit() || Utils.chance(this.myCrit(st) + (sk.crit || 0) + (typeof Stat !== 'undefined' && Stat.activeEchoes(p).has('ult') ? 5 : 0) + StatusFx.pctOf(B.enemy.fx, 'vuln'));   // v40（E379）：必会心走 takeSureCrit 单源；v30：破绽加成会心；v38（E342）：涅槃/追星「锋芒」必杀会心 +5%
+      if (crit) dmg *= Math.min(1.7 * this.critDmgBonus(p, st), GameData.BALANCE.COMBAT.CRIT_DMG_CAP);   // v40（E380）：总乘数封顶
       dmg = Math.max(1, Math.round(dmg));
       dmg = this.dealToEnemy(B, st, dmg, { src: 'ult', crit });   // v39（E364）：账目单源（实伤回填，周天乘区如实）
       this.pushFloat('enemy', `-${dmg}`, crit ? 'crit' : 'dmg');
@@ -767,7 +782,7 @@ const Battle = {
       this.log('【本命·锁魂一击】法宝化作流光直贯敌身！', 'log-crit');
       this.fxShow('lightning');
       await this.wait(400);
-      let dmg = Stat.afterDef(this.myAtk(st) * 2.5, this.enDef(B.enemy)) * Utils.randF(0.95, 1.2) * this.moraleMul();
+      let dmg = Stat.afterDef(this.myAtk(st) * 2.5, this.enDef(B.enemy), B.enemy.power) * Utils.randF(0.95, 1.2) * this.moraleMul();
       dmg = Math.max(1, Math.round(dmg));
       dmg = this.dealToEnemy(B, st, dmg, { src: 'ult' });   // v39（E364）：账目单源（实伤回填）
       // v38（E345）：7 阶里程碑「锁魂蚀骨」——破防延长 1 回合
@@ -781,7 +796,7 @@ const Battle = {
       this.log('【本命·两世归一斩】两世道韵合流于器，一斩而下！', 'log-crit');
       this.fxShow('sword');
       await this.wait(500);
-      let dmg = Stat.afterDef(this.myAtk(st) * 4.0, this.enDef(B.enemy)) * Utils.randF(1.0, 1.25) * this.moraleMul();
+      let dmg = Stat.afterDef(this.myAtk(st) * 4.0, this.enDef(B.enemy), B.enemy.power) * Utils.randF(1.0, 1.25) * this.moraleMul();
       dmg = Math.max(1, Math.round(dmg));
       this.dealToEnemy(B, st, dmg, { src: 'ult' });   // v39（E364）：账目单源
       const heal = this.healMe(p, st, st.maxHp * 0.15);   // v39（E364）：治疗钳制单源
@@ -875,7 +890,11 @@ const Battle = {
       const p = Game.player;
       if (p.dao === 'pill' && DaoSys.hasPath(p, 3, 'duJing')) fx = { ...fx, pct: (fx.pct || 0) * 1.5 };
       else if (p.dao === 'demonic' && DaoSys.hasPath(p, 6, 'lianYu')) fx = { ...fx, pct: (fx.pct || 0) * 1.2 };
-      if (B.ctx && B.ctx.mutShenhan) fx = { ...fx, pct: (fx.pct || 0) * 1.3 };   // v38（E307）：深寒彻骨——持续伤害 +30%
+      // v40 修瑕：原裸 `B.ctx` 引用（本方法无 B 形参、全仓亦无全局 B）——毒/灼/流血类 DOT 一经施加
+      // 即抛 ReferenceError，v38 E307 起含 DOT 天生技的灵兽协战必崩（E368 三档协战验证途中实证）。
+      // 改取 this.active，语义不变（深寒彻骨——持续伤害 +30%）
+      const act = this.active;
+      if (act && act.ctx && act.ctx.mutShenhan) fx = { ...fx, pct: (fx.pct || 0) * 1.3 };
       if (typeof Stat !== 'undefined' && Stat.activeEchoes(p).has('dot')) fx = { ...fx, pct: (fx.pct || 0) * 1.15 };   // v38（E342）：血煞/冰雷「蚀骨」+15%
     }
     StatusFx.add(e.fx, fx);
@@ -941,18 +960,20 @@ const Battle = {
   },
 
   /** v38（E308）：读招洞察克制表；v39（E349）扩容+中性原则——strike（重击/直伤技）入表、
-   *  attack（普攻）维持无解不奖不罚、charge 纳入会心抢断（破招泛化后攻击亦是合法应对）、
+   *  charge 纳入会心抢断（破招泛化后攻击亦是合法应对）、
    *  敌疗/敌强化两类 lenient=true（应对失据不扣层只不奖——表外合理应对不再受罚）。
-   *  lenient=false：有克制解却应对失据才扣层。锚：E308 熟练期望 ≤+12% 不变 */
+   *  lenient=false：有克制解却应对失据才扣层。锚：E308 熟练期望 ≤+12% 不变
+   *  v40（E379）：attack 意图新增「对拼」解（pin）——近半回合的无解面转为可读（可读面约六成） */
   INSIGHT_MAX: 3,
   intentCounter(intent) {
     if (!intent) return null;
     if (intent.kind === 'charge') return { acts: ['defend', 'attack', 'skill-damage', 'ult'], items: 'shield', lenient: false, text: '其杀招蓄势待发——防御卸其力，或抢在蓄满前以会心一击打断' };
     if (intent.kind === 'finisher') return { acts: ['defend'], items: 'shield', lenient: false, text: '杀招压顶——防御或金光护体正合其势' };
     if (intent.kind === 'strike') return { acts: ['defend'], items: 'vuln', lenient: false, text: '其将挥出重击——凝神防御卸其势，或以破阵符照其破绽' };
+    if (intent.kind === 'attack') return { acts: ['attack'], lenient: false, pin: true, text: '其招直来——以攻对攻，对拼换招（各受轻创，你料得其路数）' };
     if (intent.kind === 'skill' && intent.sk && intent.sk.kind === 'heal') return { acts: ['attack', 'skill-damage', 'ult', 'benming', 'combo', 'burst'], lenient: true, text: '其将运功自愈——抢在疗伤之前重创之' };
     if (intent.kind === 'skill' && intent.sk && (intent.sk.kind === 'guard' || intent.sk.kind === 'roar' || intent.sk.kind === 'atkup')) return { acts: ['item'], items: 'debuff', lenient: true, text: '其将强化自身——趁运功未竟，以削益之符破之' };
-    return null;   // v39（E349）：attack 意图维持无解——不奖不罚
+    return null;
   },
   /** 洞察结算（单点）：kind 为本次行动类别；arg 为道具 id（item 时）。act/actUlt/actBenming/actBurst 各入口调用 */
   evalInsight(kind, arg) {
@@ -972,13 +993,14 @@ const Battle = {
       B.insightN = Math.min(this.INSIGHT_MAX, (B.insightN || 0) + 1);
       if (B.stats) B.stats.readN = (B.stats.readN || 0) + 1;   // v39（E348）：关键转折「读招」计数
       this.addMorale(5);   // v39（E349）：读中 +5 战意——强化读招→战意爆发链
+      B.zhenyuan = Math.min(B.zmax || 6, (B.zhenyuan || 0) + 1);   // v40（E379）：读中 +1 真元——读招收益复权
       this.pushFloat('me', '读中 ✓', 'heal');
-      this.log(`【读招】${c.text}——你料敌机先（洞察 ${B.insightN}/${this.INSIGHT_MAX}，战意 +5）。`, 'log-gain');
+      this.log(`【读招】${c.text}——你料敌机先（洞察 ${B.insightN}/${this.INSIGHT_MAX}，战意 +5、真元 +1）。`, 'log-gain');
       if (B.insightN >= this.INSIGHT_MAX) {
         B.insightN = 0;
-        StatusFx.add(B.enemy.fx, { kind: 'vuln', pct: 40, rounds: 2 });
-        B._sureCrit = true;
-        this.log(`【破绽毕现】三度料敌于先，你已看穿 ${B.enemy.name} 的气机流转——其破绽大开（受击必被会心，持续两回合），你的下一手重击必将洞穿要害！`, 'log-crit');
+        StatusFx.add(B.enemy.fx, { kind: 'vuln', pct: 40, rounds: 3 });   // v40（E379）：破绽常驻 3 回合（原 2 回合单发）
+        B._sureCrit = 2;   // v40（E379）：必会心 2 发（takeSureCrit 单源取用）
+        this.log(`【破绽毕现】三度料敌于先，你已看穿 ${B.enemy.name} 的气机流转——其破绽大开（受击更易被会心，持续三回合），你的接下来两手重击必将洞穿要害！`, 'log-crit');
         UI.announce('✦ 破 绽 毕 现 ✦', 'gold');
         Ambience.sfx('crit');
         this.fxShow('fire');
@@ -990,8 +1012,10 @@ const Battle = {
     }
   },
 
-  /** v38（E308）：战意爆发——战意 ≥90 时主动兑现：清空战意换一记 1.8× 重击并回 3 真元（每场两次）。
-   *  战意自此从纯被动乘数升格为可支配资源；走 onEnemyHit 同一总线（魔棘/不灭照常结算） */
+  /** v38（E308）：战意爆发——战意 ≥90 时主动兑现：战意 −60 换一记 2.4× 必会心重击并回 3 真元（每场两次）。
+   *  v40（E378）复权：1.8×→2.4×、清零改 −60（清零乘区税几乎吃光收益）、附带必会心——
+   *  「爆发→破绽毕现→必杀」成明示连招链（存有读招必会则优先消耗不浪费）；
+   *  走 onEnemyHit 同一总线（魔棘/不灭照常结算） */
   async actBurst() {
     const B = this.active;
     if (!B || B.busy || B.over) return;
@@ -1004,23 +1028,23 @@ const Battle = {
     try {
       B.burstUsed = (B.burstUsed || 0) + 1;
       this.evalInsight('burst');
-      this.log(`【意气风发】战意如潮势不可挡（第 ${B.burstUsed}/2 次爆发）——你将满腔斗气凝于一击！`, 'log-crit');
+      this.log(`【意气风发】战意如潮势不可挡（第 ${B.burstUsed}/2 次爆发）——你将满腔斗气凝于一记必中要害的重击！`, 'log-crit');
       this.fxShow('quake');
       Ambience.sfx('crit');
       await this.wait(400);
-      let dmg = Stat.afterDef(this.myAtk(st) * 1.8, this.enDef(B.enemy)) * Utils.randF(0.95, 1.2) * this.moraleMul();
-      const crit = B._sureCrit || Utils.chance(this.myCrit(st) + StatusFx.pctOf(B.enemy.fx, 'vuln'));
-      if (B._sureCrit) B._sureCrit = false;
-      if (crit) dmg *= 1.7 * this.critDmgBonus(p);   // v39（E349）：爆发会心与普攻/法诀/必杀同口径——杀剑·夺命(+25%)满配一击不再被低估约三成
+      let dmg = Stat.afterDef(this.myAtk(st) * 2.4, this.enDef(B.enemy), B.enemy.power) * Utils.randF(0.95, 1.2) * this.moraleMul();   // v40（E378）：1.8→2.4；E376：分母随受方 rp
+      const crit = true;   // v40（E378）：爆发必会心——存有读招必会则优先消耗（不浪费）
+      if (B._sureCrit) this.takeSureCrit();
+      if (crit) dmg *= Math.min(1.7 * this.critDmgBonus(p, st), GameData.BALANCE.COMBAT.CRIT_DMG_CAP);   // v40（E380）：总乘数封顶
       dmg = Math.max(1, Math.round(dmg));
       const preMorale = B.morale;
-      B.morale = 0;
+      B.morale = Math.max(0, (B.morale || 0) - 60);   // v40（E378）：清零改 −60——余勇可贾
       B.zhenyuan = Math.min(B.zmax || 6, (B.zhenyuan || 0) + 3);
       dmg = this.dealToEnemy(B, st, dmg, { src: 'attack', crit });   // v39（E364）：账目单源（实伤回填）
       this.pushFloat('enemy', `-${dmg}`, crit ? 'crit' : 'dmg');
       B.hitShake = true;
       this.onEnemyHit(B, st, dmg);
-      this.log(`战意化拳，轰然炸裂——对 ${B.enemy.name} 造成 <b>${dmg}</b> 点伤害！（战意 ${preMorale}→0，真元 +3）`, 'log-crit');
+      this.log(`战意化拳，轰然炸裂——对 ${B.enemy.name} 造成 <b>${dmg}</b> 点伤害！（战意 ${preMorale}→${B.morale}，真元 +3）`, 'log-crit');
       this.render();
       if (B.enemy.hp <= 0) { await this.victory(); return; }
       if (p.hp <= 0) { await this.afterEnemyPhase(st); return; }
@@ -1083,6 +1107,10 @@ const Battle = {
     switch (kind) {
       case 'attack': {
         this.evalInsight('attack');   // v38（E308）：读招洞察结算
+        // v40（E379）：attack 意图「对拼」解——敌我各受 0.6× 普攻伤（以攻对攻，先受其招再还以颜色）
+        const _pinC = B.intent && this.intentCounter(B.intent);
+        const _clashed = !!(_pinC && _pinC.pin);
+        if (_clashed && B.enemy.hp > 0) this.enemyStrike(st, 0.6, false, '对拼换招');
         const daoTier = DaoSys.tierLevel(p);
         const enSpd = this.enSpd(B.enemy);
         // v10 剑心六境·剑仙境：普攻必中
@@ -1094,7 +1122,7 @@ const Battle = {
           this.addMorale(-4);
           B.combo = 0;
         } else {
-          let dmg = Stat.afterDef(this.myAtk(st), this.enDef(B.enemy)) * Utils.randF(GameData.BALANCE.COMBAT.DMG_RAND_MIN, GameData.BALANCE.COMBAT.DMG_RAND_MAX) * this.moraleMul() * this.comboMul();   // v32（E24）：伤害随机区间接线集中配置
+          let dmg = Stat.afterDef(this.myAtk(st), this.enDef(B.enemy), B.enemy.power) * Utils.randF(GameData.BALANCE.COMBAT.DMG_RAND_MIN, GameData.BALANCE.COMBAT.DMG_RAND_MAX) * this.moraleMul() * this.comboMul();   // v40（E376）：分母随受方（敌方）rp；v32（E24）：伤害随机区间接线集中配置
           // v30 连携·势尽一击：法诀之后接普攻收尾——招式相衔，一击 +15%
           if (B.lastSkillTag != null) { dmg *= 1.15; this.log('【连携·势尽】法力余韵未散，此击顺势而发——+15%！', 'log-gain'); }
           B.lastSkillTag = null; B.skillChain = 0; B.skillSeq = 0;   // v32（C3）：普攻断连珠之势
@@ -1107,11 +1135,10 @@ const Battle = {
           // v37（E249）：道途联动——剑修持「斩杀」，终结线自 20% 拓至 30%（不扩池结构，消费端联动）
           if (eqFx.execute > 0 && B.enemy.hp < B.enemy.hpMax * (p.dao === 'sword' ? 0.3 : 0.2)) dmg *= 1 + eqFx.execute;
           // v30：破绽状态——敌人露出破绽时更易被会心
-          // v38（E308）：破绽毕现之「必会心」——_sureCrit 一击而耗
-          const crit = B._sureCrit || Utils.chance(this.myCrit(st) + StatusFx.pctOf(B.enemy.fx, 'vuln'));
-          if (B._sureCrit) B._sureCrit = false;
+          // v40（E379）：破绽毕现之「必会心」——takeSureCrit 单源取用（存量 2 发）
+          const crit = this.takeSureCrit() || Utils.chance(this.myCrit(st) + StatusFx.pctOf(B.enemy.fx, 'vuln'));
           // v10 剑心六境·剑芒境：暴击伤害 +20%；v38（E300）：杀剑·夺命会伤 +25%
-          if (crit) dmg *= (p.dao === 'sword' && daoTier >= 2 ? 1.9 : GameData.BALANCE.COMBAT.CRIT_MULT) * this.critDmgBonus(p);   // v32（E24）暴击倍率接线；v38（E339/E300）：燎原/杀剑会伤加成
+          if (crit) dmg *= Math.min((p.dao === 'sword' && daoTier >= 2 ? 1.9 : GameData.BALANCE.COMBAT.CRIT_MULT) * this.critDmgBonus(p, st), GameData.BALANCE.COMBAT.CRIT_DMG_CAP);   // v40（E380）：总乘数封顶；v32（E24）暴击倍率接线；v38（E339/E300）：燎原/杀剑会伤加成
           // 剑修：剑心通明伤害翻倍（剑心通明境触发率提至三成；v38（E300）：剑心通明·极 45%）
           const jianxin = p.dao === 'sword' && Utils.chance(DaoSys.hasPath(p, 6, 'jianxin45') ? 45 : (daoTier >= 3 ? 30 : 20));
           if (jianxin) dmg *= 2;
@@ -1143,7 +1170,7 @@ const Battle = {
           // v37（E249）：机制词条「连击追击」——普攻命中后 20% 概率追加一次六成威力追击
           //（普攻每回合一次，追击天然一回合至多一次；追击走 onEnemyHit 同一总线复查魔棘/不灭）
           if (B.enemy.hp > 0 && typeof ForgeSys !== 'undefined' && ForgeSys.hasMech(p, 'combochase') && Utils.chance(20)) {
-            const chase = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.6, this.enDef(B.enemy)) * Utils.randF(0.9, 1.1), { src: 'attack' });   // v39（E364）：账目单源
+            const chase = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.6, this.enDef(B.enemy), B.enemy.power) * Utils.randF(0.9, 1.1), { src: 'attack' });   // v39（E364）：账目单源
             this.pushFloat('enemy', `-${chase}`, 'dmg');
             this.log(`【连击追击】招式未尽，顺势再进——追加 <b>${chase}</b> 点伤害！`, 'log-gain');
             this.onEnemyHit(B, st, chase);
@@ -1161,7 +1188,7 @@ const Battle = {
           // v10 境界特性 · 法相（合体起）：两成几率引动法相，追加五成攻击的一击
           // v34（C5）：走战斗内攻防口径——原用面板原始 atk，狂暴/虚弱/敌方防御全不生效（对堆防敌零减免）
           if (p.realmIdx >= 6 && B.enemy.hp > 0 && Utils.chance(20)) {
-            const extra = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy)), { src: 'attack' });   // v39（E364）：账目单源
+            const extra = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy), B.enemy.power), { src: 'attack' });   // v39（E364）：账目单源
             this.log(`【法相】天地法相随行，一掌拍落！追加 <b>${extra}</b> 点伤害！`, 'log-crit');
           }
           // v10 般若六境·金刚境：普攻附带两成吸血
@@ -1258,13 +1285,12 @@ const Battle = {
               power *= 1.10;
               this.log('【会心引诀】剑意与法韵相合——此诀顺势而发（+10%）！', 'log-gain');
             }
-            let dmg = Stat.afterDef(this.myAtk(st) * power, this.enDef(B.enemy)) * Utils.randF(0.9, 1.15) * this.moraleMul() * this.comboMul();
+            let dmg = Stat.afterDef(this.myAtk(st) * power, this.enDef(B.enemy), B.enemy.power) * Utils.randF(0.9, 1.15) * this.moraleMul() * this.comboMul();
             if (this.eFx(B, 'e_tstorm')) dmg *= 1.3;   // v20 精英词缀·雷皮：受法诀伤害 +30%
             // v38（E343）：元素灵体「灵韵共鸣」——出战元素灵兽，法诀 +6%
             if (typeof BeastSys !== 'undefined' && BeastSys.speciesOf && BeastSys.speciesOf(p) === 'element') dmg *= 1.06;
-            const crit = B._sureCrit || Utils.chance(this.myCrit(st) + StatusFx.pctOf(B.enemy.fx, 'vuln'));   // v30：破绽加成会心；v38（E308）：破绽毕现必会心
-            if (B._sureCrit) B._sureCrit = false;
-            if (crit) dmg *= 1.7 * this.critDmgBonus(p);
+            const crit = this.takeSureCrit() || Utils.chance(this.myCrit(st) + StatusFx.pctOf(B.enemy.fx, 'vuln'));   // v40（E379）：必会心走 takeSureCrit 单源；v30：破绽加成会心
+            if (crit) dmg *= Math.min(1.7 * this.critDmgBonus(p, st), GameData.BALANCE.COMBAT.CRIT_DMG_CAP);   // v40（E380）：总乘数封顶
             dmg = Math.max(1, Math.round(dmg));
             dmg = this.dealToEnemy(B, st, dmg, { src: 'skill', crit });   // v39（E364）：账目单源（实伤回填）
             this.pushFloat('enemy', `-${dmg}`, crit ? 'crit' : 'dmg');
@@ -1314,7 +1340,7 @@ const Battle = {
           if (fk === 'damage') {
             // 伤害符：符光必中，高额爆发（雷笔境 +30%）
             // v27 修瑕：祭符伤害此前用面板原始 atk，狂暴/虚弱等状态不生效（与全战斗口径不一致）
-            let dmg = Stat.afterDef(this.myAtk(st) * (def.power || 2.2), this.enDef(B.enemy)) * Utils.randF(0.95, 1.1) * this.moraleMul() * this.comboMul();
+            let dmg = Stat.afterDef(this.myAtk(st) * (def.power || 2.2), this.enDef(B.enemy), B.enemy.power) * Utils.randF(0.95, 1.1) * this.moraleMul() * this.comboMul();
             if (p.dao === 'talisman' && DaoSys.tierLevel(p) >= 3) dmg *= 1.3;   // v10 符道六境·雷笔境
             if (DaoSys.hasPath(p, 3, 'ranFu')) dmg *= 1.15;   // v38（E300）：燃符焚天
             if (this.eFx(B, 'e_tstorm')) dmg *= 1.3;   // v20 精英词缀·雷皮
@@ -1424,7 +1450,7 @@ const Battle = {
         if (b.species === 'snake') spFx[1] = 7;   // v38（E343）：蛇族「蛇毒更烈」——合击毒 5%→7%
         const comboFeed = 1 + Math.min(this.comboCap(p), (B.combo || 0)) * 0.04;   // v31（D2）：合击吃连击层（每层 +4%，上限随 comboCap 单源）；v39（E347）：连山词缀自此对合击生效
         const bondBoost = ((b.bond || 0) >= 100 ? 1.25 : 1);   // v31（E-灵兽）：亲昵满百合击 +25%
-        let cdmg = Stat.afterDef(this.myAtk(st) * (1.2 + b.power * 0.015 + b.level * 0.05) * (b.evolved ? 1.3 : 1) * comboFeed * bondBoost, this.enDef(B.enemy)) * Utils.randF(0.95, 1.2) * this.moraleMul();
+        let cdmg = Stat.afterDef(this.myAtk(st) * (1.2 + b.power * 0.015 + b.level * 0.05) * (b.evolved ? 1.3 : 1) * comboFeed * bondBoost, this.enDef(B.enemy), B.enemy.power) * Utils.randF(0.95, 1.2) * this.moraleMul();
         cdmg = Math.max(1, Math.round(cdmg));
         cdmg = this.dealToEnemy(B, st, cdmg, { src: 'combo' });   // v39（E364）：账目单源（beast/attack 对半分账在 helper 内保持）
         this.pushFloat('enemy', `-${cdmg}`, 'crit');
@@ -1953,11 +1979,19 @@ const Battle = {
     (kindMap[sk.kind] || (() => this.enemyStrike(st, 1, false)))();
   },
 
-  /** v8：敌方一次攻击结算（mult 威力倍率；杀招同样可被闪避/格挡/防御化解；v13 计入状态修正） */
+  /** v8：敌方一次攻击结算（mult 威力倍率；杀招同样可被闪避/格挡/防御化解；v13 计入状态修正）
+   *  v40（E377）：前置敌方基线失手掷——原敌方恒命中，身法领先后「对面是木桩」（命中对称）
+   *  v40（E376）：承伤分母随玩家境界 rp 复权（敌我两路同式） */
   enemyStrike(st, mult, heavy, tagText) {
     const B = this.active;
     const p = Game.player;
     const e = B.enemy;
+    if (Utils.chance(GameData.BALANCE.COMBAT.ENEMY_MISS_BASE)) {
+      this.log(`${e.name} ${tagText || (heavy ? '杀招当头' : '扑击而来')}，却招式走空，扑了个空！`);
+      this.pushFloat('me', '其招走空', 'miss');
+      this.addMorale(4);
+      return;
+    }
     const dodgeChance = Utils.clamp(3 + (this.mySpd(st) - this.enSpd(e)) * 1.1 + st.dodge + (B.buffs.dodgeRounds > 0 ? B.buffs.dodgeBonus : 0) + (B.fogDodge || 0), 0, GameData.BALANCE.COMBAT.ENEMY_DODGE_MAX);
     if (Utils.chance(dodgeChance)) {
       this.log(`${e.name} ${tagText || (heavy ? '杀招当头' : '扑击而来')}，却被你身形一晃，堪堪避过！`);
@@ -1965,7 +1999,7 @@ const Battle = {
       this.addMorale(6);
       return;
     }
-    let dmg = Stat.afterDef(this.enAtk(e) * mult, this.myDef(st)) * Utils.randF(GameData.BALANCE.COMBAT.DMG_RAND_MIN, GameData.BALANCE.COMBAT.DMG_RAND_MAX);   // v35（E173）：敌方随机区间接线集中配置
+    let dmg = Stat.afterDef(this.enAtk(e) * mult, this.myDef(st), p.realmIdx * 4 + p.layer) * Utils.randF(GameData.BALANCE.COMBAT.DMG_RAND_MIN, GameData.BALANCE.COMBAT.DMG_RAND_MAX);   // v40（E376）：分母随受方（玩家）境界 rp 复权；v35（E173）：敌方随机区间接线集中配置
     // v18 种族克制：敌方攻击时计算种族关系
     const speciesRel = GameData.speciesRelation(e.species, 'human');
     if (speciesRel > 0) dmg *= 1 + GameData.BALANCE.SPECIES_COUNTER.bonus;
@@ -1992,7 +2026,8 @@ const Battle = {
     dmg = Math.max(1, Math.round(dmg));
     p.hp = Math.max(0, p.hp - dmg);
     B.stats.in += dmg;   // v19 统计
-    B.combo = 0;   // v13 受击中断连击
+    // v40（E381）：连击韧性——受击五成几率保住连势；防御卸力之势不散（失手断连不变，comboCap 单源不动）
+    if (!B.defending && !Utils.chance(50)) B.combo = 0;   // v13 受击中断连击
     B.playerHit = true; // v18：玩家受击标记
     this.onPlayerHit(B);   // v37（E249）：玩家受击统一响应（套技/词条），单点漏斗零新增分叉
     // v38（E343）：草木精「续命之荫」——出战草木灵兽，受击一成几率回血 1%
@@ -2039,7 +2074,7 @@ const Battle = {
     }
     // v20 反击：防御姿态下被命中，两成五几率顺势还一手（五成攻）
     if (B.defending && p.hp > 0 && e.hp > 0 && Utils.chance(25)) {
-      const cDmg = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(e)) * Utils.randF(0.9, 1.1), { src: 'counter' });   // v39（E364）：账目单源
+      const cDmg = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(e), B.enemy.power) * Utils.randF(0.9, 1.1), { src: 'counter' });   // v39（E364）：账目单源
       this.pushFloat('enemy', `-${cDmg}`, 'dmg');
       text += `<br>【反击】你借力卸势、顺势还招——${e.name} 受 <b>${cDmg}</b> 点伤害！`;
       this.onEnemyHit(B, st, 0);   // v36（E206）：反击致死路径接线——传 0 仅复查「不灭」，不触发魔棘防「反伤套反伤」双计
@@ -2100,7 +2135,7 @@ const Battle = {
         drops.push('【上古法宝碎片】');
       }
     }
-    if (e.rareDrop && Utils.chance((30 + KarmaSys.rareDropBonus(p)) * coef)) {
+    if (e.rareDrop && Utils.chance((e.rareRate != null ? e.rareRate : 30 + KarmaSys.rareDropBonus(p)) * coef)) {   // v40（E382）：普怪低几率标记（2%）优先；精英走常规 30%+福缘
       const rd = GameData.ITEMS[e.rareDrop];
       if (!(rd.type === 'gongfa' && p.gongfa[e.rareDrop])) {
         Bag.addItem(e.rareDrop, 1);
@@ -2409,6 +2444,18 @@ const Battle = {
       return;
     }
     const st = Stat.compute(p);
+    // v40（E382）：前二图（新手村/青峰山）精英战败「点到为止」——parity 之前的必败目标不再
+    // 吃全额败北罚（心魔 +1，无灵石/修为折损，不耗疗伤 3 日）
+    if (B.ctx.explore && ['village', 'qingfeng'].includes(B.ctx.mapId) && B.enemy.elite) {
+      p.hp = Math.max(1, Math.round(st.maxHp * 0.3));
+      p.mp = Math.round(st.maxMp * 0.2);
+      p.counters.defeats = (p.counters.defeats || 0) + 1;
+      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 1, '点到为止');
+      this.end();
+      Log.add(`你败下阵来，${B.enemy.name} 却收势停手——「见你年轻，点到为止。」（心魔 +1，灵石修为无损）`, 'warn');
+      UI.announce('点 到 为 止', 'warn');
+      return;
+    }
     // §24 危机相助：好友/结拜/道侣概率出手
     const aid = NpcSys.tryAid(p, 'battle');
     const mul = aid ? 0.4 : 1;

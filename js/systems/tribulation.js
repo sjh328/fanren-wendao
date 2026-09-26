@@ -68,7 +68,13 @@ const Tribulation = {
       power: this.power(p, effTarget),
       artifact: this.findArtifact(p, xian ? 4 : this.artifactGrade(target)),
       // v38（E304）：三段劫势——三重劫象逐一公示，应/避/御逐重应对后方入三策定夺
-      stages: [0, 0, 0].map(() => Utils.pick(GameData.TRIB_OMENS || [])),
+      // v40（E392）：目标境 ≥6（合体劫起）劫象扩池混入 TRIB_OMENS_HIGH 两象（复用 best 对策框架零新机制）
+      stages: [0, 0, 0].map(() => {
+        const base = (GameData.TRIB_OMENS || []).slice();
+        const high = (GameData.TRIB_OMENS_HIGH || []).filter(x => x && x.id);
+        if (target >= 6 && high.length) base.push(...high);
+        return Utils.pick(base);
+      }),
       stageIdx: 0, stageRes: [], stress: 0, yingN: 0, biN: 0, perfectN: 0, biGood: 0,
       busy: false, logs: [],
     };
@@ -472,8 +478,20 @@ const Tribulation = {
       }
       // —— v35（E130）：以下「失利专用」收尾整段移入 else——原位于 if/else 之后，
       // 成功分支因无 return 坠落到此：折寿/道侣安慰/宿敌偷袭/叩问大道在突破成功时全部误发。
-      // v29 天年：渡劫失利折寿十年（选择回溯者本次渡劫已尽数抹去，不折寿）
-      if (!p.dead && !S.xian) Time.cutLife(p, 10, '天劫反噬');   // v31：仙劫失利折仙元不折寿
+      // v40（E395③）：渡劫失败感悟保留五成——囤满百冲劫「输了也无损」的免死金牌就此作废
+      //（FIFO 单源扣减：老感悟先折，纯度结构保留）；成功清零口径不变
+      if (!p.dead && (p.insight || 0) > 0) {
+        const keep = (p.insight || 0) - Math.floor((p.insight || 0) / 2);
+        Cultivate.spendInsight(p, Math.floor((p.insight || 0) / 2));
+        this.log(`劫气震荡识海，半数突破感悟溃散（感悟 −${keep}）。`, 'log-loss');
+      }
+      // v29 天年：渡劫失利折寿（选择回溯者本次渡劫已尽数抹去，不折寿）
+      // v40（E395）：固定十年在高境寿元池里无感——改 max(3, 寿元上限×5%)，疼感随境保比例
+      if (!p.dead && !S.xian) {
+        const cutYears = Math.max(3, Math.round(GameData.LIFESPAN[p.realmIdx] * 0.05));
+        Time.cutLife(p, cutYears, '天劫反噬');
+        this.log(`天劫反噬蚀去寿元 <b>${cutYears}</b> 年。`, 'log-loss');
+      }   // v31：仙劫失利折仙元不折寿
       // v30 补遗：道侣共渡天劫——失利之际道侣扶住你（心魔 -2，患难见真情）
       if (!p.dead && p.partner) {
         const ps = (typeof NpcSys !== 'undefined' && NpcSys.state) ? NpcSys.state(p, p.partner) : null;

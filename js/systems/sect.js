@@ -79,33 +79,44 @@ const SectSys = {
     // v37（E242）：生死状升格为宗门独占生成支（派系成员才可掷；战时概率大涨）——
     // 原 wrapDanger 在普通 kill 任务上二次掷点，普通 kill 支一删它即断线；
     // 掷点（chance(war?55:26)）与 elites 选取自 wrapDanger 原样前置搬入
-    if (p.sect && p.sect.faction && Utils.chance(WorldSys.warActive(p) ? 55 : 26)) {
+    const tendWar = SectSys.tendency ? SectSys.tendency(p) === 'war' : false;
+    if (p.sect && p.sect.faction && Utils.chance((WorldSys.warActive(p) ? 55 : 26) + (tendWar ? 10 : 0))) {
       const rp = realm * 4 + p.layer;
       const elites = Object.entries(GameData.MONSTERS)
         .filter(([, m]) => m.elite && m.power >= rp - 1 && m.power <= rp + 4).map(([id]) => id);
       if (elites.length) {
         const target = Utils.pick(elites);
-        return { type: 'kill', target, need: 1, progress: 0, danger: true, name: '高危 · 生死状', desc: `讨伐 ${GameData.MONSTERS[target].name}（敌对派系借刀杀人，赏格翻倍）` };
+        const tMul = (SectSys.tendency && SectSys.tendency(p) === 'war') ? 1.1 : 1;
+      return { type: 'kill', target, need: 1, progress: 0, danger: true, name: '高危 · 生死状', desc: `讨伐 ${GameData.MONSTERS[target].name}（敌对派系借刀杀人，赏格翻倍${tendWar ? ' · 倾向加成' : ''}）`, tMul };
       }
     }
-    const type = Utils.pickWeighted((p.sect && SECT_W[p.sect.id]) || { cult: 1, explore: 1, sign: 1 });
+    // v40（E392）：后段机制补位——r6+ 差事板增「秘境协防」门（入秘 2 层，赏格 ×1.5；E405 两门并存）
+    const W0 = (p.sect && SECT_W[p.sect.id]) || { cult: 1, explore: 1, sign: 1 };
+    // v40（E405）：sign 键删除——问签差事退役
+    const W1 = {}; for (const k of Object.keys(W0)) if (k !== 'sign') W1[k] = W0[k];
+    const type = Utils.pickWeighted(realm >= 6 ? Object.assign({}, W1, { dungeon: 2 }) : W1);
     // v30 宗门特色差事：本宗名目替代通用名目（35%），机制不变、文案见宗门气象
     const flav = p.sect && GameData.SECT_QUEST_FLAVOR && GameData.SECT_QUEST_FLAVOR[p.sect.id];
     const flavorName = (flav && Utils.chance(35)) ? flav[type] : null;
-    const need = Math.round(120 * GameData.eco(realm));
+    const tendCult = SectSys.tendency && SectSys.tendency(p) === 'cult';
+    const need = Math.round(90 * GameData.eco(realm) * (tendCult ? 0.85 : 1));   // v40（E405）：勤修倾向修为需求 −15%
     if (type === 'explore') {
-      const need2 = Utils.rand(3, 5);
+      const need2 = Utils.rand(2, 4);   // v40（E405）：历练 3~5→2~4 次（需求差异化）
       return { type, target: null, need: need2, progress: 0, name: flavorName || '历练 · 行走山河', desc: flavorName ? `门中差事 · ${flavorName}：外出历练 ${need2} 次（任意地图）` : `外出历练 ${need2} 次（任意地图）` };
     }
-    if (type === 'sign') {
-      return { type, target: null, need: 1, progress: 0, name: flavorName || '问签 · 黄历一卦', desc: flavorName ? `门中差事 · ${flavorName}：黄历求签 1 次` : '黄历求签 1 次' };
+    // v40（E405）：问签差事删除——与求签系统重复，门中差事归为修行/历练/秘境协防三门
+    // v40（E392）：秘境协防门——入秘深入 2 层（赏格 ×1.5，rewards 按 type 加成）
+    if (type === 'dungeon') {
+      return { type: 'dungeon', target: null, need: 2, progress: 0, name: '秘境协防', desc: '入秘境深入 2 层（协防门中禁地，赏格 ×1.5）' };
     }
     return { type: 'cult', target: null, need, progress: 0, name: flavorName || '修行 · 精进不休', desc: flavorName ? `门中差事 · ${flavorName}：累计获得修为 ${Utils.fmtNum(need)}` : `累计获得修为 ${Utils.fmtNum(need)}` };
   },
   rewards(p, task) {
     const realm = p.realmIdx;
     let contrib = 30 + realm * 22, stones = Math.round(45 * GameData.stoneEco(realm));
-    if (task && task.danger) { contrib *= 2; stones *= 2; }        // 高危生死状：赏格翻倍
+    if (task && task.danger) { contrib *= 2; stones *= 2; }
+    if (task && task.tMul) { contrib = Math.round(contrib * task.tMul); stones = Math.round(stones * task.tMul); }   // v40（E405）：整军倾向赏格 +10%        // 高危生死状：赏格翻倍
+    if (task && task.type === 'dungeon') { contrib = Math.round(contrib * 1.5); stones = Math.round(stones * 1.5); }   // v40（E392）：秘境协防 ×1.5
     if (WorldSys.warActive(p)) { contrib = Math.round(contrib * 1.5); stones = Math.round(stones * 1.5); } // 宗门大战：悬赏暴涨
     // v27 修瑕：长老令「开炉演武」文案称门派任务与悬赏酬劳 +50%——此前只有悬赏半边生效
     if (this.commandActive(p, 'drill')) { contrib = Math.round(contrib * 1.5); stones = Math.round(stones * 1.5); }
@@ -194,36 +205,9 @@ const SectSys = {
     Log.add('【剑冢演武】你于剑冢之中与千年剑傀拆了三百招——招式熟极而流，明日出剑必有如神助（当日前两战：开局战意 +10、必杀熟练精进）。', 'gain');
     Game.afterAction();
   },
-  /** v38（E344）：亲传弟子·代行差事——指派门下弟子代行本桩：即刻了结，赏格七折、耗时两日 */
-  async delegate(taskIdx) {
-    const p = Game.player;
-    if (!p.sect) return;
-    const rk = this.rank(p);
-    if (!rk || (rk.id !== 'core' && rk.id !== 'elder')) { UI.toast('亲传弟子方有差事代行之权'); return; }
-    const t = p.sect.tasks[taskIdx];
-    if (!t || t.danger) { UI.toast('生死状大事，须亲身历险'); return; }
-    const today = Math.floor(p.day || 0);
-    if (p._claimDay !== today) { p._claimDay = today; p._claimCount = 0; }
-    if ((p._claimCount || 0) >= this.CLAIM_DAILY) { UI.toast(`今日差事赏格已领满（${this.CLAIM_DAILY} 桩）`); return; }
-    const ok = await UI.popup({
-      title: '代行差事',
-      html: `指派门下弟子代行本桩「${t.name}」——即刻了结，然<b>赏格七折、耗时两日</b>。<br><span class="tip-line">· 当了师父，自有人跑腿；但门中功过簿记得分明。</span>`,
-      options: [{ text: '遣弟子代行', value: true, primary: true }, { text: '亲身去办', value: false }],
-    });
-    if (!ok) return;
-    p._claimCount = (p._claimCount || 0) + 1;
-    const r = this.rewards(p, t);
-    const contrib = Math.round(r.contrib * 0.7);
-    const stones = Math.round(r.stones * 0.7);
-    p.sect.contrib += contrib;
-    p.sect.questsDone = (p.sect.questsDone || 0) + 1;
-    Bag.addStones(stones);
-    Time.add(2);
-    if (p.dead) return;
-    Log.add(`【代行】门中弟子替你办妥了「${t.name}」——贡献 +${contrib}、灵石 ${Utils.fmtNum(stones)}（七折赏格，耗时两日）。`, 'gain');
-    p.sect.tasks[taskIdx] = this.newTask(p);
-    Game.afterAction();
-  },
+  /** v40（E403）：双代行并一——代行差事由化身第四桩「代行差事」承接（avatar.js），
+   *  本方法保留为兼容入口（旧存档/UI 残留调用时降级到亲传逻辑），新入口走化身桩。
+   *  化身并行时间天然解释零耗时，七折赏格与三成贡献保留。
   /** v38（E344）：长老·季议——每季一票，定全宗一季之方向（自己受益的宗门 buff） */
   COUNCILS: [
     { id: 'war',   name: '整军经武', desc: '战斗获胜修为 +5%（一季）' },
@@ -232,6 +216,9 @@ const SectSys = {
   ],
   councilKey(p) { return `${Math.floor((p.day || 0) / 365)}-${typeof Art !== 'undefined' && Art.seasonOf ? Art.seasonOf(p) : 0}`; },
   council(p) { return (p.sect && p.sect.council && p.sect.council.key === this.councilKey(p)) ? p.sect.council.choice : null; },
+  /** v40（E405）：季议事件倾向——独立叠加层落 p.sect.council.tendency（零新顶层）
+   *  三档效果：整军=生死状概率+10%/赏格+10%·通商=行情波幅 ±20%→±25%·勤修=差事修为需求 −15% */
+  tendency(p) { return (p.sect && p.sect.council && p.sect.council.tendency) || null; },
   async councilVote(choice) {
     const p = Game.player;
     if (!p.sect) return;
@@ -239,7 +226,7 @@ const SectSys = {
     if (!rk || rk.id !== 'elder') { UI.toast('长老家方有一票之权'); return; }
     const c = this.COUNCILS.find(x => x.id === choice);
     if (!c) return;
-    p.sect.council = { key: this.councilKey(p), choice };
+    p.sect.council = { key: this.councilKey(p), choice, tendency: choice };   // v40（E405）：tendency 落 p.sect.council.tendency
     Log.add(`【季议】你以长老之位投下关键一票——本季宗门施行<b>「${c.name}」</b>：${c.desc}。`, 'system');
     Game.afterAction();
   },
@@ -368,6 +355,17 @@ const SectSys = {
       }
     }
   },
+  /** v40（E392）：秘境协防钩子（秘境非守关层推进）——DungeonSys.onVictory 调用 */
+  onDungeonLayer() {
+    const p = Game.player;
+    if (!p.sect || !Array.isArray(p.sect.tasks)) return;
+    for (const t of p.sect.tasks) {
+      if (t.type === 'dungeon' && t.progress < t.need) {
+        t.progress++;
+        if (t.progress >= t.need) Log.add('宗门秘境协防差事已完成，可回去领取奖励！', 'gain');
+      }
+    }
+  },
   /** v30 补遗：问签钩子（黄历求签）——求签处调用 */
   onSign() {
     const p = Game.player;
@@ -461,7 +459,9 @@ const SectSys = {
       });
       const nid = ids[0];
       if (p.sect.tourney) p.sect.tourney.lastFoe = nid;   // 魁首贺语取材
-      const e = NpcSys.buildEnemy(p, nid);
+      // v40（E374）：大比对手按三档带生成（同门较技有来有回，估算与实战同口径）
+      const band = NpcSys.rivalBand(p, nid);
+      const e = NpcSys.buildEnemy(p, nid, 0, { ratio: band.ratio, bandName: band.name });
       e.elite = false;
       return e;
     }

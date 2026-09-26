@@ -69,7 +69,7 @@ console.log('===== SA 源码静态组 =====');
   const cave = R('systems/cave.js');
   cave.includes('upgradeDongtian') && cave.includes('sinkCurve') ? pass('SA33 洞天营造+曲线统一（E）') : fail('SA33 洞天', '');
   const gdata = R('data/game-data.js');
-  gdata.includes('fr <= 5 ? Math.pow(3, fr) : 243 * Math.pow(3.8, fr - 5)') ? pass('SA34 sinkCurve 单源（E；v39（E351）分段：r≤5 逐字节不变、r≥6 挂 3.8^(r-5)）') : fail('SA34 sinkCurve', '');
+  gdata.includes('fr <= 5 ? Math.round(Math.pow(3.4, fr)) : 243 * Math.pow(3.8, fr - 5)') ? pass('SA34 sinkCurve 单源（E；v40（E384）r≤5 段 3.4^fr 中段补位、r≥6 挂 3.8^(r-5) 一字不动）') : fail('SA34 sinkCurve', '');
   gdata.includes("id: 'f19'") && gdata.includes("id: 'f22'") ? pass('SA35 毕业装炼器配方（D6）') : fail('SA35 配方', '');
   gdata.includes('codex_tier_') ? pass('SA36 图鉴分档奖励（G6）') : fail('SA36 图鉴分档', '');
   gdata.includes('SECT_QUEST_FLAVOR') ? pass('SA37 宗门特色差事（G4）') : fail('SA37 差事', '');
@@ -181,7 +181,7 @@ if (browser) {
     d1.personalN === 24 ? pass('RB8 个人线 24 位（G1）') : fail('RB8 个人线', String(d1.personalN));
     d1.worldN >= 12 ? pass('RB9 世界大事 ' + d1.worldN + ' 种（G5）') : fail('RB9 大事', String(d1.worldN));
     d1.festN >= 7 ? pass('RB10 节庆 ' + d1.festN + ' 个（G5）') : fail('RB10 节庆', String(d1.festN));
-    Math.round(d1.sink6) === 923 && d1.sink0 === 1 && Math.round(d1.sink8) === 50669 && d1.sink5 === 243 && d1.sink3 === 27 ? pass('RB11 sinkCurve 数值（E；v39（E351）分段曲线：r6=243×3.8≈923、r9=243×3.8^4≈50669，r3/r5 与 v38 一致）') : fail('RB11 sinkCurve', JSON.stringify([d1.sink6, d1.sink0, d1.sink8]));
+    Math.round(d1.sink6) === 923 && d1.sink0 === 1 && Math.round(d1.sink8) === 50669 && d1.sink5 === 454 && d1.sink3 === 39 ? pass('RB11 sinkCurve 数值（E；v40（E384）r≤5 段 3.4^fr：r3=39、r5=454；r≥6 段一字不动：r6≈923、r9≈50669）') : fail('RB11 sinkCurve', JSON.stringify([d1.sink6, d1.sink0, d1.sink8]));
 
     /* ---- 行为组：状态引擎 / 连招 / 套装 / 词缀 ---- */
     const b1 = await page.evaluate(() => {
@@ -372,11 +372,11 @@ if (browser) {
       const p = Game.player;
       // 差事五式：钩子在位
       out.hooks = typeof SectSys.onExplore === 'function' && typeof SectSys.onSign === 'function';
-      // v37（E242）：池互斥后宗门只余三门（cult/explore/sign），kill/collect 归悬赏板不再自宗门生成
+      // v37（E242）+v40（E405）：池互斥后宗门只余两门（cult/explore；sign 随问签删除退役，dungeon r6+ 新增）
       p.sect = { id: 'qingyun', contrib: 100, tasks: [], faction: null };
       const seen = new Set();
       for (let i = 0; i < 40; i++) { const t = SectSys.genTask(p); seen.add(t.type); }
-      out.threeTypes = ['cult', 'explore', 'sign'].every(t => seen.has(t)) && !seen.has('kill') && !seen.has('collect');
+      out.threeTypes = ['cult', 'explore'].every(t => seen.has(t)) && !seen.has('sign') && !seen.has('kill') && !seen.has('collect');
       out.flavor3 = Object.keys(GameData.SECT_QUEST_FLAVOR.qingyun).length === 3;
       // explore/sign 钩子推进
       p.sect.tasks = [{ type: 'explore', target: null, need: 2, progress: 0, name: 'x', desc: 'x' }];

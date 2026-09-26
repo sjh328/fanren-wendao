@@ -1,6 +1,6 @@
 
 /* ======================================================================
- * §15.5 v11 剧情 · 问道九章 QuestSys（主线 + 奇遇录支线）
+ * §15.5 v11 剧情 · 问道十章 QuestSys（主线 + 奇遇录支线）
  * 主线：九章剧情随修为推进，每章开篇叙事 + 阶段目标 + 章末奖励；
  * 支线：奇遇录五则，达到境界解锁，达成后结案领赏。
  * 全部目标挂靠既有玩法行为，不新增玩法负担。
@@ -543,7 +543,7 @@ const QuestSys = {
     for (const [id, n] of Object.entries(reward.items || {})) parts.push(`${GameData.ITEMS[id].name} ×${n}`);
     return parts.join('、') || '无';
   },
-  storyHtml(text) { return text.split('\n').map(t => `<p class="story-p">${t}</p>`).join(''); },
+  // v40（E373）：无消费死方法 storyHtml 删除（缺陷猎手 deadscan 复核全仓零调用；叙事入卷走 storyLog）
   /** v11 叙事入卷：剧情以「羊皮卷」样式写入游历记载（不弹窗，不阻断操作） */
   storyLog(head, text) {
     Log.add(head, 'system');
@@ -712,7 +712,7 @@ const QuestSys = {
     const bonusGotN = Object.keys(q.bonus || {}).length;
     const railHtml = `
     <div class="card quest-card card-main">
-      <div class="card-title">✦ 主线 · 问道九章 <span class="tag">${ch}/${this.CHAPTERS.length} 章</span>
+      <div class="card-title">✦ 主线 · 问道十章 <span class="tag">${ch}/${this.CHAPTERS.length} 章</span>
         <button class="btn btn-sm" data-action="quest-review" style="margin-left:auto">📜 问道录 · 剧情回顾</button></div>
       <div class="quest-rail">${rail}</div>
       <div class="quest-sum">
@@ -737,7 +737,7 @@ const QuestSys = {
           ⚔ 再战门前影${retryOk ? '' : '（须静修一年后再战）'}</button>` : '';
       mainHtml = `
       <div class="card quest-card">
-        <div class="card-title">主线 · 问道九章（已圆满）</div>
+        <div class="card-title">主线 · 问道十章（已圆满）</div>
         <div class="card-desc">残玉化砂，仙路已成。三百年血案昭雪，你的故事却仍在继续——轮回转世，另有一番天地机缘。</div>${shadowHtml}
       </div>`;
     } else {

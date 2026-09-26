@@ -66,7 +66,8 @@ console.log('===== SA 源码静态组 =====');
   beast.includes('此处按 ctx 补齐与 Battle.victory 同款的分发') && beast.includes('B.ctx.sectDanger != null') ? pass('SA3 驯服结算 ctx 分发（A2）') : fail('SA3 驯服分发', '');
   battle.includes('B.ctx.tower || B.ctx.story || B.ctx.dungeon || B.ctx.weType || B.ctx.sectDanger != null') ? pass('SA4 canTame 排除剧情/秘境/生死状/事件（A2）') : fail('SA4 canTame', '');
   dungeon.includes('开战前置守卫 + 成功开战后才清空') && dungeon.includes('genChoices(D); Game.afterAction(); return;') ? pass('SA5 秘境 choices 开战后清空+回滚（A3）') : fail('SA5 choices', '');
-  gamejs.includes('空 choices 且未卡死则重掷本层') ? pass('SA6 读档秘境自愈（A3）') : fail('SA6 自愈', '');
+  // v40（E373）：stuck 守卫收窄——自愈语义不变（空 choices 重掷本层）
+  gamejs.includes('空 choices 则重掷本层') ? pass('SA6 读档秘境自愈（A3；v40 E373 守卫收窄）') : fail('SA6 自愈', '');
   festival.includes('Battle.active || UI._popupResolve') ? pass('SA7 节庆战斗/弹窗挂起门（A3/E61）') : fail('SA7 节庆门', '');
   bag.includes('const p = Game.player;   // v32 修瑕（A4）') ? pass('SA8 drop 补 p 声明（A4）') : fail('SA8 drop', '');
   reinc.includes('marksEarned') && reinc.includes('baseTier(legacy)') && reinc.includes('TREE_EXTRA_COST') ? pass('SA9 印记分账三件套（A5/D1）') : fail('SA9 分账', '');
@@ -462,7 +463,7 @@ try {
     out.streak7 = p.signStreak === 7 && (p.signText || '').includes('上上签');
     Game.afterAction = aa3; p.signStreak = 0; p.signDay = null;
     // A3：秘境开战失败回滚本层
-    p.dungeon = { realm: 0, depth: 0, choices: ['battle'], stuck: false, gains: [], total: 9 };
+    p.dungeon = { realm: 0, depth: 0, choices: ['battle'], gains: [], total: 9 };
     Battle.active = {};
     await DungeonSys.resolve(0);
     Battle.active = null;

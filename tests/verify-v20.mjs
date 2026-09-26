@@ -52,8 +52,8 @@ console.log('===== SA 源码静态组 =====');
   const sw = readFileSync(join(__dirname, 'sw.js'), 'utf8').replace(/\r\n/g, '\n');
   const stylecss = readFileSync(join(__dirname, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
   /* ---- A 节奏重校 ---- */
-  gdata.includes('EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 3540000, 22000000, 137000000, 850000000]') ? pass('SA1 EXP_BASE ×5.4 重排（A1）') : fail('SA1 EXP_BASE', '');
-  gdata.includes('fr <= 5 ? Math.pow(3, fr) : 243 * Math.pow(3.8, fr - 5)') ? pass('SA2 sinkCurve 分段单源（D3；v39（E351）r≥6 段挂 3.8^(r-5) 与收入同速）') : fail('SA2 sinkCurve', '');
+  gdata.includes('EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 2394000, 10054800, 42230160, 177366672]') ? pass('SA1 EXP_BASE 字面量（A1；v40 E391 r6~r9 改 ×4.2 梯削尾，r0~r5 逐字节不变）') : fail('SA1 EXP_BASE', '');
+  gdata.includes('fr <= 5 ? Math.round(Math.pow(3.4, fr)) : 243 * Math.pow(3.8, fr - 5)') ? pass('SA2 sinkCurve 分段单源（D3；v40（E384）r≤5 段 3.4^fr、r≥6 段 3.8^(r-5) 与收入同速一字不动）') : fail('SA2 sinkCurve', '');
   cult.includes('const expGain = Math.round(this.baseGain(p) * 2.5 * pur2);') && !cult.includes('20 * 80 * GameData.eco') ? pass('SA3 悟道收益改 baseGain×2.5 自随缩放（A2；v37（E264）乘感悟纯度 pur2）') : fail('SA3 悟道', '');
   cult.includes('spill * this.baseGain(p) * 0.125') && !cult.includes('spill * 80 * GameData.eco') ? pass('SA4 感悟溢出汇率同悟道口径（A2）') : fail('SA4 溢出', '');
   cult.includes('daoGain >= 500 || p.counters.xianyuan % 500 < daoGain') ? pass('SA5 仙元溢流播报节流（A2）') : fail('SA5 节流', '');
@@ -70,7 +70,7 @@ console.log('===== SA 源码静态组 =====');
   world.includes('nextEventYear: 2 + Utils.rand(0, 2), _evResched34: true') ? pass('SA8 世界大事首现 2~4 年（A3）') : fail('SA8 首现', '');
   world.includes('w.nextEventYear = y + 1 + Utils.rand(0, 2)') ? pass('SA9 世界大事后续 1~3 年一遇（A3）') : fail('SA9 后续', '');
   world.includes('!w._evResched34 && !(w.history && w.history.length)') ? pass('SA10 旧档一次性重掷防重（A3）') : fail('SA10 重掷', '');
-  gamejs.includes('Math.min(120, Math.floor(elapsedMs / 60000))') && gamejs.includes('const OFFLINE_EFF = 0.6;') && gamejs.includes('perRound / 3 * OFFLINE_EFF * rushMul * realDays') ? pass('SA11 离线上限 120 日·效率 0.6（A4；v37（E277）OFFLINE_EFF/rushMul 具名 + 聚灵窗口补乘）') : fail('SA11 离线参数', '');
+  gamejs.includes('Math.min(240, Math.floor(elapsedMs / 60000))') && gamejs.includes('const OFFLINE_EFF = 0.85;') && gamejs.includes('perRound / 3 * OFFLINE_EFF * rushMul * realDays') ? pass('SA11 离线上限 240 日·效率 0.85（A4；v37（E277）OFFLINE_EFF/rushMul 具名 + 聚灵窗口补乘；v40 E393 拉平待遇）') : fail('SA11 离线参数', '');
   gamejs.includes('云 归 · 离 线 小 结') && cave.includes("Game._offlineAgg.spring = (Game._offlineAgg.spring || 0) + gain") ? pass('SA12 离线小结弹窗+灵泉入账（E1/A4）') : fail('SA12 离线小结', '');
   gamejs.includes('this._skipOfflineOnce = true;') ? pass('SA13 新档离线守卫（G3）') : fail('SA13 新档守卫', '');
 
@@ -102,7 +102,7 @@ console.log('===== SA 源码静态组 =====');
   battle.includes("atk *= 1 + StatusFx.pctOf(e.fx, 'atkup') / 100;") && battle.includes("spd *= 1 + StatusFx.pctOf(e.fx, 'agiup') / 100;") && battle.includes("Utils.chance(e.crit + StatusFx.pctOf(e.fx, 'critup'))") ? pass('SA29 偷来增益敌方三读端生效（C3）') : fail('SA29 偷益', '');
   battle.includes('身被禁锢，心神难凝') && !battle.includes("'slow', 'weaken', 'stun', 'freeze', 'vuln']") ? pass('SA30 凝神被控拦截+净化剔除控制（C4）') : fail('SA30 凝神', '');
   battle.includes("if (B._ningUsed) { UI.toast('凝神一转") ? pass('SA31 凝神已用守卫防双开（C4；v39（E350）去弹窗化后为同步直达守卫）') : fail('SA31 复查', '');
-  battle.includes("const extra = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy)), { src: 'attack' });") ? pass('SA32 法相追击走攻防口径（C5；v39（E364）落账随 dealToEnemy 单源）') : fail('SA32 法相', '');
+  battle.includes("const extra = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy), B.enemy.power), { src: 'attack' });") ? pass('SA32 法相追击走攻防口径（C5；v39（E364）落账随 dealToEnemy 单源；v40（E376）受方 rp）') : fail('SA32 法相', '');
   battle.includes('+ (B.fogDodge || 0) + (B.enemy.dodge || 0), 2, GameData.BALANCE.COMBAT.SKILL_MISS_MAX)') ? pass('SA33 雾战法诀闪避生效（C6）') : fail('SA33 雾战', '');
   battle.includes('if (mercyTxt) this.log(mercyTxt, \'log-system\');') ? pass('SA34 首战保底日志建档后入列（C7）') : fail('SA34 保底日志', '');
   battle.includes('if (turnFx.mpRegen > 0 && p.mp < st.maxMp)') && !battle.includes('mpRegen > 0 && p.mp > 0') ? pass('SA35 回灵 mp=0 复活（C8）') : fail('SA35 回灵', '');
@@ -110,15 +110,17 @@ console.log('===== SA 源码静态组 =====');
   !gdata.includes('HIT_CHANCE_CLAMP') && !gdata.includes('ENEMY_DOGDE_MAX') ? pass('SA37 死配置常量清除（C9）') : fail('SA37 死常量', '');
 
   /* ---- D 经济 ---- */
-  auction.includes("{ item: 'pill_zaohua', base: 160000, minRealm: 6 }") ? pass('SA38 造化仙丹底价/门槛对齐（D1）') : fail('SA38 造化丹', '');
+  // v40（E388）：pill_zaohua/w_sanqing 坊市同款拍品剔除——底价对齐语义由「不在池」承接
+  !auction.includes("{ item: 'pill_zaohua'") && !auction.includes("{ item: 'w_sanqing'") ? pass('SA38 造化仙丹底价/门槛对齐（D1；v40 E388 同款拍品整行剔除）') : fail('SA38 造化丹', '');
   auction.includes('!DaoSys.canLearnGongfa(p, d2, true)') && auction.includes('此诀你已修习，重拍无用') ? pass('SA39 拍卖功法判重+静默门槛（D1）') : fail('SA39 功法双闸', '');
   dao.includes('canLearnGongfa(p, def, silent = false)') ? pass('SA40 canLearnGongfa 静默参数（D1）') : fail('SA40 静默', '');
-  black.includes('Bag.addItem(mat, matQty * 2 + Math.ceil(matQty * 0.5))') && !black.includes("Bag.addItem('m_gupian', 1)") ? pass('SA41 赌袋碎片彩头除名+统一×2.5（D2）') : fail('SA41 赌袋', '');
+  // v40（E387）：赌袋（buyMystery）整功能删除——黑市专注「暗巷奇货+还价」
+  !black.includes('buyMystery') && !black.includes('来路不明') ? pass('SA41 赌袋功能随 E387 整体删除（黑市专注奇货+还价）') : fail('SA41 赌袋', '');
   {
     const pa = readFileSync(join(__dirname, 'scripts', 'price-audit.mjs'), 'utf8').replace(/\r\n/g, '\n');
     const sim = readFileSync(join(__dirname, 'scripts', 'balance-sim.mjs'), 'utf8').replace(/\r\n/g, '\n');
 
-    pa.includes('[拍卖倒挂]') && pa.includes('[赌袋正期望]') ? pass('SA42 price-audit 扩容双检测（D4）') : fail('SA42 审计扩容', '');
+    pa.includes('[拍卖倒挂]') && pa.includes('[0 价 tier 物]') && pa.includes('[悬赏带宽超限]') ? pass('SA42 price-audit 扩容检测（D4；v40 E385/E386 新路在链、赌袋路随功能退役）') : fail('SA42 审计扩容', '');
     sim.includes('GameData.sinkCurve(r) / GameData.BALANCE.ENHANCE.COST_REALM_FACTOR') ? pass('SA43 balance-sim 强化口径对齐（D5）') : fail('SA43 sim 口径', '');
   }
 
@@ -212,7 +214,7 @@ try {
     return out;
   });
   rA.expR2 === Math.round(2350 * 2.5) ? pass('RB1 曲线 r2 圆满=5875（A1）') : fail('RB1 曲线 r2', String(rA.expR2));
-  rA.expR9 === Math.round(850000000 * 2.5) ? pass('RB2 曲线 r9 圆满=21.25 亿（A1）') : fail('RB2 曲线 r9', String(rA.expR9));
+  rA.expR9 === Math.round(177366672 * 2.5) ? pass('RB2 曲线 r9 圆满≈4.43 亿（A1；v40 E391 ×4.2 梯：177366672×2.5）') : fail('RB2 曲线 r9', String(rA.expR9));
   Math.round(rA.sink9) === Math.round(243 * Math.pow(3.8, 4)) && Math.round(rA.sink8) === Math.round(243 * Math.pow(3.8, 3)) ? pass('RB3 sinkCurve 分段（D3；v39（E351）r9=243×3.8^4≈50669、r8=243×3.8^3≈13334，与收入同速）') : fail('RB3 sinkCurve', `${rA.sink8}/${rA.sink9}`);
   rA.wudaoRewritten ? pass('RB4 悟道收益不再 80×eco（A2）') : fail('RB4 悟道', '');
   rA.eventFirst ? pass('RB5 世界大事首现 2~4 年（A3）') : fail('RB5 首现', '');

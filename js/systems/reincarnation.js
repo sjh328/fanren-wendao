@@ -88,12 +88,18 @@ const ReincarnationSys = {
     const stopRealm = (typeof XianSys !== 'undefined' && XianSys.unlocked(p) && XianSys.cur(p) > 0)
       ? `${XianSys.label(p)}（仙籍）`
       : `${GameData.REALM_NAMES[p.realmIdx] || '?'}${GameData.LAYER_NAMES[p.layer] || ''}`;
-    const events = (p.chronicle || []).slice(-3).map(x => x.txt || x).join('；') || '——';
+    // v40（E408）：m 旗标条目优先，不足补末 3 条
+    const mFlagged = (p.chronicle || []).filter(e => e.m);
+    const tail = (p.chronicle || []).slice(-3);
+    const merged = [];
+    for (const e of mFlagged) { if (!merged.includes(e)) merged.push(e); }
+    for (const e of tail) { if (!merged.includes(e)) merged.push(e); }
+    const events = merged.slice(0, 6).map(e => e.txt || e).join('；') || '——';
     const rows = [
       ['一世止境', `<b class="hl">${stopRealm}</b>`],
       ['红尘岁月', `${p.age || '?'} 岁（历 ${Math.floor(p.day || 0)} 日）`],
       ['身家', `灵石 ${Utils.fmtNum(stones)}${p.sect ? ` · ${p.sect.contrib} 门中贡献` : ''}`],
-      ['因果', `气运 ${p.fortune || 0} · 孽障 ${p.karma || 0}${p.karma >= 100 ? '（曾斩三尸）' : ''}`],
+      ['因果', `气运 ${p.fortune || 0} · 孽障 ${p.karma || 0}${p.slayBonus ? '（曾斩三尸·洗髓之效未尽）' : ''}`],
       ['杀伐', `${c.wins || 0} 胜 · 诛精英 ${c.killsElite || 0} · 秘境深处第 ${c.maxDepth || 0} 层`],
       ['情谊', `${partners.length ? `与 ${partners.join('、')} 结伴` : '独来独往'} · 莫逆 ${bosom} 人`],
       ['印记', `本世 ${marksThisLife} 枚（累计 ${legacy.marksEarned || 0}）`],
@@ -109,7 +115,7 @@ const ReincarnationSys = {
   /** v38（E319）：终局/里程碑报告弹窗（坐化/兵解/飞升/证道祖共用）
    *  webdriver（E2E）环境下自动降级为日志行，不弹窗不阻塞测试链 */
   async showLifeReport(p, kind) {
-    const rep = this.lifeReport(p, kind);
+    const rep = this.lifeReport(p, kind);   // v40（E408）：一世报告 chronicle 取 m 旗标优先
     if (typeof navigator !== 'undefined' && navigator.webdriver) {
       Log.add(`【${rep.title}】${(p.chronicle || []).slice(-1).map(x => x.txt || x).join('') || '此生行止，俱入年表。'}`, 'system');
       return;

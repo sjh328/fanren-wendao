@@ -48,7 +48,7 @@ const BountySys = {
   },
   rewards(p) {
     const realm = p.realmIdx;
-    let stones = Math.round(60 * GameData.stoneEco(realm));
+    let stones = Math.round(90 * GameData.stoneEco(realm));   // v40（E383）：60→90——灵泉降档后悬赏赏格 +50% 补偿
     // v32（F3）宗门内乱次年回响：乱局佣兵生意好做——悬赏赏格 ×1.1
     const w = p.world;
     if (w && w.turmoilUntil) {
@@ -76,9 +76,13 @@ const BountySys = {
    *  玩家据预览做「卖店 vs 交悬赏」决策全部失真。两处共用此式。
    *  v37（E266）：系数 2→1.2——旧系数下「购料（全价 ≈2.22×卖价/件）→交悬赏」构成正期望环
    *  （连锁乘算叠加后最高 3.2×卖价）；1.2 仍比 v29 前直卖 0.45 系数显著优待收集者。
-   *  price-audit 第八路购料环检测锚此口径（floor 为购料环收益上限） */
+   *  v40（E386）：改按 TIER_AVG 计价——材料只决定交什么，同 tier 赏格统一（带宽 ≤2× 检测路）；
+   *  交入贵料相对卖店让利、贱料相对卖店加价，换一批自此回归「换自己有的料」的救急语义。
+   *  购料环复核（price-audit 第八路）：全池可购料（坊市/黑市渠道）按此 floor 均为负期望（E385
+   *  m_qipei 400 定价后 tier2 均价抬升亦入保）。连锁乘数不作用于 floor（v37 口径不变） */
   collectFloor(t) {
-    return Math.round(ShopSys.sellPrice(t.target) * t.need * 1.2);
+    const tier = (GameData.ITEMS[t.target] || {}).tier || 1;
+    return Math.round(GameData.tierAvg(tier) * 0.45 * 1.2 * t.need);
   },
   claim(idx) {
     const p = Game.player;

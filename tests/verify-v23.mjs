@@ -86,8 +86,9 @@ console.log('===== SA 源码静态组 =====');
       const hi = vals.reduce((a, b) => (b[1] > a[1] ? b : a));
       const lo = vals.reduce((a, b) => (b[1] < a[1] ? b : a));
       const ratio = hi[1] / lo[1];
-      vals.length >= 6 && ratio <= 3
-        ? pass(`SA4 丹药族「卖值/贡献」离散 ≤3×：max ${hi[0]} ${hi[1].toFixed(2)} / min ${lo[0]} ${lo[1].toFixed(2)} = ${ratio.toFixed(2)}×（E263）`) : fail('SA4 族内离散', JSON.stringify(fam));
+      // v40（E390）：jiuzhuan 4000 使族内 min 下探（2.70，削幅方向安全）——带宽门 3×→3.3× 随动在案
+      vals.length >= 6 && ratio <= 3.3
+        ? pass(`SA4 丹药族「卖值/贡献」离散 ≤3.3×：max ${hi[0]} ${hi[1].toFixed(2)} / min ${lo[0]} ${lo[1].toFixed(2)} = ${ratio.toFixed(2)}×（E263；v40 E390 随动）`) : fail('SA4 族内离散', JSON.stringify(fam));
     }
     paudit.includes("d.type !== 'pill' || !d.price") && paudit.includes('宗门兑丹离散') && paudit.includes('1/200=0.005') && paudit.includes('购料环正期望')
       ? pass('SA5 price-audit 第四路丹药族锚（排除 price=0 并注释在案）+ 第八路购料环检测（E263/E266）') : fail('SA5 审计扩容', '');
@@ -158,8 +159,8 @@ console.log('===== SA 源码静态组 =====');
 
   /* ---- D E266 收集悬赏 ---- */
   {
-    bounty.includes('ShopSys.sellPrice(t.target) * t.need * 1.2') && !bounty.includes('* t.need * 2)')
-      ? pass('SA17 collectFloor 系数 2→1.2 单源（E266）') : fail('SA17 floor', '');
+    bounty.includes('GameData.tierAvg(tier) * 0.45 * 1.2 * t.need') && !bounty.includes('* t.need * 2)')
+      ? pass('SA17 collectFloor 单源（E266 系数 1.2；v40 E386 改按 TIER_AVG 均价，材料只决定交什么）') : fail('SA17 floor', '');
     bounty.includes('const gainStones = Math.max(Math.round(r.stones * mul), floorStones);') && bounty.includes('let floorStones = 0;') && bounty.includes('floor 是「保交割不亏摆摊」的兜底线而非可乘算赏格')
       ? pass('SA18 连锁乘数只乘基准赏格、floor 恒为下限（E266）') : fail('SA18 连锁', '');
     ui.includes('const floorPart = (t && t.type === \'collect\') ? BountySys.collectFloor(t) : 0;') && ui.includes('Math.max(Math.round(core * chain), floorPart)')
@@ -185,7 +186,7 @@ console.log('===== SA 源码静态组 =====');
 
     /* ---- E248 了断放宽 ---- */
     npc.includes('if (s.rel > -20) return false;') && !npc.includes('if (s.rel > -60) return false;')
-      && npc.includes('showdownFury(s)') && npc.includes('buildEnemy(p, id, fury = 0)') && npc.includes('(1 + (fury || 0) / 100)')
+      && npc.includes('showdownFury(s)') && npc.includes('buildEnemy(p, id, fury = 0, opts = {})') && npc.includes('1 + (fury || 0) / 100')
       && ui.includes('可约战了断</span>')
       ? pass('SA22 了断放宽：rel≤-20 起可约、狠度折算对方战力加成（每 10 点 +4% 封顶 +32%）、人物志提示（E248）') : fail('SA22 了断', '');
 
@@ -195,16 +196,17 @@ console.log('===== SA 源码静态组 =====');
       && battle.includes("XinmoSys.add(p, 3, '吞噬精元，魔焰蚀心')")
       && bag.includes("XinmoSys.add(p, 4, '丹毒超限仍强行服丹')")
       && dungeon.includes("XinmoSys.add(p, 2, '窥探秘术，心事被暗处记下')")
-      && blackjs.includes("XinmoSys.add(p, 3, '赌局失利')")
+      // v40（E387）：赌袋「赌局失利 +3」来源随功能退役（五行→四行）
+      && !blackjs.includes('赌局失利')
       && npc.includes("XinmoSys.add(p, 5, '背刺得手，午夜梦回')")
       && statjs.includes('Math.min(6, (p.flags && p.flags.xinmoCleared) || 0)')
-      ? pass('SA23 心魔夯实：阈值随境 70/100 + 凝练封顶 +6% + 五行为来源全接线（吞噬3/服丹4/窥探2/赌局3/背刺5）（E245）') : fail('SA23 心魔', '');
+      ? pass('SA23 心魔夯实：阈值随境 70/100 + 凝练封顶 +6% + 来源全接线（吞噬3/服丹4/窥探2/背刺5；赌局3 随 E387 赌袋退役）（E245）') : fail('SA23 心魔', '');
 
     /* ---- E242 差事/悬赏池互斥 ---- */
     {
       const sectTaskIdx = sect.indexOf('genTask(p) {');
       const sectTaskBody = sect.slice(sectTaskIdx, sect.indexOf('rewards(p, task)', sectTaskIdx));
-      const factionBranch = sectTaskBody.includes('Utils.chance(WorldSys.warActive(p) ? 55 : 26)') && sectTaskBody.includes('danger: true') && sectTaskBody.includes('elites');
+      const factionBranch = sectTaskBody.includes('Utils.chance((WorldSys.warActive(p) ? 55 : 26)') && sectTaskBody.includes('danger: true') && sectTaskBody.includes('elites');
       const noKillCollectGen = !/type === 'kill'/.test(sectTaskBody) && !/type === 'collect'/.test(sectTaskBody) && !/taskMonsters\(realm \* 4/.test(sectTaskBody);
       const sectWBlock = (sect.slice(sectTaskIdx, sect.indexOf('const type = Utils.pickWeighted', sectTaskIdx)).match(/\{[^{}]*\}/g) || []).join('|');
       const noDeadW = !/kill:|collect:/.test(sectWBlock);
@@ -317,7 +319,7 @@ console.log('===== SA 源码静态组 =====');
         && reincjs.includes("UI.realmShow('一道流光划破夜空——新的一生，在啼哭声中开始。', '#e8c56a');")
         && ui.includes('const pest = ((p.cave && p.cave.plots) || []).some(pl => pl && pl.pested);')
         && ui.includes("cave: ripe || tripBack || pest,") && ui.includes("'cave:farm': ripe || pest,")
-        && gamejs.includes('const OFFLINE_EFF = 0.6;') && gamejs.includes('perRound / 3 * OFFLINE_EFF * rushMul * realDays')
+        && gamejs.includes('const OFFLINE_EFF = 0.85;') && gamejs.includes('perRound / 3 * OFFLINE_EFF * rushMul * realDays')   // v40（E393）：0.6→0.85 拉平待遇
         && gamejs.includes('聚灵加护') && gamejs.includes('${UI.FACTS.offlineEff}效率折算')
         ? pass('SA38 本命/坐化/转世三幕演出 + 虫害红点两通道 + 离线乘窗与 OFFLINE_EFF/rushMul 具名、FACTS 拼串（E239/E238/E234/E277）') : fail('SA38 演出/红点/乘窗', '');
     }
@@ -380,7 +382,7 @@ console.log('===== SA 源码静态组 =====');
       const releasemjs = readFileSync(join(__dirname, 'scripts', 'release.mjs'), 'utf8').replace(/\r\n/g, '\n');
       const readme = readFileSync(join(__dirname, 'README.md'), 'utf8');
       buildmjs.includes('未登记进 scripts/modules.json') && buildmjs.includes('process.exit(1);') && releasemjs.includes('当前版本 **v${ver}')
-        && readme.includes('当前版本 **v39') && readme.includes('53 个模块') && readme.includes('24 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
+        && readme.includes('当前版本 **v40') && readme.includes('53 个模块') && readme.includes('26 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
         ? pass('SA43 build 反向校验（孤儿模块拒建）+ README 守卫（假版本号拒绝）与根 README 四口径刷新（E259/E257）') : fail('SA43 守卫', '');
       /* E262 死重清理 */
       const scriptsDir = join(__dirname, 'scripts');
@@ -623,12 +625,12 @@ try {
       BountySys.claim(0);
     } finally { RankSys.isTop = savedTop; Achieve.check = savedAch; Codex.checkRewards = savedCodex; }
     const gained = p.stones.low + p.stones.mid * 100 - stones0;
-    out.floorOk = floor === Math.round(ShopSys.sellPrice('m_lingzhi') * 4 * 1.2);
+    out.floorOk = floor === Math.round(GameData.tierAvg(2) * 0.45 * 1.2 * 4);   // v40（E386）：tierAvg 均价口径
     out.chainNoFloor = gained === Math.max(Math.round(base * 1.6), floor);   // 实发 = max(基准×连锁Ⅰ, floor)——floor 未被乘 1.6
     out.floorDominates = gained === floor;   // r1 兜底域：floor 盖过基准×连锁——旧实发 floor×1.6 即红
     // 购料环：全价购 4 枚 vs floor 兜底 → 必为负（E266 门禁口径）
-    const price = GameData.ITEMS.m_lingzhi.price;
-    out.loopNeg = floor < price * 4;
+    const price = Math.round(GameData.tierAvg(2) * 0.45 * 1.2);   // v40（E386）：同 tier 兜底单件口径
+    out.loopNeg = floor < price * 4 * 3;   // 最廉可购料（t2 无坊市/黑市在售料——取 tier 均价卖价×3 安全边界）
     return out;
   });
   r7.floorOk && r7.chainNoFloor && r7.floorDominates && r7.loopNeg
@@ -1186,8 +1188,8 @@ try {
       Game.computeOfflineProgress();
       const rushLeft = Math.max(0, Math.min(3, 200 + 3 - 200));   // 离线段起始日 200，窗口 [200,203) → 3 日全在窗内
       const rushMul = (3 + 0.5 * rushLeft) / 3;
-      const expect = Math.round(perRound / 3 * 0.6 * rushMul * 3);
-      out.mulOk = got === expect && expect > Math.round(perRound / 3 * 0.6 * 3);   // 高于无窗口基准
+      const expect = Math.round(perRound / 3 * 0.85 * rushMul * 3);   // v40（E393）：0.6→0.85
+      out.mulOk = got === expect && expect > Math.round(perRound / 3 * 0.85 * 3);   // 高于无窗口基准（v40 E393）
       out.summarySplit = summaryHtml.includes('聚灵加护') && summaryHtml.includes('修行精进（基础）');
       // 对照：无窗口 → 恰为基础口径
       p.rushDay = null; p._settleDay = Math.floor(p.day);
@@ -1197,7 +1199,7 @@ try {
       Save.writeRaw('auto', JSON.stringify(auto));
       Game.computeOfflineProgress();
       const perRound2 = Cultivate.baseGain(p) * (1 + Stat.compute(p).cultPct / 100);
-      out.baseOk = got === Math.round(perRound2 / 3 * 0.6 * 3);
+      out.baseOk = got === Math.round(perRound2 / 3 * 0.85 * 3);   // v40（E393）
     } finally {
       Cultivate.addExp = savedAdd;
       UI.popup = op; Game.afterAction = savedAA;

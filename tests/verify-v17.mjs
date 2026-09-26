@@ -120,7 +120,7 @@ console.log('===== SA 源码静态组 =====');
   R('systems/xian.js').includes('tribSuccess(p, to, strategy)') && R('systems/xian.js').includes('daozuCheck(p)') && R('systems/xian.js').includes('dailyCheck(p, auto') ? pass('SA64 XianSys 模块（C）') : fail('SA64 XianSys', '');
   trib.includes('opts = {}') && trib.includes('xianTo: opts.xianTo || 0') && trib.includes('xianYuanAtStart') ? pass('SA65 天劫参数化仙劫（C3）') : fail('SA65 仙劫参数', '');
   trib.includes('XianSys.tribSuccess(p, S.xianTo, strategy)') ? pass('SA66 仙劫成功走仙阶口径（C3）') : fail('SA66 仙劫成功', '');
-  trib.includes('!S.xian) p.exp = Math.round') && trib.includes('!p.dead && !S.xian) Time.cutLife') ? pass('SA67 仙劫失利折仙元不折寿（C3）') : fail('SA67 仙劫失利', '');
+  trib.includes('!S.xian) p.exp = Math.round') && trib.includes("Time.cutLife(p, cutYears, '天劫反噬')") && trib.includes('!p.dead && !S.xian) {') ? pass('SA67 仙劫失利折仙元不折寿（C3；v40 E395 折寿改比例口径多行块）') : fail('SA67 仙劫失利', '');
   stat.includes('xianLayers * 0.015') && stat.includes('xianLayers * 2') && stat.includes('XIAN_TIERS.slice(0, XianSys.cur(p))') ? pass('SA68 仙阶属性/修炼/仙寿入总线（C4/C5）') : fail('SA68 总线', '');
   pfac.includes('xianjie: { idx: 0, layer: 0 }') && pfac.includes('out.xianjie = {') ? pass('SA69 仙阶模板+迁移自愈（C1）') : fail('SA69 模板', '');
   ui.includes("data-action=\"act-xian-enter\"") && ui.includes('data-action="act-xian-advance"') && ui.includes('data-action="act-xian-trib"') ? pass('SA70 仙阶卡三按钮（C6）') : fail('SA70 仙阶卡', '');
@@ -142,7 +142,8 @@ console.log('===== SA 源码静态组 =====');
   forge.includes('async enhanceMulti(slot, times = 5)') && gamejs.includes("'act-enhance-multi'") && ui.includes('连祭炼×5') ? pass('SA84 连祭炼+祝福徽标（D7）') : fail('SA84 连祭炼', '');
   forge.includes("Bag.addItem('m_qipei', frag)") && gdata.includes("name: '器胚残片'") ? pass('SA85 炼器器胚残片保底（D7）') : fail('SA85 残片', '');
   ui.includes('祝福 ${bless}/100') ? pass('SA86 祝福值面板徽标（D7）') : fail('SA86 徽标', '');
-  beast.includes('SPECIES_SKILLS3') && beast.includes('(b.bond || 0) >= 80 ? 3 : 2') ? pass('SA87 亲昵三技（E-灵兽）') : fail('SA87 三技', '');
+  // v40（E368）：协战技能数改亲昵三档（<40:2 / <80:3 / ≥80:4）——第三技 ≥40 即生效，第四技 ≥80 兑现
+  beast.includes('SPECIES_SKILLS3') && beast.includes('(b.bond || 0) >= 80 ? 4 : (b.bond || 0) >= 40 ? 3 : 2') ? pass('SA87 亲昵三技（E-灵兽；v40 E368 三档）') : fail('SA87 三技', '');
   beast.includes('情谊为重') && beast.includes('亲昵 +6') ? pass('SA88 寻宝归来三选一（E-灵兽）') : fail('SA88 寻宝', '');
   reinc.includes('PLANS') && reinc.includes('来世预约兑现') ? pass('SA89 来世预约（E-江湖）') : fail('SA89 预约', '');
   ui.includes('act-tutorial-replay') && gamejs.includes("Tutorial.show(true)") ? pass('SA90 重看引导（F）') : fail('SA90 引导', '');
@@ -383,12 +384,13 @@ if (browser) {
       // 入籍
       XianSys.enterFirst();
       out.entered = p.xianjie.idx === 1 && p.xianjie.layer === 0;
-      // 晋层：仙元足够时扣元进层
+      // 晋层：仙元足够时扣元进层（v40 E398：官声轴——预置考功政绩免 ×1.5 软门槛）
+      p.xianCourt = p.xianCourt || {}; p.xianCourt.merit = 100;
       p.counters.xianyuan = 100000;
       XianSys.advanceLayer();
       XianSys.advanceLayer();
       out.layers = p.xianjie.idx === 1 && p.xianjie.layer === 2;
-      out.yuanSpent = 100000 - p.counters.xianyuan === 10000;   // 地仙 5000×2
+      out.yuanSpent = 100000 - p.counters.xianyuan === 35000;   // v40（E397）：地仙首层 17500×2
       // 属性总线：5 层（地仙2层）→ +7.5% 全属性、+10% 修炼
       const st = Stat.compute(p);
       out.cult = st.cultPct >= 10;

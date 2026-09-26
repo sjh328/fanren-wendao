@@ -563,7 +563,7 @@ try {
     return { txt: c.innerText, btn: (c.querySelector('[data-action="act-breakthrough"]') || {}).textContent || null };
   });
   const cultTab = card12a.txt;
-  cultTab.includes('冲击瓶颈') && cultTab.includes('静修冲关') && !cultTab.includes('引动天劫') && (card12a.btn || '').includes('静')
+  cultTab.includes('冲击瓶颈') && cultTab.includes('冲关加成') && !cultTab.includes('引动天劫') && (card12a.btn || '').includes('静')   // v40（E395）：静修 +15% 拆解行改「冲关加成」
     ? pass('T12 练气圆满出现静修冲关卡片（无天劫）') : fail('T12 冲关卡片', JSON.stringify({ btn: card12a.btn, txt: cultTab.slice(0, 200) }));
   await clickSel(page, '[data-action="act-breakthrough"]');
   await sleep(1800);

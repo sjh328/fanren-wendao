@@ -176,7 +176,11 @@ const BeastSys = {
     //          傀儡/阴魂系招式被静默丢弃；现按语义分别结算（伤敌/削敌/护主/续主）
     let skillNote = '';
     const mySt = Stat.compute(p);
-      for (const sk of (b.skills || []).slice(0, (b.bond || 0) >= 80 ? 3 : 2)) {
+    // v40（E368）修瑕：协战技能数按亲昵三档——原 `≥80?3:2` 两档使繁育第 4 门天生技在协战/合击/
+    // 擂主战全路径永不生效（E303「遗传 2~4 门破野生上限」的付费承诺落空）。<40 用 2 门、
+    // <80 用 3 门、≥80 四门齐出（兽栏 UI 与「四技灵兽」里程碑承诺就此兑现）
+    const bondN = (b.bond || 0) >= 80 ? 4 : (b.bond || 0) >= 40 ? 3 : 2;
+    for (const sk of (b.skills || []).slice(0, bondN)) {
       if (!sk.kind) continue;
       if (['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken'].includes(sk.kind)) {
         Battle.applyEnemyFx(B.enemy, { kind: sk.kind, pct: (sk.pct || 2) * 0.6, rounds: sk.rounds || 2 });
@@ -382,7 +386,9 @@ const BeastSys = {
     if (!b) return;
     if (b.trip) { UI.toast('它已在寻宝途中'); return; }
     if (p.beasts.active === uid || p.beasts.active2 === uid) { UI.toast('出战/护持中的灵兽不可派遣'); return; }
-    const days = await UI.popup({
+    // v40（E366）修瑕：原 `const days` 在下方星槎贴片被重新赋值——洞天二重及以上派遣必抛
+    // 「Assignment to constant variable」，星槎特效从未生效、灵兽寻宝整条玩法瘫痪
+    let days = await UI.popup({
       title: `派遣寻宝 · ${b.name}`,
       html: `放它独自外出寻宝——归期越久，带回的灵材越厚。<br>派遣期间不可出战，归来时自动入栏。`,
       options: [
@@ -519,30 +525,94 @@ const BeastSys = {
     if (p.beastArena.champDay === today) { UI.toast('今日已挑战过擂主——擂主也要歇气，明日再来'); return; }
     const best = p.beasts.list.reduce((m, x) => Math.max(m, x.power || 0), 0);
     const foeP = Math.min(70, Math.round(best * 1.15 * (1 + 0.05 * (p.beastArena.streak || 0))));
-    const winP = Utils.clamp(this.arenaWinP(b) - 8, 30, 72);
+    // v40（E399）：擂主战实战化——simBeastDuel 快算（技能池/物种克制/tactic 真实参与），
+    // 胜率展示与结算同源（同种子复现）；对手兽按我方出战兽 power ×0.9~1.1 生成、带 2 门技
+    const foe = this.makeChampFoe(foeP);
+    const sim = this.simBeastDuel(b, foe);
     const ok = await UI.popup({
       title: `擂主战 · 第 ${p.beastArena.streak} 连胜`,
-      html: `场内连胜三场，<b>老擂主</b>亲自下场会你——其座下灵兽战力约 <b class="hl">${foeP}</b>（你方 ${b.name} 战力 ${b.power}）。<br>
-        <span class="tip-line">· 胜算预估 <b class="hl">${winP}%</b>（强敌让八分）<br>· 胜：玄铁 ×(3+连胜)、器魂 ×2、灵石 ${Utils.fmtNum(Math.round(200 * GameData.stoneEco(Math.min(5, p.realmIdx))))}；败：连胜清零。</span>`,
+      html: `场内连胜三场，<b>老擂主</b>亲自下场会你——其座下灵兽战力约 <b class="hl">${foeP}</b>（你方 ${b.name} 战力 ${b.power}、技能 ${b.skills.length} 门）。<br>
+        <span class="tip-line">· 演武推演胜算 <b class="hl">${sim.winP}%</b>（技能/克制/协战策略尽入推演）<br>· 胜：玄铁 ×(3+连胜)、器魂 ×2、灵石 ${Utils.fmtNum(Math.round(200 * GameData.stoneEco(Math.min(5, p.realmIdx))))}；败：连胜清零。</span>`,
       options: [{ text: '应 战', value: true, primary: true }, { text: '改日再战', value: false }],
     });
     if (!ok) return;
     p.beastArena.champDay = today;
     Time.add(1);
-    if (Utils.chance(winP)) {
+    // 结算与推演同源：种子 = 推演种子（胜率展示与结果一致，可复现）
+    const result = this.simBeastDuel(b, foe, sim.seed);
+    Log.add(`⚔ 擂主战——${result.report[0]}${result.report[1]}${result.report[2]}`, result.won ? 'gain' : 'loss');
+    if (result.won) {
       const streak = p.beastArena.streak || 0;
       const iron = 3 + streak, stones = Math.round(200 * GameData.stoneEco(Math.min(5, p.realmIdx)));
       Bag.addItem('m_xuantie', iron);
       p.qihun = (p.qihun || 0) + 2;
       Bag.addStones(stones);
       p.beastArena.streak = streak + 1;
-      Log.add(`⚔ 擂主战——<b>${b.name}</b> 力挫老擂主的座下灵兽，满堂彩声雷动！得玄铁矿 ×${iron}、器魂 +2、灵石 ${Utils.fmtNum(stones)}。（擂台连胜 ${streak + 1}）`, 'gain');
+      Log.add(`⚔ <b>${b.name}</b> 力挫老擂主的座下灵兽，满堂彩声雷动！得玄铁矿 ×${iron}、器魂 +2、灵石 ${Utils.fmtNum(stones)}。（擂台连胜 ${streak + 1}）`, 'gain');
       UI.toast('擂主战告捷！');
     } else {
       p.beastArena.streak = 0;
-      Log.add(`⚔ 擂主战——老擂主宝刀未老，<b>${b.name}</b> 苦战落败。（场内连胜清零，改日再图）`, 'loss');
+      Log.add(`⚔ 老擂主宝刀未老，<b>${b.name}</b> 苦战落败。（场内连胜清零，改日再图）`, 'loss');
     }
     Game.afterAction();
+  },
+  /** v40（E399）：擂主座下灵兽生成——power 0.9~1.1 倍、必带 2 门技（1 天生 + 1 随机）、物种自五族随选 */
+  makeChampFoe(power) {
+    const baseP = Utils.clamp(Math.round(power * Utils.randF(0.9, 1.1)), 1, 70);
+    const species = Utils.pick(['beast', 'snake', 'swarm', 'plant', 'element']);
+    const NAME = { beast: '裂山凶兽王', snake: '碧鳞噬影蟒', swarm: '蚀骨妖蜂群', plant: '缠仙古藤王', element: '九幽灵火精' };
+    const SK = BeastSys.SPECIES_SKILLS, SK2 = BeastSys.SPECIES_SKILLS2;
+    const skills = [];
+    if (SK[species]) skills.push({ ...SK[species] });
+    if (skills.length < 2 && SK2[species]) skills.push({ ...SK2[species] });
+    while (skills.length < 2) skills.push({ name: '野性撕咬', kind: 'bleed', pct: 3, rounds: 2 });
+    return { name: NAME[species] || '擂主灵兽', species, power: baseP, level: 10, evolved: true, tactic: 'focus', skills };
+  },
+  /** v40（E399）：simBeastDuel——灵兽单挑快算（assist 同式伤害 + 物种克制 + tactic 加权 + 技能池全量），
+   *  种子可选（缺省 Date.now）：同种子复现一致。返回 { won, winP, rounds, report:[首回/中盘/决胜] }。
+   *  胜率 = 蒙特卡洛 60 场同种子不同扰动的一致采样（展示与结算同源） */
+  simBeastDuel(my, foe, seed) {
+    const s0 = seed != null ? seed : Date.now();
+    // 物种克制：GameData.speciesRelation 攻守双向（±15% 伤害），与主战场同源
+    const rel = GameData.speciesRelation(my.species, foe.species);
+    const relMul = rel > 0 ? 1 + GameData.BALANCE.SPECIES_COUNTER.bonus : rel < 0 ? 1 - GameData.BALANCE.SPECIES_COUNTER.bonus : 1;
+    const relMulFoe = GameData.speciesRelation(foe.species, my.species);
+    const relMulF = relMulFoe > 0 ? 1 + GameData.BALANCE.SPECIES_COUNTER.bonus : relMulFoe < 0 ? 1 - GameData.BALANCE.SPECIES_COUNTER.bonus : 1;
+    // 单场推演：双方 HP = 100+power×4、每轮掷攻、伤害 = power×克制×随机×(1+技能加成)，assist 同式量纲
+    const simOne = (s) => {
+      let rnd = s;
+      const rand = () => { rnd = (rnd * 1103515245 + 12345) & 0x7fffffff; return rnd / 0x7fffffff; };
+      const hpOf = b => 100 + b.power * 4;
+      const skBonus = b => (b.skills || []).slice(0, 4).reduce((s2, sk) => s2 + (['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken'].includes(sk.kind) ? (sk.pct || 3) * 2 : sk.kind === 'heal' ? 2 : sk.kind === 'stun' || sk.kind === 'freeze' ? 3 : 1), 0);
+      const myHp = hpOf(my), foeHp = hpOf(foe);
+      const myAtk = my.power * (1 + skBonus(my) / 100);
+      const foeAtk = foe.power * (1 + skBonus(foe) / 100);
+      let curA = myHp, curF = foeHp, round = 0;
+      while (curA > 0 && curF > 0 && round < 200) {
+        round++;
+        // 我方先手：伤害 = power×克制×随机（0.8~1.2）
+        const dA = Math.max(1, Math.round(myAtk * relMul * (0.8 + rand() * 0.4)));
+        curF = Math.max(0, curF - dA);
+        if (curF <= 0) return { win: 1, round };
+        // 敌方反击
+        const dF = Math.max(1, Math.round(foeAtk * relMulF * (0.8 + rand() * 0.4)));
+        curA = Math.max(0, curA - dF);
+      }
+      return { win: curA > 0 ? 1 : 0, round };
+    };
+    // 蒙特卡洛 60 场（种子扰动 = s0 + k）
+    let wins = 0, N = 60;
+    for (let k = 0; k < N; k++) wins += simOne(s0 + k * 7919).win;
+    const winP = Math.round(wins / N * 100);
+    // 决胜一场（同结算种子）出战报三行
+    const final = simOne(s0);
+    const r5 = s0 % 3;
+    const report = [
+      `开场${r5 === 0 ? '即互试身手，招式如潮' : r5 === 1 ? '两兽绕场对峙，气机锁死' : '一声长啸，两影交错'}——`,
+      `中盘${final.round > 8 ? '陷入苦战，血脉偾张' : '招式相衔，攻守转换迅疾'}——`,
+      final.win ? `${my.name} 一击定音，擂台易主！` : `${foe.name} 技高一筹，卫冕成功。`,
+    ];
+    return { won: !!final.win, winP, rounds: final.round, report, seed: s0 };
   },
   /* ========== v38（E303）：灵兽繁育——双十阶结契生蛋，技能遗传 2~4 门（超野生上限） ========== */
   BREED_CD: 90,

@@ -48,8 +48,8 @@ try {
     ? pass('TA7 气运软上限 150') : fail('TA7 气运上限', '');
   js.includes('pill_yanshou:') && js.includes('pill_dujie:') && js.includes("use: { life: 10 }") && js.includes("use: { dujie: 1 }")
     ? pass('TA8 延寿丹线 + 渡劫丹数据齐备') : fail('TA8 延寿丹', '');
-  js.includes('cutLife(p, years, reason') && js.includes("Time.cutLife(p, 10, '天劫反噬')")
-    ? pass('TA9 折寿机制：天劫 -10 / 心魔 / 转道') : fail('TA9 折寿', '');
+  js.includes('cutLife(p, years, reason') && js.includes("Time.cutLife(p, cutYears, '天劫反噬')")
+    ? pass('TA9 折寿机制：天劫折寿（v40 E395 改 max(3, 寿元 5%) 比例口径）/ 心魔 / 转道') : fail('TA9 折寿', '');
   js.includes('坐化之时神魂不昧') && js.includes('extraMarks: 1')
     ? pass('TA10 坐化兵解闭环（寿满天年 +1 印记）') : fail('TA10 坐化', '');
   js.includes("Math.max(60, GameData.LIFESPAN[p.realmIdx] - (p.lifeCut || 0) + (p.lifeGain || 0)")
@@ -254,10 +254,11 @@ try {
   const tian = await page.evaluate(async () => {
     const p = Game.player;
     const out = {};
-    // 折寿
+    // 折寿（v40 E395：行为链同步改比例口径 max(3, 寿元 5%)）
     const base = GameData.LIFESPAN[p.realmIdx];
-    Time.cutLife(p, 10, '天劫反噬');
-    out.afterCut = Stat.compute(p).lifespan === Math.max(60, base - 10);
+    const cutYears = Math.max(3, Math.round(base * 0.05));
+    Time.cutLife(p, cutYears, '天劫反噬');
+    out.afterCut = Stat.compute(p).lifespan === Math.max(60, base - cutYears);
     // 延寿丹（丹道之身直接 apply 效果）
     p.lifeGain = 0;
     Pill.apply(p, GameData.ITEMS.pill_yanshou);

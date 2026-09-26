@@ -246,15 +246,16 @@ const NpcSys = {
     const s = this.state(p, id);
     // v37（E248）：狠度进赔率——rel 低于 -20 的部分每 10 点折算对方战力 +4%（封顶 +32%）
     const fury = this.showdownFury(s);
+    const band = this.rivalBand(p, id);   // v40（E374）：雷台对手按三档带生成（狠度在校准之上叠乘）
     const ok = await UI.popup({
       title: `雷台了断 · ${d.name}`,
-      html: `你们之间的仇怨已深。<br>约战雷台，做个了断——<b>胜者可夺对方一件随身法宝</b>，恩怨就此两清。<br>${fury > 0 ? `<span class="neg">仇怨愈狠，对方出手愈重（本战其战力 +${fury}%）。</span><br>` : ''}<span class="neg">若败，恩怨依旧，且伤势难免。</span>`,
+      html: `你们之间的仇怨已深。<br>约战雷台，做个了断——<b>胜者可夺对方一件随身法宝</b>，恩怨就此两清。<br>· 对手成算：<b>${band.name}</b>${fury > 0 ? `<span class="neg">（仇怨愈狠，对方出手愈重：本战其战力再 +${fury}%）</span>` : ''}<br><span class="neg">若败，恩怨依旧，且伤势难免。</span>`,
       options: [{ text: '雷台相见', value: true, primary: true }, { text: '再等等', value: false }],
     });
     if (!ok) return;
     Log.add(`你向 <b>${d.name}</b> 递上雷台战书——恩怨纠葛，今日做个了断！`, 'warn');
     Story.chron(`与 ${d.name} 约战雷台`);
-    Battle.start(null, { enemy: this.buildEnemy(p, id, fury), npcId: id, mode: 'confront', showdown: true, mapName: '雷台' });
+    Battle.start(null, { enemy: this.buildEnemy(p, id, fury, { ratio: band.ratio, bandName: band.name }), npcId: id, mode: 'confront', showdown: true, mapName: '雷台' });
     Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
   },
   /** v37（E248）：雷台了断赔率——rel≤-20 起可约，低于 -20 的部分每 10 点对方战力 +4%，封顶 +32% */
@@ -285,10 +286,61 @@ const NpcSys = {
     if (p.partner || swornAlive.length) p.counters.aidRot = (p.counters.aidRot || 0) + 1;
     const s = this.state(p, cand);
     if (!s || !s.alive) return null;
-    if (!Utils.chance(Utils.clamp(25 + Math.max(0, s.rel) * 0.3, 0, 70))) return null;
+    // v40（E402）：义气值加持——结拜方 tryAid 概率 ×(0.5 + loyalty/100)（loyalty 0~100）
+    const loyal = (p.sworn || []).includes(cand) ? Math.min(100, s.loyalty || 0) : 0;
+    const aidBase = Utils.clamp(25 + Math.max(0, s.rel) * 0.3, 0, 70);
+    if (!Utils.chance(aidBase * (0.5 + loyal / 100))) return null;
     s.rel = Utils.clamp(s.rel + 4, -100, 100);
     this.mem(p, cand, 'save', '危难相救');   // v19 记忆
     return { id: cand, name: this.def(cand).name };
+  },
+  /** v40（E402）：义聚节拍入口（dailySettle 调用）——扫结拜名单判 30 日节拍（loyalty ≥20 解锁），
+   *  每日至多触发一场；popup 三选一 + mem + 金兰词缀授予在 oathGather 内 */
+  oathGatherTick(p) {
+    for (const id of (p.sworn || [])) {
+      const s = p.npcs[id];
+      if (!s || !s.alive) continue;
+      const since = Math.floor(p.day || 0) - (s.oathDay || 0);
+      if (since >= 30 && (s.loyalty || 0) >= 20) { this.oathGather(p, id); break; }
+    }
+  },
+  /** v40（E402）：义聚——每 30 日与结拜兄弟/姊妹小聚（三选一 popup + mem + loyalty +5~8）；
+   *  loyalty ≥60 授一次永久【金兰】小词缀（防御 +2%，stat.js 消费，≤5% 档） */
+  async oathGather(p, id) {
+    const s = this.state(p, id);
+    const d = this.def(id);
+    if (!s || !d || !s.alive || !(p.sworn || []).includes(id)) return;
+    const today = Math.floor(p.day || 0);
+    s.oathDay = today;
+    const pick = await UI.popup({
+      title: `义聚 · ${d.name}`,
+      html: `与 ${d.name} 已有月余未见——今日携酒登门，共叙义气。<br><span class="tip-line">· 义气（loyalty）随义聚增长：危难相救概率与共御胜算随之上涨。</span>`,
+      options: [
+        { text: '对饮论战（突破感悟 +2）', value: 'talk', primary: true },
+        { text: '联手办案（灵石小赏）', value: 'case' },
+        { text: '切磋互通（战意 +10）', value: 'spar' },
+      ],
+    });
+    if (!pick) return;
+    s.loyalty = Math.min(100, (s.loyalty || 0) + Utils.rand(5, 8));
+    this.mem(p, id, 'story', '义聚叙旧');
+    if (pick === 'talk') {
+      Cultivate.addInsight(p, 2, false);
+      Log.add(`【义聚】你与 <b>${d.name}</b> 对饮论道直至月上中天——言及旧事，各有顿悟。（突破感悟 +2、义气 ${s.loyalty}）`, 'gain');
+    } else if (pick === 'case') {
+      const stones = Math.round(Utils.rand(20, 40) * GameData.stoneEco(p.realmIdx));
+      Bag.addStones(stones);
+      Log.add(`【义聚】你与 <b>${d.name}</b> 联手办结一桩积案——事毕分润酬金，相视而笑。（灵石 +${Utils.fmtNum(stones)}、义气 ${s.loyalty}）`, 'gain');
+    } else {
+      p.warSpirit = (p.warSpirit || 0) + 10;
+      Log.add(`【义聚】你与 <b>${d.name}</b> 以武会友，三招过后互约再战。（战意 +10、义气 ${s.loyalty}）`, 'gain');
+    }
+    if ((s.loyalty || 0) >= 60 && !s.goldlan) {
+      s.goldlan = true;
+      Log.add(`【金兰】义气已至化境——你与 <b>${d.name}</b> 滴血重誓，结为过命之交。（永久词缀【金兰】：防御 +2%）`, 'realm');
+      if (typeof Story !== 'undefined' && Story.chron) Story.chron(`与 ${d.name} 义气金兰`, { m: 1 });
+    }
+    Game.afterAction();
   },
   /** v38（E312）：名动一方（声望 ≥120）——初见自带三分敬意（一次性，五点交情随初见入账）
    *  v39（E358）：120 门槛与 RepSys.LEVELS 新「名动一方」显示档对齐（机制数值不动，仅档名归位） */
@@ -342,15 +394,60 @@ const NpcSys = {
     const def = Math.round((4 + rp * 1.7) * mod);
     const hp = Math.round((65 + Math.pow(rp, 1.6) * 5.2) * mod);
     const spd = Math.round((7 + rp * 0.9) * mod);
-    return Math.round(atk * 2 + def * 1.5 + hp * 0.3 + spd * 1 + 8 * 2 + 5 * 1.5 + 8 * 0.5);
+    // v40（E374）：估算并入 parity 乘区——buildEnemy 实际按玩家装备当量变强，估算不同步则三档失真
+    const parity = this.parityOf(p, rp);
+    return this._powerOf(Math.round(atk * parity), Math.round(def * parity), Math.round(hp * parity), spd);
   },
-  buildEnemy(p, id, fury = 0) {
+  /** v40（E374）：战力量纲单源——buildEnemy 三档校准与 npcCombatPower 估算共用同一折算式
+   *  （尾项 27.5 = crit8×2 + dodge5×1.5 + block8×0.5，与 Stat.power 权重同源） */
+  _powerOf(atk, def, hp, spd) { return atk * 2 + def * 1.5 + hp * 0.3 + spd * 1 + 8 * 2 + 5 * 1.5 + 8 * 0.5; },
+  /** v40（E374）：装备当量乘区——人形对手 hp/atk ×(0.8+0.5×min(1, 玩家power/同境裸装基准))，
+   *  基准单源 GameData.BALANCE.COMBAT.PARITY_BENCH（堵「NPC 永无装备」的结构性一边倒） */
+  parityOf(p, rp) {
+    const realmIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
+    const bench = ((GameData.BALANCE.COMBAT.PARITY_BENCH || [])[realmIdx]) || 0;
+    if (bench <= 0 || typeof Stat === 'undefined' || !Stat.power) return 1;
+    return 0.8 + 0.5 * Math.min(1, Stat.power(p) / bench);
+  },
+  /** v40（E374）：问剑/雷台/大比对手的校准带——按自然战力比落三档（可敌 ≈1.00 / 略逊 ≈0.90 /
+   *  远逊 ≈0.78，表单源 RIVAL_BANDS），对手属性按带生成，估算与实战同口径 */
+  rivalBand(p, id) {
+    const bands = GameData.BALANCE.COMBAT.RIVAL_BANDS || [];
+    const ratio = this.npcCombatPower(p, id) / Math.max(1, Stat.power(p));
+    const band = ratio >= 0.95 ? bands[0] : ratio >= 0.8 ? bands[1] : bands[2] || bands[0];
+    return { name: band.name, ratio: band.ratio };
+  },
+  buildEnemy(p, id, fury = 0, opts = {}) {
     const d = this.def(id);
     const s = this.state(p, id);
     if (!d || !s) return buildMonster('m_zeiren');
     const rp = Utils.clamp(s.realmIdx * 4 + s.layer, 0, 60);
-    const mod = (0.92 + d.talent * 0.04) * (1 + (fury || 0) / 100);   // v37（E248）：fury=雷台了断狠度加成（默认 0，其余调用不受影响）
     const realmIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
+    const mod = 0.92 + d.talent * 0.04;
+    // v40（E374）①：装备当量乘区——hp/atk 随玩家 Stat.power 对同境裸装基准之比变强（0.8~1.3）
+    const parity = this.parityOf(p, rp);
+    let hpMax = Math.round((65 + Math.pow(rp, 1.6) * 5.2) * mod * parity);
+    let atk = Math.round((7 + rp * 2.7) * mod * parity);
+    let def = Math.round((4 + rp * 1.7) * mod);
+    let spd = Math.round((7 + rp * 0.9) * mod);
+    // v40（E374）②：三档带生成——按玩家 Stat.power 量纲镜像（气血/攻各乘带比与补偿系数、
+    // 防/速同量纲），可敌 ρ=1 即真实引擎五五互角（问剑/雷台/大比传入；
+    // 技能与习性保留 NPC 自身模板；fury 狠度在带生成后叠乘不失真）
+    if (opts.ratio && typeof Stat !== 'undefined' && Stat.compute) {
+      const st2 = Stat.compute(p);
+      const den = (GameData.BALANCE.COMBAT.AFTER_DEF_DENOM || 140) * (1 + (p.realmIdx * 4 + p.layer) / 6);
+      const hpEdge = GameData.BALANCE.COMBAT.RIVAL_HP_EDGE || 1;
+      const atkEdge = GameData.BALANCE.COMBAT.RIVAL_ATK_EDGE || 1;
+      hpMax = Math.round(st2.maxHp * opts.ratio * hpEdge);
+      def = Math.round(st2.def);
+      spd = Math.round(st2.speed);
+      const pOut = st2.atk * Math.max(0.05, 1 - def / (def + den));   // 玩家对镜像防的每回合输出
+      atk = Math.round(opts.ratio * pOut * atkEdge / Math.max(0.05, 1 - st2.def / (st2.def + den)));
+    }
+    // v37（E248）：fury=雷台了断狠度加成（默认 0，其余调用不受影响）
+    const furyMul = 1 + (fury || 0) / 100;
+    hpMax = Math.round(hpMax * furyMul); atk = Math.round(atk * furyMul);
+    def = Math.round(def * furyMul); spd = Math.round(spd * furyMul);
     // v18：NPC 按性情配专属技能（切磋/恩怨不再退化为普攻对轰）
     const temperSkills = {
       '孤傲': [{ name: '傲剑诀', w: 40, kind: 'bleed', pct: 3, rounds: 2 }],
@@ -379,17 +476,20 @@ const NpcSys = {
     const skills = temperSkills[d.temper] || [{ name: '出手一击', w: 40, kind: 'bleed', pct: 2, rounds: 2 }];
     // v38（E318）：转世劫难「群邪环伺」——NPC 之敌同样 hp/atk ×1.10
     const foeMul = (p.reinc && Array.isArray(p.reinc.trials) && p.reinc.trials.includes('foe')) ? 1.1 : 1;
+    // v40（E374）③：parity>1 的强者有赏——赏格/掉落 ×(0.8+0.2×parity)，防「打强者反而穷」
+    const rewardMul = 0.8 + 0.2 * Math.max(1, parity);
     return {
       id: null, npcId: id, name: d.name, elite: false, power: rp,
       realmLabel: GameData.REALM_NAMES[realmIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
-      hpMax: Math.round((65 + Math.pow(rp, 1.6) * 5.2) * mod * foeMul),
-      atk: Math.round((7 + rp * 2.7) * mod * foeMul),
-      def: Math.round((4 + rp * 1.7) * mod),
-      spd: Math.round((7 + rp * 0.9) * mod),
+      bandName: opts.ratio ? (opts.bandName || '') : null,   // v40（E374）：三档校准带名（战报公示用）
+      hpMax: Math.round(hpMax * foeMul),
+      atk: Math.round(atk * foeMul),
+      def,
+      spd,
       dodge: 5, crit: 8,
       skills, // v18：NPC 专属技能
-      expGain: Math.round(30 * GameData.eco(realmIdx)),
-      stoneGain: Math.round(Utils.rand(30, 55) * GameData.stoneEco(realmIdx)),
+      expGain: Math.round(30 * GameData.eco(realmIdx) * rewardMul),
+      stoneGain: Math.round(Utils.rand(30, 55) * GameData.stoneEco(realmIdx) * rewardMul),
       dropTier: Math.min(4, Math.floor(realmIdx / 2) + 1),
       rareDrop: null,
       hp: 0,
@@ -600,6 +700,9 @@ const NpcSys = {
     p.sworn.push(id);
     s.rel = Utils.clamp(s.rel + 8, -100, 100);
     this.mem(p, id, 'story', '义结金兰');   // v19 记忆
+    // v40（E402）：义聚线起点——loyalty 0~100 义气值、oathDay 义聚节拍锚（30 日一聚）
+    s.loyalty = s.loyalty || 20;
+    s.oathDay = Math.floor(p.day || 0);
     // v34（E3）：义结金兰是人生峰值事件，配得上一次全屏仪式（复用 realmShow/announce/sfx 现成轮子）
     UI.realmShow('义结金兰 · 祸福与共 · 此生共进退', '#e8c56a');
     UI.announce(`✦ 义 结 金 兰 · ${d.name} ✦`, 'gold');

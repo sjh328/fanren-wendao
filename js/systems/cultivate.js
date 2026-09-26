@@ -196,11 +196,13 @@ const Cultivate = {
     Game.afterAction();
     return 'done';
   },
-  normal() {
+  normal(opts = {}) {
     const p = Game.player;
     let gain = Math.round(this.baseGain(p) * this.gainMult());
     let evNote = '';
     // v8 灵机事件（v19 扩池）：基础四类 + 六道职业特化 + 境界异象，按身份动态构建（8% 触发）
+    // v40（E396）：抽成闭口函数以便「亲修偶得」复用同一 roll（AutoCult/离线/一键行权不传 manual）
+    const lingjiRoll = () => {
     if (Utils.chance(8)) {
       const pool = { surge: 35, epiphany: 25, heartDemon: 25, glean: 15 };
       const daoEv = { sword: 'jianMeng', pill: 'danXiang', talisman: 'fuGuang', body: 'tiWu', array: 'zhenXian', demonic: 'xueYong' };
@@ -261,6 +263,13 @@ const Cultivate = {
         Log.add('【灵机】神识离体，遨游星海一瞬——归来时天地都已换了一副面目。（修为 ×1.8，感悟 +2）', 'realm');
         evNote = '（神游太虚 · 修为 ×1.8）';
       }
+    }
+    };
+    lingjiRoll();
+    // v40（E396）：亲修偶得——手动修炼按悟性 ×2% 概率追加一次灵机判定（期望增益 ≤+3%，文案如实）
+    if (opts.manual && Utils.chance(Stat.compOf(p) * 2)) {
+      lingjiRoll();
+      Log.add('【亲修】亲手行功，气息绵长偶有顿悟之机——你再凝神行了一周天。', 'gain');
     }
     this.addExp(p, gain);
     UI.float(`修为 +${Utils.fmtNum(gain)}${evNote ? ' ' + evNote.replace(/[（）]/g, ' ') : ''}`);   // v21 行动浮字
@@ -414,32 +423,60 @@ const Cultivate = {
     Game.afterAction();
     if (rep.rounds > 0) this.settleReport(rep);   // v21 结算报告
   },
-  /** 突破成算（大境界渡劫基准）：感悟/悟性/气运/孽障/大道/根基/挫而愈坚 皆计入 */
+  /** v40（E407）：修炼乘区明细——baseGain 各乘区逐项列名（聚灵/灵潮/洞天/阵旗/季议/称号等），
+   *  修炼/闭关弹窗消费此明细行展示「这轮为何高/低」（零新字段，纯展示单源） */
+  baseGainBreakdown(p) {
+    const st = Stat.compute(p);
+    const rows = [];
+    rows.push({ k: '基础产出', v: this.baseGainRaw(p) });
+    if (p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < (typeof CaveSys !== 'undefined' && CaveSys.RUSH_WINDOW ? CaveSys.RUSH_WINDOW() : 3)) rows.push({ k: '聚灵加速', v: '×1.5' });
+    if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) rows.push({ k: '灵潮涌动', v: '×1.2' });
+    if (typeof CaveSys !== 'undefined' && CaveSys.cultBonus) { const cb = CaveSys.cultBonus(p); if (cb) rows.push({ k: '洞府聚灵阵', v: `+${cb}%` }); }
+    if (typeof SectSys !== 'undefined' && SectSys.council && SectSys.council(p) === 'cult') rows.push({ k: '季议·勤修不辍', v: '+3%' });
+    if (st.cultPct) rows.push({ k: '修炼效率合计', v: `+${st.cultPct}%` });
+    return rows;
+  },
+  baseGainRaw(p) {
+    return Math.round((12 + ((p.attrs && p.attrs.comp) || 5) * 2) * GameData.eco(p.realmIdx || 0) * (1 + (p.layer || 0) * 0.15));   // v40（E407 修正）：与 baseGain 同式（乘区前的基础产出）
+  },
+  /** v40（E395①）：突破成算拆解单源——加性项逐项列名（感悟 ×0.5/心魔每10 −1/残玉两世归一 +3/
+   *  劫体 +8/仙障 +2/挫而愈坚/气运孽障/冲关加成），乘性项（剑修 ×0.77、体修 ×1.4、根基 ±、上下限钳制）
+   *  折算为末位「乘区收敛」残差——拆解行加总恒等于最终成算（预估卡与本函数同源，node 验算锚） */
+  breakdown(p, bonus = 0) {
+    const items = [];
+    const add = (k, v) => { if (v) { items.push({ k, v: Math.round(v * 100) / 100 }); } return v; };
+    let sum = 40 + Stat.compOf(p) * 2;
+    items.push({ k: `基础（悟性 ${Stat.compOf(p).toFixed(1)}）`, v: 40 + Stat.compOf(p) * 2 });
+    sum += add(`突破感悟 ×0.5（${p.insight || 0} 点）`, (p.insight || 0) * 0.5);
+    sum += add('残玉两世归一（九重）', (p.jade || 0) >= 9 ? 3 : 0);
+    sum += add(`气运 ${p.fortune || 0}（每10点 +2%）`, (p.fortune || 0) * 0.2);
+    sum += add(`孽障 ${p.karma || 0}（每10点 −2%）`, -(p.karma || 0) * 0.2);
+    sum += add(`心魔 ${Math.round(p.xinmo || 0)}（每10点 −1%）`, -Math.floor((p.xinmo || 0) / 10));
+    sum += add(`挫而愈坚（连败 ${p.breakStreak || 0} 次）`, Math.min(15, (p.breakStreak || 0) * 5));
+    sum += add('仙障心魔试炼（道基愈坚）', (p.flags && p.flags.visionXinzhang) ? 2 : 0);
+    sum += add('劫体（渡劫：半身已在雷海）', p.realmIdx >= 8 ? 8 : 0);
+    if (p.dao === 'pill') sum += add('丹道收敛（天劫微宽）', 4);
+    if (p.dao === 'talisman') sum += add('符道收敛（天劫微宽）', 2);
+    if (p.dao === 'array') sum += add('阵道收敛（天劫微宽）', 2);
+    sum += add(bonus ? `冲关加成 +${bonus}` : '冲关加成', bonus || 0);
+    let chance = sum;
+    if (p.dao === 'sword') chance *= 0.77;   // 剑心桀骜：渡劫难度+30%
+    if (p.dao === 'body') chance *= 1.4;     // 金刚不坏：渡劫成算+40%
+    if (p.rootDeep) chance *= 1.1;           // 根基深厚：历劫难度-10%
+    if (p.rootWeak) chance *= 0.85;          // 根基虚浮：历劫难度+15%
+    chance = Utils.clamp(chance, 5, 95);
+    items.push({ k: '乘区收敛（道途/根基/上下限钳制）', v: Math.round((chance - sum) * 100) / 100 });
+    return { items, chance };
+  },
+  /** 突破成算（大境界渡劫基准）：感悟/悟性/气运/孽障/大道/根基/挫而愈坚 皆计入（v40 E395 起经 breakdown 单源） */
   breakthroughChance(p, bonus = 0) {
-    // v30 修瑕：感悟 1:1 计成算可饱和打穿（满百 +100 把三策博弈与境界惩罚全部架空）——降权为 0.5:1
-    let chance = 40 + Stat.compOf(p) * 2 + (p.insight || 0) * 0.5 + bonus;
-    // v18 残玉共鸣九重 · 两世归一：两世道韵归一，突破成算 +3%
-    if ((p.jade || 0) >= 9) chance += 3;
-    chance += (p.fortune || 0) * 0.2;   // 气运：每10点 +2%
-    chance -= (p.karma || 0) * 0.2;     // 孽障：每10点 -2%
-    chance -= Math.floor((p.xinmo || 0) / 10);   // v28 联动：心魔蚀道——未降伏的心魔每10点 -1% 成算（满百另有心魔劫）
-    chance += Math.min(15, (p.breakStreak || 0) * 5);   // v8 挫而愈坚：连败保底，每次失利 +5%（上限 +15%）
-    if (p.flags && p.flags.visionXinzhang) chance += 2;   // v32（D6）：仙障心魔试炼——道基愈坚，突破成算永久 +2
-    if (p.realmIdx >= 8) chance += 8;   // v10 境界特性 · 劫体（渡劫）：半身已在雷海
-    if (p.dao === 'sword') chance *= 0.77;  // 剑心桀骜：渡劫难度+30%
-    if (p.dao === 'body') chance *= 1.4;    // 金刚不坏：渡劫成算+40%
-    // v38（E321/E300）：职业渡劫收敛——丹/符/阵以战力换百艺，天劫微宽（+4/+2/+2），
-    // 邪修自持 1.8× 修炼不另补；六职业至飞升离散收敛进 ±15% 带（balance-sim 职业矩阵看门）
-    if (p.dao === 'pill') chance += 4;
-    if (p.dao === 'talisman') chance += 2;
-    if (p.dao === 'array') chance += 2;
-    if (p.rootDeep) chance *= 1.1;          // 根基深厚：历劫难度-10%
-    if (p.rootWeak) chance *= 0.85;         // 根基虚浮：历劫难度+15%
-    return Utils.clamp(chance, 5, 95);
+    return this.breakdown(p, bonus).chance;
   },
   /** 大境界突破：练气→筑基为静修冲关（无天劫）；金丹劫起进入天劫三策博弈（小境界进层仍在 addExp 中自动结算） */
   async breakthrough(bonus = 0) {
     const p = Game.player;
+    // v40（E400）：斩三尸「洗髓之效」——下一次突破成算 +5（一次性旗标，此处消费）
+    if (p && p.slayBonus) { bonus += 5; p._slayUsed = true; Log.add('【洗髓之效】斩三尸的道基淬炼在此刻兑现——突破成算 +5！', 'realm'); }   // v40 修正：持久旗标不清零（一世报告读），但每次突破仍生效   // v40（E400 修正）：不清零——一世报告读旗标持久显示
     if (p.layer !== 3 || p.exp < GameData.layerNeedT(p, p.realmIdx, 3)) return;
     if (p.realmIdx >= 9) return;
     if (p.realmIdx + 1 < GameData.TRIB_START) {
@@ -525,10 +562,12 @@ const Cultivate = {
     if (!Utils.chance(chance)) {
       const lost = Math.round(p.exp * 0.6);
       p.exp = Math.max(0, p.exp - lost);
-      Time.cutLife(p, 10, '仙劫失利，雷火蚀身');
+      // v40（E395②）：折寿随寿元池保比例（max(3, 上限×5%)，与天劫同口径）
+      const cutYears = Math.max(3, Math.round(GameData.LIFESPAN[p.realmIdx] * 0.05));
+      Time.cutLife(p, cutYears, '仙劫失利，雷火蚀身');
       const st2 = Stat.compute(p);
       p.hp = Math.max(1, Math.round(st2.maxHp * 0.3));
-      Log.add(`仙劫失利！雷火反噬，你自云端跌落人间——圆满修为折损六成，折寿十年。仙门未闭，来日再叩。`, 'loss');
+      Log.add(`仙劫失利！雷火反噬，你自云端跌落人间——圆满修为折损六成，折寿 ${cutYears} 年。仙门未闭，来日再叩。`, 'loss');
       UI.toast('仙劫失利 · 调息后再战', true);
       Game.afterAction();
       return;

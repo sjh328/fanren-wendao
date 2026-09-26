@@ -219,7 +219,7 @@ try {
     const quiet = Game.player.realmIdx + 1 < GameData.TRIB_START;
     return box ? { txt: box.innerText, chance: Cultivate.breakthroughChance(Game.player, quiet ? 15 : 0) } : null;
   });
-  est && est.txt.includes('预估最终成算') && est.txt.includes('气运') && est.txt.includes('孽障') && est.txt.includes('大道')
+  est && est.txt.includes('预估最终成算') && est.txt.includes('悟性') && est.txt.includes('乘区收敛')   // v40（E395）：恒显示行=基础悟性/乘区收敛/最终成算（零值行隐藏）
     ? pass(`U7 预估成功率分解面板（最终 ${est.chance.toFixed(0)}%）`)
     : fail('U7 预估成功率', JSON.stringify(est && est.txt.slice(0, 80)));
   await page.evaluate(() => { Game.player.insight = 50; UI.renderAll(); });

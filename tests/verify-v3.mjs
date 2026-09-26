@@ -262,7 +262,7 @@ try {
     wHtml.includes('天下大势') ? pass('V2 游历·天下页出现天下大势') : fail('V2 天下大势', '');
   }
   // 种子秘境进行中：宝箱 / 陷阱 两节点
-  await patchSave({ dungeon: { realm: 2, depth: 0, total: 9, choices: ['treasure', 'trap'], gains: [], stuck: false } });
+  await patchSave({ dungeon: { realm: 2, depth: 0, total: 9, choices: ['treasure', 'trap'], gains: [] } });
   await reloadSlot3();
   await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
   await sleep(300);
@@ -275,7 +275,7 @@ try {
     p.dungeon && p.dungeon.depth === 1 ? pass('V2 宝箱节点结算，深入第2层') : fail('V2 宝箱节点', JSON.stringify(p.dungeon));
   }
   // 节点结算后路线重新随机生成——重新播种陷阱节点验证
-  await patchSave({ dungeon: { realm: 2, depth: 1, total: 9, choices: ['trap', 'treasure'], gains: [], stuck: false } });
+  await patchSave({ dungeon: { realm: 2, depth: 1, total: 9, choices: ['trap', 'treasure'], gains: [] } });
   await reloadSlot3();
   await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
   await sleep(300);
@@ -296,7 +296,7 @@ try {
   }
   // 战斗节点：胜利深入 或 陨落扣物
   {
-    await patchSave({ dungeon: { realm: 0, depth: 0, total: 9, choices: ['battle', 'treasure'], gains: [], stuck: false }, bag: { pill_juqi: 10, m_lingcao: 10, w_tiejian: 2 } });
+    await patchSave({ dungeon: { realm: 0, depth: 0, total: 9, choices: ['battle', 'treasure'], gains: [] }, bag: { pill_juqi: 10, m_lingcao: 10, w_tiejian: 2 } });
     await reloadSlot3();
     await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
     await sleep(300);

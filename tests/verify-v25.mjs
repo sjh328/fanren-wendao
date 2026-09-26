@@ -153,7 +153,7 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA34 intentCounter 扩容：strike 入表、charge 纳会心抢断、lenient 中性字段（E349）') : fail('SA34 克制表', '');
   battle.includes('!c.lenient && (B.insightN || 0) > 0') && battle.includes('this.addMorale(5);   // v39（E349）')
     ? pass('SA35 扣层仅 lenient=false 意图发生 + 读中 +5 战意（E349）') : fail('SA35 中性原则', '');
-  !battle.includes('if (crit) dmg *= 1.7;') && battle.includes('if (crit) dmg *= 1.7 * this.critDmgBonus(p);   // v39（E349）')
+  !battle.includes('if (crit) dmg *= 1.7;') && battle.includes('Math.min(1.7 * this.critDmgBonus(p, st), GameData.BALANCE.COMBAT.CRIT_DMG_CAP)')
     ? pass('SA36 爆发会伤与普攻/法诀/必杀同口径（无 1.7 旧形态，E349）') : fail('SA36 爆发会伤', '');
   battle.includes('tryBreakCharge(B, st, crit, src)') && battle.includes("this.tryBreakCharge(B, st, crit, 'attack');")
     && battle.includes("this.tryBreakCharge(B, st, crit, 'skill');") && battle.includes("if (h === 0) this.tryBreakCharge(B, st, crit, 'ult');")
@@ -170,8 +170,8 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA41 蓄力教学文案与泛化机制一致（E350）') : fail('SA41 教学', '');
 
   /* ---- WP3（E351/E352） ---- */
-  gdata.includes('fr <= 5 ? Math.pow(3, fr) : 243 * Math.pow(3.8, fr - 5)')
-    ? pass('SA42 sinkCurve 分段单源（E351：r≤5 逐字节不变、r≥6 挂 3.8^(r-5) 与收入同速；封顶语义随境界轴弃留已注明）') : fail('SA42 曲线形态', '');
+  gdata.includes('fr <= 5 ? Math.round(Math.pow(3.4, fr)) : 243 * Math.pow(3.8, fr - 5)')
+    ? pass('SA42 sinkCurve 分段单源（E351；v40（E384）r≤5 段 3.4^fr 中段补位、r≥6 段一字不动）') : fail('SA42 曲线形态', '');
   tower.includes('Math.round(60 * GameData.stoneEco(p.realmIdx))') && tower.includes("Bag.addItem('m_xuantie', 4)") && tower.includes('60×境界经济 + 玄铁矿 ×4')
     ? pass('SA43 塔纳财折半 60×eco + 玄铁矿 ×4 补点击价值（E352）') : fail('SA43 纳财', '');
   cult.includes('Math.round(60 * GameData.stoneEco(p.realmIdx))') && ui.includes('日均 ≈1.6×') && ui.includes('日均 ≈1×')
@@ -655,7 +655,7 @@ if (browser) {
       // 满层破绽毕现（普通战 3 次读中达成）
       B.intent = { kind: 'charge' }; B.insightN = 0; B.morale = 50;
       Battle.evalInsight('defend'); Battle.evalInsight('defend'); Battle.evalInsight('defend');
-      out.full3 = B.insightN === 0 && B._sureCrit === true && StatusFx.has(B.enemy.fx, 'vuln');
+      out.full3 = B.insightN === 0 && B._sureCrit === 2 && StatusFx.has(B.enemy.fx, 'vuln');   // v40（E379）：必会心存量 2 发
       // strike 意图：防御/破阵符皆读中；attack 意图维持无解
       B.intent = { kind: 'strike' }; B.insightN = 0; B.morale = 30; B._sureCrit = false;
       Battle.evalInsight('defend');
@@ -663,15 +663,15 @@ if (browser) {
       B.insightN = 0;
       Battle.evalInsight('item', 'tal_pozhen');
       out.strikePozhen = B.insightN === 1;
-      out.attackNull = Battle.intentCounter({ kind: 'attack' }) === null;
+      const atkC = Battle.intentCounter({ kind: 'attack' }); out.attackPin = !!atkC && atkC.pin === true && atkC.lenient === false;   // v40（E379）：attack 意图对拼解
       Battle.active = null;
       return out;
     });
     rb15.lenientKeep && rb15.chargeHealLoses && rb15.chargeDefendRead
       ? pass('RB15 lenient 中性：敌疗意图表外应对不扣层、蓄力施疗失据扣层、防御读中+1 且战意+5（E349）') : fail('RB15 读招扩容', JSON.stringify(rb15));
     rb15.full3 ? pass('RB16 普通战三度读中→满层破绽毕现（vuln+必会心）（E308/E349 锚）') : fail('RB16 满层', JSON.stringify(rb15.full3));
-    rb15.strikeDefend && rb15.strikePozhen && rb15.attackNull
-      ? pass('RB17 strike 意图：防御/破阵符皆读中；attack 意图无解不奖不罚（E349）') : fail('RB17 strike', JSON.stringify(rb15));
+    rb15.strikeDefend && rb15.strikePozhen && rb15.attackPin
+      ? pass('RB17 strike 意图：防御/破阵符皆读中；attack 意图对拼解 pin（E349；v40 E379 复权）') : fail('RB17 strike', JSON.stringify(rb15));
 
     const rb18 = await page.evaluate(async (SETUP_SRC) => {
       const out = {};
@@ -692,9 +692,10 @@ if (browser) {
       window.__bk.restore();
       const dmgA = calls[calls.length - 2].dmg, dmgB = calls[calls.length - 1].dmg;
       const mm = 1 + 100 * GameData.BALANCE.COMBAT.MORALE_PER_POINT;
-      const expA = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * 1.8, Battle.enDef(B.enemy)) * mm * (1.7 * 1.25));
-      const expB = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * 1.8, Battle.enDef(B.enemy)) * mm * 1.7);
-      out.exact = dmgA === expA && dmgB === expB && Math.abs(dmgA - dmgB * 1.25) <= 1;
+      // v40（E378）：1.8→2.4、清零改 −60、必会心；E380：总乘数封顶 2.0——杀剑 1.7×1.25=2.125 被封顶，开/关对照相等
+      const expA = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * 2.4, Battle.enDef(B.enemy), B.enemy.power) * mm * 2.0);
+      const expB = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * 2.4, Battle.enDef(B.enemy), B.enemy.power) * mm * 1.7);
+      out.exact = dmgA === expA && dmgB === expB;
       if (Battle.active) { Battle.active.over = true; document.getElementById('battle-modal').classList.add('hidden'); Battle.active = null; }
       Utils.chance = oc; Utils.randF = orf; p.dao = daoBak;
       return out;
@@ -724,12 +725,12 @@ if (browser) {
     /* ---- WP3 RB：sink 锚 / 纳财折半 / 闭关 60×eco（E351/E352） ---- */
     const rb21 = await page.evaluate(() => {
       const out = {};
-      // 计划锚：sinkCurve(3)=27、sinkCurve(9)≈Math.round(243×3.8^4)=50669（≈取整比，不锁接缝比）
-      out.a3 = GameData.sinkCurve(3) === 27;
+      // 计划锚：v40（E384）sinkCurve(3)=39（3.4^3 取整）、sinkCurve(9)≈Math.round(243×3.8^4)=50669（≈取整比，不锁接缝比）
+      out.a3 = GameData.sinkCurve(3) === 39;
       out.a9 = Math.round(GameData.sinkCurve(9)) === Math.round(243 * Math.pow(3.8, 4));
       out.a6 = Math.round(GameData.sinkCurve(6)) === Math.round(243 * Math.pow(3.8, 1));
       // r≤5 与 v38 逐字节一致（旧式 3^r 全等）
-      out.lowSame = [0, 1, 2, 3, 4, 5].every(r => GameData.sinkCurve(r) === Math.pow(3, r));
+      out.lowSame = [0, 1, 2, 3, 4, 5].every(r => GameData.sinkCurve(r) === Math.round(Math.pow(3.4, r)));   // v40（E384）：3^r → 3.4^fr 取整
       // 强化+5 grade3 r9 折算 ≈2.0 日建模收入（±0.3）；日均收入 125×stoneEco 与 balance-sim 同式
       const E = GameData.BALANCE.ENHANCE;
       const enh9 = Math.round((E.BASE_COST + 5 * E.COST_PER_LV) * (1 + 3 * E.COST_GRADE_FACTOR) * GameData.sinkCurve(9) / E.COST_REALM_FACTOR);
@@ -737,7 +738,7 @@ if (browser) {
       return out;
     });
     rb21.a3 && rb21.a9 && rb21.a6 && rb21.lowSame && rb21.enhDays
-      ? pass('RB21 sinkCurve 锚：r3=27、r9≈50669、r6=923、r≤5 与 v38 逐字节一致；r9 强化+5≈2.0 日（±0.3）（E351）') : fail('RB21 曲线锚', JSON.stringify(rb21));
+      ? pass('RB21 sinkCurve 锚：r3=39、r9≈50669、r6=923、r≤5 与 3.4^fr 取整一致（v40 E384）；r9 强化+5≈2.0 日（±0.3）（E351）') : fail('RB21 曲线锚', JSON.stringify(rb21));
 
     const rb22 = await page.evaluate(async () => {
       const out = {};
@@ -1203,7 +1204,7 @@ if (browser) {
       const aaBak = Game.afterAction; Game.afterAction = () => {};
       const bsBak = Battle.start; let battleStarted = false; Battle.start = () => { battleStarted = true; };
       // 确定性构造：双宝箱路 → 连推自动结算（无演出卡）
-      p.dungeon = { realm: enterIdx, depth: 0, total: 11, choices: ['treasure', 'treasure'], gains: [], stuck: false, muts: [] };
+      p.dungeon = { realm: enterIdx, depth: 0, total: 11, choices: ['treasure', 'treasure'], gains: [], muts: [] };
       await DungeonSys.autoPush(p);
       out.autoPushed = p.dungeon.depth >= 1 && popupN === 0;   // 至少推一层且零结算卡
       // 决策载体必停：battle 路不被连推

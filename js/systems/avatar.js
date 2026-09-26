@@ -25,7 +25,10 @@ const AvatarSys = {
   upCost(p) { const lv = this.lv(p); return Math.min(100, 20 + lv * 10); },   // 晋级感悟（外源入池）
   tasks(p) {
     const a = p.avatar || {};
-    return [a.task, a.lv >= this.LV_CAP ? a.task2 : null].filter(Boolean);
+    const list = [a.task, a.lv >= this.LV_CAP ? a.task2 : null].filter(Boolean);
+    // v40（E403）：化身第四桩「代行差事」——sect 双代行并一后由化身承接（零耗时七折）
+    if (a.on && list.length && !list.includes('delegate')) list.push('delegate');
+    return list;
   },
   state(p) { return p.avatar || {}; },
 
@@ -47,7 +50,8 @@ const AvatarSys = {
     if (a.cdDay && a.cdDay > today) { UI.toast(`神识调转需时——${a.cdDay - today} 日后方可换差`); return; }
     a[key] = task;
     a.cdDay = today + this.SWITCH_CD;
-    const NAMES = { cult: '代主闭关', explore: '代主游历', guard: '驻守护府' };
+    const NAMES = { cult: '代主闭关', explore: '代主游历', guard: '驻守护府', delegate: '代行差事' };   // v40（E403）：第四桩
+
     Log.add(`化身领命——<b>${NAMES[task] || task}</b>${slot === 2 ? '（第二差事）' : ''}。神识调转，三日内不再更换。`, 'info');
     Game.afterAction();
   },
@@ -71,6 +75,7 @@ const AvatarSys = {
     const today = Math.floor(p.day || 0);
     if ((a.day || 0) >= today) return;   // 日界防重（同日多次 dailySettle）
     a.day = today;
+    const dual = a.lv >= this.LV_CAP && a.task != null && a.task2 != null;   // v40（E401）：九重双任务栏（分身问道判据）
     for (const t of this.tasks(p)) {
       if (t === 'cult') {
         // 代主闭关：主身闭关日均口径 × 并行效率（走 addExp 单源，不冲关不积丹毒）
@@ -82,24 +87,50 @@ const AvatarSys = {
         Cultivate.addExp(p, gain, true);
         if (auto) { Game._offlineAgg = Game._offlineAgg || {}; Game._offlineAgg.avatarExp = (Game._offlineAgg.avatarExp || 0) + gain; }
         else Log.add(`【化身·闭关】元神行功不辍——修为 +${Utils.fmtNum(gain)}。`, 'gain');
+        // v40（E401）：分身问道——九重双任务栏下闭关第二桩，每 10 日折突破感悟 +1（外源 FIFO 池入账）
+        if (dual) {
+          a._daoAskDay = a._daoAskDay || 0;
+          if (today - a._daoAskDay >= 10) {
+            a._daoAskDay = today;
+            Cultivate.addInsight(p, 1, false);
+            if (!auto) Log.add('【分身问道】化身闭关之余参悟道问——突破感悟 +1（十日一得）。', 'gain');
+          }
+        }
       } else if (t === 'explore') {
-        // 代主游历：以神识踏查已解锁最深的舆图——灵石四成带，两成捎回灵材；遇险则空手而归（无惩罚）
+        // 代主游历：可指定地图（a.exploreMap 会话参数，setTask 时由玩家选择、不落盘持久）；
+        // 兽潮/魔域图灵材 +20%（v40 E401 差异化）；灵石四成带，两成捎回灵材；遇险则空手而归（无惩罚）
         const maps = (GameData.MAPS || []).filter(m => (m.recRealm || 0) <= p.realmIdx + 1);
-        const map = maps[maps.length - 1] || GameData.MAPS[0];
+        const map = (a.exploreMap && maps.find(m => m.id === a.exploreMap)) || maps[maps.length - 1] || GameData.MAPS[0];
         const er = Math.max(map.recRealm || 0, p.realmIdx - 2);
         const stones = Math.round(Utils.rand(8, 16) * GameData.stoneEco(Math.min(9, er)) * this.eff(p) / 0.5 * 0.4);
         Bag.addStones(stones);
         let matTxt = '';
-        if (Utils.chance(20)) {
+        const hotMap = (typeof WorldSys !== 'undefined' && WorldSys.beastWaveActive && WorldSys.beastWaveActive(p, map.id)) || (typeof WorldSys !== 'undefined' && WorldSys.isMagic && WorldSys.isMagic(p, map.id));
+        if (Utils.chance(20 * (hotMap ? 1.2 : 1))) {   // v40（E401）：兽潮/魔域图灵材 +20%
           const tier = Utils.clamp(Math.floor(er / 2) + 1, 1, 3);
           const mat = Utils.pick(GameData.matsByTier(tier));
           Bag.addItem(mat, 1);
           matTxt = `、捎回${GameData.ITEMS[mat].name} ×1`;
         }
         if (auto) { Game._offlineAgg = Game._offlineAgg || {}; Game._offlineAgg.avatarStones = (Game._offlineAgg.avatarStones || 0) + stones; }
-        else Log.add(`【化身·游历】神识踏遍${map.name}——觅得灵石 ${Utils.fmtNum(stones)}${matTxt}。`, 'gain');
+        else Log.add(`【化身·游历】神识踏遍${map.name}${a.exploreMap ? '（指定图）' : ''}——觅得灵石 ${Utils.fmtNum(stones)}${matTxt}。`, 'gain');
       }
-      // guard：驻守无直接产出——灵泉 ×1.2（springDaily 消费）与夜袭守御（CaveSys 消费）
+      // v40（E403）：代行差事——宗门差事即刻了结（赏格七折），每轮自动办理
+      if (t === 'delegate') {
+        if (p.sect && p.sect.tasks && p.sect.tasks.length) {
+          const idx = p.sect.tasks.findIndex(t2 => t2 && !t2.danger && t2.progress >= t2.need);
+          if (idx >= 0) {
+            const r = SectSys.rewards(p, p.sect.tasks[idx]);
+            const contrib = Math.round(r.contrib * 0.7);
+            const stones = Math.round(r.stones * 0.7);
+            p.sect.contrib += contrib;
+            Bag.addStones(stones);
+            p.sect.tasks[idx] = SectSys.newTask(p);
+            if (!auto) Log.add(`【化身·代行】化身替宗门办妥了差事——贡献 +${contrib}、灵石 ${Utils.fmtNum(stones)}（七折）。`, 'gain');
+          }
+        }
+      }
+            // guard：驻守无直接产出——灵泉 ×1.2（springDaily 消费）与夜袭守御（CaveSys 消费）
     }
   },
 };

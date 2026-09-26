@@ -31,21 +31,32 @@ const KarmaSys = {
   rareDropBonus(p) { return Utils.clamp((p.fortune || 0) * 0.3, 0, 45); },
   /** 孽障：仇家偷袭概率（百分点），每10点+4% */
   ambushChance(p) { return Utils.clamp((p.karma || 0) * 0.4, 0, 60); },
-  /** 斩三尸：孽障≥100 方可施展 */
+  /** 斩三尸：孽障≥100 方可施展
+   *  v40（E400）重做：由「严格劣解」改为冲关前洗髓仪式——独占收益【三尸尽去】：
+   *  气运 +20、心魔 −30、下一次突破成算 +5（p.slayBonus 持久旗标，一世报告读取（突破生效不清零））；
+   *  配全屏演出 realmShow + announce + 年表里程碑（chron m:1）；一世报告读 slayBonus 持久旗标 */
   async slayCorpses() {
     const p = Game.player;
     if ((p.karma || 0) < 100) return;
     const ok = await UI.popup({
       title: '斩三尸',
-      html: `孽障缠身（当前 ${p.karma}），已碍道途。<br>斩三尸者，斩善念、斩恶念、斩执念——<br>· 孽障清零<br><span class="neg">· 当前小境界修为尽数散去</span><br><span class="neg">· 永久损失 5% 全属性上限（已累计折损 ${(p.statLossPct || 0)}%）</span><br><br>此举凶险，道友三思。`,
+      html: `孽障缠身（当前 ${p.karma}），已碍道途。<br>斩三尸者，斩善念、斩恶念、斩执念——<br>· 孽障清零<br><span class="neg">· 当前小境界修为尽数散去</span><br><span class="neg">· 永久损失 5% 全属性上限（已累计折损 ${(p.statLossPct || 0)}%）</span><br><span class="hl">· 【三尸尽去】：气运 +20、心魔 −30、下一次突破成算 +5（冲关前洗髓，一击定音）</span><br><br>此举凶险，道友三思。`,
       options: [{ text: '执剑，斩！', value: true, primary: true }, { text: '再等等', value: false }],
     });
     if (!ok) return;
     p.karma = 0;
     p.exp = 0;
     p.statLossPct = (p.statLossPct || 0) + 5;
-    Log.add('你闭目内视，于识海深处斩出三剑——善尸、恶尸、执念尸应声而碎！孽障尽消。然大道五十、天衍四九，那缺失的一分，再也回不来了。', 'system');
+    p.slayBonus = true;   // v40（E400）：下一次突破成算 +5 一次性旗标（突破时消费）
+    KarmaSys.addFortune(20, true);
+    p.xinmo = Math.max(0, (p.xinmo || 0) - 30);
+    Log.add('你闭目内视，于识海深处斩出三剑——善尸、恶尸、执念尸应声而碎！孽障尽消、心魔涤荡三十，气运逆涨二十；洗髓之效凝于道基——下一次突破成算 +5。然大道五十、天衍四九，那缺失的一分，再也回不来了。', 'system');
+    // v40（E400）：全屏演出 + 年表里程碑
+    UI.realmShow('三 尸 尽 去 · 洗 髓 涤 魂', '#cfd8cc', 5);
+    UI.announce('✦ 斩 三 尸 · 三 尸 尽 去 ✦', 'gold');
     UI.toast('三尸已斩，因果暂清');
+    if (typeof Ambience !== 'undefined' && Ambience.sfx) Ambience.sfx('rare');
+    if (typeof Story !== 'undefined' && Story.chron) Story.chron('斩三尸，三尸尽去', { m: 1 });
     Game.afterAction();
   },
 };
@@ -75,8 +86,9 @@ const RepSys = {
     return this.LEVELS[0];
   },
   add(p, amount, reason = '') {
-    // v38（E306）：清贫之誓——声望增速 +50%（正向）
-    if (amount > 0 && typeof OathSys !== 'undefined' && OathSys.active(p, 'poor')) amount = Math.round(amount * 1.5);
+    // v38（E306）：清贫之誓——声望增速 +50%（正向）；v40（E373）：改调 OathSys.repMul 单源
+    //（原系数 1.5 内联双写，誓言口径调整时影子实现会静默掉队）
+    if (amount > 0 && typeof OathSys !== 'undefined' && OathSys.repMul) amount = Math.round(amount * OathSys.repMul(p));
     p.reputation = Utils.clamp((p.reputation || 0) + amount, -100, 200);
     if (reason) Log.add(`声望 ${amount > 0 ? '+' : ''}${amount}（${reason}）`, amount > 0 ? 'gain' : 'loss');
   },

@@ -101,15 +101,12 @@ const Stat = {
     }
     return base;
   },
-  /** 有效悟性：转世传承 +10%／层，圣地讲道限时翻倍（§26 / §23） */
+  /** 有效悟性：转世传承 +10%／层，圣地讲道限时翻倍（§26 / §23）
+   *  v40（E373）：讲道在判改调 WorldSys.preachActive 单源（原 year/preachUntil 判式内联双写） */
   compOf(p) {
     let c = (p.attrs && p.attrs.comp) || 5;
     if (p.reinc && p.reinc.compPct) c *= 1 + p.reinc.compPct / 100;
-    const w = p.world;
-    if (w && w.preachUntil) {
-      const y = Math.floor((p.day || 0) / 365) + 1;
-      if (y <= w.preachUntil) c *= 2;
-    }
+    if (typeof WorldSys !== 'undefined' && WorldSys.preachActive && WorldSys.preachActive(p)) c *= 2;
     return c;
   },
   compute(p) {
@@ -159,13 +156,17 @@ const Stat = {
     const partnerHeart1 = !!(p.partner && p.npcs && p.npcs[p.partner] && (p.npcs[p.partner].heart || 0) >= 1);
     const atk = Math.round((8 + A.gen * 2 + rp * 3 + (eq.atk || 0))
       * (1 + ((gf.atkPct || 0) + (eq.atkPct || 0) + (sb.atkPct || 0) + (dao.atkPct || 0) + (beastPass.atkPct || 0) + (dx.atkPct || 0) + (pl.atkPct || 0) + trainPct + (partnerHeart1 ? 3 : 0)) / 100) * finalScale);
+    const goldLan = p.npcs && (p.sworn || []).some(id => p.npcs[id] && p.npcs[id].goldlan);
     const def = Math.round((4 + A.body * 1.2 + rp * 1.8 + (eq.def || 0))
-      * (1 + ((gf.defPct || 0) + (eq.defPct || 0) + (sb.defPct || 0) + (dao.defPct || 0) + (dx.defPct || 0) + (pl.defPct || 0) + trainPct) / 100) * finalScale);   // v27 修瑕：宗门/职位 defPct 此前从未生效
+      * (1 + ((gf.defPct || 0) + (eq.defPct || 0) + (sb.defPct || 0) + (dao.defPct || 0) + (dx.defPct || 0) + (pl.defPct || 0) + trainPct + (goldLan ? 2 : 0)) / 100) * finalScale);   // v27 修瑕：宗门/职位 defPct 此前从未生效；v40（E402）：金兰义契防御 +2%
     const speed = Math.round((8 + (A.gen + A.body) / 2 + rp * 0.8 + (eq.spd || 0))
       * (1 + ((gf.spdPct || 0) + (eq.spdPct || 0)) / 100) * finalScale);   // v27 修瑕：装备词缀「迅捷」spdPct 此前从未生效
+    // v40（E380）：暴击溢出折算——75 钳外的暴击率不再静默蒸发，记入 critOver 供会伤加成消费
+    const critRaw = 5 + (A.luck + (eq.luck || 0)) * 0.6 + (gf.crit || 0) + (eq.crit || 0) + (beastPass.crit || 0) + (dx.crit || 0) + (pl.crit || 0);
     return {
       maxHp, maxMp, atk, def, speed,
-      crit: Utils.clamp(5 + (A.luck + (eq.luck || 0)) * 0.6 + (gf.crit || 0) + (eq.crit || 0) + (beastPass.crit || 0) + (dx.crit || 0) + (pl.crit || 0), 0, 75),
+      crit: Utils.clamp(critRaw, 0, 75),
+      critOver: Math.max(0, critRaw - 75),
       dodge: Utils.clamp((gf.dodge || 0) + (eq.dodge || 0) + (sb.dodge || 0) + (beastPass.dodge || 0) + (dx.dodge || 0) + (pl.dodge || 0) + (p.dao === 'array' && DaoSys.tierLevel(p) >= 4 ? 8 : 0), 0, 35),   // v10 阵道六境·迷踪境 · v13 宗门/灵兽
       block: Utils.clamp(8 + (gf.block || 0) + (eq.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0) + (p.dao === 'body' && DaoSys.hasPath(p, 6, 'buDong') ? 15 : 0), 0, 60),   // v10 般若六境·铁骨境；v31 修瑕：补读 eq.block——词缀「磐石」/玄天玉佩/仙缘玉环的格挡此前是死键（强化按功能键收费、明细表却虚报）；v38（E300）：不动如山 +15
       cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0) + (pl.cultPct || 0) + xianLayers * 2 + (p.cultGift || 0) + ((typeof OathSys !== 'undefined' && OathSys.cultBonus) ? OathSys.cultBonus(p) : 0) + councilCult,   // v30 补个人线 cultPct；v31 仙阶每层修炼效率 +2%；v36（E228）传承树四维满值折算 cultGift（百分点计，经 gainMult 生效）；v38（E306）：止戈之誓 +8；v38（E344）：季议勤修 +3
@@ -181,9 +182,10 @@ const Stat = {
           ? GameData.XIAN_TIERS.slice(0, XianSys.cur(p)).reduce((s2, x2) => s2 + x2.life, 0) : 0)),
     };
   },
-  /** 防御减伤后的伤害期望值 */
-  /** 防御减伤后的伤害期望值 */
-  afterDef(atk, def) { return atk * (1 - def / (def + (GameData.BALANCE.COMBAT.AFTER_DEF_DENOM || 140))); },
+  /** 防御减伤后的伤害期望值
+   *  v40（E376）：分母随受方境界 rp 复权（140×(1+rp/6)）——恒定 140 使中后期 def≈1000 时
+   *  敌方普攻仅 ~2% maxHp、受击侧机制全部停摆。第三参缺省 0 向后兼容；敌我两路同式 */
+  afterDef(atk, def, rp = 0) { return atk * (1 - def / (def + (GameData.BALANCE.COMBAT.AFTER_DEF_DENOM || 140) * (1 + (rp || 0) / 6))); },
   /** v20 丹毒上限单源化（原公式散落 5 处硬编码）：60 + 体魄×8，炼虚「合道」+20 */
   poisonCap(p) { return 60 + ((p.attrs && p.attrs.body) || 0) * 8 + (p.realmIdx >= 5 ? 20 : 0); },
   /** v20 综合战力：攻防血三维加权，用于自我衡量/地图校准/宿敌对比 */
@@ -220,6 +222,7 @@ const Stat = {
       { name: '灵兽（含护持）', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(beastPass, key === 'cultPct' ? 'cult' : key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(beastPass, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '道心烙印', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(dx, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(dx, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '个人线', v: key === 'crit' || key === 'dodge' || key === 'pillPct' ? pctOf(pl, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(pl, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
+      { name: '金兰义契（结拜 loyalty≥60）', v: (p.npcs && Object.values(p.npcs).some(n => n && n.goldlan)) && key === 'def' ? 2 : 0 },   // v40（E402）【金兰】词缀：防御 +2%
       { name: '洞府（聚灵/藏宝/演武）', v: key === 'cultPct' ? ((p.cave && p.cave.lv) || 0) * 4 : key === 'stonePct' ? (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3) : key === 'atk' || key === 'def' ? (((p.cave && p.cave.builds && p.cave.builds.train) || 0) * 2) : 0 },
       { name: '轮回印记/残玉共鸣/心魔凝练', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed' ? Math.round(base * (((p.reinc ? Math.min(30, p.reinc.marks || 0) * 0.01 : 0) + ((p.jade || 0) * 0.015) + (Math.min(6, (p.flags && p.flags.xinmoCleared) || 0)) * 0.01 + ((p.benming && p.benming.lv) || 0) * 0.01)) * 100) / 100 : 0 },   // v32 修瑕（E35）：心魔凝练封顶折算（v37（E245）：+20% 不可达装饰改如实 +6%，与 XinmoSys.scale 同口径）
       { name: '仙门之外（残玉终响）', v: (p.flags && p.flags.beyondGate) && (key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed') ? Math.round(base * 0.03 * 100) / 100 : 0 },   // v25

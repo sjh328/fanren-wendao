@@ -43,6 +43,28 @@ const ForgeSys = {
     const E = GameData.BALANCE.ENHANCE;
     return Math.round((E.BASE_COST + lv * E.COST_PER_LV) * (1 + (def.grade || 0) * E.COST_GRADE_FACTOR) * GameData.sinkCurve(p.realmIdx) / E.COST_REALM_FACTOR);   // v30：消费端曲线族统一（r9 相对收入提升约 13 倍）
   },
+  /** v40（E370）：强化失败结算单源——磐岩「月首败保级」与掉级两路并一，单祭炼与连祭炼
+   *  共用（此前连祭炼失败直接掉级，同一宗门福利两套待遇）。返回 { kept:是否保级,
+   *  blessNote:祝福值播报 }；保级侧播报在此统一发出，掉级侧成败文案两入口各持 */
+  tryForgeFailure(p, itemId, lv) {
+    const def = GameData.ITEMS[itemId] || {};
+    // v38（E337）：磐岩谷【营造匠心】——每月首次强化失败不掉级（匠心稳炉）
+    const mk = Math.floor((p.day || 0) / 30);
+    if (p.sect && p.sect.id === 'panyan' && p._panyanEnhMonth !== mk) {
+      p._panyanEnhMonth = mk;
+      let blessNote2 = '';
+      if (lv >= 8) { const b2 = this.addBless(p, itemId, 20); blessNote2 = `（祝福值 ${b2}/100${b2 >= 100 ? '——下次必定成功！' : ''}）`; }
+      Log.add(`炉火骤然失控！幸得磐岩谷匠心之术稳住炉基——<b class="grade-${def.grade}">${def.name}</b> 强化未坠（仍为 +${lv}）${blessNote2}。本月「首败保级」已用。`, 'warn');
+      return { kept: true, blessNote: blessNote2 };
+    }
+    // 掉级：实例强化优先（v26 口径，lvOf/Stat 均以实例为准），无实例回落共享心得
+    const inst = ['weapon', 'armor', 'accessory'].map(s => p.equipped[s]).find(x => x && typeof x === 'object' && x.id === itemId);
+    if (inst) inst.enhance = Math.max(0, lv - 1);
+    else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = Math.max(0, lv - 1); }
+    let blessNote = '';
+    if (lv >= 8) { const b = this.addBless(p, itemId, 20); blessNote = `（祝福值 ${b}/100${b >= 100 ? '——下次必定成功！' : ''}）`; }
+    return { kept: false, blessNote };
+  },
   /** 执行强化 */
   async enhance(slot) {
     const p = Game.player;
@@ -98,20 +120,10 @@ const ForgeSys = {
       Log.add(`炉火纯青——<b class="grade-${def.grade}">${def.name}</b> 祭炼功成，升至 <b>+${lv + 1}</b>！法宝灵光更胜往昔。`, 'gain');
       if (lv + 1 >= 7) UI.announce(`✦ ${def.name} +${lv + 1}`, 'gold');
     } else if (lv >= 7) {
-      // v38（E337）：磐岩谷【营造匠心】——每月首次强化失败不掉级（匠心稳炉）
-      const mk = Math.floor((p.day || 0) / 30);
-      if (p.sect && p.sect.id === 'panyan' && p._panyanEnhMonth !== mk) {
-        p._panyanEnhMonth = mk;
-        let blessNote2 = '';
-        if (lv >= 8) { const b2 = this.addBless(p, itemId, 20); blessNote2 = `（祝福值 ${b2}/100${b2 >= 100 ? '——下次必定成功！' : ''}）`; }
-        Log.add(`炉火骤然失控！幸得磐岩谷匠心之术稳住炉基——<b class="grade-${def.grade}">${def.name}</b> 强化未坠（仍为 +${lv}）${blessNote2}。本月「首败保级」已用。`, 'warn');
-      } else {
-        const eq2 = p.equipped[slot];
-        if (eq2 && typeof eq2 === 'object') eq2.enhance = Math.max(0, lv - 1);
-        else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv - 1; }
-        let blessNote = '';
-        if (lv >= 8) { const b = this.addBless(p, itemId, 20); blessNote = `（祝福值 ${b}/100${b >= 100 ? '——下次必定成功！' : ''}）`; }
-        Log.add(`炉火骤然失控！<b class="grade-${def.grade}">${def.name}</b> 祭炼失利，灵纹黯淡——强化跌至 <b>+${lv - 1}</b>${blessNote}。`, 'loss');
+      // v40（E370）：保级/掉级单源结算（磐岩月首败保级两入口同待遇）
+      const fail = this.tryForgeFailure(p, itemId, lv);
+      if (!fail.kept) {
+        Log.add(`炉火骤然失控！<b class="grade-${def.grade}">${def.name}</b> 祭炼失利，灵纹黯淡——强化跌至 <b>+${lv - 1}</b>${fail.blessNote}。`, 'loss');
         UI.toast('祭炼失败，强化跌落一级', true);
       }
     } else {
@@ -159,13 +171,15 @@ const ForgeSys = {
         if (p.enhBless) delete p.enhBless[itemId];
         Log.add(`【连祭炼 ${done}】炉火纯青——<b class="grade-${def.grade}">${def.name}</b> 升至 <b>+${lv + 1}</b>！`, 'gain');
       } else if (lv >= 7) {
-        const eq2 = p.equipped[slot];
-        if (eq2 && typeof eq2 === 'object') eq2.enhance = Math.max(0, lv - 1);
-        else { p.enhanced = p.enhanced || {}; p.enhanced[itemId] = lv - 1; }
-        let blessNote = '';
-        if (lv >= 8) { const b = this.addBless(p, itemId, 20); blessNote = `（祝福值 ${b}/100）`; }
-        Log.add(`【连祭炼 ${done}】炉火骤然失控——强化跌至 <b>+${lv - 1}</b>${blessNote}，连祭炼中止。`, 'loss');
-        UI.toast('祭炼失败，强化跌落一级', true);
+        // v40（E370）：与单祭炼共用保级/掉级单源——磐岩「月首败保级」自此两入口同待遇；
+        // 失败即停的约定不变（保级亦视为一败，不再续烧材料）
+        const fail = this.tryForgeFailure(p, itemId, lv);
+        if (fail.kept) {
+          Log.add(`【连祭炼 ${done}】炉火骤然失控，幸得匠心稳炉——强化未坠（仍为 +${lv}），连祭炼中止。`, 'warn');
+        } else {
+          Log.add(`【连祭炼 ${done}】炉火骤然失控——强化跌至 <b>+${lv - 1}</b>${fail.blessNote}，连祭炼中止。`, 'loss');
+          UI.toast('祭炼失败，强化跌落一级', true);
+        }
         Game.afterAction();
         return;
       } else {

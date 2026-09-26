@@ -112,6 +112,14 @@ const Ambience = {
         UI.toast(e.target.value === 'always' ? '行权悟道：纯度 ≥30% 自动' : e.target.value === 'skip' ? '行权悟道：跳过' : '行权悟道：每次询问');
       });
     }
+    // v40（E394）：设置中心「挂机节奏」三档——纯体验零数值变动
+    const apace = document.getElementById('amb-apace');
+    if (apace) {
+      apace.value = typeof AutoCult !== 'undefined' ? (AutoCult.loadPace()) : 'normal';
+      apace.addEventListener('change', e => {
+        if (typeof AutoCult !== 'undefined' && AutoCult.setPace) AutoCult.setPace(e.target.value);
+      });
+    }
     // v13 设置中心：战斗速度
     const spd = document.getElementById('amb-speed');
     if (spd) {

@@ -167,7 +167,7 @@ try {
     const repBefore = p.reputation;
     BountySys.claim(0);
     const gained = tot() - before;
-    const base = Math.round(60 * GameData.stoneEco(p.realmIdx));
+    const base = Math.round(90 * GameData.stoneEco(p.realmIdx))   // v40（E383）：60→90 悬赏增益;
     return { gained, expect: Math.round(base * 1.5), repUp: p.reputation > repBefore };
   });
   (d1.gained === d1.expect && d1.repUp)
@@ -337,7 +337,7 @@ try {
     Game.actions['act-tab']({ tab: 'shop:bounty' });
     const html = document.getElementById('tab-content').innerHTML;
     const m = html.match(/赏格：灵石 ([\d,，]+)/);
-    const base = Math.round(60 * GameData.stoneEco(p.realmIdx));
+    const base = Math.round(90 * GameData.stoneEco(p.realmIdx))   // v40（E383）：60→90 悬赏增益;
     const shown = m ? Number(m[1].replace(/[,,]/g, '')) : 0;
     p.reputation = 0;
     return { shown, expect: Math.round(base * 1.3) };

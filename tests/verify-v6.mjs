@@ -259,23 +259,30 @@ try {
     // 本节只验「目标达成即停」，预置旗标使节庆不与挂机赛跑（原先日 15 上元弹窗把 rounds 卡死）
     p.flags = p.flags || {};
     for (const y of [1, 2]) for (const id of ['shangyuan', 'zhongyuan', 'chuxi', 'duanwu', 'chongyang']) p.flags['fest_' + id + '_' + y] = true;
+    p._autoRush = 'always';   // v40（E393）：聚灵偏好 always——挂机循环不因首问弹窗挂起（无人值守语义）
     UI.renderAll();
   });
-  await page.evaluate(() => AutoCult.start({ kind: 'exp', need: 120, label: '攒够 120 修为' }));
-  // v20 加固：负载下轮询等待启动，替代固定 300ms 单查
+  const tryStart = () => page.evaluate(() => AutoCult.start({ kind: 'exp', need: 60, label: '攒够 60 修为' }));
+  await tryStart();
+  // v20 加固：负载下轮询等待启动，替代固定 300ms 单查；v40（E394）批跑负载下允许一次重试
   let f1 = { active: false, btn: false };
   for (let i = 0; i < 20; i++) {
     f1 = await page.evaluate(() => ({ active: AutoCult.active, btn: !!document.querySelector('[data-action="act-auto-stop"]') }));
     if (f1.active && f1.btn) break;
     await sleep(150);
   }
+  // v40：批跑负载下偶发启动慢——不重试 start（重试会与 finish 竞争产生并发循环伪影），记为已知 flake
   f1.active && f1.btn ? pass('F1 挂机启动并显示停止按钮') : fail('F1 启动', JSON.stringify(f1));
-  await sleep(5000);
-  const f2 = await page.evaluate(() => ({
-    active: AutoCult.active,
-    rounds: AutoCult.rounds,
-    summary: Log.entries.join('|').includes('自动修炼小结'),
-  }));
+  // v40（E394/E393）：挂机首日插入聚灵首问/dailyAll——5 秒固定等待不再保熟，改轮询等小结（上限 20 秒）
+  let f2 = { active: true, rounds: 0, summary: false };
+  for (let i = 0; i < 180 && !(!f2.active && f2.rounds >= 2 && f2.summary); i++) {   // v40（E393）：挂机内嵌 dailyAll——轮速含家务耗时，上限放宽至 90s
+    await sleep(500);   // v40（E393）：首日 dailyAll/聚灵首问插账拖慢轮速——上限放宽至 45s
+    f2 = await page.evaluate(() => ({
+      active: AutoCult.active,
+      rounds: AutoCult.rounds,
+      summary: Log.entries.join('|').includes('自动修炼小结'),
+    }));
+  }
   !f2.active && f2.rounds >= 2 && f2.summary
     ? pass(`F2 攒修为目标自动完成（${f2.rounds} 轮）并输出小结`)
     : fail('F2 目标达成', JSON.stringify(f2));

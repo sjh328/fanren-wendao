@@ -31,14 +31,15 @@ const buildMonster = (id, delta = 0, opts = {}) => {
     realmLabel: GameData.REALM_NAMES[realmIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
     hpMax: Math.round(m(Math.round((55 + Math.pow(rp, 1.6) * 5) * (d.hp || 1) * (dataElite ? 1.7 : 1)), 'hp') * foeMul),
     atk: Math.round(m(Math.round((6 + rp * 2.6) * (d.atk || 1) * (dataElite ? 1.35 : 1)), 'atk') * foeMul),
-    def: m(Math.round((3 + rp * 1.6) * (d.def || 1)), 'def'),
+    def: m(Math.round((3 + rp * 1.9) * (d.def || 1)), 'def'),   // v40（E376）：def 成长 1.6/rp→1.9/rp——承伤分母随境界复权后的敌防随动
     spd: m(Math.round((6 + rp * 0.9) * (d.spd || 1)), 'spd'),
     dodge: d.dodge || 0,
     crit: (e ? 10 : 4) + ((tpl && tpl.crit) || 0),
     expGain: Math.round(22 * GameData.eco(realmIdx) * (dataElite ? 2.2 : 1)),
-    stoneGain: Math.round(Utils.rand(10, 20) * GameData.stoneEco(realmIdx) * (d.stoneMul || 1) * (dataElite ? 2.5 : 1)),
+    stoneGain: Math.round(Utils.rand(25, 50) * GameData.stoneEco(realmIdx) * (d.stoneMul || 1) * (dataElite ? 2.5 : 1)),   // v40（E383）：10~20→25~50——灵泉降档后主动战斗收入的 ×2.5 补偿
     dropTier: Math.min(4, Math.floor(realmIdx / 2) + 1),
     rareDrop: d.rareDrop || null,
+    rareRate: d.rareRate != null ? d.rareRate : null,   // v40（E382）：稀有掉落低几率标记（普怪挂 rareDrop 时用固定 2%，精英走常规 30%+福缘）
     rareDrop2: d.rareDrop2 || null,   // v32（E7）：第二稀有掉落（仙缘套装补源）
     hp: 0,
   };
@@ -88,10 +89,15 @@ const Explore = {
     if (huntForce) { p.flags = p.flags || {}; p.flags._huntJustNow = true; }
     switch (type) {
       case 'battle': {
-        const eliteChance = (under ? 14 : 8) + deepTier * 4;   // v20 深耕：精英率 +
+        // v40（E375）：遭遇难度带——同阶为主（80%）+ 两成几率 +1~2 小层凶兽（秒胜线与精英墙
+        // 之间重开「紧张但可赢」带：delta 兽经验/灵石/掉落 ×(1+0.5×delta)，精英率再 +3%/层）
+        const delta = Utils.chance(20) ? Utils.rand(1, 2) : 0;
+        const eliteChance = (under ? 14 : 8) + delta * 3 + deepTier * 4;   // v20 深耕：精英率 +；v40（E375）：delta ×3%/层
         let monsterId = Utils.chance(eliteChance) && map.elite
           ? map.elite
           : Utils.pickWeighted(map.pool);
+        // v40（E382）：前二图精英 mercy=0.75——数学上零胜机的必败目标先削三档（削弱明示，如实入日志）
+        const earlyElite = (map.id === 'village' || map.id === 'qingfeng') && monsterId === map.elite;
         // v20 夜行妖兽：夜半（及中元）出没，境界相近者主动寻人
         const isNight = wx0.night || (typeof FestivalSys !== 'undefined' && FestivalSys.is(p, 'zhongyuan'));
         if (isNight) {
@@ -107,6 +113,16 @@ const Explore = {
         const arraySetup = arrayTier >= 1 && Utils.chance(50);
         if (arraySetup) DaoSys.gain(p, 20);   // v16 阵道
         const bctx = { mapName: map.name, mapId: map.id, firstStrike, arraySetup, arrayPotent: arrayTier >= 3, arrayGrand: arrayTier >= 6, explore: true };   // v38（E323）：秒胜「探索时关闭」判据
+        // v40（E382）：前二图精英 mercy=0.75（全属性折算，首战保底并存取更低者；战报有「未出全力」明示）
+        if (earlyElite) bctx.mercy = Math.min(bctx.mercy || 1, 0.75);
+        // v40（E375）：delta 凶兽——+1~2 小层，经验/灵石 ×(1+0.5×delta)、掉落同倍率
+        if (delta > 0 && monsterId !== map.elite) {
+          const den = buildMonster(monsterId, delta);
+          den.expGain = Math.round(den.expGain * (1 + 0.5 * delta));
+          den.stoneGain = Math.round(den.stoneGain * (1 + 0.5 * delta));
+          bctx.enemy = den;
+          bctx.dropMul = (bctx.dropMul || 1) * (1 + 0.5 * delta);
+        }
         // v20 深耕掉落与兽潮掉落
         if (deepTier > 0) {
           bctx.dropMul = (bctx.dropMul || 1) * (1 + deepTier * 0.15);
@@ -406,11 +422,12 @@ const EventSys = {
     }
     Narrative.logScene('observe');   // v5：道途视角的打量
     if (kind === 'merchant') {
-      const pool = ['w_qinggang', 'a_huxin', 'z_jifengxue', 'w_sanqing', 'a_xuangui', 'z_qiankun', 'w_zhuxian', 'a_longlin', 'z_taiji'];
-      const affordable = pool.slice(Math.max(0, p.realmIdx - 1), Math.max(1, p.realmIdx + 3));
-      const item = Utils.pick(affordable.length ? affordable : ['w_qinggang']);
-      const def = GameData.ITEMS[item];
-      const cost = Math.round(def.price * 0.7);
+      // v40（E404）：改调 RowMerchant 单源（discount 0.7 = 云游商人档）
+      const offer = RowMerchant.offer(p.realmIdx, 0.7);
+      if (!offer) { Log.add('商人不在。', 'info'); }
+      const item = offer.item;
+      const def = offer.def;
+      const cost = offer.cost;
       Log.add('你遇到一位云游商人，他神秘兮兮地展示了一件货物。', 'event');
       const buy = await UI.popup({
         title: '云游商人',
@@ -509,4 +526,19 @@ const EventSys = {
     }
   },
 
+};
+
+/* v40（E404）：RowMerchant 单源——云游商人/秘境散商双实现并一（同池同折扣同 popup 形态），
+ * offer(realm, discount) 按 realm 过滤商品、discount 控制折扣（explore 0.7 / dungeon 0.65） */
+const RowMerchant = {
+  POOL: ['w_qinggang', 'a_huxin', 'z_jifengxue', 'w_sanqing', 'a_xuangui', 'z_qiankun', 'w_zhuxian', 'a_longlin', 'z_taiji', 'gf_lieyang', 'gf_xuantian', 'gf_tiangang'],
+  offer(realm, discount) {
+    const disc = discount || 0.65;
+    const pool = this.POOL.slice(Math.max(0, realm - 1), Math.max(1, realm + 3));
+    const item = Utils.pick(pool.length ? pool : this.POOL);
+    const def = GameData.ITEMS[item];
+    if (!def) return null;
+    const cost = Math.round((def.price || 8000) * disc);
+    return { item, def, cost };
+  },
 };

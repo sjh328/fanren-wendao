@@ -5,7 +5,7 @@
 const UI = {
   // v36（E231）：数值文案单源——「改参数忘改文案」三连（v34 A4/v32 E16/v35 E168）后的防复发地基：
   // 手册与面板的比值文案一律由此拼串，真值常量由 check-actions「文案-常量」定点对账锚定（漂移即红）
-  FACTS: { offlineEff: '普通修炼六成', offlineCap: 120, bountyDays: 3, sellRate: '四成五', blackOpen: '每月初一至初三开市三日' },
+  FACTS: { offlineEff: '普通修炼八成五', offlineCap: 240, bountyDays: 3, sellRate: '四成五', blackOpen: '每月初一至初三开市三日' },   // v40（E393）：离线效率 0.6→0.85、上限 120→240
   el: {},
   cache() {
     for (const id of ['start-screen', 'create-screen', 'game-screen', 'start-slots', 'create-attrs', 'create-rating',
@@ -462,7 +462,7 @@ const UI = {
       <div class="card">
         <div class="card-title">✦ 大道未定</div>
         <div class="card-desc">你已筑基有成，然大道未定，如无舵之舟。<br>六条大道，各有玄妙——择一而行，方能登高望远。</div>
-        <div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-dao-open">叩问大道</button></div>
+        <div class="action-row"><button class="btn btn-sm" data-action="act-cave-bulk" data-flag="b_juling">一键聚灵</button><button class="btn btn-sm" data-action="act-cave-bulk" data-flag="b_yudi">一键御敌</button><button class="btn btn-sm" data-action="act-cave-bulk" data-flag="b_cangfeng">一键藏锋</button><button class="btn btn-sm" data-action="act-cave-bulk" data-flag="b_lianxi">一键敛息</button><button class="btn btn-sm btn-danger" data-action="act-cave-bulk" data-flag="">清空阵眼</button></div><div class="action-row"><button class="btn btn-primary btn-glow" data-action="act-dao-open">叩问大道</button></div>
       </div>`;
     }
     // v19 心魔劫
@@ -477,21 +477,12 @@ const UI = {
       </div>`;
     }
     if (canBreak) {
-      // v4：预估成功率实时分解——悟性 / 丹药感悟 / 气运 / 孽障 / 大道 / 根基 皆计入
+      // v4：预估成功率实时分解——v40（E395①）改 Cultivate.breakdown 单源：感悟 ×0.5 如实（原卡按 ×1
+      // 虚标）、心魔/残玉/劫体/仙障逐项列名，乘区折算残差——拆解行加总恒等于成算（node 验算锚）
       const target = p.realmIdx + 1;
       const quiet = target < GameData.TRIB_START;   // v9 筑基静修冲关
-      const compEff = Stat.compOf(p);
-      const basePart = 40 + compEff * 2 + (p.insight || 0);
-      const fortPart = (p.fortune || 0) * 0.2;
-      const karmaPart = (p.karma || 0) * 0.2;
-      let daoMul = 1, daoText = '无';
-      if (p.dao === 'sword') { daoMul *= 0.77; daoText = '剑修 ×0.77'; }
-      if (p.dao === 'body') { daoMul *= 1.4; daoText = '体修 ×1.40'; }
-      let rootMul = 1, rootText = '寻常';
-      if (p.rootDeep) { rootMul *= 1.1; rootText = '深厚 ×1.10'; }
-      if (p.rootWeak) { rootMul *= 0.85; rootText = '虚浮 ×0.85'; }
-      const chance = Cultivate.breakthroughChance(p, quiet ? 15 : 0);
-      const streak = p.breakStreak || 0;
+      const bd = Cultivate.breakdown(p, quiet ? 15 : 0);
+      const chance = bd.chance;
       const tribPower = Tribulation.power(p, target);
       const realmPenalty = Tribulation.realmPenalty(target);
       const tribMult = Utils.clamp(1 - (tribPower - 100) / 500, 0.35, 1.1) * realmPenalty;
@@ -502,15 +493,7 @@ const UI = {
           ? `<div class="card-desc">修为已至<b>练气圆满</b>。筑基乃登堂入室之门，只需静室冲关、水到渠成——<b>无需历劫</b>，一念可破。</div>`
           : `<div class="card-desc">修为已至${GameData.REALM_NAMES[p.realmIdx]}圆满，冲击 <b>${GameData.REALM_NAMES[target]}</b> 期将引来<b>天劫</b>（劫威预估 ${tribPower.toFixed(0)}，境界愈高劫难愈重）！届时可在三策中择一而行，成败皆有道果。</div>`}
         <div class="break-est">
-          <div class="stat-line"><span>基础（悟性 ${compEff.toFixed(1)} + 丹药感悟 ${p.insight || 0}）</span><b>${basePart.toFixed(0)}%</b></div>
-          <div class="stat-line"><span>气运 ${p.fortune || 0}</span><b style="color:var(--ok)">+${fortPart.toFixed(0)}%</b></div>
-          <div class="stat-line"><span>孽障 ${p.karma || 0}</span><b style="color:var(--danger)">-${karmaPart.toFixed(0)}%</b></div>
-          <div class="stat-line"><span>大道加成（${daoText}）</span><b>×${daoMul.toFixed(2)}</b></div>
-          <div class="stat-line"><span>根基（${rootText}）</span><b>×${rootMul.toFixed(2)}</b></div>
-          ${quiet
-            ? `<div class="stat-line"><span>静修冲关（筑基易关）</span><b style="color:var(--ok)">+15%</b></div>`
-            : `<div class="stat-line"><span>境界劫难（目标${GameData.REALM_NAMES[target]}期）</span><b style="color:var(--danger)">×${realmPenalty.toFixed(2)}</b></div>`}
-          ${streak > 0 ? `<div class="stat-line"><span>挫而愈坚（连败 ${streak} 次）</span><b style="color:var(--ok)">+${Math.min(15, streak * 5)}%</b></div>` : ''}
+          ${bd.items.map(it => `<div class="stat-line"><span>${it.k}</span><b style="color:${it.v < 0 ? 'var(--danger)' : 'inherit'}">${it.v >= 0 ? '+' : ''}${it.v}%</b></div>`).join('\n          ')}
           <div class="stat-line est-final"><span>预估最终成算（基准策）</span><b class="hl">${chance.toFixed(0)}%</b></div>
         </div>
         ${quiet
@@ -542,7 +525,7 @@ const UI = {
       // v38（E309）：仙庭子区——差遣三桩 / 仙功晋品 / 仙市易物
       const cs = XianSys.courtState(p);
       const pin = XianSys.pin(p);
-      const taskRows2 = XianSys.TASKS.map((t, i) => {
+      const taskRows2 = XianSys.taskList(p).map((t, i) => {   // v40（E398）：二品特权四桩
         const claimed = cs.claims && cs.claims[t.id];
         const done = XianSys.taskProg(p, t) >= t.need;
         return `<div class="shop-row"><div class="gf-info"><div class="gf-name">${claimed ? '✓' : '·'} ${t.name}${claimed ? ' <span class="tag safe">已领</span>' : ''}</div>
@@ -560,7 +543,10 @@ const UI = {
           <span style="font-size:12px;color:var(--text-dim)">仙功 ${Utils.fmtNum(XianSys.gong(p))}${XianSys.pinNext(p) ? `（晋品还差 ${Utils.fmtNum(XianSys.pinNext(p) - XianSys.gong(p))}）` : ' · 人臣之极'}</span></div>
         ${taskRows2}
         <div class="tip-line">仙市（${XianSys.pinName(p)}折 ${Math.round((1 - (pin - 1) * 0.04) * 100)}%）：${marketRows2}</div>
-        <div class="tip-line">· 品阶 ≥5 开云海深处；每战可借仙兵一次（战斗内 ☁ 仙兵）；心魔 ≥80 将遭罢黜罚功。</div>
+        <div class="tip-line">· 官声：考功政绩 ${XianSys.merit(p)} · 罢黜记录 ${XianSys.demerit(p)}——晋品考功不足（政绩 < 品阶×4）仙元消耗 ×1.5（软门槛）。</div>
+        ${XianSys.hasPriv(p, 'calmXinmo') ? `<div class="tip-line">· 四品特权「每日镇心魔」：<button class="btn btn-sm" data-action="act-court-calm" ${cs._calmDay === Math.floor(p.day || 0) ? 'disabled' : ''}>${cs._calmDay === Math.floor(p.day || 0) ? '今日已镇' : '镇心魔 −10'}</button></div>` : ''}
+        ${XianSys.hasPriv(p, 'marketHint') ? `<div class="tip-line">· 六品特权「仙市行情预告」：${(() => { const m = WorldSys.marketState(p); const now = Math.floor(p.day || 0); return m.next > now ? `本茬行情至第 ${m.next} 日换茬（余 ${m.next - now} 日）` : '近日换茬'; })()}。</div>` : ''}
+        <div class="tip-line">· 品阶 ≥5 开云海深处；每战可借仙兵一次（战斗内 ☁ 仙兵）；心魔 ≥80 将遭罢黜罚功（官声受损，政绩为负停差遣）。</div>
         </div>`;
       if (xi === 0) {
         xianBody = `<div class="card-desc">飞升之后，仙途未竟。落名仙籍，自地仙起步——此后每层全属性 <b class="hl">+1.5%</b>、修炼效率 <b class="hl">+2%</b>，仙元自此有了正经去处。</div>
@@ -636,6 +622,13 @@ const UI = {
       <div class="card card-main">
         <div class="card-title">✦ 修行 <span style="font-size:12px;color:var(--text-dim)">当前层尚需修为 ${Utils.fmtNum(Math.max(0, need - p.exp))}${est > 0 && need > p.exp ? ` · 约需 ${Math.max(1, Math.ceil((need - p.exp) / est * 3))} 日` : ''}</span></div>
         <div class="card-desc">当前每轮修炼约得修为 <b class="hl">${Utils.fmtNum(est)}</b>（悟性 ${p.attrs.comp}，功法加成 ${st.cultPct}%）。</div>
+        ${(typeof Guide !== 'undefined' && Guide.UNLOCKS && Guide.stage) ? (() => {
+          // v40（E392）：本境解锁行——读 guide 解锁文案表（零机制零字段）
+          const now = Guide.stage(p);
+          const got = Object.values(Guide.UNLOCKS).filter(L => now >= L.stage).map(L => (L.hint || '').split(' · ')[0]);
+          const nexts = Object.values(Guide.UNLOCKS).filter(L => now < L.stage).sort((a, b) => a.stage - b.stage);
+          return `<div class="tip-line">· 本境已解锁：${got.length ? got.join('、') : '（暂无）'}${nexts.length ? `；下一解锁：<b>${(nexts[0].hint || '').split(' · ')[0]}</b>（${(nexts[0].hint || '').split(' · ')[1] || ''}）` : ''}。</div>`;
+        })() : ''}
         <div class="act-groups">
           <div class="act-main-row">
             <!-- v39（E352）：两钮如实日均披露——修炼日均 ≈1×（灵机机缘仅探索/离线折算另有），闭关日均 ≈1.6×（无机缘、耗灵石 60×eco、越 30 日） -->
@@ -1135,10 +1128,8 @@ const UI = {
     const p = Game.player;
     const D = p.dungeon;
     const R = GameData.SECRET_REALMS[D.realm];
-    const nodeBtns = D.stuck
-      ? '<div class="tip-line"><span class="neg">一战不利，你退至安全处藏身——此地不宜久留，趁早撤离为上。</span></div>'
-      : (D.choices || []).map((t, i) =>
-        `<button class="btn ${t === 'boss' ? 'btn-primary btn-glow' : ''}" data-action="act-realm-node" data-node="${i}">${DungeonSys.nodeIcon(t)}${t === 'boss' ? '决战 · 守关者（最深处）' : `${GameData.DUNGEON_NODE_NAMES[t] || t} · 第 ${D.depth + 1} 层`}</button>`).join('');
+    const nodeBtns = (D.choices || []).map((t, i) =>
+      `<button class="btn ${t === 'boss' ? 'btn-primary btn-glow' : ''}" data-action="act-realm-node" data-node="${i}">${DungeonSys.nodeIcon(t)}${t === 'boss' ? '决战 · 守关者（最深处）' : `${GameData.DUNGEON_NODE_NAMES[t] || t} · 第 ${D.depth + 1} 层`}</button>`).join('');
     return `
     <div class="card dungeon-card">
       <div class="card-title">✦ 秘境 · ${R.name} <span class="tag warn">第 ${Math.min(D.depth + 1, D.total)} / ${D.total} 层</span></div>
@@ -1152,7 +1143,7 @@ const UI = {
         return peek.length ? `<div class="tip-line">· 灵觉所及：${peek.join('　·　')}${D.depth + 3 >= D.total ? '（更深处便是守关者）' : ''}</div>` : '';
       })()}
       ${D.gains && D.gains.length ? `<div class="tip-line">已掠得：${D.gains.slice(-5).join('；')}</div>` : ''}
-      <div class="action-row"><button class="btn btn-sm ${(p.flags && p.flags.dungeonAuto) ? 'btn-primary' : ''}" data-action="act-dung-auto" title="连推：宝箱/奇遇/陷阱自动续推，战斗/守关/遭遇必停；血量 <35% 自动止步">连推 · ${(p.flags && p.flags.dungeonAuto) ? '开' : '关'}</button><button class="btn btn-danger" data-action="act-realm-retreat">携收获 · 撤离秘境</button></div>
+      <div class="action-row"><button class="btn btn-sm" data-action="dmn-scout" ${DungeonSys.hasTalisman(p) ? '' : 'disabled'} title="窥探：以一张符箓窥见本层左右两路的节点类型（心魔 +2）">窥 探</button><button class="btn btn-sm ${(p.flags && p.flags.dungeonAuto) ? 'btn-primary' : ''}" data-action="act-dung-auto" title="连推：宝箱/奇遇/陷阱自动续推，战斗/守关/遭遇必停；血量 <35% 自动止步">连推 · ${(p.flags && p.flags.dungeonAuto) ? '开' : '关'}</button><button class="btn btn-danger" data-action="act-realm-retreat">携收获 · 撤离秘境</button></div>
       <div class="tip-line">当前气血 ${Math.round(p.hp)} / ${Stat.compute(p).maxHp} —— 陨落于秘境者，背包三成之物将永远留在其中。</div>
     </div>`;
   },
@@ -1279,7 +1270,8 @@ const UI = {
   shopMarket() {
     const p = Game.player;
     const st = Stat.compute(p);
-    const stock = GameData.SHOP.filter(row => p.realmIdx >= row.minRealm);
+    // v40（E390）：maxRealm 过气自动下架——低阶白板装备/饰品后期不再上架（货架只留丹/符/种子与当期装备）
+    const stock = GameData.SHOP.filter(row => p.realmIdx >= row.minRealm && (row.maxRealm == null || p.realmIdx <= row.maxRealm));
     const group = (type, title, open = false) => {
       const items = stock.filter(r => GameData.ITEMS[r.item].type === type);
       if (!items.length) return '';
@@ -1613,7 +1605,7 @@ const UI = {
     // v13 黑市（每月前三日开市）
     const blackSection = BlackSys.isOpen(p) ? `
       <div class="shop-section-title">◈ 暗巷黑市 <span class="tag warn">开市中 · 余 ${BlackSys.daysLeft(p)} 日</span></div>
-      <div class="tip-line" style="margin:0 0 6px">· 黑市奇货稀罕，价钱却贵六成；${this.FACTS.blackOpen}。<br>· 巷角的「来路不明之物」，福缘高者捡漏，福缘低者破财。</div>
+      <div class="tip-line" style="margin:0 0 6px">· 黑市奇货稀罕，价钱却贵六成；${this.FACTS.blackOpen}。（v40（E387）：巷角的赌袋摊已收摊——陷阱货与拍卖古匣重复且全面劣于，就此绝迹）</div>
       ${BlackSys.goods(p).map(id => {
         const def = GameData.ITEMS[id];
         const price = BlackSys.price(p, id);
@@ -1629,12 +1621,7 @@ const UI = {
             <button class="btn btn-sm" data-action="act-black-buy" data-item="${id}">买 下</button>
           </div>
         </div>`;
-      }).join('')}
-      <div class="shop-row">
-        <div class="gf-info"><div class="gf-name">？？？ <span class="tag danger">来路不明</span></div>
-        <div class="gf-desc">巷角那只血渍未干的储物袋……要赌一手吗？</div></div>
-        <div class="gf-actions"><button class="btn btn-sm btn-danger" data-action="act-black-mystery">赌一手</button></div>
-      </div>` : `
+      }).join('')}` : `
       <div class="shop-section-title">◈ 暗巷黑市 <span class="tag">闭市</span></div>
       <div class="tip-line" style="margin:0 0 6px">· ${this.FACTS.blackOpen}——如今巷口空空，唯有野猫。</div>`;
     // v19 拍卖行
@@ -1696,7 +1683,7 @@ const UI = {
       const done = t.progress >= t.need;
       let btn = '';
       if (done) btn = `<button class="btn btn-sm btn-primary" data-action="act-task-claim" data-i="${i}" ${claimLeft != null && claimLeft <= 0 ? 'disabled title="今日赏格已领满"' : ''}>领取奖励</button>`
-        + ` <button class="btn btn-sm" data-action="act-sect-delegate" data-i="${i}" title="亲传弟子可遣门下弟子代行：即刻了结，赏格七折、耗时两日">代 行</button>`;   // v38（E344）
+       ;   // v40（E403）：代行按钮随双代行并一删除
       // v37（E242）：collect 上交分支随宗门采集差事一并删除——生死状（kill·danger）接状即战、击杀推进
       else if (t.danger) btn = `<button class="btn btn-sm btn-danger" data-action="act-danger-go" data-i="${i}">接生死状</button>`;
       const dangerTag = t.danger ? ' <span class="tag danger">高危</span>' : '';
@@ -2335,8 +2322,8 @@ const UI = {
         <div class="tip-line">· 每章主线完结送残玉共鸣（全属性 +1.5%）——跟主线走不吃亏；卡住就看左栏「当前建议」。</div>
       </details>
       <details class="fold"><summary>✦ 修行与境界</summary>
-        <div class="tip-line">· 十境三十六层：练气→筑基→金丹→元婴→化神→炼虚→合体→大乘→渡劫→真仙，每境四层。</div>
-        <div class="tip-line">· 每层修为攒满即「圆满」，可冲关下一境；金丹起冲关引天劫，成败皆有道果（劫前记得存档）。</div>
+        <div class="tip-line">· 十境四十层：练气→筑基→金丹→元婴→化神→炼虚→合体→大乘→渡劫→真仙，每境四层。</div>
+        <div class="tip-line">· 每层修为攒满即「圆满」，可冲关下一境；金丹起冲关引天劫，成败皆有道果。</div>
         <div class="tip-line">· 闭关 30 日 = 一轮大修炼（耗灵石、清丹毒）；「聚灵加速」点燃后 ${CaveSys.RUSH_WINDOW()} 日内修炼 ×1.5，窗口内不重燃。</div>
         <div class="tip-line">· 大道六择一（剑/丹/符/体/阵/魔）：剑修渡劫 ×0.77、体修 ×1.4，各道有专属行为加成，终身可转（跌一大境界）。</div>
         <div class="tip-line">· 心魔满百必劫（丹毒反噬/渡劫失利所积）；孽障满百可斩三尸（清孽障，散修为）。</div>
@@ -2449,6 +2436,7 @@ const UI = {
     }
     if (!data || data.v !== 1 || !data.player || !data.player.name) { UI.toast('文本码无法识别', true); return; }
     const p = PlayerFactory.migrate(data.player);
+    GongfaSys.syncCustom(p);   // v40（E367）：导入落盘前再注册一次自创功法定义（幂等，防时序回退）
     // v35（E136）：导入侧清洗未知 bag id——脏 id 不再借导入入境（与 E23/渲染侧判空同口径）
     if (p.bag) {
       const badIds = Object.keys(p.bag).filter(id => !GameData.ITEMS[id]);
@@ -2482,8 +2470,8 @@ const UI = {
     div.setAttribute('role', 'status');
     div.textContent = text;
     wrap.appendChild(div);
-    setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity .4s'; }, 1600);
-    setTimeout(() => { div.remove(); }, 2100);
+    setTimeout(() => { div.style.opacity = '0'; div.style.transition = 'opacity .4s'; }, 2600);
+    setTimeout(() => { div.remove(); }, 3000);   // v40（E410 修正）：淡出 2600ms 完成后再移除（原 2100ms 先于淡出执行）
   },
   /** v21：行动浮字——所得在触发按钮上方飘起渐散（数字动效关闭时不显示） */
   float(text, color = 'var(--exp)', anchor) {

@@ -119,11 +119,11 @@ console.log('===== SA 源码静态组 =====');
   has('E307 古咒层数 +1 / Boss 必双词缀', /guZhou \? 1 : 0/.test(dungeon) && /_forceFx2 = true/.test(dungeon));
   has('E307 异变入战 ctx（剑冢/孤勇/瘴雾/深寒）', /mutJzz: this\.hasMut\(D, 'jianzhong'\)/.test(dungeon) && /mutShenhan/.test(battle));
 
-  /* ---- E308 读招洞察与战意爆发（v39（E349）扩容+中性原则：strike 入表/charge 纳会心抢断/lenient 失据不扣层） ---- */
-  has('E308 intentCounter 克制表（蓄力/杀招/重击/自愈/强化 + lenient 中性）', /intentCounter\(intent\)/.test(battle) && /kind === 'charge'/.test(battle) && /kind === 'strike'/.test(battle) && /lenient: true/.test(battle) && /lenient: false/.test(battle));
-  has('E308 满层破绽毕现（vuln 40 + _sureCrit）', /B\._sureCrit = true/.test(battle));
-  has('E308 _sureCrit 三伤害口消费', (battle.match(/B\._sureCrit \|\| Utils\.chance/g) || []).length >= 3);
-  has('E308 战意爆发 ≥90/每场两次/1.8×+3 真元 + 会伤同口径', /burstUsed \|\| 0\) >= 2/.test(battle) && /myAtk\(st\) \* 1\.8/.test(battle) && /if \(crit\) dmg \*= 1\.7 \* this\.critDmgBonus\(p\);/.test(battle) && !/if \(crit\) dmg \*= 1\.7;/m.test(battle));
+  /* ---- E308 读招洞察与战意爆发（v39（E349）扩容+中性原则；v40（E379/E378）：attack 对拼解/破绽 3 回合必会心 2 发/爆发 2.4×−60 必会心） ---- */
+  has('E308 intentCounter 克制表（蓄力/杀招/重击/自愈/强化 + lenient 中性；v40 attack 对拼 pin）', /intentCounter\(intent\)/.test(battle) && /kind === 'charge'/.test(battle) && /kind === 'strike'/.test(battle) && /lenient: true/.test(battle) && /lenient: false/.test(battle) && /pin: true/.test(battle));
+  has('E308 满层破绽毕现（vuln 40 ×3 回合 + 必会心 2 发；v40 E379 复权）', /B\._sureCrit = 2;/.test(battle) && /rounds: 3 \}\);/.test(battle));
+  has('E308 必会心三伤害口消费（takeSureCrit 单源；v40 E379）', (battle.match(/this\.takeSureCrit\(\) \|\| Utils\.chance/g) || []).length >= 3);
+  has('E308 战意爆发 ≥90/每场两次/2.4×−60 必会心 +3 真元 + 会伤封顶（v40 E378 复权）', /burstUsed \|\| 0\) >= 2/.test(battle) && /myAtk\(st\) \* 2\.4/.test(battle) && /Math\.max\(0, \(B\.morale \|\| 0\) - 60\)/.test(battle) && /CRIT_DMG_CAP\)/.test(battle));
 
   /* ---- E309 仙庭 ---- */
   has('E309 九品 PINS 门槛表', (xian.match(/PINS: \[0, 300/) || []).length === 1);
@@ -188,7 +188,8 @@ console.log('===== SA 源码静态组 =====');
   has('E341 传承遗风四层（treeSage/treeLuck/旧识/紫气×1.5）', /treeSage = true/.test(reinc) && /treeLuck = true/.test(reinc) && /_oldFriend = id/.test(reinc) && /treeAuspicious\) \? 1\.5 : 1/.test(trib));
   has('E342 道韵协奏 echo 键 + activeEchoes 单源', (gdata.match(/echo: '/g) || []).length >= 12 && /activeEchoes\(p\) \{/.test(stat) && (battle.match(/activeEchoes\(p\)\.has\(/g) || []).length >= 4);
   has('E343 物种招牌五族（beast/snake/plant/element/swarm）', /speciesOf\(p\) \{/.test(beast) && /=== 'element'\) dmg \*= 1\.06/.test(battle) && /=== 'plant' && p\.hp > 0 && Utils\.chance\(10\)/.test(battle) && /=== 'swarm'\) atk \*= 1\.05/.test(battle) && /spFx\[1\] = 7/.test(battle));
-  has('E344 代行（七折+2日）与季议三选', /contrib \* 0\.7/.test(sect) && /Time\.add\(2\)/.test(sect) && (sect.match(/id: '(war|trade|cult)',\s*name:/g) || []).length >= 3);
+  const avatarJs = R('systems/avatar.js');
+  has('E344 代行（七折）与季议三选（v40 E403 代行入化身第四桩）', /contrib \* 0\.7/.test(avatarJs) && (sect.match(/id: '(war|trade|cult)',\s*name:/g) || []).length >= 3);
   has('E345 本命中段（4 阶金光+1 回合/7 阶破防+1）', /bmLv >= 4 \? 3 : 2/.test(battle) && /bmLv >= 7 \? 4 : 3/.test(battle));
 
   /* ---- 迁移与门禁基础 ---- */
@@ -196,7 +197,7 @@ console.log('===== SA 源码静态组 =====');
   has('p.title/xianCourt create 默认', /title: null/.test(pfac) && /xianCourt: null/.test(pfac));
   has('防臃肿：无新顶层页签（SUBTABS 仅 shop/cave/map）', !/SUBTABS: \{[^}]*'jianghu'/.test(ui));
   has('E322 开局 300 灵石', /low: 300/.test(pfac));
-  has('E321 职业渡劫收敛（丹+4/符+2/阵+2）', /dao === 'pill'\) chance \+= 4/.test(cult) && /dao === 'talisman'\) chance \+= 2/.test(cult) && /dao === 'array'\) chance \+= 2/.test(cult));
+  has('E321 职业渡劫收敛（丹+4/符+2/阵+2；v40 E395 breakdown 收敛行形态）', /dao === 'pill'\) sum \+= add\('丹道收敛（天劫微宽）', 4\)/.test(cult) && /dao === 'talisman'\) sum \+= add\('符道收敛（天劫微宽）', 2\)/.test(cult) && /dao === 'array'\) sum \+= add\('阵道收敛（天劫微宽）', 2\)/.test(cult));
 
   
   
