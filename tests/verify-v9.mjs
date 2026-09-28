@@ -204,8 +204,8 @@ try {
   const s9 = await page.evaluate(() => {
     const p = Game.player;
     p.day = 300;
-    const a1 = AuctionSys.state(p);
-    const a2 = AuctionSys.state(p);   // 同日确定性
+    const a1 = AuctionSys.ensure(p);   // v41（E434）：期次滚茬收写侧 ensure()，state()/peek() 恒纯读
+    const a2 = AuctionSys.ensure(p);   // 同日确定性
     const lots = AuctionSys.LOT_POOL.length;
     const tierOk = DonateSys.TIERS.length === 3 && DonateSys.TIERS.every(t => t.rep > 0 && t.karma < 0);
     return { det: a1.item === a2.item && a1.base === a2.base, until: a1.until > 300, lots, tierOk };

@@ -78,26 +78,28 @@ const Ambience = {
       });
     }
     // v36（E205）：一键行权 · 聚灵偏好三态——'skip' 的永久语义自此只能在此显式设置、随时可改回
-    // （存量脏档经 ESC/遮罩误触写入的 skip 经设置页可见可改；「每次询问」= undefined 不落盘）
+    // （存量档经 ESC/遮罩误触写入的 skip 经设置页可见可改；「每次询问」= 不落盘）
+    // v41（E422/E428）：偏好收进玩家档 p.ui 容器（挂机/行权/回显三侧同源，旧散键已删）
     const rush = document.getElementById('amb-rush');
     if (rush) {
       this.syncRushPref();
       rush.addEventListener('change', e => {
         const p = Game.player;
         if (!p) return;
-        p._autoRush = e.target.value === 'ask' ? undefined : e.target.value;
+        p.ui = p.ui || {};
+        if (e.target.value === 'ask') delete p.ui.rush; else p.ui.rush = e.target.value;
         UI.toast(e.target.value === 'always' ? '聚灵偏好：总是聚灵' : e.target.value === 'skip' ? '聚灵偏好：从不聚灵' : '聚灵偏好：每次询问');
       });
     }
-    // v39（E362）：行权小账/悟道三态偏好——同 p._pref 子字段（默认 ask），面板可见可改
+    // v39（E362）：行权小账/悟道三态偏好——v41（E428）起同 p.ui 子字段（默认 ask），面板可见可改
     const damode = document.getElementById('amb-damode');
     if (damode) {
       this.syncDailyPrefs();
       damode.addEventListener('change', e => {
         const p = Game.player;
         if (!p) return;
-        p._pref = p._pref || {};
-        p._pref.damode = e.target.value === 'ask' ? undefined : e.target.value;
+        p.ui = p.ui || {};
+        if (e.target.value === 'ask') delete p.ui.damode; else p.ui.damode = e.target.value;
         UI.toast(e.target.value === 'always' ? '行权小账：toast 汇总不弹窗' : e.target.value === 'skip' ? '行权小账：静默' : '行权小账：每次弹出');
       });
     }
@@ -107,9 +109,22 @@ const Ambience = {
       wudao.addEventListener('change', e => {
         const p = Game.player;
         if (!p) return;
-        p._pref = p._pref || {};
-        p._pref.wudao = e.target.value === 'ask' ? undefined : e.target.value;
+        p.ui = p.ui || {};
+        if (e.target.value === 'ask') delete p.ui.wudao; else p.ui.wudao = e.target.value;
         UI.toast(e.target.value === 'always' ? '行权悟道：纯度 ≥30% 自动' : e.target.value === 'skip' ? '行权悟道：跳过' : '行权悟道：每次询问');
+      });
+    }
+    // v41（E423 修偏）：挂机方式（智能/普通）——p.ui.engine 单源（autocult 每轮判定读），
+    // 面板可见可改；此前 'normal' 档无任何设置入口不可达（只能靠灵石跌破滞回被动回落）
+    const eng = document.getElementById('amb-engine');
+    if (eng) {
+      this.syncEnginePref();
+      eng.addEventListener('change', e => {
+        const p = Game.player;
+        if (!p) return;
+        p.ui = p.ui || {};
+        p.ui.engine = e.target.value === 'normal' ? 'normal' : 'smart';
+        UI.toast(p.ui.engine === 'smart' ? '挂机方式：智能（灵石充裕自动闭关）' : '挂机方式：普通（不自动闭关）');
       });
     }
     // v40（E394）：设置中心「挂机节奏」三档——纯体验零数值变动
@@ -346,21 +361,27 @@ const Ambience = {
     const btn = document.getElementById('amb-toggle');
     if (btn) btn.classList.toggle('on', this.sfxOn || this.musicOn);
   },
-  /** v36（E205）：设置面板打开时同步聚灵偏好显示值——偏好存于玩家档（p._autoRush）而非 amb
-   *  偏好文件，面板为静态 DOM，init 时玩家多半尚未读档，须于每次打开时回读 */
+  /** v36（E205）：设置面板打开时同步聚灵偏好显示值——v41（E428）起偏好存于玩家档 p.ui 容器
+   *  而非 amb 偏好文件，面板为静态 DOM，init 时玩家多半尚未读档，须于每次打开时回读 */
   syncRushPref() {
     const rush = document.getElementById('amb-rush');
     if (!rush) return;
     const p = Game.player;
-    rush.value = (p && p._autoRush) || 'ask';
+    rush.value = (p && p.ui && p.ui.rush) || 'ask';
     this.syncDailyPrefs();
+    this.syncEnginePref();
   },
-  /** v39（E362）：行权小账/悟道三态偏好回显（p._pref 子字段，默认 ask） */
+  /** v39（E362）：行权小账/悟道三态偏好回显（v41（E428）起 p.ui 子字段，默认 ask） */
   syncDailyPrefs() {
     const p = Game.player;
     const da = document.getElementById('amb-damode');
-    if (da) da.value = (p && p._pref && p._pref.damode) || 'ask';
+    if (da) da.value = (p && p.ui && p.ui.damode) || 'ask';
     const wd = document.getElementById('amb-wudao');
-    if (wd) wd.value = (p && p._pref && p._pref.wudao) || 'ask';
+    if (wd) wd.value = (p && p.ui && p.ui.wudao) || 'ask';
+  },
+  /** v41（E423）：挂机方式回显（p.ui.engine，默认 smart）——随面板打开回读（syncRushPref 同范式） */
+  syncEnginePref() {
+    const eng = document.getElementById('amb-engine');
+    if (eng) eng.value = (Game.player && Game.player.ui && Game.player.ui.engine) || 'smart';
   },
 };

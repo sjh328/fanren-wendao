@@ -58,13 +58,17 @@ const Story = {
     if (!p.story) p.story = { seen: {}, mid: {}, choices: {} };
     p.story.seen[id] = Math.floor(p.day || 0) + 1;
     if (typeof QuestSys !== 'undefined' && QuestSys.loreToast) QuestSys.loreToast(id);   // v24 百科新词条解锁提示
+    if (typeof QuestSys !== 'undefined' && QuestSys.checkStudyMark) QuestSys.checkStudyMark();   // v41（E465）：温书考据印记检查（重读 force 不经此处——印记不随重读重发）
   },
-  /** 抉择记录（每章末记录所选 value） */
+  /** 抉择记录（每章末记录所选 value）
+   *  v41（E465）：抉择落定亦是考据拼图的一角——章末抉择录毕即补查印记（首看章末时抉择尚未录，
+   *  单靠 markSeen 查不满） */
   recordChoice(key, value) {
     const p = Game.player;
     if (!p) return;
     if (!p.story) p.story = { seen: {}, mid: {}, choices: {} };
     p.story.choices[key] = value;
+    if (typeof QuestSys !== 'undefined' && QuestSys.checkStudyMark) QuestSys.checkStudyMark();   // v41（E465）
   },
   choiceOf(key) {
     const p = Game.player;

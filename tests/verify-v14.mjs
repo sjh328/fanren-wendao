@@ -243,7 +243,7 @@ try {
   const te2 = await page.evaluate(async () => {
     // 宗门任务已达成 → 一键行权应领取（弹窗小账含「宗门任务领赏」）
     const p = Game.player;
-    p._autoRush = 'always';   // v35（U3）：聚灵扣款改明示确认——测试预置「以后不再询问」走自动路径
+    p.ui = Object.assign({}, p.ui, { rush: 'always' });   // v35（U3）：聚灵扣款改明示确认——测试预置「以后不再询问」走自动路径；v41（E428）：偏好迁 p.ui.rush
     p._restDay = Math.floor(p.day); p._wuDaoDay = Math.floor(p.day); p.listenDay = Math.floor(p.day); p._sparCount = 3; p._wenjianDay = Math.floor(p.day);   // v38（E325）：预置跳过新增行，专测宗门领赏
     const before = p.sect.contrib;
     Guide.dailyAll();

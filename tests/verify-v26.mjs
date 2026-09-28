@@ -91,12 +91,12 @@ console.log('===== SA 源码静态组 =====');
     && forge.slice(forge.indexOf('async enhanceMulti(slot')).includes('this.tryForgeFailure(p, itemId, lv)')
     ? pass('SA10 两消费点分别落于 enhance 与 enhanceMulti 函数体内（E370 grep 双断言）') : fail('SA10 消费点落位', '');
 
-  /* ---- E371：黑市还价涨价落盘 ---- */
-  black.includes('const mul = (p._haggleFailDay === today && p._haggleMul) ? p._haggleMul : 1;')
+  /* ---- E371：黑市还价涨价落盘（v41（E428/E437）修订：键位迁 p.sess 单源、涨价 ×1.3 + 当日拂袖拒卖） ---- */
+  black.includes('const mul = (sess.haggleFailDay === today && sess.haggleMul) ? sess.haggleMul : 1;')
     && black.includes('base * 1.6 * repMul * mul')
-    ? pass('SA11 price() 当日消费 p._haggleMul（E371——涨价真落盘）') : fail('SA11 price 消费', '');
-  /p\._haggleMul = 1\.15;\s*\n\s*p\._haggleFailDay = Math\.floor\(p\.day\);/.test(black)
-    ? pass('SA12 还价失败分支写 p._haggleMul=1.15（E371）') : fail('SA12 涨价落盘', '');
+    ? pass('SA11 price() 当日消费 p.sess.haggleMul（E371 落盘语义；v41（E428/E437）键位迁 p.sess 唯一键位）') : fail('SA11 price 消费', '');
+  /sess\.haggleMul = 1\.3;\s*\n\s*sess\.haggleFailDay = today;/.test(black)
+    ? pass('SA12 还价失败分支写 p.sess.haggleMul=1.3（E371；v41（E437）×1.15→×1.3 拂袖加价）') : fail('SA12 涨价落盘', '');
 
   /* ---- E372：秘境窥探接回（check-actions 双向登记） ---- */
   ui.includes('data-action="dmn-scout"') && gamejs.includes("'dmn-scout': () => DungeonSys.scout()")
@@ -147,12 +147,15 @@ console.log('===== SA 源码静态组 =====');
   npcjs.includes('const parity = this.parityOf(p, rp);') && npcjs.split('parity').length > 6 && !/npcCombatPower\(p, id\) \{[\s\S]*?return Math\.round\(atk \* 2 \+ def \* 1\.5 \+ hp \* 0\.3/.test(npcjs)
     ? pass('SA27 npcCombatPower 估算并入 parity（估算与实战同口径，E282 口径延续）') : fail('SA27 估算同源', '');
 
-  /* ---- E375：遭遇难度带 ---- */
-  explore2.includes('const delta = Utils.chance(20) ? Utils.rand(1, 2) : 0;')
+  /* ---- E375：遭遇难度带（v41（E453）修订：Δ≥2 动态扩带 + power 钳 1.35） ---- */
+  explore2.includes('const delta = dRealm >= 2')
+    && explore2.includes('? (Utils.chance(20 + 5 * dRealm) ? Utils.rand(1, 2 + dRealm) : 0)')
+    && explore2.includes(': (Utils.chance(20) ? Utils.rand(1, 2) : 0);')
     && explore2.includes('delta * 3 + deepTier * 4')
     && explore2.includes('den.expGain = Math.round(den.expGain * (1 + 0.5 * delta))')
     && explore2.includes('(bctx.dropMul || 1) * (1 + 0.5 * delta)')
-    ? pass('SA28 遭遇难度带：80% 同阶 + 20% +1~2 层、delta 收益 ×(1+0.5Δ)、精英率 +3%/层（E375）') : fail('SA28 难度带', '');
+    && explore2.includes('const rpCap = Math.ceil((p.realmIdx * 4 + p.layer) * 1.35);')
+    ? pass('SA28 遭遇难度带：80% 同阶 + Δ≥2 动态扩带 chance(20+5Δ)/rand(1,2+Δ)、delta 收益 ×(1+0.5Δ)、精英率 +3%/层、怪 power 钳 ≤玩家×1.35（E375；v41（E453）动态威胁带）') : fail('SA28 难度带', '');
 
   /* ---- E376：承伤曲线复权 ---- */
   R('core/stat.js').includes('afterDef(atk, def, rp = 0)') && R('core/stat.js').includes('(1 + (rp || 0) / 6)')
@@ -173,18 +176,22 @@ console.log('===== SA 源码静态组 =====');
     && battlejs.includes('const crit = true;   // v40（E378）：爆发必会心')
     ? pass('SA33 爆发 2.4×/战意 −60/必会心（E378——清零乘区税废除）') : fail('SA33 爆发复权', '');
 
-  /* ---- E379：读招洞察复权 ---- */
+  /* ---- E379：读招洞察复权（v41（E414）修订：对拼 pin 兑现置 _clashed、enemyTurn 余波 0.3×） ---- */
   battlejs.includes("{ kind: 'vuln', pct: 40, rounds: 3 }") && battlejs.includes('B._sureCrit = 2;')
     && (battlejs.match(/this\.takeSureCrit\(\) \|\| Utils\.chance/g) || []).length >= 3
     && battlejs.includes('takeSureCrit() {') && battlejs.includes('pin: true')
-    && battlejs.includes("if (_clashed && B.enemy.hp > 0) this.enemyStrike(st, 0.6, false, '对拼换招');")
-    ? pass('SA34 破绽毕现 3 回合+必会心 2 发（takeSureCrit 单源）、读中+1 真元、attack 对拼解（E379）') : fail('SA34 读招复权', '');
+    && battlejs.includes("const _clashed = !!(_pinC && _pinC.pin);")
+    && battlejs.includes("this.enemyStrike(st, 0.6, false, '对拼换招');\n          B._clashed = true;")
+    && battlejs.includes("} else if (B._clashed) {")
+    && battlejs.includes("this.enemyStrike(st, 0.3, false, '强弩之末');")
+    && battlejs.includes('B._clashed = false;')
+    ? pass('SA34 破绽毕现 3 回合+必会心 2 发（takeSureCrit 单源）、读中+1 真元、对拼 pin 兑现 0.6×+_clashed 余波 0.3× 回合尾清（E379；v41（E414）对拼双结算修复）') : fail('SA34 读招复权', '');
 
-  /* ---- E380：暴击溢出折算 ---- */
+  /* ---- E380：暴击溢出折算（v41（E417）修订：CAP 2.0→2.4 与爆发同档） ---- */
   R('core/stat.js').includes('critOver: Math.max(0, critRaw - 75)')
     && battlejs.includes('critOver') && battlejs.includes('Math.min(over, 50) * 0.005')
-    && gdata.includes('CRIT_DMG_CAP: 2.0') && (battlejs.match(/CRIT_DMG_CAP\)/g) || []).length >= 4
-    ? pass('SA35 暴击溢出 st.critOver 折会伤（≤50 点 ×0.5%）+ 总乘数封顶 2.0 四口消费（E380）') : fail('SA35 溢出折算', '');
+    && gdata.includes('CRIT_DMG_CAP: 2.4') && (battlejs.match(/CRIT_DMG_CAP\)/g) || []).length >= 4
+    ? pass('SA35 暴击溢出 st.critOver 折会伤（≤50 点 ×0.5%）+ 总乘数封顶 2.4 四口消费（E380；v41（E417）CAP 2.0→2.4）') : fail('SA35 溢出折算', '');
 
   /* ---- E381：连击韧性 ---- */
   battlejs.includes('if (!B.defending && !Utils.chance(50)) B.combo = 0;')
@@ -220,13 +227,13 @@ console.log('===== SA 源码静态组 =====');
   const pa3 = readFileSync(join(__dirname, 'scripts', 'price-audit.mjs'), 'utf8');
   const bsim3 = readFileSync(join(__dirname, 'scripts', 'balance-sim.mjs'), 'utf8');
 
-  /* ---- E383 灵泉降档 + 主动补偿 ---- */
-  cave3.includes('45 * Math.min(4, p.cave.builds.spring) * GameData.stoneEco(Math.min(4, p.realmIdx))')
-    ? pass('SA40 灵泉降档 45×min(4,spring)×stoneEco(min(4,r))（E383——r6 裸值 28149/日，−96.1%）') : fail('SA40 灵泉降档', '');
+  /* ---- E383 灵泉降档 + 主动补偿（v41（E441）修订：系数 45→15，r6 裸值锚 28149→9383） ---- */
+  cave3.includes('15 * Math.min(4, p.cave.builds.spring) * GameData.stoneEco(Math.min(4, p.realmIdx))')
+    ? pass('SA40 灵泉 15×min(4,spring)×stoneEco(min(4,r))（E383 降档；v41（E441）系数 45→15——r6 裸值锚 9383/日，r1~r4 比 0.92 全境 <1）') : fail('SA40 灵泉降档', '');
   explore3.includes('Utils.rand(25, 50)') && bounty3.includes('Math.round(90 * GameData.stoneEco(realm))')
     ? pass('SA41 主动补偿：战斗单场 25~50（×2.5）+ 悬赏 90×eco（+50%）（E383）') : fail('SA41 主动补偿', '');
-  bsim3.includes('灵泉:主动收入比') && bsim3.includes('实收/建模') && bsim3.includes('Math.round(37.5 * eco * 2)')
-    ? pass('SA42 balance-sim 经济复算行在链：灵泉:主动比（锚 0.19）+ 实收/建模比（锚 0.39）（E383/E411）') : fail('SA42 复算行', '');
+  bsim3.includes('灵泉:主动收入比') && bsim3.includes('实收/建模') && bsim3.includes('Math.round(37.5 * se * 2)')
+    ? pass('SA42 balance-sim 经济复算行在链：灵泉:主动比（v41（E441）锚 r6 0.064 全境带）+ 实收/建模比（E383/E411；v41（E459）灵石侧 stoneEco 双轨）') : fail('SA42 复算行', '');
 
   /* ---- E384 sinkCurve 中段补位 ---- */
   gdata3.includes('fr <= 5 ? Math.round(Math.pow(3.4, fr)) : 243 * Math.pow(3.8, fr - 5)')
@@ -246,11 +253,14 @@ console.log('===== SA 源码静态组 =====');
     && !black3.includes('buyMystery') && !gamejs.includes('act-black-mystery')
     ? pass('SA46 黑市独家奇货 5 格替换 + 赌袋摊删净（E387——动作/按钮/方法三处同拆）') : fail('SA46 黑市', '');
 
-  /* ---- E388 拍卖去同款+三档重定 ---- */
+  /* ---- E388 拍卖去同款+三档重定（v41（E434）修订：BID_MODES 严禁写回 + peek/ensure 读写拆分） ---- */
   auction3.includes('BID_MODES') && auction3.includes("steady: { mul: 1.3, rate: 85") && auction3.includes("const opts = this.BID_MODES[mode];")
     && !auction3.includes("item: 'pill_zaohua'") && !auction3.includes("item: 'w_sanqing'") && !auction3.includes("item: 'm_gupian'")
     && auction3.includes("(mode === 'bold' || mode === 'steady') && Utils.chance(25)")
-    ? pass('SA47 LOT_POOL 去同款+廉价料、稳健 1.3/85、影子竞价及于稳健、BID_MODES 单源（E388）') : fail('SA47 拍卖', '');
+    && !/\bopts\.rate\s*=/.test(auction3)
+    && auction3.includes('peek(p) {') && auction3.includes('ensure(p) {') && auction3.includes('state(p) { return this.peek(p); }')
+    && auction3.includes('consign: (prev && prev.consign) || null')
+    ? pass('SA47 LOT_POOL 去同款+廉价料、稳健 1.3/85、影子竞价及于稳健、BID_MODES 单源且眼值只落局部 rate 不写回、peek/ensure 读写拆分+滚茬透传 consign（E388；v41（E434/E439））') : fail('SA47 拍卖', '');
 
   /* ---- E389 手作溢价 ---- */
   gdata3.includes('craftOutSet()') && gdata3.includes('this.EXP_RECIPES || []')
@@ -290,12 +300,12 @@ console.log('===== SA 源码静态组 =====');
     && ui4.includes('本境解锁')
     ? pass('SA53 新劫象 TRIB_OMENS_HIGH（best 框架）+ 秘境协防差事 ×1.5 + 本境解锁行（E392）') : fail('SA53 机制补位', '');
 
-  /* ---- E393 挂机/离线拉平 ---- */
+  /* ---- E393 挂机/离线拉平（v41（E422/E428）修订：聚灵偏好读 p.ui.rush 单源，旧 _autoRush 散键已删） ---- */
   gamejs.includes('const OFFLINE_EFF = 0.85;') && gamejs.includes('Math.min(240, Math.floor(elapsedMs')
     && gamejs.includes('v40（E393）权益变动')
-    && autocult4.includes("_autoRush !== 'skip'") && autocult4.includes("prefMode(p, 'wudao') === 'always'")
+    && autocult4.includes("Guide.prefMode(p, 'rush') !== 'skip'") && autocult4.includes("prefMode(p, 'wudao') === 'always'")
     && autocult4.includes('Guide.dailyAll({ silent: true })')
-    ? pass('SA54 OFFLINE_EFF 0.85 + 上限 240 + E253 注释同版 + AutoCult 三偏好接线（E393）') : fail('SA54 拉平', '');
+    ? pass('SA54 OFFLINE_EFF 0.85 + 上限 240 + E253 注释同版 + AutoCult 三偏好接线（E393；v41（E422）聚灵偏好 p.ui.rush 单源）') : fail('SA54 拉平', '');
 
   /* ---- E394 挂机节奏三档 ---- */
   autocult4.includes('PACE_KEY') && autocult4.includes('PACES: { fast: 80, normal: 280, slow: 600 }')
@@ -332,10 +342,11 @@ console.log('===== SA 源码静态组 =====');
     && xian5.includes('c.demerit = (c.demerit || 0) + 3') && xian5.includes('taskList(p)')
     ? pass('SA59 仙庭官场化：考功评级 merit+1/+2、官声轴软门槛 ×1.5、四品特权全链（E398）') : fail('SA59 官场化', '');
 
-  /* ---- E399 擂主赛实战化 ---- */
-  beast5.includes('this.simBeastDuel(b, foe, sim.seed)') && beast5.includes('makeChampFoe(foeP)')
+  /* ---- E399 擂主赛实战化（v41（E447）修订：foeP 锚改出战兽 b.power、tactic 三策推演并列） ---- */
+  beast5.includes('this.simBeastDuel(b, foe, seed)') && beast5.includes('makeChampFoe(foeP)')
     && beast5.includes('GameData.speciesRelation(my.species, foe.species)')
-    ? pass('SA60 擂主战 simBeastDuel（技能/克制/tactic 入推演）+ 同种子结算一致（E399）') : fail('SA60 擂主', '');
+    && beast5.includes('const foeP = Math.min(70, Math.round(b.power * 1.15')
+    ? pass('SA60 擂主战 simBeastDuel（技能/克制/tactic 入推演）+ 同种子结算一致 + foeP 锚出战兽（E399；v41（E447）换弱兽对手随之变弱）') : fail('SA60 擂主', '');
 
   /* ---- E400 斩三尸重做 ---- */
   karma5.includes('p.slayBonus = true') && karma5.includes("Story.chron('斩三尸，三尸尽去', { m: 1 })")
@@ -348,11 +359,13 @@ console.log('===== SA 源码静态组 =====');
     && cave5.includes('if (guardOn) {') && cave5.includes('化身驻守巡田——灵田免虫害')
     ? pass('SA62 化身三差事：驻守必挡+免虫害、游历指定图+兽潮材+20%、分身问道十日+1（E401）') : fail('SA62 化身', '');
 
-  /* ---- E402 义聚线 ---- */
-  npc5.includes('oathGatherTick(p)') && npc5.includes('oathGather(p, id)') && npc5.includes('s.loyalty = Math.min(100,')
+  /* ---- E402 义聚线（v41（E445）修订：oathGatherTick 带 auto 补聚参、tryAid 乘区只作用结拜候选、warSpirit 死写删除） ---- */
+  npc5.includes('oathGatherTick(p, auto = false)') && npc5.includes('oathGather(p, id)') && npc5.includes('s.loyalty = Math.min(100,')
     && npc5.includes('s.goldlan = true') && npc5.includes('0.5 + loyal / 100')
     && npcjs.includes("s.loyalty = s.loyalty || 20") && npcjs.includes("s.oathDay = Math.floor(p.day || 0);")
-    ? pass('SA63 义聚线：30 日节拍 + 三选一 + loyalty×tryAid + 金兰词缀 +2% 断言（E402）') : fail('SA63 义聚', '');
+    && npcjs.includes("p._sparBuffDay = Math.floor(pp.day || 0) + 1;")
+    && !allJs.some(s2 => s2.includes('warSpirit'))
+    ? pass('SA63 义聚线：30 日节拍 + 三/四选一 + loyalty×tryAid（v41（E445）只作用结拜候选）+ 金兰词缀 + 共斗 _sparBuffDay + warSpirit 死字段清零（E402/E445）') : fail('SA63 义聚', '');
 
   /* ---- chron m 旗标（E400/E408 共用） ---- */
   story5.includes('if (opts && opts.m) e.m = 1;')
@@ -368,9 +381,9 @@ console.log('===== SA 源码静态组 =====');
   const pfac6 = R('core/player-factory.js');
   const story6 = R('ui/story.js');
 
-  /* ---- E403 双代行并一 ---- */
-  !gamejs.includes('act-sect-delegate') && sect6.includes('v40（E403）') && R('systems/avatar.js').includes("'delegate'")
-    ? pass('SA65 双代行并一：sect delegate 旧入口删、化身第四桩承接（E403）') : fail('SA65 双代行', '');
+  /* ---- E403 双代行并一（v41 复核：sect 侧旧注释已清，化身第四桩锚 avatar NAMES 单源） ---- */
+  !gamejs.includes('act-sect-delegate') && R('systems/avatar.js').includes("'delegate'") && R('systems/avatar.js').includes("delegate: '代行差事'")
+    ? pass('SA65 双代行并一：sect delegate 旧入口删、化身第四桩承接（E403；v41（E446/E472）差事管理台同锚）') : fail('SA65 双代行', '');
 
   /* ---- E404 RowMerchant ---- */
   explore6.includes('const RowMerchant') && dungeon6.includes('RowMerchant.offer') && explore6.includes('RowMerchant.offer(p.realmIdx, 0.7)')
@@ -724,51 +737,65 @@ if (browser) {
     rb6.keep1 && rb6.drop1 && rb6.keep2 && rb6.drop2
       ? pass('RB6 磐岩保级：单祭炼/连祭炼「月首败保级、再败掉级」四态同待遇（E370）') : fail('RB6 保级单源', JSON.stringify(rb6));
 
-    /* ---- RB7：E371 黑市还价涨价落盘（当日 ×1.15、次日自清） ---- */
+    /* ---- RB7：E371 黑市还价涨价落盘（v41（E428/E437）修订：键位 p.sess、×1.3、触怒当日拂袖拒卖） ---- */
     const rb7 = await page.evaluate(async () => {
       const out = {};
       const p = Game.player;
-      delete p._haggleMul; p._haggleFailDay = -1;
+      p.sess = { haggleMul: null, haggleFailDay: null };
       p.day = 500;
       const before = BlackSys.price(p, 'm_neidan');
-      const realPopup = UI.popup, realChance = Utils.chance;
-      UI.popup = async () => 'haggle'; Utils.chance = () => false;
+      const realPopup = UI.popup, realChance = Utils.chance, realToast = UI.toast;
+      const toasts = [];
+      UI.popup = async () => 'haggle'; Utils.chance = () => false; UI.toast = (m) => { toasts.push(String(m)); };
       await BlackSys.buyAsync('m_neidan', before);
-      UI.popup = realPopup; Utils.chance = realChance;
-      out.mulSet = p._haggleMul === 1.15 && p._haggleFailDay === 500;
+      out.mulSet = p.sess.haggleMul === 1.3 && p.sess.haggleFailDay === 500;
       const after = BlackSys.price(p, 'm_neidan');
-      out.raised = Math.abs(after - Math.round(before * 1.15)) <= 1;
+      out.raised = Math.abs(after - Math.round(before * 1.3)) <= 1;
+      // 触怒当日复购——商贾拂袖而去，一律拒卖（E437②）
+      await BlackSys.buyAsync('m_neidan', after);
+      out.refused = toasts.some(t => t.includes('拂袖'));
+      UI.popup = realPopup; Utils.chance = realChance; UI.toast = realToast;
       p.day = 531;
       const next = BlackSys.price(p, 'm_neidan');
-      out.cleared = next === before && p._haggleMul == null;
-      p.day = 1; delete p._haggleMul; p._haggleFailDay = -1;
+      out.cleared = next === before && p.sess.haggleMul == null;
+      p.day = 1; p.sess = { haggleMul: null, haggleFailDay: null };
       return out;
     });
-    rb7.mulSet && rb7.raised && rb7.cleared
-      ? pass('RB7 还价触怒：涨价落盘当日 price ×1.15、次日自清还原（E371）') : fail('RB7 黑市涨价', JSON.stringify(rb7));
+    rb7.mulSet && rb7.raised && rb7.refused && rb7.cleared
+      ? pass('RB7 还价触怒：涨价落 p.sess 当日 price ×1.3、触怒当日拂袖拒卖、次日自清还原（E371；v41（E437））') : fail('RB7 黑市涨价', JSON.stringify(rb7));
 
-    /* ---- RB8：E372 窥探接回——符消费、心魔 +2、按钮与置灰 ---- */
-    const rb8 = await page.evaluate(() => {
+    /* ---- RB8：E372 窥探接回（v41（E458）修订：三档情报——窥前路一符 / 窥异变两符置 scoutedMuts（净化钮门控）） ---- */
+    const rb8 = await page.evaluate(async () => {
       const out = {};
       const p = Game.player;
-      p.dungeon = { realm: 0, depth: 0, total: 9, choices: ['treasure', 'battle'], gains: [], muts: [] };
+      p.dungeon = { realm: 0, depth: 0, total: 9, choices: ['treasure', 'battle'], gains: [], muts: ['guzhou'], route: Array.from({ length: 9 }, (_, i) => i === 8 ? ['boss'] : ['battle']) };
       // 有符时按钮在位且可点
-      p.bag = { tal_jinguang: 1 };
+      p.bag = { tal_jinguang: 2 };
       const html0 = UI.renderDungeonActive();
       out.button = html0.includes('data-action="dmn-scout"') && !html0.includes('dmn-scout" disabled');
+      // 窥异变前：净化钮未窥见置灰并提示「先以斥候符窥探此异变，方可净化」（E458②/E470⑤）
+      out.purifyGated = html0.includes('data-action="act-dungeon-purify"') && html0.includes('先以斥候符窥探此异变，方可净化');
       const xinmo0 = p.xinmo || 0;
-      DungeonSys.scout();
-      out.talUsed = !p.bag.tal_jinguang;
+      const realPopup = UI.popup, realChance = Utils.chance;
+      UI.popup = async (o) => (o && o.title && o.title.includes('三问')) ? 'mut' : true;   // 三问选「窥异变」，详情弹窗收势
+      Utils.chance = () => false;   // 不掷陷阱反噬
+      await DungeonSys.scout();
+      UI.popup = realPopup; Utils.chance = realChance;
+      out.talUsed = !p.bag.tal_jinguang;   // 两符尽耗
       out.xinmo2 = (p.xinmo || 0) - xinmo0 === 2;
       out.action = typeof Game.actions['dmn-scout'] === 'function';
+      out.scoutedMuts = Array.isArray(p.dungeon.scoutedMuts) && p.dungeon.scoutedMuts.includes('guzhou');
+      // 窥见后净化钮亮起
+      const html1 = UI.renderDungeonActive();
+      out.purifyLit = !html1.includes('先以斥候符窥探此异变，方可净化');
       // 无符置灰
       p.bag = {};
       out.disabledBtn = UI.renderDungeonActive().includes('dmn-scout" disabled');
       p.dungeon = null; p.xinmo = xinmo0; p.bag = { pill_juqi: 3 };
       return out;
     });
-    rb8.talUsed && rb8.xinmo2 && rb8.action && rb8.button && rb8.disabledBtn
-      ? pass('RB8 窥探：按钮在位可点、耗一张符、心魔 +2、无符置灰（E372/E245）') : fail('RB8 窥探', JSON.stringify(rb8));
+    rb8.talUsed && rb8.xinmo2 && rb8.action && rb8.button && rb8.disabledBtn && rb8.scoutedMuts && rb8.purifyGated && rb8.purifyLit
+      ? pass('RB8 窥探：按钮在位可点、窥异变耗两符置 scoutedMuts、心魔 +2、无符置灰、净化钮未窥见置灰/窥见后亮起（E372/E245；v41（E458/E470⑤）三档情报+净化门控）') : fail('RB8 窥探', JSON.stringify(rb8));
 
     /* ---- RB9：E373 单源化数值逐位不变（repMul 声望 / preachActive 悟性） ---- */
     const rb9 = await page.evaluate(() => {
@@ -904,16 +931,18 @@ if (browser) {
   } catch (e) {
     fail('RB 运行时组异常', (e && e.stack ? String(e.stack).split('\n').slice(0, 4).join(' | ') : String(e)).slice(0, 300));
   }
-    /* ---- RB15：E383 灵泉裸值/驻守行为（CaveSys.springDaily 实算） ---- */
+    /* ---- RB15：E383 灵泉裸值/驻守行为（v41（E441）修订：r6 裸值锚 28149→9383） ---- */
     const rb15 = await page.evaluate(() => {
       const out = {};
       const p = Game.player;
       p.cave = { lv: 6, builds: { spring: 3 }, _springDay: -1 };
       p.realmIdx = 6;
+      const s0 = Bag.stonesTotal(p);
       CaveSys.springDaily(p);
       const today = Math.floor(p.day || 0);
       out.bare = p.cave._springDay === today;
-      out.bare6 = out.bare;
+      out.bareAmt = Bag.stonesTotal(p) - s0 === 9383;   // v41（E441）：r6 裸值锚 9383（原 28149）
+      out.bare6 = out.bare && out.bareAmt;
       CaveSys.springDaily(p);
       const stonesAfterBare = Bag.stonesTotal(p);
       // 驻守 ×1.2 单列
@@ -922,12 +951,12 @@ if (browser) {
       p.cave._springDay = today - 1;   // 重新入账
       const before = Bag.stonesTotal(p);
       CaveSys.springDaily(p);
-      out.guardMul = Bag.stonesTotal(p) - before === Math.round(28149 * 1.2);
+      out.guardMul = Bag.stonesTotal(p) - before === Math.round(9383 * 1.2);
       p.avatar = null;
       return out;
     });
     rb15.bare6 && rb15.guardMul
-      ? pass('RB15 灵泉 r6 裸值实发 28149/日、驻守 ×1.2 单列生效（E383）') : fail('RB15 灵泉', JSON.stringify(rb15));
+      ? pass('RB15 灵泉 r6 裸值实发 9383/日（v41（E441）系数 45→15）、驻守 ×1.2 单列生效（E383/E441）') : fail('RB15 灵泉', JSON.stringify(rb15));
 
     /* ---- RB16：E386 兜底同 tier 统一 + E389 手作溢价卖价 ---- */
     const rb16 = await page.evaluate(() => {

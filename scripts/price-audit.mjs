@@ -19,7 +19,11 @@ await new Promise(r => setTimeout(r, 500));
 
 const report = await page.evaluate(() => {
   const G = GameData;
+  /* v41（E460）：行情种子钉死——freshWorld 后强制 market={seed:0,next:Infinity}，WorldSys.marketMul
+   * 的确定性哈希自此落在固定种子上（原种子含 Math.random，报告逐跑漂移）。
+   * 本报告为「行情种子=0 确定性口径」。 */
   const fake = { version: 1, name: '审计道人', day: 300, realmIdx: 3, layer: 0, exp: 0, attrs: { gen: 5, comp: 5, luck: 5, body: 5 }, fortune: 0, karma: 0, poison: 0, insight: 0, stones: { low: 0, mid: 0, high: 0 }, bag: {}, gongfa: {}, equipped: { weapon: null, armor: null, accessory: null }, cave: null, dao: null, sect: null, flags: {}, counters: {}, npcs: NpcSys.freshNpcs(), world: WorldSys.freshWorld(), beasts: { active: null, list: [] }, benming: { lv: 0 }, jade: 0 };
+  fake.world.market = { seed: 0, next: Infinity };   // v41（E460）：行情种子=0 确定性口径
   const shopIds = new Set(G.SHOP.map(r => r.item));
   const blackIds = new Set(BlackSys.POOL.map(x => x.id));
   const realPlayer = Game.player;
@@ -345,18 +349,22 @@ const report = await page.evaluate(() => {
   {
     const income = r => 125 * G.stoneEco(r);
     const ENH = G.BALANCE.ENHANCE;
+    /* v41（E460）：SITES 重锚——原 44/397/476/546/582 系 v40 时点行号，forge/cave/beast/auction
+     * 多版增删后已漂（实测 49/416/495/565/601、cave 26/60/483、auction 343、beast 350/659、gongfa 147）；
+     * 「器魂匣(lv0)」名实错（该处实为套装炼化），改名在案。行号真伪由本脚本 node 侧源码断言守卫
+     * （标签行文本须含 sinkCurve，见文件尾 SITES_LINE_GUARDS）。 */
     const SITES = [
-      { id: '强化+5(grade3)', where: 'forge.js:44', f: r => Math.round((ENH.BASE_COST + 5 * ENH.COST_PER_LV) * (1 + 3 * ENH.COST_GRADE_FACTOR) * G.sinkCurve(r) / ENH.COST_REALM_FACTOR) },
-      { id: '洗练(grade3)', where: 'forge.js:397', f: r => Math.round(300 * G.sinkCurve(r) / 2.2) },
-      { id: '重铸', where: 'forge.js:476', f: r => Math.round(150 * G.sinkCurve(r) / 2.2) },
-      { id: '器魂匣(lv0)', where: 'forge.js:546', f: r => Math.round(2000 * 1 * G.sinkCurve(r) / 2.2) },
-      { id: '本命升一阶(lv0)', where: 'forge.js:582', f: r => Math.round(3000 * 1 * G.sinkCurve(r) / 2.2) },
+      { id: '强化+5(grade3)', where: 'forge.js:49', f: r => Math.round((ENH.BASE_COST + 5 * ENH.COST_PER_LV) * (1 + 3 * ENH.COST_GRADE_FACTOR) * G.sinkCurve(r) / ENH.COST_REALM_FACTOR) },
+      { id: '洗练(grade3)', where: 'forge.js:416', f: r => Math.round(300 * G.sinkCurve(r) / 2.2) },
+      { id: '重铸', where: 'forge.js:495', f: r => Math.round(150 * G.sinkCurve(r) / 2.2) },
+      { id: '套装炼化(lv0)', where: 'forge.js:565', f: r => Math.round(2000 * 1 * G.sinkCurve(r) / 2.2) },
+      { id: '本命升一阶(lv0)', where: 'forge.js:601', f: r => Math.round(3000 * 1 * G.sinkCurve(r) / 2.2) },
       { id: '聚灵升级(lv0)', where: 'cave.js:26', f: r => Math.round(4000 * 1 * G.sinkCurve(r) / 16) },
-      { id: '洞天升级(lv0)', where: 'cave.js:59', f: r => Math.round(4000 * 1 * G.sinkCurve(r)) },
-      { id: '灵田营造(lv1)', where: 'cave.js:430', f: r => Math.round(2000 * 1 * G.sinkCurve(r) / 2.2) },
-      { id: '布施(large)', where: 'auction.js:189', f: r => Math.round(50000 * Math.max(1, G.sinkCurve(r) / 2.2)) },
-      { id: '灵兽蜕变', where: 'beast.js:346', f: r => Math.round(8000 * G.sinkCurve(r) / 2.2) },
-      { id: '结契', where: 'beast.js:569', f: r => Math.round(5000 * G.sinkCurve(r) / 2.2) },
+      { id: '洞天升级(lv0)', where: 'cave.js:60', f: r => Math.round(4000 * 1 * G.sinkCurve(r)) },
+      { id: '灵田营造(lv1)', where: 'cave.js:484', f: r => Math.round(2000 * 1 * G.sinkCurve(r) / 2.2) },   // v41 修偏重锚：cave.js resolveNightRaid 驻守分支接 AvatarSys.noteGuard +1 行（483→484）
+      { id: '布施(large)', where: 'auction.js:343', f: r => Math.round(50000 * Math.max(1, G.sinkCurve(r) / 2.2)) },
+      { id: '灵兽蜕变', where: 'beast.js:350', f: r => Math.round(8000 * G.sinkCurve(r) / 2.2) },
+      { id: '结契', where: 'beast.js:659', f: r => Math.round(5000 * G.sinkCurve(r) / 2.2) },
       { id: '自创功法(灵石段)', where: 'gongfa.js:147', f: r => Math.round(2000 * G.sinkCurve(r)) },
     ];
     const EXEMPT = [
@@ -447,9 +455,11 @@ const report = await page.evaluate(() => {
   const auctionSpreadProblems = [];
   const auctionSpread = {};
   {
-    const expCost = (p, mul, esc) => mul * p / (1 - (1 - p) * esc);   // esc=失利后期望成本增长因子（稳健失利必 ×1.1；激进失利 25% 概率 ×1.1 → 1.025）
+    const expCost = (p, mul, esc) => mul * p / (1 - (1 - p) * esc);   // esc=失利后期望成本增长因子
     const BM = AuctionSys.BID_MODES;   // v40（E388）：与 bid() 同源（注入改动即红）
-    const mks = { steady: expCost(BM.steady.rate / 100, BM.steady.mul, 1.0), bold: expCost(BM.bold.rate / 100, BM.bold.mul, 1.025), dump: expCost(BM.dump.rate / 100, BM.dump.mul, 0) };
+    // v41（E460）：稳健 esc 1.0→1.1——原传 1.0 与行注「稳健失利必抬价 ×1.1」及 bid() 实装相反；
+    // 复算散布 ≈4.7% ≤15% 仍绿
+    const mks = { steady: expCost(BM.steady.rate / 100, BM.steady.mul, 1.1), bold: expCost(BM.bold.rate / 100, BM.bold.mul, 1.025), dump: expCost(BM.dump.rate / 100, BM.dump.mul, 0) };
     auctionSpread.steady = +mks.steady.toFixed(3);
     auctionSpread.bold = +mks.bold.toFixed(3);
     auctionSpread.dump = +mks.dump.toFixed(3);
@@ -510,16 +520,68 @@ const report = await page.evaluate(() => {
       }
     }
   }
-  /* ---- v40（E383）新增路：灵泉 r6 裸值锚 + 灵泉:主动收入比 <0.5 ---- */
+  /* ---- v40（E383）新增路：灵泉 r6 裸值锚 + 灵泉:主动收入比 <0.5（v41（E441/E460）随动：
+   * 系数 45→15，r6 裸值锚 28149→9383，比值锚 0.19→0.24） ---- */
   const springProblems = [];
   {
-    const springR6 = Math.round(45 * 3 * G.stoneEco(4));   // cave.js springDaily 裸值同式（spring 滕 3、r6 → min(4,·)）
-    if (springR6 !== 28149) springProblems.push(`[灵泉 r6 裸值漂移] ${springR6} ≠ 28149（E383/E411 锚：45×3×stoneEco(4) 取整）`);
-    const active = 0.5 * 37.5 * G.stoneEco(6) + 30 * G.stoneEco(6);   // 主动收入：探索 0.5 场/日 + 悬赏 1 窗/3 日
+    const springR6 = Math.round(15 * 3 * G.stoneEco(4));   // cave.js springDaily 裸值同式（spring 滕 3、r6 → min(4,·)）；v41（E441）：45→15
+    if (springR6 !== 9383) springProblems.push(`[灵泉 r6 裸值漂移] ${springR6} ≠ 9383（v41（E441）锚：15×3×stoneEco(4) 取整）`);
+    const active = 0.5 * 37.5 * G.stoneEco(6) + 30 * G.stoneEco(6);   // 主动收入：探索 0.5 场/日 + 悬赏 1 窗/3 日（灵石=stoneEco，E459 双轨口径）
     const ratio = springR6 / active;
-    if (ratio >= 0.5) springProblems.push(`[灵泉:主动比超限] ${ratio.toFixed(2)} ≥ 0.5（E383 锚 0.19）`);
+    if (ratio >= 0.5) springProblems.push(`[灵泉:主动比超限] ${ratio.toFixed(2)} ≥ 0.5（v41 锚 0.24）`);
   }
-  return { rows: rows.length, zeroPrice, problems, auctionProblems, sectProblems, sectPillRatioProblems, sectPillRatios, drawProblems, auctionGradeProblems, tierProblems, top10, boardProblems, boardAll: actionBoard.length, boardV37N: actionBoard.filter(x => x.v37).length, bountyLoopProblems, sinkBand, mysteryProblems, zeroTierProblems, bountyBandProblems, blackExclusiveProblems, auctionSpreadProblems, auctionSpread, craftLoopProblems, craftArbProblems, dualPriceProblems, dualPriceExempted, springProblems  };
+  /* ---- v41（E460）新增路①：通商倾向波幅（E440 随动）——常态 mul ∈[0.8,1.2]、trade 季 ∈[0.75,1.25]，
+   * 且 trade 值域须真宽于常态（防「改常态冒充 trade」的假票复辟）。行情 seed=0 确定性采样全 ITEMS ---- */
+  const tradeProblems = [];
+  const tradeSpread = {};
+  {
+    const savedPlayer3 = Game.player;
+    try {
+      Game.player = fake;
+      const ids = Object.keys(G.ITEMS);
+      const muls = ids.map(id => WorldSys.marketMul(fake, id));
+      tradeSpread.normalMin = +Math.min(...muls).toFixed(3);
+      tradeSpread.normalMax = +Math.max(...muls).toFixed(3);
+      if (tradeSpread.normalMin < 0.8 - 1e-9 || tradeSpread.normalMax > 1.2 + 1e-9) tradeProblems.push(`[常态波幅越界] mul ∈ [${tradeSpread.normalMin}, ${tradeSpread.normalMax}] ∉ [0.8,1.2]`);
+      const savedTendency = SectSys.tendency;
+      SectSys.tendency = () => 'trade';   // 审计 harness：强挂通商倾向（p.sect.council.tendency 单源在 SectSys.tendency）
+      const tmuls = ids.map(id => WorldSys.marketMul(fake, id));
+      SectSys.tendency = savedTendency;
+      tradeSpread.tradeMin = +Math.min(...tmuls).toFixed(3);
+      tradeSpread.tradeMax = +Math.max(...tmuls).toFixed(3);
+      if (tradeSpread.tradeMin < 0.75 - 1e-9 || tradeSpread.tradeMax > 1.25 + 1e-9) tradeProblems.push(`[通商波幅越界] trade mul ∈ [${tradeSpread.tradeMin}, ${tradeSpread.tradeMax}] ∉ [0.75,1.25]`);
+      if (tradeSpread.tradeMax - tradeSpread.tradeMin <= tradeSpread.normalMax - tradeSpread.normalMin + 1e-9) tradeProblems.push('[通商波幅未放宽] trade 值域未宽于常态（E405 假票复辟）');
+    } finally { Game.player = savedPlayer3; }
+  }
+  /* ---- v41（E460）新增路②：寄售佣金 sink（E439 随动）——CONSIGN_TIERS 单源现金 EV 曲线
+   * （EV = mul×rate/100×0.95，流拍退件留存不计）+ settleConsign 功能复算两支：
+   * 速售 0.8 档 EV ≈0.61 > 坊市秒卖 0.45（稳档寄售成立）、天价 2.0 档 EV ≈0.08 < 0.45（博高价=纯赌） ---- */
+  const consignProblems = [];
+  const consignRows = {};
+  {
+    const savedPlayer4 = Game.player;
+    try {
+      Game.player = fake;
+      const ev = (AuctionSys.CONSIGN_TIERS || []).map(t => +(t.mul * t.rate / 100 * 0.95).toFixed(3));
+      consignRows.ev = ev;
+      if (ev.length >= 5) {
+        if (!(ev[0] > 0.45)) consignProblems.push(`[寄售稳档失效] 速售档现金 EV ${ev[0]} ≤ 坊市 0.45（稳档寄售不成立）`);
+        if (!(ev[ev.length - 1] < 0.45)) consignProblems.push(`[寄售天价档失效] 天价档现金 EV ${ev[ev.length - 1]} ≥ 坊市 0.45（博高价非纯赌，E439 口径破）`);
+        for (let i = 1; i < ev.length; i++) if (ev[i] >= ev[i - 1]) consignProblems.push(`[寄售 EV 非单调] 第${i + 1}档 ${ev[i]} ≥ 第${i}档 ${ev[i - 1]}（成交率应随底价单调降）`);
+      }
+      // 功能复算：成交支（五厘佣金入账）与流拍支（二厘手续费 + 退件回包）
+      fake.auction = { item: null, until: -1, consign: { item: 'm_gupian', base: 10000, rate: 100, tier: '速售', until: 0 } };
+      AuctionSys.settleConsign(fake, 1);
+      const stoneTotal = fake.stones.high * 10000 + fake.stones.mid * 100 + fake.stones.low;   // addStonesRaw 逢百进位，验总额
+      if (stoneTotal !== 9500) consignProblems.push(`[寄售佣金漂移] 成交入账 ${stoneTotal} ≠ 9500（五厘佣金口径破）`);
+      fake.auction.consign = { item: 'm_gupian', base: 10000, rate: 0, tier: '天价', until: 0 };
+      AuctionSys.settleConsign(fake, 1);
+      if ((fake.bag.m_gupian || 0) !== 1) consignProblems.push('[寄售退件失效] 流拍未退件回包');
+      delete fake.auction;
+      fake.bag = {};
+    } finally { Game.player = savedPlayer4; }
+  }
+  return { rows: rows.length, zeroPrice, problems, auctionProblems, sectProblems, sectPillRatioProblems, sectPillRatios, drawProblems, auctionGradeProblems, tierProblems, top10, boardProblems, boardAll: actionBoard.length, boardV37N: actionBoard.filter(x => x.v37).length, bountyLoopProblems, sinkBand, mysteryProblems, zeroTierProblems, bountyBandProblems, blackExclusiveProblems, auctionSpreadProblems, auctionSpread, craftLoopProblems, craftArbProblems, dualPriceProblems, dualPriceExempted, springProblems, tradeProblems, tradeSpread, consignProblems, consignRows  };
 });
 
 await browser.close();
@@ -537,13 +599,31 @@ if (report.mysteryProblems.length) gateLines.push(...report.mysteryProblems.map(
   for (const p of report.craftArbProblems) gateLines.push('⚠ E389/② ' + p);
   for (const p of report.dualPriceProblems) gateLines.push('⚠ E390 ' + p);
   for (const p of report.springProblems) gateLines.push('⚠ E383 ' + p);
+  for (const p of report.tradeProblems) gateLines.push('⚠ E460/通商 ' + p);
+  for (const p of report.consignProblems) gateLines.push('⚠ E460/寄售 ' + p);
+  /* v41（E460）：SITES 行号源码断言——标签行号处文本须含 sinkCurve，防再漂（重锚后行号漂移即红） */
+  {
+    const SITES_LINE_GUARDS = [
+      ['js/systems/forge.js', [49, 416, 495, 565, 601]],
+      ['js/systems/cave.js', [26, 60, 484]],   // v41 修偏重锚：cave.js noteGuard 接线 +1 行（483→484）
+      ['js/systems/auction.js', [343]],
+      ['js/systems/beast.js', [350, 659]],
+      ['js/systems/gongfa.js', [147]],
+    ];
+    for (const [file, lns] of SITES_LINE_GUARDS) {
+      const src = fs.readFileSync(file, 'utf8').split('\n');
+      for (const ln of lns) {
+        if (!(src[ln - 1] || '').includes('sinkCurve')) gateLines.push(`⚠ E460/SITES 行号漂移 ${file}:${ln} 行文本不含 sinkCurve——sinkBand SITES.where 需重锚`);
+      }
+    }
+  }
 if (gateLines.length) {
   console.error(gateLines.join('\n'));
   process.exitCode = 1;
 } else {
-  console.log(`✓ 第九路 sink 日数比带全零（出带 ${report.sinkBand.exempted.length} 条均已显式列名豁免）· 第十路古匣稳健 EV 全负`);
+  console.log(`✓ 第九路 sink 日数比带全零（出带 ${report.sinkBand.exempted.length} 条均已显式列名豁免）· 第十路古匣稳健 EV 全负 · E460 通商波幅/寄售佣金两路绿 · SITES 行号断言全中`);
 }
-let md = `# v20 经济审计报告（scripts/price-audit.mjs 自动生成）\n\n采样画像：realm3、行情中位。\n\n- 物品总数：${report.rows}\n- 定价为 0 的稀有物（无坊市渠道，按品阶折算黑市价）：${report.zeroPrice.join('、') || '无'}\n\n## 问题清单（${report.problems.length}）\n`;
+let md = `# v20 经济审计报告（scripts/price-audit.mjs 自动生成）\n\n采样画像：realm3、行情种子=0 确定性口径（v41（E460）：freshWorld 后钉死 market={seed:0,next:Infinity}，报告逐跑逐字节可复现）。\n\n- 物品总数：${report.rows}\n- 定价为 0 的稀有物（无坊市渠道，按品阶折算黑市价）：${report.zeroPrice.join('、') || '无'}\n\n## 问题清单（${report.problems.length}）\n`;
 md += report.problems.length ? report.problems.map(p => `- ${p}`).join('\n') + '\n' : '- 无套利路径与定价倒挂。\n';
 md += `\n## v34 扩容检测\n\n- 拍卖池倒挂（${report.auctionProblems.length}）：\n` + (report.auctionProblems.length ? report.auctionProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
 md += `- 黑市赌袋路：v40（E387）随 buyMystery 删除整路退役（存废注释见源码第六路段）\n`;
@@ -563,7 +643,7 @@ md += `- 第八路·per-action 现金流榜（采样 ${report.boardAll} 行，�
 md += (report.top10.length ? report.top10.map((x, i) => `  ${i + 1}. ${x.action} —— 净 ${Math.round(x.perDay).toLocaleString()} 灵石/日`).join('\n') + '\n' : '  - 无。\n');
 md += `- 第八路·榜报警（${report.boardProblems.length}）：\n` + (report.boardProblems.length ? report.boardProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无越 300×eco 线或 Top1/中位 >8× 的离群动作。\n');
 md += `\n## v40 扩容检测（E383~E390）\n\n`;
-md += `- E383 灵泉：r6 裸值锚 28149/日（−96.1%，驻守 ×1.2 单列 3.38 万）+ 灵泉:主动收入比 <0.5（锚 0.19）：${report.springProblems.length ? '\n' + report.springProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 裸值与比值全部落锚。\n'}`;
+md += `- E383 灵泉：r6 裸值锚 9383/日（v41（E441）系数 45→15，−66.7%，驻守 ×1.2 单列）+ 灵泉:主动收入比 <0.5（v41 锚 0.24）：${report.springProblems.length ? '\n' + report.springProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 裸值与比值全部落锚。\n'}`;
 md += `- E385 0 价 tier 物（材料池定价 0 即断裂）：${report.zeroTierProblems.length ? '\n' + report.zeroTierProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无（m_qipei 400 定价后全池有价）。\n'}`;
 md += `- E386 悬赏带宽（同 tier 兜底逐位相等，门 ≤2×）：${report.bountyBandProblems.length ? '\n' + report.bountyBandProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - tier1~4 兜底带宽 1.0×。\n'}`;
 md += `- E386/E387 第八路·购料环（tierAvg floor vs 最廉可购渠道）：${report.bountyLoopProblems.length ? '\n' + report.bountyLoopProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 全 tier 全渠道负期望，环已破。\n'}`;
@@ -571,6 +651,10 @@ md += `- E387 黑市独家格占比（门 ≥70%）：${report.blackExclusivePro
 md += `- E388 第十二路·三档期望成本（含截胡；稳健 ${report.auctionSpread.steady}× / 激进 ${report.auctionSpread.bold}× / 天价 ${report.auctionSpread.dump}×base）：${report.auctionSpreadProblems.length ? '\n' + report.auctionSpreadProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 三档效率散布 ≤15%——稳健不再无脑最优、天价确定性溢价在门内。\n'}`;
 md += `- E389 手作溢价防套利两路：${report.craftLoopProblems.length || report.craftArbProblems.length ? '\n' + [...report.craftLoopProblems, ...report.craftArbProblems].map(p => `  - ${p}`).join('\n') + '\n' : '  - 逐配方 Σ材料购价 > sellPrice(out) 零命中；sellPrice(out) ≤ 直购价零命中。\n'}`;
 md += `- E390 宗门同物双价（通用列 vs 派系 exclusive）：${report.dualPriceProblems.length ? '\n' + report.dualPriceProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - pill_jiuzhuan 双挂点 4000 同价，全表零双价。\n'}`;
+md += `\n## v41 扩容检测（E460）\n\n`;
+md += `- E460 通商波幅（常态 ∈[0.8,1.2]、trade 季 ∈[0.75,1.25] 且值域真放宽；行情 seed=0 全 ITEMS 采样）：${report.tradeProblems.length ? '\n' + report.tradeProblems.map(p => `  - ${p}`).join('\n') + '\n' : `  - 常态 ∈ [${report.tradeSpread.normalMin}, ${report.tradeSpread.normalMax}]、trade ∈ [${report.tradeSpread.tradeMin}, ${report.tradeSpread.tradeMax}]，两带落位且 trade 更烈。\n`}`;
+md += `- E460 寄售佣金 sink（CONSIGN_TIERS 单源现金 EV=mul×rate/100×0.95 + settleConsign 功能两支）：${report.consignProblems.length ? '\n' + report.consignProblems.map(p => `  - ${p}`).join('\n') + '\n' : `  - 五档 EV = ${report.consignRows.ev.join(' / ')}——速售 ≈0.61 > 坊市 0.45（稳档成立）、天价 ≈0.08 < 0.45（博高价=纯赌）；成交入账 9500/10000（五厘佣金）、流拍退件回包（二厘费）两支实测在案。\n`}`;
+md += `- E460 SITES 重锚与行号断言：44/397/476/546/582 → 49/416/495/565/601（另 cave 26/60/483、auction 343、beast 350/659）；「器魂匣(lv0)」改名「套装炼化(lv0)」；标签行文本含 sinkCurve 源码断言（漂移即非零退出）。\n`;
 md += `\n## v39 扩容检测（E351/E352）\n\n`;
 md += `- 第九路·大额 sink 日数比带（采样 grep \`sinkCurve(\` 实测 12 处随动面 × r6~r9；带 [0.3, 2.5] 日、邻境日数比变化 ≤1.3×；分母 = 建模日均收入 125×stoneEco，与 balance-sim dayIn 同式；r10 为投影行——境界轴真仙 r9 为顶，仅验证曲线增长稳定）：\n`;
 {

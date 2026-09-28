@@ -169,7 +169,10 @@ const XianSys = {
   PIN_NAMES: ['九品仙吏', '八品仙丞', '七品仙卫', '六品仙使', '五品仙官', '四品仙卿', '三品仙侯', '二品仙君', '一品仙尊'],
   gong(p) { return (p.xianCourt && p.xianCourt.gong) || 0; },
   /** v40（E398）：官声轴——merit（考功政绩）/ demerit（罢黜记录）。晋品仙元需求不变，
-   *  merit 不足（<晋品需求的 40%）时仙元消耗 ×1.5 软门槛（不锁死）；demerit 高则官市折法 */
+   *  merit 不足（<晋品需求的 40%）时仙元消耗 ×1.5 软门槛（不锁死）；
+   *  v41（E444）官声做实（v5 定死口径）：demerit 为罢黜记录，官市对你**加价**——×(1+min(0.30, demerit×0.05))，
+   *  demerit=5 → ×1.25、≥6 → ×1.30 帽（折扣方向会让「多被贬官」变理财手段，且与「merit 不足→仙元 ×1.5」
+   *  对称——v41 定死惩罚轴并如实明示）；merit 每 10 点官市折上折 1%（帽 5%，与 demerit 反号成两轴区分度） */
   merit(p) { return (p.xianCourt && p.xianCourt.merit) || 0; },
   demerit(p) { return (p.xianCourt && p.xianCourt.demerit) || 0; },
   addMerit(p, n) {
@@ -210,7 +213,7 @@ const XianSys = {
     { id: 'tribute', name: '上贡仙丹', desc: '开炉炼丹一炉（仙庭香火）', need: 1, counter: 'crafts' },
     { id: 'alms',   name: '参拜仙官', desc: '黄历求签一次（诚心可鉴）', need: 1, counter: null },
   ],
-  TASK_EXTRA: { id: 'night', name: '巡夜护佑', desc: '入夜巡行一次（洞府巡夜）', need: 1, counter: 'explores' },
+  TASK_EXTRA: { id: 'night', name: '巡夜护佑', desc: '外出巡行一次（任意地图探索）', need: 1, counter: 'explores' },
   taskList(p) {
     return this.hasPriv(p, 'fourTasks') ? [...this.TASKS, this.TASK_EXTRA] : this.TASKS;
   },
@@ -301,8 +304,11 @@ const XianSys = {
     { item: 'm_gupian', base: 6000, qty: 2 },
   ],
   marketPrice(p, row) {
-    // v40（E398）一品特权「仙市七五折」：乘法叠加——一品品阶折 0.68 × 特权 0.75 ≈ 0.51
-    const disc = (1 - (this.pin(p) - 1) * 0.04) * (this.hasPriv(p, 'market75') ? 0.75 : 1);   // v40（E398）：乘法叠加
+    // v40（E398）一品特权「仙市七五折」乘法叠加；v41（E444）①②：官声两轴做实——
+    // demerit 加价（每点 +5%，帽 +30%）与 merit 折上折（每 10 点 −1%，帽 −5%）反号，四重乘法叠加
+    const disc = (1 - (this.pin(p) - 1) * 0.04) * (this.hasPriv(p, 'market75') ? 0.75 : 1)   // v40（E398）：乘法叠加
+      * (1 - Math.min(0.05, Math.floor(Math.max(0, this.merit(p)) / 10) * 0.01))
+      * (1 + Math.min(0.30, this.demerit(p) * 0.05));
     return Math.round(row.base * disc);
   },
   async courtBuy(i) {
@@ -311,11 +317,15 @@ const XianSys = {
     const row = this.MARKET[i];
     if (!row) return;
     const price = this.marketPrice(p, row);
+    // v41（E444）③：折扣公示反推单源——公示折=实付折（±1pp），特权生效另注，官声两轴如实分列
+    const pct = Math.round((1 - price / row.base) * 100);
+    const dem = this.demerit(p);
+    const mer = Math.min(5, Math.floor(Math.max(0, this.merit(p)) / 10));
     const qty = row.qty || 1;
     const def = GameData.ITEMS[row.item];
     const ok = await UI.popup({
       title: '仙市 · 易物',
-      html: `以灵石易仙材：<br>【${def.name}】×${qty}——索价 <span class="hl">${Utils.fmtNum(price)}</span> 灵石（${this.pinName(p)}仙市折 ${Math.round((1 - (this.pin(p) - 1) * 0.04) * 100)}%）。`,
+      html: `以灵石易仙材：<br>【${def.name}】×${qty}——索价 <span class="hl">${Utils.fmtNum(price)}</span> 灵石（${this.pinName(p)}仙市实付折 <b>${pct}%</b>${this.hasPriv(p, 'market75') ? '，含一品仙市七五折' : ''}${mer ? `，考功折上折 −${mer}%` : ''}${dem ? `；<span class="neg">官声受损（罢黜 ${dem} 记），官市加价 +${Math.round(Math.min(0.30, dem * 0.05) * 100)}%</span>` : ''}）。`,
       options: [{ text: '易 之', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;

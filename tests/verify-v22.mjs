@@ -83,11 +83,11 @@ console.log('===== SA 源码静态组 =====');
     tower.includes('此处重复 afterAction 删除') && !/\n    Game\.afterAction\(\);\n    \/\/ 每 5 层/.test(tower)
       ? pass('SA77b onVictory 重复 afterAction 删除——节庆检查不再双跑（E200/E62 同族）') : fail('SA77b 冗余', '');
     {
-      const bsIdx = trib.indexOf('Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambushNpc)');
+      const bsIdx = trib.indexOf('Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambushNpc, 25)');
       const aaIdx = bsIdx >= 0 ? trib.indexOf('Game.afterAction()', bsIdx) : -1;
       const pdIdx = trib.indexOf('p.pendingDao = true;');
       trib.includes('对齐 dungeon E59 时序') && bsIdx >= 0 && aaIdx > bsIdx && pdIdx >= 0 && pdIdx < bsIdx
-        ? pass('SA78 渡劫失利偷袭：开战在前、afterAction 在后（E201/E143-12）') : fail('SA78 偷袭时序', `${bsIdx}/${aaIdx}/${pdIdx}`);
+        ? pass('SA78 渡劫失利偷袭：开战在前、afterAction 在后（E201/E143-12；v41（E457）偷袭敌补 fury 25）') : fail('SA78 偷袭时序', `${bsIdx}/${aaIdx}/${pdIdx}`);
     }
     cave.indexOf('if (plot.pested) { plot.pested = false; cured++; }') < cave.indexOf('if (remaining <= 0) continue;')
       && cave.includes('收 获</button>${plot.pested ? `<button class="btn btn-sm btn-danger" data-action="act-cave-pest"')
@@ -97,11 +97,11 @@ console.log('===== SA 源码静态组 =====');
     battle.includes('waveReset(B) {') && battle.includes('this.waveReset(B);')
       && battle.includes('B.combo = 0;') && battle.includes('B.lastSkillTag = null;') && battle.includes('B.skillSeq = 0;')
       ? pass('SA81 续波重置抽 waveReset 单源并入连击/连携势（E204）') : fail('SA81 waveReset', '');
-    guide.includes('p._autoRushSkipDay !== today') && guide.includes("else if (c === 'skip') { p._autoRushSkipDay = today; }")
+    guide.includes('this._rushDeclineDay !== today') && guide.includes("else if (c === 'skip') { this._rushDeclineDay = today; }")
       && guide.includes('偏好随时可在设置中心修改')
       && ambience.includes('amb-rush') && ambience.includes('syncRushPref')
       && idxHtml.includes('id="amb-rush"') && idxHtml.includes('从不聚灵')
-      ? pass('SA82 聚灵偏好三态单源化：单日跳过 + 设置中心入口（E205）') : fail('SA82 聚灵三态', '');
+      ? pass('SA82 聚灵偏好三态单源化：单日跳过 + 设置中心入口（E205；v41（E422/E428）偏好迁 p.ui.rush、跳过改会话内 _rushDeclineDay）') : fail('SA82 聚灵三态', '');
   }
 
   /* ---- v36 B2 批修 E206~E212 ---- */
@@ -170,8 +170,8 @@ console.log('===== SA 源码静态组 =====');
       ? pass('SA94b spiritRush 窗口守卫 + 弹窗净收益按场景实算 0.5/8×baseGain（E218）') : fail('SA94b 净收益', '');
     // v39（E346）：窗口判定/文案全部消费 CaveSys.RUSH_WINDOW() 单源（洞天灵潮 4 日），断言随新口径修订
     guide.includes('const inWindow = p.rushDay != null && today - p.rushDay < WIN;') && guide.includes('const WIN = CaveSys.RUSH_WINDOW();')
-      && guide.includes('!inWindow && p._autoRush !== \'skip\' && p._autoRushSkipDay !== today') && guide.includes('点燃后 ${WIN} 日内修炼效率 ×1.5')
-      ? pass('SA95 一键行权聚灵终态守卫 + 窗口口径弹窗（E205/E218；v39（E346）RUSH_WINDOW 单源化）') : fail('SA95 行权聚灵', '');
+      && guide.includes("this.prefMode(p, 'rush') !== 'skip' && this._rushDeclineDay !== today") && guide.includes('点燃后 ${WIN} 日内修炼效率 ×1.5')
+      ? pass('SA95 一键行权聚灵终态守卫 + 窗口口径弹窗（E205/E218；v39（E346）RUSH_WINDOW 单源化；v41（E422）偏好 p.ui.rush 单源）') : fail('SA95 行权聚灵', '');
     ui.includes("label: '悟道'") && ui.includes("act: (!wudaoDone && canWudao) ? 'act-wudao' : ''") && ui.includes('感悟 ${p.insight}/${wdCost}')
       && gamejs.includes("'act-wudao': () => Cultivate.wuDao(),")
       ? pass('SA96a 悟道入今日修行卡三态 + act-wudao 行内接线（E219；v37（E265）门槛改随境 wdCost=20+2r 卡面/弹窗/实扣三处同源）') : fail('SA96a 悟道行', '');
@@ -192,9 +192,10 @@ console.log('===== SA 源码静态组 =====');
     gdata.includes('days: 19, desc: \'播入灵田，十九日可收【万年雪莲】。\'') && gdata.includes('days: 21, desc: \'播入灵田，廿一日可收【炼魂石】。\'')
       && cave.includes('可收 ×2｜过熟 20 日折半｜季秋 +1')
       ? pass('SA100 种子 grade3 重校 19/21 日 + desc + 卡面收成口径（E223）') : fail('SA100 种子', '');
-    craft.includes("q += (typeof Art !== 'undefined' && Art.seasonOf(p) === 1 ? 2 * 91 / 365 : 0);")
+    craft.includes("const pd = ((DaoSys.tierLevel(p) >= 2 ? 20 : 12) + (DaoSys.hasPath(p, 6, 'tianBi') ? 15 : 0)) / 100;")
+      && craft.includes("+ (typeof Art !== 'undefined' && Art.seasonOf(p) === 1 ? 2 : 0);")
       && paudit.includes('for (const season of [0, 1, 2, 3])')
-      ? pass('SA101 画符仲夏期望摊入 expectedQty + 审计四季复扫（E224）') : fail('SA101 画符季节', '');
+      ? pass('SA101 画符仲夏期望摊入 expectedQty + 审计四季复扫（E224；v41（E435）expectedQty 重写为与实发逐项对表的 EV 式）') : fail('SA101 画符季节', '');
     // v40（E387）：赌袋模型标记随路退役，改验第八路重写标记
     paudit.includes('tierAvg(t) * 0.45 * 1.2') && !paudit.includes('if (loseRate < 0) continue')
       && paudit.includes('第七路') && paudit.includes('配方对倒挂') && paudit.includes('种子档位') && paudit.includes('符箓档位')
@@ -219,10 +220,10 @@ console.log('===== SA 源码静态组 =====');
     gdata.includes("{ item: 'gf_tumo', cost: 1900 }") && gdata.includes("{ item: 'gf_dayan', cost: 1900 }") && gdata.includes("{ item: 'pill_jiuzhuan', cost: 4000 }")   // v40（E390）：900→4000 与通用列同价
       && sect.includes('七五折兑换派系秘藏') && sect.includes('战败折损甚重，且不可改换门庭')
       ? pass('SA105 exclusive 七五折重锚 1900/900/1900 + 站队文案（v36 E226）') : fail('SA105 秘藏', '');
-    npc.includes('npcCombatPower(p, id)') && rank.includes("'可敌' : (ratio >= 0.7 && ratio <= 1.3) ? '略逊' : '远逊'")
+    npc.includes('npcCombatPower(p, id)') && rank.includes('NpcSys.rivalBand(p,')
       && rank.includes('距上一位') && npc.includes('Math.max(grudgeMul, chaseMul)')
       && npc.includes('Utils.clamp(myRp - hisRp, 0, 30) * 0.05')
-      ? pass('SA106 天骄榜活性化：战力三档 + 距上一位 + 温和追赶 max 不叠乘（v36 E227）') : fail('SA106 天骄榜', '');
+      ? pass('SA106 天骄榜活性化：战力三档 + 距上一位 + 温和追赶 max 不叠乘（v36 E227；v41（E420）三档带收 RIVAL_BANDS 单源）') : fail('SA106 天骄榜', '');
     reinc.includes('p2.cultGift = (p2.cultGift || 0) + 2') && reinc.includes('Math.round(2 * full / 4)')
       && stat.includes('+ (p.cultGift || 0)') && reinc.includes('对应属性满十时折化为修炼效率 +2%')
       ? pass('SA107 传承树四维满值折算 cultGift + stat 消费 + 轮回镜提示（v36 E228）') : fail('SA107 cultGift', '');
@@ -265,9 +266,9 @@ console.log('===== SA 源码静态组 =====');
   /* ---- v22 新立：温书守卫 / 聚灵三态 / 切磋总限（处方 SA 清单点项） ---- */
   story.includes('if (c.readonly) return;') && story.includes('此战已成往事') && story.includes('温书回看')
     ? pass('SV1 温书守卫与纯文本渲染双收口（E199）') : fail('SV1 温书', '');
-  guide.includes("p._autoRushSkipDay !== today") && guide.includes("const inWindow = p.rushDay != null && today - p.rushDay < WIN;")
-    && guide.includes("!inWindow && p._autoRush !== 'skip' && p._autoRushSkipDay !== today")
-    ? pass('SV2 聚灵三态与 _autoRushSkipDay + 窗口守卫 inWindow（E205/E218；v39（E346）窗口消费 RUSH_WINDOW 单源）') : fail('SV2 聚灵', '');
+  guide.includes("this._rushDeclineDay !== today") && guide.includes("const inWindow = p.rushDay != null && today - p.rushDay < WIN;")
+    && guide.includes("this.prefMode(p, 'rush') !== 'skip' && this._rushDeclineDay !== today")
+    ? pass('SV2 聚灵三态与跳过会话记账 + 窗口守卫 inWindow（E205/E218；v39（E346）窗口消费 RUSH_WINDOW 单源；v41（E422）_autoRushSkipDay 删除不迁移）') : fail('SV2 聚灵', '');
   npc.includes('今日已三度以武会友') && npc.includes('p._sparCount = (p._sparCount || 0) + 1;')
     ? pass('SV3 切磋每日 3 场跨 NPC 总限（E198）') : fail('SV3 总限', '');
 }
@@ -700,27 +701,27 @@ try {
     const out = {};
     const p = Game.player;
     p.cave = { lv: 1, builds: {}, plots: [] };
-    p.day = 800; p._settleDay = 800; p.rushDay = null; p._autoRush = undefined; p._autoRushSkipDay = -1;
+    p.day = 800; p._settleDay = 800; p.rushDay = null; p.ui = Object.assign({}, p.ui); delete p.ui.rush; delete Guide._rushDeclineDay;   // v41（E422/E428）：偏好 p.ui.rush、跳过印 Guide._rushDeclineDay（旧 _autoRush 系死键清场）
     p.signDay = 800; p.bounties = { day: 800, list: [] }; p.beasts = { active: null, list: [] };   // 环境确定化：其余日常步骤零输出零弹窗，聚灵步行为单独可观测
     // ESC/遮罩（undefined）：不落任何偏好印、当日不聚灵（rushDay 未置即未扣款），次日自然重问
     const op = UI.popup; UI.popup = async () => undefined;
     await Guide.dailyAll();
-    out.escSkipDay = p._autoRushSkipDay !== 800 && p._autoRush === undefined && p.rushDay === null;
-    p.day = 801; p._settleDay = 801; p.rushDay = null; p._autoRushSkipDay = -1;
+    out.escSkipDay = Guide._rushDeclineDay === undefined && p.rushDay === null;
+    p.day = 801; p._settleDay = 801; p.rushDay = null;   // v41（E422）：次日自然重问（旧跳过日死键已删）
     let asked = false;
     UI.popup = async () => { asked = true; return false; };
     await Guide.dailyAll();
     out.reaskNextDay = asked;
     // 设置改回当日即聚：skip 档在设置中心改 always → 当日行权即聚灵不询问
-    p.day = 802; p._settleDay = 802; p.rushDay = null; p._autoRush = 'skip'; p._autoRushSkipDay = -1;
+    p.day = 802; p._settleDay = 802; p.rushDay = null; p.ui = Object.assign({}, p.ui, { rush: 'skip' });   // v41（E428）：skip 偏好迁 p.ui.rush
     p.stones.low += 10000000;   // 防多轮运行间灵石耗尽使 spendStones 偶发失败
-    p._autoRush = 'always';   // 设置中心 amb-rush change 写入等价路径
+    p.ui = Object.assign({}, p.ui, { rush: 'always' });   // 设置中心 amb-rush change 写入等价路径（v41（E428）：迁 p.ui.rush）
     UI.popup = async (o) => { asked = asked && false; return 'once'; };
     const stonesBefore = p.stones.low;
     await Guide.dailyAll();
     out.setThenRush = p.rushDay === 802 && p.stones.low < stonesBefore;
     UI.popup = op;
-    p.day = 10; p.rushDay = null; p._autoRush = undefined; p._autoRushSkipDay = -1;
+    p.day = 10; p.rushDay = null; delete Guide._rushDeclineDay;
     return out;
   });
   rv2.escSkipDay && rv2.reaskNextDay && rv2.setThenRush
@@ -810,7 +811,7 @@ try {
     out.upgraded = upgraded;
     p.realmIdx = 2; p.layer = 0;
     const html = RankSys.render(p);
-    out.vsCount = (html.match(/>可敌<|>略逊<|>远逊</g) || []).length;
+    out.vsCount = (html.match(/>旗鼓相当<|>劲敌<|>鏖战</g) || []).length;   // v41（E420）：带名换强度语
     out.chaseTip = html.includes('距上一位');
     p.realmIdx = 5;
     return out;

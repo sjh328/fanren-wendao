@@ -8,9 +8,44 @@ const Save = {
   mem: {},
   read(key) {
     try {
+      // v41（E466）：写失败键回落 mem 镜像——E124 配额镜像原「只写不读」（read 恒优先 storage），
+      // 本会话内对失败键先读 mem 镜像，进度不丢；下一次成功覆写后回落自动解除（write 成功侧清账）
+      if (this._quotaFailDay && this._quotaFailDay[key] && this.mem[key] != null) {
+        try { return JSON.parse(this.mem[key]); } catch (e2) { /* 镜像损坏则落回常规读 */ }
+      }
       const raw = this.storage.getItem ? this.storage.getItem(this.KEY + key) : this.mem[key];
       return raw ? JSON.parse(raw) : null;
     } catch (e) { return null; }
+  },
+  /** v41（E463）：只读窥档——岁月残影面板读快照元信息（时间点·名号·境界·日）用；
+   *  storage 先读、缺失回落 mem 镜像（writeRaw 配额镜像的快照亦可见），不走 E466 写失败回落
+   *  语义、不触发任何写路径 */
+  peekRaw(key) {
+    try {
+      const raw = this.storage.getItem ? this.storage.getItem(this.KEY + key) : null;
+      if (raw != null) return JSON.parse(raw);
+    } catch (e) { /* storage 读损坏则试 mem */ }
+    try { return this.mem[key] != null ? JSON.parse(this.mem[key]) : null; } catch (e) { return null; }
+  },
+  /** v41（E466）：写失败记账（会话内存，不落档）——键级回落 mem 镜像的依据 */
+  markQuotaFail(key) { this._quotaFailDay = this._quotaFailDay || {}; this._quotaFailDay[key] = Math.floor(Date.now() / 86400000); },
+  clearQuotaFail(key) { if (this._quotaFailDay) delete this._quotaFailDay[key]; },
+  /** v41（E466）：写失败 toast 的「立即导出文本码」入口——给刚弹出的 toast 挂一枚按钮
+   *  （data-action 走全局委托，复用 save-export/exportSave）；toast 本身短命，另入日志一条长效入口 */
+  exportEntry() {
+    try {
+      const wrap = (typeof UI !== 'undefined' && UI.el && UI.el.toast) || null;
+      const tip = wrap && wrap.lastElementChild;
+      if (tip) {
+        const b = document.createElement('button');
+        b.className = 'btn btn-sm';
+        b.style.marginLeft = '8px';
+        b.dataset.action = 'save-export';
+        b.textContent = '立即导出文本码';
+        tip.appendChild(b);
+      }
+    } catch (e) { /* ignore */ }
+    try { if (typeof Log !== 'undefined' && Log.add) Log.add('⚠ 存档写入异常，本次进度已暂存内存镜像（本会话内读取不丢）——<button class="btn btn-sm" data-action="save-export">立即导出文本码</button>', 'warn'); } catch (e2) { /* ignore */ }
   },
   /** v34（E123）：原始串单源写入——storage 可用走 localStorage，否则落内存档（键名与 read 严格对称）。
    *  Meta 此前自拼 `Save.KEY + key` 直写 mem（mem['fanren_wd_meta_1']），而 read('meta_1') 读的是
@@ -19,7 +54,10 @@ const Save = {
     try {
       if (this.storage.setItem) this.storage.setItem(this.KEY + key, raw);
       else this.mem[key] = raw;
-    } catch (e) { this.mem[key] = raw; }   // v34（E124）：配额满/写入异常同样镜像内存档，进度不丢
+      this.clearQuotaFail(key);   // v41（E466）：写成功解除该键回落
+    } catch (e) {
+      this.mem[key] = raw; this.markQuotaFail(key);   // v34（E124）镜像 + v41（E466）回落记账
+    }
   },
 write(key, player) {
     const realmText = GameData.REALM_NAMES[player.realmIdx] + GameData.LAYER_NAMES[player.layer];
@@ -44,13 +82,16 @@ write(key, player) {
         if (verify === raw) {
           this.storage.setItem(this.KEY + key, raw);
           this.storage.removeItem(verifyKey);
+          this.clearQuotaFail(key); delete this.mem[key];   // v41（E466）：成功覆写解除回落、清陈旧镜像
         } else {
           // v33（E97）修瑕：校验失败原「重试」只是原样重写同一 raw——若存储层坏读，第二次大概率
           // 同样不符且无二次校验（自欺）。失败改落内存档并明示，本会话进度至少不丢。
           console.warn('存档校验失败，本条改落内存档');
           this.mem[key] = raw;
+          this.markQuotaFail(key);   // v41（E466）：坏读键记账——本会话 read() 回落 mem 镜像
           try { this.storage.removeItem(verifyKey); } catch (e2) { /* ignore */ }
           UI.toast('浏览器存储读写异常——本次进度暂存内存，可能不会保留', true);
+          this.exportEntry();   // v41（E466）：「立即导出文本码」入口
         }
       } else {
         this.mem[key] = raw;
@@ -58,8 +99,10 @@ write(key, player) {
     } catch (e) {
       console.warn('存档失败', e);
       this.mem[key] = raw;   // v34（E124）：QuotaExceeded 等写入异常也镜像内存档——原只 toast，本条进度直接丢弃
+      this.markQuotaFail(key);   // v41（E466）：写失败键记账——本会话 read() 对该键回落 mem 镜像
       try { if (this.storage.removeItem) this.storage.removeItem(this.KEY + key + '_v'); } catch (e2) { /* ignore */ }   // v35（E191）：回收孤儿校验键（配额本已紧张，孤儿键自加剧）
       UI.toast('存档写入异常，请检查存储空间', true);
+      this.exportEntry();   // v41（E466）：「立即导出文本码」入口
     }
     UI.saveFlash();
   },
@@ -92,6 +135,8 @@ write(key, player) {
   },
   remove(key) {
     try { this.storage.removeItem ? this.storage.removeItem(this.KEY + key) : delete this.mem[key]; } catch (e) { /* ignore */ }
+    delete this.mem[key];   // v41（E463/E466）：清 mem 镜像与回落账（peekRaw/写失败回落不再窥见已删档）
+    this.clearQuotaFail(key);
     // v31 修瑕（E26）：联动清掉该档的成就图鉴 meta 键——此前删档后 fanren_wd_meta_<slot> 永久残留
     try { this.storage.removeItem ? this.storage.removeItem(this.KEY + 'meta_' + key) : delete this.mem['meta_' + key]; } catch (e) { /* ignore */ }
     // v35（E191）：删档一并回收 _v 校验键（孤儿校验键与正式键等大，配额紧张场景自加剧）

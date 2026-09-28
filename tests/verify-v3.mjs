@@ -184,6 +184,7 @@ try {
       for (const k in pt) if (!NESTED.includes(k)) base[k] = pt[k];
       const meta = { name: base.name, realmText: '测试', day: base.day, age: base.age, ts: Date.now(), dead: false };
       localStorage.setItem('fanren_wd_3', JSON.stringify({ v: 1, player: base, meta }));
+      if (typeof UI !== 'undefined' && UI.renderStart) UI.renderStart();   // v41（E463）起开始界面按既有存档渲染读取钮——写档后须重渲染
     }, patch);
     await clickSel(page, '[data-action="st-load"][data-slot="3"]');
     await sleep(700);
@@ -249,7 +250,9 @@ try {
   /* ================= V2 秘境 ================= */
   console.log('--- V2 秘境 ---');
   await seedAndLoad({ day: 40, realmIdx: 2 });
-  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
+  await clickSel(page, '[data-action="act-tab"][data-tab="map"]');   // v41（E467）换骨后子页签随主页渲染——先入游历页
+  await sleep(200);
+  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]', 15000);
   await sleep(300);
   {
     const mapHtml = await text(page, '#tab-content');
@@ -264,7 +267,9 @@ try {
   // 种子秘境进行中：宝箱 / 陷阱 两节点
   await patchSave({ dungeon: { realm: 2, depth: 0, total: 9, choices: ['treasure', 'trap'], gains: [] } });
   await reloadSlot3();
-  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
+  await clickSel(page, '[data-action="act-tab"][data-tab="map"]');   // v41（E467）换骨后子页签随主页渲染——先入游历页
+  await sleep(200);
+  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]', 15000);
   await sleep(300);
   {
     const dn = await text(page, '#tab-content');
@@ -277,7 +282,9 @@ try {
   // 节点结算后路线重新随机生成——重新播种陷阱节点验证
   await patchSave({ dungeon: { realm: 2, depth: 1, total: 9, choices: ['trap', 'treasure'], gains: [] } });
   await reloadSlot3();
-  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
+  await clickSel(page, '[data-action="act-tab"][data-tab="map"]');   // v41（E467）换骨后子页签随主页渲染——先入游历页
+  await sleep(200);
+  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]', 15000);
   await sleep(300);
   {
     await clickSel(page, '[data-action="act-realm-node"][data-node="0"]').catch(() => {});
@@ -298,7 +305,9 @@ try {
   {
     await patchSave({ dungeon: { realm: 0, depth: 0, total: 9, choices: ['battle', 'treasure'], gains: [] }, bag: { pill_juqi: 10, m_lingcao: 10, w_tiejian: 2 } });
     await reloadSlot3();
-    await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
+    await clickSel(page, '[data-action="act-tab"][data-tab="map"]');   // v41（E467）换骨后子页签随主页渲染——先入游历页
+  await sleep(200);
+  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]', 15000);
     await sleep(300);
     await clickSel(page, '[data-action="act-realm-node"][data-node="0"]');
     await sleep(700);
@@ -320,7 +329,9 @@ try {
   // 合成
   {
     await seedAndLoad({ bag: { m_gupian: 9 }, dungeon: null });
-    await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]');
+    await clickSel(page, '[data-action="act-tab"][data-tab="map"]');   // v41（E467）换骨后子页签随主页渲染——先入游历页
+  await sleep(200);
+  await clickSel(page, '[data-action="act-tab"][data-tab="map:realm"]', 15000);
     await sleep(300);
     const hasSynth = await page.$('[data-action="act-realm-synth"]');
     hasSynth ? pass('V2 九碎片出现合成入口') : fail('V2 合成入口', '');
@@ -459,9 +470,11 @@ try {
     await clickSel(page, '[data-action="act-tab"][data-tab="map:world"]');
     await sleep(300);
     await clickSel(page, '[data-action="act-event-join"]');
+    await sleep(400);
+    await clickPopupBtn(0);   // v41（E440②）：领奖事件改零成本取舍——应「静参」首项
     await sleep(600);
     const p1 = await player(page);
-    (p1.exp > exp0 && !p1.world.pending) ? pass('V4 参与圣地讲道：讲道修为奖励+事件卡消除') : fail('V4 讲道参与', JSON.stringify({ e: p1.exp, e0: exp0, pend: p1.world.pending }));
+    (p1.exp > exp0 && !p1.world.pending) ? pass('V4 参与圣地讲道：讲道修为奖励+事件卡消除（取舍弹窗应答静参）') : fail('V4 讲道参与', JSON.stringify({ e: p1.exp, e0: exp0, pend: p1.world.pending }));
   }
   // 魔界入侵参与
   {

@@ -159,7 +159,9 @@ const Bag = {
       UI.toast(poisonBlocked ? '丹毒将满，不宜再服' : '气血灵力充盈，无需服丹');
       return;
     }
-    Time.add(1);
+    // v41（E427）：服丹时间口径统一为「每枚 1 日」——单服 Time.add(1)、连服 Time.add(used) 原本
+    // 三口径并存，一键服 40 枚曾只计 1 日（白嫖 39 日）；现 autoUseLowPills 同按枚计日
+    Time.add(Math.max(1, usedHp + usedMp));
     if (p.dead) return;
     Log.add(`你盘膝调息，一口气服下疗伤丹 ×${usedHp}、回灵丹 ×${usedMp}，气血灵力已然充盈。`, 'gain');
     if (poisonBlocked) Log.add('只是丹毒积累将满，不宜再多服——再服恐有反噬之危。', 'warn');

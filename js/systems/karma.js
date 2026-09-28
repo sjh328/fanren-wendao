@@ -33,24 +33,27 @@ const KarmaSys = {
   ambushChance(p) { return Utils.clamp((p.karma || 0) * 0.4, 0, 60); },
   /** 斩三尸：孽障≥100 方可施展
    *  v40（E400）重做：由「严格劣解」改为冲关前洗髓仪式——独占收益【三尸尽去】：
-   *  气运 +20、心魔 −30、下一次突破成算 +5（p.slayBonus 持久旗标，一世报告读取（突破生效不清零））；
-   *  配全屏演出 realmShow + announce + 年表里程碑（chron m:1）；一世报告读 slayBonus 持久旗标 */
+   *  气运 +20（气运已满则折算破关感悟 +5，v41（E450）定案）、心魔 −30、一世内每次突破成算 +5
+   *  （p.slayBonus 持久旗标——v41（E450）勘误定案：非「下一次/一次性」，是一世内每次突破均 +5，
+   *  突破不清零，reincarnation.js 一世报告「曾斩三尸」行据此保留）；配全屏演出 + 年表里程碑 */
   async slayCorpses() {
     const p = Game.player;
     if ((p.karma || 0) < 100) return;
+    const fortuneFull = (p.fortune || 0) >= this.FORTUNE_CAP;   // v41（E450）③：满气运如实折算
     const ok = await UI.popup({
       title: '斩三尸',
-      html: `孽障缠身（当前 ${p.karma}），已碍道途。<br>斩三尸者，斩善念、斩恶念、斩执念——<br>· 孽障清零<br><span class="neg">· 当前小境界修为尽数散去</span><br><span class="neg">· 永久损失 5% 全属性上限（已累计折损 ${(p.statLossPct || 0)}%）</span><br><span class="hl">· 【三尸尽去】：气运 +20、心魔 −30、下一次突破成算 +5（冲关前洗髓，一击定音）</span><br><br>此举凶险，道友三思。`,
+      html: `孽障缠身（当前 ${p.karma}），已碍道途。<br>斩三尸者，斩善念、斩恶念、斩执念——<br>· 孽障清零<br><span class="neg">· 当前小境界修为尽数散去</span><br><span class="neg">· 永久损失 5% 全属性上限（已累计折损 ${(p.statLossPct || 0)}%）</span><br><span class="hl">· 【三尸尽去】：${fortuneFull ? '气运已满——折破关感悟 +5' : '气运 +20'}、心魔 −30、一世内每次突破成算 +5（洗髓之效持久不灭，逢突破必显）</span><br><br>此举凶险，道友三思。`,
       options: [{ text: '执剑，斩！', value: true, primary: true }, { text: '再等等', value: false }],
     });
     if (!ok) return;
     p.karma = 0;
     p.exp = 0;
     p.statLossPct = (p.statLossPct || 0) + 5;
-    p.slayBonus = true;   // v40（E400）：下一次突破成算 +5 一次性旗标（突破时消费）
+    p.slayBonus = true;   // v41（E450）：一世内每次突破成算 +5（持久旗标，突破不清零；旧一次性消费死键已删）
     KarmaSys.addFortune(20, true);
+    if (fortuneFull) Cultivate.addInsight(p, 5);   // v41（E450）③：满气运不蒸发——气运 +20 折破关感悟 +5（addInsight 通道）
     p.xinmo = Math.max(0, (p.xinmo || 0) - 30);
-    Log.add('你闭目内视，于识海深处斩出三剑——善尸、恶尸、执念尸应声而碎！孽障尽消、心魔涤荡三十，气运逆涨二十；洗髓之效凝于道基——下一次突破成算 +5。然大道五十、天衍四九，那缺失的一分，再也回不来了。', 'system');
+    Log.add(`你闭目内视，于识海深处斩出三剑——善尸、恶尸、执念尸应声而碎！孽障尽消、心魔涤荡三十，${fortuneFull ? '气运已满，化作破关感悟 +5' : '气运逆涨二十'}；洗髓之效凝于道基——一世内每次突破成算 +5。然大道五十、天衍四九，那缺失的一分，再也回不来了。`, 'system');
     // v40（E400）：全屏演出 + 年表里程碑
     UI.realmShow('三 尸 尽 去 · 洗 髓 涤 魂', '#cfd8cc', 5);
     UI.announce('✦ 斩 三 尸 · 三 尸 尽 去 ✦', 'gold');
@@ -78,6 +81,10 @@ const RepSys = {
     { min: 120,  name: '名动一方', color: 'gold' },
     { min: 150,  name: '威震天下', color: 'grade-5' },
   ],
+  /** v41（E438 修偏）：声望机制阈值正档六位单源——30/60/80/90/120/150（priceMul 30/80、bountyBonus
+   *  30/80/150、stat.js 60、explore 90、firstMeetBoost 120、销赃折价全档的并集）；黑市销赃折价档与
+   *  UI 声望阶梯同表消费本表，调阈值不再静默漂移。机制分支字面量保留——各档语义各异，不强行参数化 */
+  STEPS: [30, 60, 80, 90, 120, 150],
   level(p) {
     const rep = p.reputation || 0;
     for (let i = this.LEVELS.length - 1; i >= 0; i--) {

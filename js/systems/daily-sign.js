@@ -73,7 +73,7 @@ const DailySign = {
     const effect = item.apply(p);
     p.signDay = today;
     p.counters.signs = (p.counters.signs || 0) + 1;   // v24 章助缘计数
-    if (typeof SectSys !== 'undefined' && SectSys.onSign) SectSys.onSign();   // v30：宗门问签差事钩子
+    // v41（E443）：宗门问签差事退役——SectSys.onSign 空转调用随 sect.js 侧一并删除（残根清场）
     p.signText = item.text;
     p.signDesc = item.desc;
     Log.add(`【黄历${p.signStreak > 1 ? ` · 连签第 ${p.signStreak} 日${streakDay === 7 ? ' · 七日满签，气运 +3' : ''}` : ''}】你诚心摇签，得一支<b>${item.text}</b>——${item.desc}（${effect}）`, item.id === 'mishap' ? 'warn' : 'gain');

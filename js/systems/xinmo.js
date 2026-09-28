@@ -33,29 +33,72 @@ const XinmoSys = {
   /** 全属性加成（Stat.finalScale 消费）：每降伏一次 +1%，封顶 +6%（v37（E245）：原 +20% 为
    *  本世不可达装饰，改如实——扩源后每世 3~6 次降伏可期，封顶真实可触） */
   scale(p) { return 1 + Math.min(6, this.cleared(p)) * 0.01; },
-  /** 降伏心魔：幻境之战（胜负皆了局） */
+  /* ========== v41（E448）②：六道心象池（贪/嗔/痴/慢/疑/惰）——池写本文件不进 game-data ==========
+   *  每象专属开场词 2 句 + 技能组 3 门（复用既有敌人 skills 白名单机制）；剪影现算零新存档字段 */
+  IMAGES: {
+    tan:  { name: '贪', lines: ['「你攥着那些灵石的样子，像极了饿鬼攥着供饭。」', '「再囤一分，你的道心便再轻一分——你我，都清楚。」'],
+      skills: [{ name: '摄物贪手', w: 35, kind: 'drain', mult: 1.15, leech: 0.5 }, { name: '万物皆可夺', w: 30, kind: 'bleed', pct: 3, rounds: 2 }, { name: '贪壑难填', w: 25, kind: 'weaken', pct: 22, rounds: 2 }] },
+    chen: { name: '嗔', lines: ['「记仇吗？你夜里翻来覆去嚼的那些名字——都是我喂你的。」', '「火烧起来的时候，你可从没想过扑。」'],
+      skills: [{ name: '瞋火燎心', w: 35, kind: 'burn', pct: 4, rounds: 2 }, { name: '怒涛血刃', w: 30, kind: 'bleed', pct: 3.5, rounds: 2 }, { name: '一念成魔', w: 25, kind: 'stun', rounds: 1 }] },
+    chi:  { name: '痴', lines: ['「参了三百遍的那一句话，你其实一个字也没懂。」', '「困住你的从来不是关，是你自己画的圈。」'],
+      skills: [{ name: '执念缠身', w: 35, kind: 'slow', pct: 28, rounds: 2 }, { name: '痴梦不解', w: 30, kind: 'freeze', rounds: 1 }, { name: '钻牛角尖', w: 25, kind: 'defdown', pct: 22, rounds: 2 }] },
+    man:  { name: '慢', lines: ['「榜首也好、魁首也罢——你早觉得全天下的道理都该让路了。」', '「低头？你忘了怎么写了。」'],
+      skills: [{ name: '我慢高山', w: 35, kind: 'roar', atk: 25, rounds: 2 }, { name: '目下无尘', w: 30, kind: 'weaken', pct: 25, rounds: 2 }, { name: '傲骨为障', w: 25, kind: 'guard', def: 35, rounds: 2 }] },
+    yi:   { name: '疑', lines: ['「背刺过人的手，梦里也攥不拢——你数过他们临走的眼神吗？」', '「誓是你说碎就碎的，如今你猜谁都会这样对你。」'],
+      skills: [{ name: '疑影憧憧', w: 35, kind: 'weaken', pct: 25, rounds: 2 }, { name: '猜忌成刃', w: 30, kind: 'poison', pct: 3.5, rounds: 3 }, { name: '倒戈一击', w: 25, kind: 'bleed', pct: 3, rounds: 2 }] },
+    duo:  { name: '惰', lines: ['「修行？明日再说吧——这话你已经说了多少个明日？」', '「你把日子都睡成了同一日，还问我为何寻上门。」'],
+      skills: [{ name: '怠惰如泥', w: 35, kind: 'slow', pct: 30, rounds: 2 }, { name: '拖字诀', w: 30, kind: 'guard', def: 30, rounds: 2 }, { name: '懒骨蚀神', w: 25, kind: 'weaken', pct: 20, rounds: 2 }] },
+  },
+  /** v41（E448）②：心象剪影现算——按本世 counters/孽障/记忆推主象，因果对表：
+   *  杀孽（孽障·精英杀）→嗔、背刺/破誓（记忆·宽恕）→疑、存灵石→贪、荣誉在身→慢、
+   *  论道切磋求知之执→痴、挂机搁身→惰；济世（散财/侠名）为池外善念，消嗔减疑。
+   *  返回 { id, name, sev(0.3~1 重度，镜像 0.95~1.05 语义带), lines, skills }——不落盘 */
+  imageOf(p) {
+    const c = p.counters || {};
+    const betrayN = Object.values(p.npcs || {}).reduce((n, s) => n + (((s || {}).mem || []).filter(m => m.t === 'betray').length), 0);
+    const mercyN = (p.oaths && p.oaths.mercy) ? Object.values(p.oaths.mercy).reduce((a, b) => a + (Number(b) || 0), 0) : 0;
+    const poorCap = (typeof OathSys !== 'undefined' && OathSys.poorCap) ? Math.max(1, OathSys.poorCap(p)) : 1;
+    const w = {
+      chen: (p.karma || 0) * 0.4 + (c.killsElite || 0) * 2,
+      yi:   betrayN * 25 + mercyN * 15,
+      tan:  Math.min(40, (typeof Bag !== 'undefined' && Bag.stonesTotal ? Bag.stonesTotal(p) : 0) / poorCap * 40),
+      man:  (p.rankHonor || 0) * 3 + ((p.flags && p.flags.tourneyChamp) || 0) * 8,
+      chi:  (c.learns || 0) * 2 + (c.spars || 0) * 0.5,
+      duo:  (typeof AutoCult !== 'undefined' && AutoCult.active) ? 20 : 0,
+    };
+    const good = (c.donates || 0) * 3 + ((p.reputation || 0) >= 80 ? 12 : 0);   // 济世→善：善念折冲杀业
+    w.chen = Math.max(0, w.chen - good);
+    w.yi = Math.max(0, w.yi - good);
+    const rows = Object.entries(w).sort((a, b2) => b2[1] - a[1]);
+    const topId = rows[0][0];
+    const topW = rows[0][1];
+    const img = this.IMAGES[topId];
+    return { id: topId, name: img.name, sev: topW <= 0 ? 0.5 : Utils.clamp(topW / 40, 0.3, 1), lines: img.lines, skills: img.skills };
+  },
+  /** 降伏心魔：幻境之战（胜负皆了局）
+   *  v41（E448）①：化身改玩家 Stat 镜像——旧基式 55+5rp^1.6 零 parity，E374 后仪式战相对塌陷。
+   *  hp=玩家 maxHp×1.1、atk=玩家 atk×0.9、def=玩家 def、spd=玩家 speed；
+   *  心象重度 sev ∈ 0.3~1 折 0.95~1.05 语义带（旗鼓相当带微调，E420② 带名），70 心魔即劫的「选择的代价」复归 */
   start() {
     const p = Game.player;
     if (!this.ready(p) || Battle.active || Story.active()) return;
-    const rp = Utils.clamp(p.realmIdx * 4 + p.layer + 2, 1, 60);
     Log.add('你阖目入定，识海深处黑雾翻涌——心魔化身，踏着你自己的模样而来。', 'warn');
     Story.chron('心魔劫起，识海自战');
-    const pw = rp;
-    const rIdx = Utils.clamp(Math.floor(pw / 4), 0, 9);
+    const st = Stat.compute(p);
+    const img = this.imageOf(p);
+    const trim = 0.95 + 0.10 * img.sev;
+    const rp = Utils.clamp(p.realmIdx * 4 + p.layer + 2, 1, 60);
+    const rIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
     const enemy = {
-      id: null, name: '心魔化身', elite: true, power: pw, species: 'ghost', bossArt: 'xinmo',
-      realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(pw % 4, 0, 3)],
-      hpMax: Math.round((55 + Math.pow(pw, 1.6) * 5) * 1.7 * 0.9),
-      atk: Math.round((6 + pw * 2.6) * 1.35 * 0.9),
-      def: Math.round((4 + pw * 2.2) * 0.9), spd: Math.round(7 + pw * 0.9),
+      id: null, name: `心魔化身 · ${img.name}相`, elite: true, power: rp, species: 'ghost', bossArt: 'xinmo',
+      realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
+      hpMax: Math.round(st.maxHp * 1.1 * trim),
+      atk: Math.round(st.atk * 0.9 * trim),
+      def: Math.round(st.def), spd: Math.round(st.speed),
       dodge: 8, crit: 12,
-      skills: [
-        { name: '心魔低语', w: 30, kind: 'weaken', pct: 25, rounds: 2 },
-        { name: '旧事重演', w: 30, kind: 'bleed', pct: 3, rounds: 2 },
-        { name: '心渊噬魂', w: 25, kind: 'drain', mult: 1.2, leech: 0.5 },
-      ],
+      skills: img.skills.slice(0, 3),
       expGain: Math.round(30 * GameData.eco(rIdx)), stoneGain: 0, dropTier: 2, rareDrop: null, hp: 0,
-      _storyBark: '心魔化身开口，用的却是你自己的声音：「你不敢看的那一面……就是我。」',
+      _storyBark: `${img.lines[0]}\n${img.lines[1]}`,
     };
     // v20 心魔镜像：它抬手的，分明是你自己的成名绝技
     const dmgGf = Object.entries(p.gongfa || {})

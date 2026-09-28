@@ -127,7 +127,8 @@ console.log('===== SA 源码静态组 =====');
   rank.includes('在世风云修士') && rank.includes('殒身者自榜上除名') ? pass('SA57 天骄榜文案对齐（D7）') : fail('SA57 天骄榜', '');
   quest.includes("id: 'xianjie'") && quest.includes("id: 'xianVision'") && quest.includes("id: 'dungeonRule'") ? pass('SA58 百科三新词条（D7）') : fail('SA58 词条', '');
   gdata.includes('仙门之内分四阶十二层') && gdata.includes('仙劫之雷非死劫') && gdata.includes('天下十座秘境，各有地脉') ? pass('SA59 百科词条正文（D7）') : fail('SA59 正文', '');
-  guide.includes('tut_v33sign') && guide.includes('tut_v33rule') && guide.includes('tut_v33fee') ? pass('SA60 升档新知三引导（D9/E103）') : fail('SA60 新知', '');
+  gamejs.includes('tut_v33sign') && gamejs.includes('tut_v33rule') && gamejs.includes('tut_v33fee')
+    ? pass('SA60 升档新知三引导（D9/E103；v41（E429②）旗标置位迁 Game.afterAction 行动时机，tips 纯只读）') : fail('SA60 新知', '');
   explore.includes('雾漫深谷') && explore.includes('秋气肃杀') ? pass('SA61 天时/季节事件文案（E110）') : fail('SA61 文案', '');
   dungeon.includes('Cultivate.addInsight(p, insGain)') && dungeon.includes('Cultivate.addInsight(p, 5)') ? pass('SA62 秘境感悟走统一入口（E106）') : fail('SA62 感悟', '');
   festival.includes('delete p.flags[key]') ? pass('SA63 节庆旗标失败回滚（E107）') : fail('SA63 回滚', '');
@@ -267,8 +268,8 @@ try {
     await stubAA(() => AuctionSys.bid('steady'));
     out.e73a = p._boxDay === today;   // 第 0 日也须成立（真值 coercion 曾在此失配）
     const wMid = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;   // 首匣已花 115
-    p.auction.until = 0; p.auction.seq++;   // 触发 state() 整体重掷（原 boxDay 在此蒸发）
-    const rolled = AuctionSys.state(p);
+    p.auction.until = 0; p.auction.seq++;   // 触发期次滚茬整体重掷（原 boxDay 在此蒸发）；v41（E434）：滚茬收写侧 ensure()
+    const rolled = AuctionSys.ensure(p);
     await stubAA(() => AuctionSys.bid('steady'));
     const w1 = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
     out.e73b = rolled.item !== 'mystery' || w1 === wMid;   // 换出的若仍是古匣，第二次必被门禁挡下（分文不流）
@@ -304,15 +305,15 @@ try {
     // E77：views 按拍品连任累计、换品归一
     const ch3 = Utils.chance; Utils.chance = () => false;
     p.auction = null;
-    AuctionSys.state(p);
-    const lotA = AuctionSys.state(p);
+    AuctionSys.ensure(p);
+    const lotA = AuctionSys.ensure(p);
     out.e77a = (lotA.views || 0) === 1;
     p.auction.until = Math.floor(p.day) - 1;   // 同日同 seq 同 hash → 同拍品连任
-    const lotB = AuctionSys.state(p);
+    const lotB = AuctionSys.ensure(p);
     out.e77b = lotB.item === lotA.item && lotB.views === 2;
     Utils.chance = () => true;
     p.auction = null;
-    const lotC = AuctionSys.state(p);
+    const lotC = AuctionSys.ensure(p);
     out.e77c = lotC.item === 'mystery' && lotC.views === undefined;
     Utils.chance = ch3;
     p.auction = null;
@@ -437,13 +438,16 @@ try {
     out.d6 = typeof re._realmRule === 'string' && re._realmRule.includes('剑气禁制');
     // D7：百科词条解锁探针
     out.d7 = QuestSys.LORE_KEYS.filter(e => ['xianjie', 'xianVision', 'dungeonRule'].includes(e.id)).length === 3;
-    // D9：guide tips 升档新知触发一次后自锁
+    // D9：升档新知三旗标迁行动时机（v41（E429②））——afterAction 触发一次性 toast 后自锁；tips 纯只读不再置旗
     p.counters.signs = 5; p.counters.forges = 3; p.counters.maxDepth = 3;
+    p.signStreak = 0;   // 连签新知门槛（<7）防多轮运行残留
     p.flags = p.flags || {};
     delete p.flags.tut_v33sign; delete p.flags.tut_v33rule; delete p.flags.tut_v33fee;
-    const tips = Guide.tips(p);
+    const toasts = []; const realToast2 = UI.toast; UI.toast = t => toasts.push(String(t));
+    Game.afterAction();
+    UI.toast = realToast2;
     out.d9a = ['tut_v33sign', 'tut_v33rule', 'tut_v33fee'].every(k => p.flags[k] === true);
-    out.d9b = tips.some(t => t.text.includes('连签')) && tips.some(t => t.text.includes('地脉')) && tips.some(t => t.text.includes('工费'));
+    out.d9b = toasts.some(t => t.includes('连签')) && toasts.some(t => t.includes('地脉')) && toasts.some(t => t.includes('工费'));
     Log.add = logBak;
     return out;
   });

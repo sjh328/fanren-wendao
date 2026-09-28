@@ -8,8 +8,8 @@ const Log = {
   paused: false,     // v4：暂停自动滚动
   pinTimer: null,    // v4：金色置顶条计时器
   filter: null,      // v20：类型过滤（null=全部）
-  density: 'all',    // v20：all / lite（略去见闻）
-  TYPES: { info: '见闻', gain: '收获', loss: '损失', battle: '战斗', system: '系统', realm: '境界', event: '事件', warn: '警训', story: '剧情' },
+  density: 'all',    // v20：all / lite（略去杂记；v41 E431 起见闻 flavor 不受密度影响）
+  TYPES: { flavor: '见闻', info: '杂记', gain: '收获', loss: '损失', battle: '战斗', system: '系统', realm: '境界', event: '事件', warn: '警训', story: '剧情' },   // v41（E431）：flavor 自 info 分家——见闻（六道语料）常显可滤，杂记（流程流水）lite 下仍略去
   init() {
     this.el = document.getElementById('log');
     // v14：恢复上次折叠偏好（默认折叠，内容区主导）
@@ -27,7 +27,7 @@ const Log = {
       if (document.visibilityState === 'visible' && this.el && !this.paused) this.el.scrollTop = this.el.scrollHeight;
     });
   },
-  /** text 支持 HTML；type: info/gain/loss/battle/system/realm/event/warn/crit */
+  /** text 支持 HTML；type: flavor/info/gain/loss/battle/system/realm/event/warn/crit */
   add(text, type = 'info') {
     if (!this.el || this.skim(type)) return;
     const p = Game.player;
@@ -58,7 +58,7 @@ const Log = {
     // v14：折叠态提示新日志
     this.pokeBadge();
   },
-  /** v20 日志密度：lite 模式下略去 info（见闻/氛围）类，降低刷屏 */
+  /** v20 日志密度：lite 模式下略去 info（杂记流水）类；flavor（见闻）自 v41（E431）起不受密度滤除 */
   skim(type) { return this.density === 'lite' && (type === 'info'); },
   /** v20 日志类型过滤：null=全部，否则仅显示该类型 */
   setFilter(type) {
@@ -81,7 +81,7 @@ const Log = {
       gain: ['gain', 'realm'],
       loss: ['loss', 'warn'],
       story: ['story', 'event'],
-      system: ['system'],   // v34（E6）：见闻(info)不再混入「系统」——玩家找突破/大事记录时满屏见闻，语义错位
+      system: ['system'],   // v34（E6）：杂记(info)不再混入「系统」；见闻(flavor)自 v41（E431）为独立过滤项
     };
     div.style.display = (groups[this.filter] || [this.filter]).includes(type) ? '' : 'none';
   },

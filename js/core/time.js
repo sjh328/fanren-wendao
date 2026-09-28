@@ -4,6 +4,13 @@
  * ====================================================================== */
 const Time = {
   MONTHS: ['孟春', '仲春', '季春', '孟夏', '仲夏', '季夏', '孟秋', '仲秋', '季秋', '孟冬', '仲冬', '季冬'],
+  // v41（E429⑤）：日推进后置钩子单点——add() 是全游戏日推进唯一收口，跨系统需要「日推进后」
+  // 做常规预热/滚茬的一律经 onAdvanceHook 注册于此（B1 现册：拍卖期常规预热）。
+  // v5 收口：time.js 本钩子由 P2/B1 一次性建成并独占改动；后续批次（B2/E434②）只 retarget 回调，不再动 time.js。
+  onAdvance: [],
+  onAdvanceHook(fn) {
+    if (typeof fn === 'function' && !this.onAdvance.includes(fn)) this.onAdvance.push(fn);
+  },
   add(days) {
     const p = Game.player;
     if (!p || p.dead) return;
@@ -21,6 +28,10 @@ const Time = {
       Log.add(`又是一年春秋，你如今 <b>${p.age}</b> 岁。`, 'system');
       if (p.age > st.lifespan * 0.9) Log.add('你隐隐感到体内生机流逝，寿元无多了……', 'warn');
       if (p.age > st.lifespan) { Game.gameOver('寿元'); return; }
+    }
+    // v41（E429⑤）：日推进后置钩子（尾部单点）——寿元坐化即返，钩子不扰动死亡结算
+    for (const fn of this.onAdvance) {
+      try { fn(p, days); } catch (err) { console.error('日推进后置钩子异常:', err); }
     }
   },
   /** v29 天年：折寿——天劫失利/转道/心魔劫败等大挫折损寿元（lifeCut 持久化，读写 ||0 自愈） */

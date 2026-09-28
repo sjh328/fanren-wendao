@@ -93,6 +93,9 @@ const AutoCult = {
     this.active = true;
     this.rounds = 0;
     this._expFellBack = false;   // v35（U5）：exp 目标飞升后转仙元的一次性标记
+    this._rushTriedDay = -1;   // v41（E422）：聚灵首问重臂
+    this._smartHold = false;   // v41（E423）：智能档滞回状态重臂
+    if (typeof Cultivate !== 'undefined') Cultivate._autoRep = null;   // v41（E423）：智能闭关聚合账重臂
     this.startExp = Guide.totalExp(p);
     this.startYuan = p.counters.xianyuan || 0;   // v35（U5）：圆满态小结改报仙元增量
     this.startDay = p.day;
@@ -115,21 +118,48 @@ const AutoCult = {
         continue;
       }
       // v40（E393）：与离线流同待遇——三偏好接线
-      // ① 聚灵偏好 ≠skip：窗口过期即续（ask 首问弹窗挂起本循环等待玩家作答；当日已拒不再问）
-      if (p.cave && p._autoRush !== 'skip') {
+      // ① v41（E422）：聚灵三态问法根治模态死循环——挂机语境同款三态（今日聚灵/以后都聚/今日跳过），
+      // 偏好落 p.ui.rush（Guide.prefMode 单源）；拒答/点燃后 _rushTriedDay 前移至窗口真过期之日，
+      // 静默整整一个窗口期（旧守卫只看当日、恰被一轮修炼 3 日耗尽，10 轮弹 10 次的病灶自此拔除）
+      if (p.cave && Guide.prefMode(p, 'rush') !== 'skip') {
         const winNow = (typeof CaveSys !== 'undefined' && CaveSys.RUSH_WINDOW) ? CaveSys.RUSH_WINDOW() : 3;
-        const inWin = p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < winNow;
-        if (!inWin && this._rushTriedDay !== Math.floor(p.day || 0)) {
-          this._rushTriedDay = Math.floor(p.day || 0);
-          const go = p._autoRush === 'always' ? true : await CaveSys.spiritRush({ ask: true });
-          if (!go && p._autoRush !== 'always') p._autoRushSkipDay = Math.floor(p.day || 0);   // 当日拒答不再问（与行权同语义）
+        const today = Math.floor(p.day || 0);
+        const inWin = p.rushDay != null && today - p.rushDay < winNow;
+        if (!inWin && (this._rushTriedDay || -1) < today) {
+          const mode = Guide.prefMode(p, 'rush');
+          const holdQuiet = () => { this._rushTriedDay = today + winNow - 1; };   // 前移：本窗口期内不再问
+          if (mode === 'always') {
+            await CaveSys.spiritRush({ ask: false });
+            holdQuiet();
+          } else {
+            const cost = CaveSys.rushCost(p);
+            const c = await UI.popup({
+              title: '自动修炼 · 聚灵加速',
+              html: `今日聚灵阵尚未点燃：燃 <b>${Utils.fmtNum(cost)}</b> 灵石，<b>${winNow} 日内修炼/闭关效率 ×1.5</b>。<br><span class="tip-line">选择「以后都聚」后，挂机将在每次灵机散尽时自动续燃（灵石不足自动跳过）；偏好随时可在设置中心修改。</span>`,
+              options: [
+                { text: `今日聚灵（-${Utils.fmtNum(cost)}）`, value: 'once', primary: true },
+                { text: '以后都聚，不再询问', value: 'always' },
+                { text: '今日跳过', value: 'skip', primary: false },
+              ],
+            });
+            if (c === 'always') { p.ui = p.ui || {}; p.ui.rush = 'always'; await CaveSys.spiritRush({ ask: false }); }
+            else if (c === 'once') await CaveSys.spiritRush({ ask: false });
+            holdQuiet();   // 拒答（含 ESC）同样前移——undefined 不落任何偏好
+          }
           if (!this.active) return;
         }
       }
       // ② 悟道偏好 always：感悟满百静默直悟
-      if (typeof Guide !== 'undefined' && Guide.prefMode(p, 'wudao') === 'always'
+      // v41（E424）：冲关让位——圆满冲关在即（exp ≥60%）感悟留而不化，一日只记一句不刷屏
+      const wuNeed = GameData.layerNeedT(p, p.realmIdx, 3);
+      if (p.layer === 3 && p.exp >= wuNeed * 0.6 && (p.insight || 0) >= Cultivate.wuDaoCost(p)) {
+        if (this._wudaoYieldDay !== Math.floor(p.day || 0)) {
+          this._wudaoYieldDay = Math.floor(p.day || 0);
+          Log.add('冲关在即，感悟留而不化——圆满资粮且存于识海，待冲关时尽数兑现。', 'system');
+        }
+      } else if (typeof Guide !== 'undefined' && Guide.prefMode(p, 'wudao') === 'always'
         && (p.insight || 0) >= Cultivate.wuDaoCost(p) && (p._wuDaoDay || -1) !== Math.floor(p.day || 0)) {
-        try { await Cultivate.wuDao({ silent: true }); } catch (e) {}
+        try { await Cultivate.wuDao({ silent: true }); } catch (e) { console.error('挂机·悟道异常:', e); }
         if (!this.active) return;
       }
       // ③ 日界内嵌一次静默行权（求签/照料/悬赏/听讲等，与离线流同待遇；小账按偏好静默）
@@ -138,7 +168,19 @@ const AutoCult = {
         try { if (!p.dead && !Battle.active && typeof Guide !== 'undefined' && Guide.dailyAll) await Guide.dailyAll({ silent: true }); } catch (e) {}
         if (!this.active) return;
       }
-      Cultivate.normal({ manual: false });   // 一轮普通修炼（自带日志 / 时间 / 收尾渲染）——挂机不带亲修
+      // v41（E423）：挂机方式 p.ui.engine（智能/普通，默认智能）——智能档在灵石存量 ≥ 3 轮闭关开销
+      // 且未在闭关时自动改跑 secludeLoop(1,{auto:true}) 轮制（进层自动出关续开）；滞回防震荡：
+      // 跌破 1 轮开销即回落普通修炼，攒回 3 轮开销才重启智能（一个入口管全部挂机，日均对齐闭关）
+      const cost1 = Cultivate.secludeCost(p);
+      const tot = (typeof Bag !== 'undefined' && Bag.stonesTotal) ? Bag.stonesTotal(p) : 0;
+      if (tot < cost1) this._smartHold = true;
+      else if (tot >= cost1 * 3) this._smartHold = false;
+      if (((p.ui && p.ui.engine) || 'smart') === 'smart' && !this._smartHold && !Cultivate._looping) {
+        await Cultivate.secludeLoop(1, { auto: true });   // settleReport 走 auto 语境聚合，不弹「出关·结算」模态（v5 静默规格）
+        if (Tribulation.state || Battle.active) { this.pause('天劫／战事起，自动修炼暂停'); return; }   // 闭关中冲关引劫——交回亲手渡劫
+      } else {
+        Cultivate.normal({ manual: false });   // 一轮普通修炼（自带日志 / 时间 / 收尾渲染）——挂机不带亲修
+      }
       // v34（G2）：abort（读档/返回开始界面）后当轮成果无人落盘——settle 已 force 存过、
       // 循环下轮即退，本轮 normal 的修为随关页蒸发。检测到已停即补一次落盘再退。
       if (!this.active) { if (typeof Save !== 'undefined') Save.autoSave(true); return; }
@@ -240,6 +282,12 @@ const AutoCult = {
       Log.add(`本次自动修炼小结：${this.rounds} 轮吐纳，游戏内历时 ${days} 日，修为尽炼仙元 <b>+${Utils.fmtNum(Math.max(0, yuan))}</b>（累计 ${Utils.fmtNum(p.counters.xianyuan || 0)}）。`, 'gain');
     } else {
       Log.add(`本次自动修炼小结：${this.rounds} 轮吐纳，游戏内历时 ${days} 日，累计修为 <b>+${Utils.fmtNum(Math.max(0, gained))}</b>。`, 'gain');
+    }
+    // v41（E423）：智能闭关聚合入小结——每轮闭关收益经 settleReport(auto) 累计至此，一行入挂机日报
+    const ar = (typeof Cultivate !== 'undefined' && Cultivate._autoRep) || null;
+    if (ar && ar.rounds > 0) {
+      Log.add(`智能闭关 ${ar.rounds} 轮 · 修为 <b>+${Utils.fmtNum(Math.round(ar.exp))}</b>${ar.advanced ? ` · 进层 ×${ar.advanced}` : ''}。`, 'gain');
+      Cultivate._autoRep = null;
     }
     UI.renderAll();
   },

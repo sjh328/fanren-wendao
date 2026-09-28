@@ -722,7 +722,7 @@ try {
     await sleep(300);
     await clickSel(page, '[data-action="act-buy"][data-item="gf_tiangang"]'); // 玄级功法
     await sleep(400);
-    const t14 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
+    const t14 = await page.evaluate(() => ({ bag: Game.player.bag, gongfa: Game.player.gongfa }));   // v41（E429）存档节流下 auto 快照有延迟——改读内存态（行为断言以玩家实态为准）
     (t14.bag.gf_tiangang || t14.gongfa.gf_tiangang) ? pass('T14 体修可购买玄级功法（E316 解禁：战内法诀 ×0.7）') : fail('T14 体修功法限制', '玄级功法仍不可买');
     // v20 加固：种子合并会残留此前学过的沧海剑诀——显式清掉，保证购买路径可断言
     await page.evaluate(() => { delete Game.player.gongfa.gf_canghai; delete Game.player.bag.gf_canghai; UI.renderAll(); });

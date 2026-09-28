@@ -370,21 +370,18 @@ if (browser) {
     const g2 = await page.evaluate(() => {
       const out = {};
       const p = Game.player;
-      // 差事五式：钩子在位
-      out.hooks = typeof SectSys.onExplore === 'function' && typeof SectSys.onSign === 'function';
+      // 差事五式：钩子在位（v41（E443）：问签差事删除，onSign 钩子随之退役——explore 钩子照常）
+      out.hooks = typeof SectSys.onExplore === 'function' && typeof SectSys.onSign !== 'function';
       // v37（E242）+v40（E405）：池互斥后宗门只余两门（cult/explore；sign 随问签删除退役，dungeon r6+ 新增）
       p.sect = { id: 'qingyun', contrib: 100, tasks: [], faction: null };
       const seen = new Set();
       for (let i = 0; i < 40; i++) { const t = SectSys.genTask(p); seen.add(t.type); }
       out.threeTypes = ['cult', 'explore'].every(t => seen.has(t)) && !seen.has('sign') && !seen.has('kill') && !seen.has('collect');
       out.flavor3 = Object.keys(GameData.SECT_QUEST_FLAVOR.qingyun).length === 3;
-      // explore/sign 钩子推进
+      // explore 钩子推进
       p.sect.tasks = [{ type: 'explore', target: null, need: 2, progress: 0, name: 'x', desc: 'x' }];
       SectSys.onExplore(); SectSys.onExplore();
       out.exploreHook = p.sect.tasks[0].progress === 2;
-      p.sect.tasks = [{ type: 'sign', target: null, need: 1, progress: 0, name: 'x', desc: 'x' }];
-      SectSys.onSign();
-      out.signHook = p.sect.tasks[0].progress === 1;
       // 亲传弟子历练：亲传有产出、外门无
       p.realmIdx = 3; p.sect.contrib = 2500;
       p.sect._discipleDay = -1;
@@ -401,7 +398,7 @@ if (browser) {
       return out;
     });
     g2.hooks && g2.threeTypes && g2.flavor3 ? pass('RB39 宗门差事三门生成与名目表（补遗；v37（E242）池互斥——kill/collect 归悬赏板不再生成）') : fail('RB39 差事', JSON.stringify({ h: g2.hooks, f: g2.threeTypes, n: g2.flavor3 }));
-    g2.exploreHook && g2.signHook ? pass('RB40 历练/问签钩子推进（补遗）') : fail('RB40 钩子', JSON.stringify({ e: g2.exploreHook, s: g2.signHook }));
+    g2.exploreHook ? pass('RB40 历练钩子推进（补遗；v41（E443）问签退役，钩子仅余 explore）') : fail('RB40 钩子', JSON.stringify({ e: g2.exploreHook }));
     g2.disciple && g2.discipleGate ? pass('RB41 亲传弟子历练产出+职位门（补遗）') : fail('RB41 弟子历练', JSON.stringify({ d: g2.disciple, g: g2.discipleGate }));
     consoleErrors.length === 0 ? pass('RB38 运行时 0 控制台错误') : fail('RB38 控制台', consoleErrors.slice(0, 3).join(' | '));
   } catch (e) {

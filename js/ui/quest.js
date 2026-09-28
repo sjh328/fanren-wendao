@@ -536,6 +536,40 @@ const QuestSys = {
     return this.SIDES.some(sd => !q.side[sd.id] && (!sd.prev || q.side[sd.prev]) && p.realmIdx >= sd.minRealm
       && sd.steps.every(st => { try { return !!st.done(p); } catch (e) { return false; } }));
   },
+  /** v41（E465）：温书考据 ·「全景已阅」印记——某章 open/mid/mid2/end 四段全部看过且章末抉择已录，
+   *  点亮 p.flags.studyMark[章id]（按章一次性；挂 Story.markSeen/recordChoice 两处首看时机，
+   *  重读 force 不经 markSeen、抉择史重读不改写——印记与集齐赏皆不随重读重发，不破 E199 防刷封印）。
+   *  境界追认静默标记的段落（p.story.mid[cid]/[cid+'_2']）与已看同等计入，追认流玩家亦可集齐。 */
+  checkStudyMark() {
+    const p = Game.player;
+    if (!p || !p.story) return;
+    p.flags = p.flags || {};
+    p.flags.studyMark = p.flags.studyMark || {};
+    const seen = p.story.seen || {}, mid = p.story.mid || {}, choices = p.story.choices || {};
+    let newly = -1;
+    for (let i = 0; i < this.CHAPTERS.length; i++) {
+      const cid = this.CHAPTERS[i].id;
+      if (p.flags.studyMark[cid]) continue;
+      const read = sfx => !!(seen[`c${i + 1}_${sfx}`] || (sfx === 'mid' && mid[cid]) || (sfx === 'mid2' && mid[cid + '_2']));
+      if (read('open') && read('mid') && read('mid2') && read('end') && choices[`c${i + 1}_end`]) {
+        p.flags.studyMark[cid] = Math.floor(p.day || 0) + 1;
+        newly = i;
+      }
+    }
+    if (newly >= 0) {
+      Log.add(`📖 温书考据 · 第${this.CN9[newly]}章「${this.CHAPTERS[newly].title}」全景已阅，印记 +1（${Object.keys(p.flags.studyMark).length}/${this.CHAPTERS.length}）。`, 'info');
+    }
+    const total = Object.keys(p.flags.studyMark).length;
+    if (total >= this.CHAPTERS.length && !p.flags.studyDone) {
+      // 集齐十章：一次性气运 +3 与一段「考据注脚」（世界观察百科一条，见问道录 · 百科）
+      p.flags.studyDone = true;
+      KarmaSys.addFortune(3, true);
+      Log.add('✦ 温书考据 · 十章全景俱已阅毕——气运 +3。你从字缝里读出了这方天地的一行注脚（见问道录 · 百科）。', 'realm');
+      UI.toast('📖 考据大成 · 气运 +3');
+    }
+  },
+  /** v41（E465）：考据注脚——集齐十章「全景已阅」后收录于百科的一条世界观察 */
+  STUDY_FOOTNOTE: '捧读十章，字里行间皆有回响——茶棚说书人的醒木从不停歇，血河的旧账、残玉的低语、门前影的一问，原来早在这方天地的每一盏灯火下流转过。所谓问道，问的从来不是天，是每一念取舍之间，那个逐渐清晰的自己。',
   rewardText(reward) {
     const parts = [];
     if (reward.stones) parts.push(`灵石 ${Utils.fmtNum(reward.stones)}`);
@@ -710,6 +744,8 @@ const QuestSys = {
     // v27：问道页一屏总览——主线进度 + 支线了结数 + 助缘领取数
     const sideDoneN = this.SIDES.filter(sd => !!q.side[sd.id]).length;
     const bonusGotN = Object.keys(q.bonus || {}).length;
+    // v41（E465）：温书考据印记数入总览
+    const studyN = Object.keys((p.flags || {}).studyMark || {}).length;
     const railHtml = `
     <div class="card quest-card card-main">
       <div class="card-title">✦ 主线 · 问道十章 <span class="tag">${ch}/${this.CHAPTERS.length} 章</span>
@@ -718,6 +754,7 @@ const QuestSys = {
       <div class="quest-sum">
         <span>支线了结 <b class="hl">${sideDoneN}/${this.SIDES.length}</b></span>
         <span>章助缘 <b class="hl">${bonusGotN}/${this.CHAPTERS.filter(d => d.bonus).length}</b></span>
+        <span>温书考据 <b class="hl">${studyN}/${this.CHAPTERS.length}</b></span>
         <span>残玉共鸣 <b class="hl">${p.jade || 0}/9</b></span>
         <span>个人线 <b class="hl">${this._personalDone(p)}/${Object.keys(GameData.PERSONAL || {}).length}</b></span>
         <span>图鉴 <b class="hl">${this._codexCount()[0]}/${this._codexCount()[1]}</b></span>
@@ -872,7 +909,9 @@ const QuestSys = {
       }
       return `<div class="card"><div class="card-title">${unlocked ? '✦' : '🔒'} ${e.title}</div>${body}</div>`;
     }).join('');
-    UI.popup({ title: '📖 百科 · 血河旧事', html: `<div class="tip-line" style="margin-bottom:6px">词条随主线推进逐步解锁——真相，要一步一步挖。</div>${rows}`, options: [{ text: '合 上', value: true, primary: true }] });
+    // v41（E465）：考据注脚——集齐十章「全景已阅」后收录于百科末尾的世界观察一条
+    const foot = ((p.flags || {}).studyDone) ? `<div class="card"><div class="card-title">✦ 考据注脚 · 全景已阅</div><div class="card-desc">${this.STUDY_FOOTNOTE}</div></div>` : '';
+    UI.popup({ title: '📖 百科 · 血河旧事', html: `<div class="tip-line" style="margin-bottom:6px">词条随主线推进逐步解锁——真相，要一步一步挖。</div>${rows}${foot}`, options: [{ text: '合 上', value: true, primary: true }] });
   },
 
   /** v15 问道录：章节剧情回顾（已看过的开篇/中段/章末可重读） */
@@ -924,6 +963,9 @@ const QuestSys = {
       if (choiceVal && this.CHOICE_LABELS[`c${i + 1}_end`] && this.CHOICE_LABELS[`c${i + 1}_end`][choiceVal]) {
         choiceLine = `<div class="tip-line">· 你当年的抉择：${this.CHOICE_LABELS[`c${i + 1}_end`][choiceVal]}</div>`;
       }
+      // v41（E465）：「全景已阅」印记——四段全阅且章末抉择已录的章，回顾册上钤一枚朱印
+      const marked = ((p.flags || {}).studyMark || {})[def.id];
+      if (marked) choiceLine += `<div class="tip-line">· <span style="color:var(--grade-5,#b98a2f)">✦ 全景已阅</span>（第${Math.floor(marked / 365) + 1}年钤印）</div>`;
       body += `<div class="shop-section-title">◈ 第${cn}章 · ${def.title}</div><div class="action-row" style="margin:0 0 4px">${rows.join('')}</div>${choiceLine}`;
     }
     // 个人线回顾

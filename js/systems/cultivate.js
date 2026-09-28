@@ -58,6 +58,8 @@ const Cultivate = {
           if (daoGain >= 500 || p.counters.xianyuan % 500 < daoGain) Log.add(`修为满溢，尽数炼作 <b>仙元</b>（道境资粮 +${daoGain} · 累计 ${p.counters.xianyuan}）——修为轴有终点，道境没有。`, 'gain');
         } else {
           // v18：溢出修为保留，突破后自动计入
+          // v41（E426）：结转改全额——原静修冲关/渡劫成功两处实发 floor(overflow/2) 暗扣一半
+          //（r5 圆满态离线 240 日暗扣 ≈116 离线日），现兑现本注释口径：余韵全额带入下一境
           p.expOverflow = (p.expOverflow || 0) + over;
         }
       }
@@ -312,7 +314,7 @@ const Cultivate = {
     // v35（U5c）：真仙圆满态预估改报仙元——原预估恒按修为口径（「≈6.8 亿修为」），实发却是
     // 溢流折算的仙元（数字币种双失真）
     const r9Full = p.realmIdx >= 9 && p.layer === 3 && p.exp >= GameData.layerNeedT(p, p.realmIdx, 3);
-    const est = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMultExp());
+    const est = Math.round(this.baseGain(p) * 10 * 1.6 * this.gainMultExp() * this.secludeMul(p));   // v41（E425）：预估同乘隆冬蛰伏——冬夏两季 est=实发（原冬季恒低 9.1%）
     const ok = await UI.popup({
       title: '闭关修炼',
       html: `闭关三十日，心无旁骛，修行效率远胜平日。<br>
@@ -336,37 +338,68 @@ const Cultivate = {
     if (cb && cb.checked) { await this.secludeLoop(); return; }
     await this.secludeLoop(1);
   },
-  /** v21：闭关结算报告——出关一纸小账，进益历历在目 */
+  /** v21：闭关结算报告——出关一纸小账，进益历历在目
+   *  v41（E423）：opts.auto——挂机智能档语境不弹「出关·结算」模态（cultivate.js:424 每轮必调、
+   *  autocult 检测 UI._popupResolve 即挂起，不静默则智能档每 ~30 游戏日弹模态停等，E422 弹窗死锁换壳），
+   *  收益聚合累计入 Cultivate._autoRep，由 AutoCult 小结一行出账。
+   *  v41（E430）：连续闭关改按年归组流水——「第 N 年：闭关 ×R、修为 +X、进层 ×N」，高光年（有进层）
+   *  鎏金加粗（sr-glow）；单轮闭关维持经典行式。 */
   realmLabel(p) { return GameData.REALM_NAMES[p.realmIdx] + GameData.LAYER_NAMES[p.layer]; },
-  settleReport(rep) {
+  settleReport(rep, opts = {}) {
     const p = Game.player;
     if (!p || p.dead) return;
-    const rows = [
-      [`闭关轮次`, `${rep.rounds} 轮`],
-      [`修为进益`, `<b class="hl">+${Utils.fmtNum(Math.round(rep.exp))}</b>`],
-      // v35（U5c）：圆满态溢流炼作的仙元单独成行——原报告只报名义修为，真仙圆满期对不上账
-      ...(rep.xianyuan > 0 ? [[`仙元炼化`, `<b class="hl" style="color:var(--gold,#d4af37)">+${Utils.fmtNum(Math.round(rep.xianyuan))}</b>`]] : []),
-      [`丹毒化解`, `<b style="color:var(--ok)">-${rep.rounds * 12}</b>`],
-      [`历时`, `${Utils.fmtNum(rep.days)} 日`],
-    ];
-    if (rep.advanced > 0) rows.push([`境界变迁`, `<b class="hl">${rep.from} → ${this.realmLabel(p)}</b>${rep.advanced > 1 ? `（${rep.advanced} 次进阶）` : ''}`]);
+    if (opts.auto) {
+      const t = this._autoRep = this._autoRep || { rounds: 0, exp: 0, advanced: 0 };
+      t.rounds += rep.rounds; t.exp += rep.exp; t.advanced += rep.advanced || 0;
+      return;
+    }
+    const years = rep.timeline && rep.years && Object.keys(rep.years).length ? rep.years : null;
+    const rows = [];
+    if (years) {
+      // v41（E430）：出关时间轴——按年归组，高光年（进层）加粗
+      for (const yr of Object.keys(rep.years)) {
+        const yb = rep.years[yr];
+        const segs = [`闭关 ×${yb.rounds}`, `修为 +${Utils.fmtNum(Math.round(yb.exp))}`];
+        if (yb.advanced) segs.push(`进层 ×${yb.advanced}`);
+        if (yb.yuan) segs.push(`炼作仙元 +${Utils.fmtNum(Math.round(yb.yuan))}`);
+        rows.push([`第 ${yr} 年`, segs.join('、'), !!yb.advanced]);
+      }
+      if (rep.advanced > 0) rows.push([`境界变迁`, `<b class="hl">${rep.from} → ${this.realmLabel(p)}</b>${rep.advanced > 1 ? `（${rep.advanced} 次进阶）` : ''}`]);
+    } else {
+      rows.push(
+        [`闭关轮次`, `${rep.rounds} 轮`],
+        [`修为进益`, `<b class="hl">+${Utils.fmtNum(Math.round(rep.exp))}</b>`],
+        // v35（U5c）：圆满态溢流炼作的仙元单独成行——原报告只报名义修为，真仙圆满期对不上账
+        ...(rep.xianyuan > 0 ? [[`仙元炼化`, `<b class="hl" style="color:var(--gold,#d4af37)">+${Utils.fmtNum(Math.round(rep.xianyuan))}</b>`]] : []),
+        [`丹毒化解`, `<b style="color:var(--ok)">-${rep.rounds * 12}</b>`],
+        [`历时`, `${Utils.fmtNum(rep.days)} 日`],
+      );
+      if (rep.advanced > 0) rows.push([`境界变迁`, `<b class="hl">${rep.from} → ${this.realmLabel(p)}</b>${rep.advanced > 1 ? `（${rep.advanced} 次进阶）` : ''}`]);
+    }
     UI.popup({
       title: '出 关 · 结 算',
-      html: `<div class="seclude-report">${rows.map(([k, v]) => `<div class="sr-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+      html: `<div class="seclude-report">${rows.map(([k, v, hl]) => `<div class="sr-row${hl ? ' sr-glow' : ''}"${hl ? ' style="color:var(--gold,#d4af37)"' : ''}><span>${k}</span><b>${v}</b></div>`).join('')}</div>
         <div class="tip-line" style="text-align:center">· 推门而出，天地一新。</div>`,
       options: [{ text: '出关大吉', value: true, primary: true }],
     });
   },
   /** v4：连续闭关——每轮三十日，修为迈进新的小境界（进层或大境界突破成功）即自动出关；
    *  灵石不济、寿元将尽或达成上限轮数时亦会中止。
-   *  v39（E364）：增 maxRounds 参数——单轮闭关（seclude 入口）跑一轮即出，双结算链合此一份。 */
-  async secludeLoop(maxRounds = 120) {
+   *  v39（E364）：增 maxRounds 参数——单轮闭关（seclude 入口）跑一轮即出，双结算链合此一份。
+   *  v41（E423）：增 opts 参数——{auto:true}（挂机智能档口）时结算走 settleReport 聚合不弹模态；
+   *  并置 _looping 在行旗标，AutoCult 智能档据此避免与手动闭关双重入定。
+   *  v41（E430）：rep 增按年归组流水（timeline 连续闭关置位）——「第 N 年：闭关 ×R、修为 +X」。 */
+  async secludeLoop(maxRounds = 120, opts = {}) {
+    this._looping = true;   // v41（E423）：闭关在行标志
     let p = Game.player;
     if (maxRounds > 1) Log.add('你拂尘入室，立誓非至进境，不出此关。', 'system');
     let rounds = 0;
     const rep = { rounds: 0, exp: 0, xianyuan: 0, days: 0, advanced: 0, from: this.realmLabel(p) };   // v21 结算报告累计（v35（U5c）：补仙元行）
+    rep.timeline = maxRounds > 1;   // v41（E430）：连续闭关结算按年归组
+    rep.years = {};
+    const yearOf = d => Math.floor((d || 0) / 365) + 1;
     while (rounds++ < maxRounds) {
-      if (!p || p.dead || Game.player !== p) return;   // 兵解/回溯等更换玩家对象时，旧循环立即作废
+      if (!p || p.dead || Game.player !== p) { this._looping = false; return; }   // 兵解/回溯等更换玩家对象时，旧循环立即作废
       // v29 修瑕：剧情/弹窗挂起时闭关暂停——此前节庆弹窗会被下一轮闭关的自动取消逻辑顶掉
       // v30 修瑕：天劫弹窗未决同样必须暂停——原守护只查剧情/弹窗，冲关劫决期间循环继续烧灵石岁月、
       //          重入 Tribulation.run 连环吞渡劫丹并反复覆写回溯备份 bak（对齐 autocult 的守护）
@@ -392,21 +425,26 @@ const Cultivate = {
       Log.add(`${Utils.pick(GameData.FLAVOR.seclude)}（第${rounds}轮 · 修为 <b>+${Utils.fmtNum(gain)}</b>，丹毒稍减）`, 'info');
       const yuanBefore = p.counters.xianyuan || 0;
       this.addExp(p, gain);
-      rep.xianyuan += (p.counters.xianyuan || 0) - yuanBefore;   // v35（U5c）：圆满态溢流折算的仙元
+      const yuanGain = (p.counters.xianyuan || 0) - yuanBefore;   // v35（U5c）：圆满态溢流折算的仙元
+      rep.xianyuan += yuanGain;
       rep.rounds++; rep.exp += gain; rep.days += 30;
+      // v41（E430）：本轮入年份桶（跨年轮归入收功之年）
+      const yb = rep.years[yearOf(p.day)] = rep.years[yearOf(p.day)] || { rounds: 0, exp: 0, advanced: 0, yuan: 0 };
+      yb.rounds++; yb.exp += gain; yb.yuan += yuanGain;
       p.poison = Math.max(0, p.poison - 12);
       Time.add(30);
-      if (p.dead || Game.player !== p) return;
+      if (p.dead || Game.player !== p) { this._looping = false; return; }
       Game.afterAction();
       // 圆满冲关（与单轮闭关同款逻辑）：天劫博弈中胜出即境界跃升
       if (p.layer === 3 && p.exp >= GameData.layerNeedT(p, p.realmIdx, 3)) {
         await Utils.sleep(400);
         await this.breakthrough(10);
-        if (!p || p.dead || Game.player !== p) return;
+        if (!p || p.dead || Game.player !== p) { this._looping = false; return; }
       }
       // 已至下一小境界 → 自动出关
       if (p.layer !== beforeLayer || p.realmIdx !== beforeRealm) {
         rep.advanced++;
+        (rep.years[yearOf(p.day)] = rep.years[yearOf(p.day)] || { rounds: 0, exp: 0, advanced: 0, yuan: 0 }).advanced++;   // v41（E430）：高光年记账
         Log.add('修为已然进阶，你推门而出，只觉天地一新——此番闭关，功成。', 'system');
         UI.toast('闭关有成 · 已至新的小境界');
         break;
@@ -421,19 +459,25 @@ const Cultivate = {
       await Utils.sleep(120);   // 留出渲染与日志滚动的时间
     }
     Game.afterAction();
-    if (rep.rounds > 0) this.settleReport(rep);   // v21 结算报告
+    if (rep.rounds > 0) this.settleReport(rep, opts);   // v21 结算报告（v41（E423）：auto 语境聚合不弹窗）
+    this._looping = false;   // v41（E423）：在行旗标解除
   },
-  /** v40（E407）：修炼乘区明细——baseGain 各乘区逐项列名（聚灵/灵潮/洞天/阵旗/季议/称号等），
-   *  修炼/闭关弹窗消费此明细行展示「这轮为何高/低」（零新字段，纯展示单源） */
+  /** v40（E407）：修炼乘区明细——baseGain 各乘区逐项列名，修炼/闭关弹窗消费此明细行展示
+   *  「这轮为何高/低」（消费落点在 ui.js，归 E432/P3）。
+   *  v41（E425）：修 helper——补道途（魔道吞噬/化功境/阵道聚灵境）、孟春灵潮、长老令·传功、
+   *  聚灵旗各行；删 councilCult 与洞府/修炼效率两行双计（其经 gainMult 的 cultPct 生效，
+   *  不属 baseGain 因子）——各行 mul 连乘 ×(首行 base) 恒等于 baseGain（±1）。
+   *  行形态：[{k, mul}]，首行另带 base（基础产出裸值，展示用）。 */
   baseGainBreakdown(p) {
-    const st = Stat.compute(p);
-    const rows = [];
-    rows.push({ k: '基础产出', v: this.baseGainRaw(p) });
-    if (p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < (typeof CaveSys !== 'undefined' && CaveSys.RUSH_WINDOW ? CaveSys.RUSH_WINDOW() : 3)) rows.push({ k: '聚灵加速', v: '×1.5' });
-    if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) rows.push({ k: '灵潮涌动', v: '×1.2' });
-    if (typeof CaveSys !== 'undefined' && CaveSys.cultBonus) { const cb = CaveSys.cultBonus(p); if (cb) rows.push({ k: '洞府聚灵阵', v: `+${cb}%` }); }
-    if (typeof SectSys !== 'undefined' && SectSys.council && SectSys.council(p) === 'cult') rows.push({ k: '季议·勤修不辍', v: '+3%' });
-    if (st.cultPct) rows.push({ k: '修炼效率合计', v: `+${st.cultPct}%` });
+    const rows = [{ k: '基础产出', mul: 1, base: this.baseGainRaw(p) }];
+    if (typeof SectSys !== 'undefined' && SectSys.commandActive && SectSys.commandActive(p, 'teach')) rows.push({ k: '长老令·传功', mul: 1.2 });
+    if (p.dao === 'demonic') rows.push({ k: '魔道·吞噬灵气', mul: 1.8 });
+    if (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 3) rows.push({ k: '魔道六境·化功', mul: 1.2 });
+    if (p.dao === 'array' && DaoSys.tierLevel(p) >= 2) rows.push({ k: '阵道六境·聚灵', mul: 1.1 });
+    if (typeof Art !== 'undefined' && Art.seasonOf(p) === 0) rows.push({ k: '孟春灵潮', mul: 1.1 });
+    if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) rows.push({ k: '天下大事·灵潮', mul: 1.2 });
+    if (p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < (typeof CaveSys !== 'undefined' && CaveSys.RUSH_WINDOW ? CaveSys.RUSH_WINDOW() : 3)) rows.push({ k: '聚灵加速', mul: 1.5 });
+    if (typeof CaveSys !== 'undefined' && CaveSys.flagPower) { const fp = CaveSys.flagPower(p, 'b_juling'); if (fp) rows.push({ k: '聚灵旗', mul: 1 + 0.03 * fp }); }
     return rows;
   },
   baseGainRaw(p) {
@@ -475,8 +519,8 @@ const Cultivate = {
   /** 大境界突破：练气→筑基为静修冲关（无天劫）；金丹劫起进入天劫三策博弈（小境界进层仍在 addExp 中自动结算） */
   async breakthrough(bonus = 0) {
     const p = Game.player;
-    // v40（E400）：斩三尸「洗髓之效」——下一次突破成算 +5（一次性旗标，此处消费）
-    if (p && p.slayBonus) { bonus += 5; p._slayUsed = true; Log.add('【洗髓之效】斩三尸的道基淬炼在此刻兑现——突破成算 +5！', 'realm'); }   // v40 修正：持久旗标不清零（一世报告读），但每次突破仍生效   // v40（E400 修正）：不清零——一世报告读旗标持久显示
+    // v40（E400）：斩三尸「洗髓之效」——一世内每次突破成算 +5（持久旗标）
+    if (p && p.slayBonus) { bonus += 5; Log.add('【洗髓之效】斩三尸的道基淬炼在此刻兑现——突破成算 +5！', 'realm'); }   // v40 修正：持久旗标不清零（一世报告读），每次突破均生效；v41（E428）：旧一次性消费死写删除（写而不读的死键清场，键名见 E428 删除契约）
     if (p.layer !== 3 || p.exp < GameData.layerNeedT(p, p.realmIdx, 3)) return;
     if (p.realmIdx >= 9) return;
     if (p.realmIdx + 1 < GameData.TRIB_START) {
@@ -494,7 +538,7 @@ const Cultivate = {
     Log.add('你收敛心神，向 <b>筑基</b> 瓶颈发起最后的冲击——气海翻涌，道基将成！', 'system');
     await Utils.sleep(700);
     if (Utils.chance(chance)) {
-      p.realmIdx = 1; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(1, 0) - 1); p.insight = 0; p.insightSrc = []; p.expOverflow = 0;   // v37（E264）：境界重置清空感悟总量缓存时，来源 FIFO 池同步清空（双池一致）
+      p.realmIdx = 1; p.layer = 0; p.exp = Math.min(p.expOverflow || 0, GameData.layerNeed(1, 0) - 1); p.insight = 0; p.insightSrc = []; p.expOverflow = 0;   // v37（E264）：境界重置清空感悟总量缓存时，来源 FIFO 池同步清空（双池一致）；v41（E426）：溢流改全额结转（原折半暗扣已修，兑现「溢出保留」注释口径）
       p.breakStreak = 0;
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;

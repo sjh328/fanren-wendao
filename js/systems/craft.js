@@ -156,14 +156,23 @@ const CraftSys = {
     if (p.realmIdx >= 4) pool.push('tal_posha');
     return pool;
   },
-  /** 期望产量（与 drawTalisman 实发逐项同源：rand(0,2) 取均值 1；v36（E224）补仲夏期望——
-   *  91/365 摊入避免 drawCost 逐日跳变；drawTalisman 实发仲夏 +2 不动（v20 天时风味），定价把权重算进去） */
+  /** 期望产量——v41（E435）：与 drawTalisman 实发逐项对表的 EV 式（锚重定）。
+   *  原式漏计妙笔、把翻倍当作 ×1.2 乘区、echo 全然未计，满配非仲夏计价 8.0 vs 实发 EV 10.45（−23% 低计），
+   *  画符成本被系统性低估。现逐项对表（括注=drawTalisman 实发行）：
+   *  · 基数：2+rand(0,2) 均值 1 → 3，＋境界 ≥2 一张、＋符道一境一张、＋妙笔生花一张（妙笔此前漏计）
+   *  · 仲夏 +2 在翻倍支之前（实发 :190 在 :191 翻倍前），整张摊入而非乘 91/365——翻倍放大下两者已不等价
+   *  · 翻倍支：几率 (朱砂境 20:12)＋天笔 15 个点（原式笼统 ×1.2）；翻倍后雷笔生花 echo +1（原式未计）
+   *  · 符仙 +2 在翻倍支后追加——两支同加，期望式 q+2+Pd×(q+echo)
+   *  验收锚：非仲夏满配 EV=10.45（6×0.65+15×0.35）、仲夏满配 EV=13.15，同参差 ≤0.01；画符路毛利回负。 */
   expectedQty(p) {
-    let q = 3 + (p.realmIdx >= 2 ? 1 : 0) + (DaoSys.tierLevel(p) >= 1 ? 1 : 0);
-    q *= 1 + (DaoSys.tierLevel(p) >= 2 ? 0.2 : 0.12);   // 朱砂境 20% 翻倍（此前 12%）
-    if (DaoSys.tierLevel(p) >= 6) q += 2;   // 符仙境 +2（在翻倍后追加）
-    q += (typeof Art !== 'undefined' && Art.seasonOf(p) === 1 ? 2 * 91 / 365 : 0);   // v36（E224）：仲夏窗口 91/365 摊入期望——E128「成本与实发同源」的季节缺口补齐
-    return q;
+    const q = 3   // 2 + rand(0,2) 均值 1
+      + (p.realmIdx >= 2 ? 1 : 0)
+      + (DaoSys.tierLevel(p) >= 1 ? 1 : 0)
+      + (DaoSys.hasPath(p, 3, 'miaoBi') ? 1 : 0)   // v38（E300）：妙笔生花 +1（原式漏计）
+      + (typeof Art !== 'undefined' && Art.seasonOf(p) === 1 ? 2 : 0);   // 仲夏雷雨 +2（翻倍支之前）
+    const pd = ((DaoSys.tierLevel(p) >= 2 ? 20 : 12) + (DaoSys.hasPath(p, 6, 'tianBi') ? 15 : 0)) / 100;   // 朱砂境/天笔点睛翻倍几率
+    const echo = (typeof Stat !== 'undefined' && Stat.activeEchoes(p).has('draw')) ? 1 : 0;   // 雷笔生花：翻倍支再 +1
+    return q + 2 + pd * (q + echo);   // 符仙 +2 在翻倍后追加（两支同加）；Pd×q=翻倍放大、Pd×echo=echo 支
   },
   drawCost(p) {
     const pool = this.talismanPool(p);

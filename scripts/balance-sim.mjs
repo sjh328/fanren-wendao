@@ -20,6 +20,12 @@ await new Promise(r => setTimeout(r, 600));
 
 // 采样：每境界在「标准玩家画像」下测 修为/日 与 突破成算（静修/天劫基准）
 const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, bonusRows }；v36（E220）：增 actionRows（全行动效率横向表）
+  /* v41（E459）：种子化确定性输出——mulberry32 固定种子流覆盖整个 evaluate（gainMult 采样/
+   * 论道实调/30 场蒙特卡洛/parity 全在此流内，soak 段另固定 tpl=none），同机两跑逐字节一致；
+   * evaluate 尾部还原原生 Math.random。 */
+  const realRandomAll = Math.random;
+  let _sdAll = 20260928;
+  Math.random = () => { _sdAll |= 0; _sdAll = _sdAll + 0x6D2B79F5 | 0; let t = Math.imul(_sdAll ^ _sdAll >>> 15, 1 | _sdAll); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
   const out = [];
   for (let r = 0; r <= 9; r++) {
     const p = PlayerFactory.create('模拟道人', { gen: 6, comp: 6, luck: 6, body: 6 });
@@ -72,8 +78,9 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
         let hp = st.maxHp, turns = 0, guard = 0;
         while (e.hp > 0 && hp > 0 && guard++ < 200) {
           turns++;
-          // 玩家回合：期望伤害（普攻，命中按身法差钳 3~35% 失手）
-          const miss = Utils.clamp(3 + (e.spd - st.speed), 2, 35);
+          // 玩家回合：期望伤害（普攻，命中按身法差钳 3%~PLAYER_MISS_MAX——v41（E459）：失手式与钳
+          // 改读 GameData.BALANCE.COMBAT.PLAYER_MISS_MAX（v40 实装 25），原手写 35 与实装漂移
+          const miss = Utils.clamp(3 + (e.spd - st.speed), 2, GameData.BALANCE.COMBAT.PLAYER_MISS_MAX);
           if (!Utils.chance(miss)) {
             let dmg = Stat.afterDef(st.atk, e.def) * Utils.randF(0.85, 1.15);
             if (Utils.chance(st.crit)) dmg *= 1.7;
@@ -104,13 +111,15 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
   }
 
   // v20 灵石收支：日均收入估算 vs 主要 sink 单价
+  // v41（E459）：灵石侧改 stoneEco(r)——原误用修为系数 eco（4.6^r），高境收入虚高 (4.6/3.8)^9 ≈ 5.6×；
+  // 口径自此注明双轨：灵石=stoneEco、修为=eco
   const stoneRows = [];
   for (let r = 0; r <= 9; r++) {
-    const eco = GameData.stoneEco(r);
-    const battleIn = Math.round(37.5 * eco * 2);      // v40（E383）：两战 × 新单场均值 37.5（rand 25~50）
-    const bountyIn = Math.round(90 * eco / 3);        // v40（E383）：悬赏 90×eco 一窗/3 日
-    const dayIn = battleIn + bountyIn + Math.round(20 * eco);
-    const sinkSeclude = Math.round(60 * eco);          // 闭关一轮（v39（E352）：30→60×eco， Cultivate.secludeCost 同步）
+    const se = GameData.stoneEco(r);
+    const battleIn = Math.round(37.5 * se * 2);      // v40（E383）：两战 × 新单场均值 37.5（rand 25~50）；v41（E459）：灵石=stoneEco
+    const bountyIn = Math.round(90 * se / 3);        // v40（E383）：悬赏 90×eco 一窗/3 日；v41（E459）：灵石=stoneEco
+    const dayIn = battleIn + bountyIn + Math.round(20 * se);
+    const sinkSeclude = Math.round(60 * se);          // 闭关一轮（v39（E352）：30→60×eco， Cultivate.secludeCost 同步）；v41（E459）：随本块改名 se=stoneEco（原 shadow 命名）
     const sinkRush = Math.round(120 * GameData.stoneEco(r));   // 聚灵加速（v32 修瑕 E25：口径对齐 cave.rushCost=120×stoneEco(r) 全幅——原 min(4,r) 低估高境 sink）
     // v34（D5）：强化 sink 口径与 ForgeSys.stonesCost 逐项对齐（grade3 装备 +5）——
     // 原手写 `×2.4^r` 与实现 `×3^min(cap,r)/2.4` 在 r9 差约 5 倍，sink 列因此长期失真
@@ -195,14 +204,19 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
       if (r >= 1) p.sect = { id: 'qingyun', contrib: 0 };
       return p;
     };
-    // 中配画像：标准四维 + 宗门 + 中阶装备（grade3 ×+8）+ 三门 level5 功法（与 v20 加成行同族）——parity 回合比用
+    // 中配画像：标准四维 + 宗门 + 中阶装备（grade3 ×+8，affixes/stars 显式空对象）+ 三门 level5 功法
+    // ——v41（E459）：与 verify-v26 RB11 画像逐字段对齐（affixes/stars/level）并补 gf_tumo——
+    // 原画像放未修习的 gf_tumo 整回合空转（battle.js 技能环判修习），parity 实测 8%/5%/3% 而表头自述五五
     const mkMid = r => {
       const p = mkStd(r);
-      p.equipped = { weapon: { id: 'w_zhuxian', enhance: 8 }, armor: { id: 'a_longlin', enhance: 8 }, accessory: { id: 'z_taiji', enhance: 8 } };
-      p.gongfa = { gf_lieyang: { level: 5, exp: 0 }, gf_xuantian: { level: 5, exp: 0 }, gf_wanjian: { level: 5, exp: 0 } };
+      p.equipped = { weapon: { id: 'w_zhuxian', enhance: 8, affixes: {}, stars: {} }, armor: { id: 'a_longlin', enhance: 8, affixes: {}, stars: {} }, accessory: { id: 'z_taiji', enhance: 8, affixes: {}, stars: {} } };
+      p.gongfa = { gf_lieyang: { level: 5, exp: 0 }, gf_wanjian: { level: 5, exp: 0 }, gf_tumo: { level: 5, exp: 0 } };
       return p;
     };
     // ①E376 承伤带：同阶普通怪单次普攻期望（E[rand]=1、不计暴击/闪避/格挡）÷ 标准 maxHp
+    // v41（E459）：soak 固定 tpl=none——习性模板随机器是本段漂移源，固定后公式级确定性
+    const savedTplW = GameData.MONSTER_TEMPLATE_WEIGHTS;
+    GameData.MONSTER_TEMPLATE_WEIGHTS = { none: 1 };
     const soak = [];
     for (let r = 0; r <= 9; r++) {
       const p = mkStd(r);
@@ -219,8 +233,10 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
         drift: r <= 2 ? +((dmgNew / st.maxHp) / (dmgOld / st.maxHp) * 100 - 100).toFixed(1) : null,   // r0~r2 变化 %
       });
     }
+    GameData.MONSTER_TEMPLATE_WEIGHTS = savedTplW;   // v41（E459）：soak 固定 tpl 结束，模板权重还原
     // ②E374 parity/三档回合比：中配 vs 同阶问剑（可敌带校准 NPC）——真实引擎 40 场采样，
     //   回合数比 = 胜局均回合 / 败局均回合 ∈ [0.8, 2.5]，可敌胜率落 [42%, 58%]（五五公示 ±8）
+    //   v41（E459）：胜率带与 TTK 带自本脚本起升级硬门禁（出带 exit≠0）——硬门禁以 verify-v26 RB11 与本脚本双轨为准（固定种子流）
     const r6 = mkMid(6);
     const npcIds = GameData.NPCS.filter(d => (d.talent || 3) === 3).slice(0, 3).map(d => d.id);
     Game.player = r6;
@@ -230,7 +246,7 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
     let _s2 = 20260926;
     Math.random = () => { _s2 |= 0; _s2 = _s2 + 0x6D2B79F5 | 0; let t = Math.imul(_s2 ^ _s2 >>> 15, 1 | _s2); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
     const savedWait = Battle.wait; Battle.wait = () => Promise.resolve();
-    const skillRing = ['gf_lieyang', 'gf_wanjian', 'gf_tumo'];
+    const skillRing = Object.keys(r6.gongfa);   // v41（E459）：技能环由 gongfa 键派生（单源）——环与画像分叉的病灶（放未修习法诀空转）自此断根
     const parityRows = [];
     for (const nid of npcIds) {
       let w = 0, rw = 0, nw = 0, rl = 0, nl = 0, R = 0;
@@ -283,18 +299,21 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
     return { soak, parityRows, burst: { old: +burstSim('old').toFixed(2), new: +burstSim('new').toFixed(2), gain: burstGain } };
   })();
 
-  // v40（E383）经济复算行：灵泉:主动收入比（<0.5，锚 0.19）与 实收/建模收入比（[0.35,1.2]，r6 锚 0.39）
-  // 口径：灵泉裸值 = 45×min(4,spring=3)×stoneEco(min(4,r))（驻守 ×1.2 单列不计）；
-  // 主动收入 = 探索 0.5 场/日 × 新单场均值 37.5×eco + 悬赏 1 窗/3 日 × 90×eco；建模日均 = dayIn 同式 125×eco
+  // v40（E383）经济复算行：灵泉:主动收入比（v41（E441）锚：r1~r4≈0.92、r5 0.24、r6 0.064；全境门
+  // r1~r4 <1.0、r5+ <0.5）与 实收/建模收入比（[0.35,1.2]，锚 0.39）
+  // 口径（v41（E459）双轨注明：灵石=stoneEco、修为=eco）：灵泉裸值 = 15×min(4,spring=3)×stoneEco(min(4,r))
+  // （v41（E441）系数 45→15，r6 裸值锚 9383；驻守 ×1.2 单列不计）；主动收入与建模日均（dayIn 同式
+  // 125×stoneEco）同为灵石轴走 stoneEco——原 :294 误用修为系数 eco 致高境虚高 5.6×
   const econRows = [];
   {
     for (let r = 0; r <= 9; r++) {
       const eco = GameData.eco(r);
-      const spring = Math.round(45 * 3 * GameData.stoneEco(Math.min(4, r)));   // 裸值（驻守 ×1.2 单列）
-      const active = Math.round(0.5 * 37.5 * eco + 30 * eco);
-      // v40（E391）：逐境轮数（相对值 ∝ EXP_BASE[r]/eco(r)，×7 层系数相消）
+      const se = GameData.stoneEco(r);
+      const spring = Math.round(15 * 3 * GameData.stoneEco(Math.min(4, r)));   // 裸值（驻守 ×1.2 单列）；v41（E441）：45→15
+      const active = Math.round(0.5 * 37.5 * se + 30 * se);   // v41（E459）：灵石=stoneEco
+      // v40（E391）：逐境轮数（相对值 ∝ EXP_BASE[r]/eco(r)，×7 层系数相消；修为轴保持 eco）
       const roundsRel = GameData.EXP_BASE[r] / eco;
-      econRows.push({ realm: GameData.REALM_NAMES[r], spring, active, ratio: +(spring / active).toFixed(2), realModel: +(active / (125 * eco)).toFixed(2), roundsRel });
+      econRows.push({ realm: GameData.REALM_NAMES[r], spring, active, ratio: +(spring / active).toFixed(2), realModel: +(active / (125 * se)).toFixed(2), roundsRel });
     }
   }
   // v40（E397）仙阶行：地仙首层（17500 仙元）时长——r9 圆满挂机每轮溢流 daoGain = perRound×1.025/(eco9×0.05)
@@ -308,6 +327,7 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
     econRows.xianNeed = need;
     econRows.xianPerDay = yuanPerDay;
   }
+  Math.random = realRandomAll;   // v41（E459）：种子流结束，还原原生 Math.random
   return { out, combat, bonusRows, stoneRows, actionRows, econRows, xianDays: econRows.xianDays || 0, xianNeed: econRows.xianNeed || 17500, xianPerDay: econRows.xianPerDay || 0, combat2 };
 });
 const sim = rows; await browser.close();
@@ -322,6 +342,7 @@ const flags = ratios.map((x, i) => (x > median * 3 || x < median / 3) ? `⚠ 第
 let md = `# v19 数值拟合报告（scripts/balance-sim.mjs 自动生成）
 
 标准画像：四维 6/6/6/6、内门宗门、未择道、仅修炼产出（不含丹药/秘境/事件收益）。
+口径（v41（E459））：**种子化确定性输出**——mulberry32 固定种子流覆盖全采样（soak 段固定 tpl=none），同机两跑逐字节一致；灵石轴=stoneEco、修为轴=eco 双轨分立。
 
 | 境界 | 修为/日 | 境内总需求 | 纯修炼天数 | 战胜收益(修为/灵石) | 突破成算 | 寿元 |
 |---|---|---|---|---|---|---|
@@ -358,20 +379,25 @@ md += `> 悬赏无修为主收益（赏格为灵石+贡献）；论道行为实�
 md += `\n## v40 战斗复算（E374~E378 公式级模型，中配画像 layer1）\n\n`;
 md += `### 承伤带（E376：同阶普通怪单次普攻期望 / 中配 maxHp，带 [3%, 12%]；r0~r2 相对旧分母变化 ≤±15%）\n\n| 境界 | 单次承伤/maxHp | r0~r2 变化 |\n|---|---|---|\n`;
 for (const s of sim.combat2.soak) md += `| ${s.realm} | ${s.pct}% | ${s.drift == null ? '—' : (s.drift > 0 ? '+' : '') + s.drift + '%'} |\n`;
-md += `\n### parity 三档采样（E374：中配 vs 同阶可敌带 NPC，真实引擎 40 场/对手；胜率落 [42%,58%]、TTK 比 ∈ [0.8,2.5]）\n\n| 对手 | 胜率 | TTK 比 | 均回合 |\n|---|---|---|---|\n`;
+md += `\n### parity 三档采样（E374：中配 vs 同阶可敌带 NPC，真实引擎 40 场/对手；胜率落 [42%,58%]、TTK 比 ∈ [0.8,2.5]——v41（E459）起为硬门禁，出带 exit≠0）\n\n| 对手 | 胜率 | TTK 比 | 均回合 |\n|---|---|---|---|\n`;
 for (const s of sim.combat2.parityRows) md += `| ${s.id} | ${s.winPct}% | ${s.ttk == null ? '—' : s.ttk} | ${s.avgR} |\n`;
 md += `\n### 战意爆发净差（E378：10 回合政策模型，普攻当量；锚 ≥ +1.5）\n\n旧 ${sim.combat2.burst.old}A → 新 ${sim.combat2.burst.new}A，净差 **+${sim.combat2.burst.gain}A**（口径：+12 战意/普攻、≥90 可爆、每场 2 次；旧 1.8×清零×会心期望 1.175，新 2.4×−60×必会心 1.7）。\n`;
-md += `\n### E383 经济复算（灵泉:主动收入比 <0.5 锚 0.19；实收/建模 ∈[0.35,1.2] 锚 0.39；灵泉裸值口径=45×min(4,spring=3)×stoneEco(min(4,r))，驻守 ×1.2 单列）\n\n| 境界 | 灵泉裸值/日 | 主动收入/日 | 灵泉:主动 | 实收/建模 |\n|---|---|---|---|---|\n`;
+md += `\n### E383 经济复算（v41（E441/E459）全境门：r1~r4 比 <1.0（锚 0.92）、r5+ <0.5（r5 锚 0.24、r6 锚 0.064）；实收/建模 ∈[0.35,1.2] 锚 0.39；灵泉裸值口径=15×min(4,spring=3)×stoneEco(min(4,r))，r6 锚 9383，驻守 ×1.2 单列；主动收入与建模日均均走 stoneEco——灵石=stoneEco、修为=eco 双轨）\n\n| 境界 | 灵泉裸值/日 | 主动收入/日 | 灵泉:主动 | 实收/建模 |\n|---|---|---|---|---|\n`;
   for (const e of sim.econRows) md += `| ${e.realm} | ${e.spring.toLocaleString()} | ${e.active.toLocaleString()} | ${e.ratio} | ${e.realModel} |\n`;
   {
-    // 门禁口径 r6~r9（灵泉降档的监控窗口；r0~r5 洞府未建成、spring lv3 不可达，比值列仅信息参考）
-    const badRatio = sim.econRows.filter(e => e.ratio >= 0.5 && sim.econRows.indexOf(e) >= 6);
+    // 门禁口径（v41（E459）扩全境，锚随 E441 改 15 系数/9383）：r1~r4 比 <1.0、r5+ <0.5；
+    // r0 洞府未建成、spring lv3 不可达，比值列仅信息参考不入门
+    const badRatio = sim.econRows.filter(e => {
+      const i = sim.econRows.indexOf(e);
+      if (i < 1) return false;
+      return e.ratio >= (i <= 4 ? 1.0 : 0.5);
+    });
     const badRM = sim.econRows.filter(e => e.realModel < 0.35 || e.realModel > 1.2);
     if (badRatio.length || badRM.length) {
-      const msgs = [...badRatio.map(e => `⚠ 灵泉:主动比越界 ${e.realm} ${e.ratio} ≥ 0.5`), ...badRM.map(e => `⚠ 实收/建模越界 ${e.realm} ${e.realModel} ∉ [0.35,1.2]`)];
+      const msgs = [...badRatio.map(e => `⚠ 灵泉:主动比越界 ${e.realm} ${e.ratio}（门：r1~r4 <1.0、r5+ <0.5）`), ...badRM.map(e => `⚠ 实收/建模越界 ${e.realm} ${e.realModel} ∉ [0.35,1.2]`)];
       console.error('⚠ E383 经济复算报警：\n' + msgs.join('\n'));
       process.exitCode = 1;
-    } else console.log('✓ E383 经济复算全绿（灵泉:主动比、实收/建模比全部带内）');
+    } else console.log('✓ E383 经济复算全绿（灵泉:主动比全境 r1~r4 <1.0、r5+ <0.5；实收/建模比全部带内）');
   // v40（E391/E397）门禁：逐境轮数（相对值）——r6~r9 占比 ≤50%（锚 49.7%）、每境降幅 ≤10%、
   // r0~r5 仍递增、全程 ≥1.5 游戏年；地仙首层 ≥2 游戏日
   {
@@ -398,21 +424,27 @@ md += `\n### E383 经济复算（灵泉:主动收入比 <0.5 锚 0.19；实收/�
   }
 const soakBad = sim.combat2.soak.filter(s => s.pct < 3 || s.pct > 12);
 const earlyBad = sim.combat2.soak.slice(0, 3).filter(s => Math.abs(s.drift) > 15);
-// parity 采样与页面上下文强相关（确定性但跨上下文漂移）：此处仅报告，硬门禁以 verify-v26 RB11（固定种子流）为准
-const ttkBad = [];
-if (soakBad.length || earlyBad.length || ttkBad.length || sim.combat2.burst.gain < 1.5) {
+// v41（E459）：parity 升级硬门禁——胜率带 [42,58]、TTK 比 [0.8,2.5]，出带 exit≠0（表头与断言同源）；
+// 硬门禁以 verify-v26 RB11 与本脚本双轨为准（固定种子流；mkMid 画像逐字段对齐后两轨同口径）
+const parityBad = [
+  ...sim.combat2.parityRows.filter(s => s.winPct < 42 || s.winPct > 58)
+    .map(s => `⚠ parity 胜率出带：${s.id} ${s.winPct}% ∉ [42,58]`),
+  ...sim.combat2.parityRows.filter(s => s.ttk != null && (s.ttk < 0.8 || s.ttk > 2.5))
+    .map(s => `⚠ parity TTK 出带：${s.id} ${s.ttk} ∉ [0.8,2.5]`),
+];
+if (soakBad.length || earlyBad.length || parityBad.length || sim.combat2.burst.gain < 1.5) {
   const msgs = [
     ...soakBad.map(s => `⚠ 承伤带越界：${s.realm} ${s.pct}% ∉ [3%,12%]`),
     ...earlyBad.map(s => `⚠ 前期承伤漂移：${s.realm} ${s.drift}% > ±15%`),
-    ...ttkBad.map(s => `⚠ 回合比越界：${s.id} ${s.ttkRatio} ∉ [0.8,2.5]`),
+    ...parityBad,
     ...(sim.combat2.burst.gain < 1.5 ? [`⚠ 爆发净差 ${sim.combat2.burst.gain}A < 1.5A`] : []),
   ];
   md += msgs.join('\n') + '\n\n结论：**战斗复算越带**——请复核对应参数。\n';
   console.error('⚠ WP2 战斗复算报警：\n' + msgs.join('\n'));
   process.exitCode = 1;
 } else {
-  md += '结论：**战斗复算全绿**——承伤带 [3%,12%]、前期漂移 ≤±15%、可敌带回合比 [0.8,2.5]、爆发净差 ≥1.5 当量全部落带。\n';
-  console.log('✓ WP2 战斗复算全绿（承伤带/回合比/爆发净差）');
+  md += '结论：**战斗复算全绿**——承伤带 [3%,12%]、前期漂移 ≤±15%、parity 胜率 [42,58] 与回合比 [0.8,2.5]（v41 硬门禁）、爆发净差 ≥1.5 当量全部落带。\n';
+  console.log('✓ WP2 战斗复算全绿（承伤带/parity 胜率+回合比/爆发净差）');
 }
 
 // v36（E220）门禁：任一 gated 行修为效率 > 修炼日均×2.2 或 > 闭关日均×1.4 → 报警非零退出

@@ -139,7 +139,7 @@ const GameData = {
       DMG_RAND_MAX: 1.15,         // 伤害随机上限
       CRIT_MULT: 1.7,             // 暴击倍率
       ENEMY_CRIT_MULT: 1.6,       // 敌方暴击倍率
-      CRIT_DMG_CAP: 2.0,          // v40（E380）：暴击总乘数封顶（1.7/1.9 × 会伤加成 ≤ 此值）
+      CRIT_DMG_CAP: 2.4,          // v41（E417）：暴击总乘数封顶（1.7/1.9 × 会伤加成 ≤ 此值）——2.0→2.4 与爆发 2.4× 同档：杀剑 min(1.9×1.25,·)=2.375 达文案九成五、赤霄 1.9×1.08=2.052 不触顶、溢出折满 1.7×1.25=2.125 有余量
       PLAYER_MISS_MAX: 25,        // 玩家普攻失手上限（v40（E377）：40→25 命中对称；法诀同钳 SKILL_MISS_MAX）
       SKILL_MISS_MAX: 25,         // 玩家法诀失手上限（v40（E377）：35→25 与普攻同钳）
       ENEMY_MISS_BASE: 3,         // v40（E377）：敌方基线失手%（原敌方恒命中——身法坍缩成打木桩）
@@ -158,13 +158,22 @@ const GameData = {
       PARITY_BENCH: [145, 205, 279, 365, 463, 568, 682, 802, 930, 1067],
       /* v40（E374）：问剑/雷台/大比对手按玩家 Stat.power 带生成——三档校准比（估算与实战同口径）。
        * HP_EDGE/ATK_EDGE 为镜像量纲上的补偿系数（玩家先手+法诀/战意/连击的输出优势抵偿；
-       * 由 verify-v26 三档胜率复算标定：中配 vs 可敌带 ≈ 五五、TTK 比 ∈ [0.8,2.5]，调整须同步复算） */
+       * 由 verify-v26 三档胜率复算标定：中配 vs 旗鼓相当带 ≈ 五五、TTK 比 ∈ [0.8,2.5]，调整须同步复算） */
       RIVAL_HP_EDGE: 6.4,
       RIVAL_ATK_EDGE: 0.8,
+      /* v41（E420）：带名改强度语——旧带名的语义错位消除（旧最弱档实为 6.4 倍血条的缠斗硬敌，非软柿）：
+       * 三档皆镜像长战之敌（旗鼓相当 ρ≈1.00 / 劲敌 ρ≈0.90 / 鏖战 ρ≈0.78），rank.js 文案随动 */
       RIVAL_BANDS: [
-        { name: '可敌', ratio: 1.0 },
-        { name: '略逊', ratio: 0.9 },
-        { name: '远逊', ratio: 0.78 },
+        { name: '旗鼓相当', ratio: 1.0 },
+        { name: '劲敌', ratio: 0.9 },
+        { name: '鏖战', ratio: 0.78 },
+      ],
+      /* v41（E420）：问剑/雷台风险自选档乘区（RIVAL_BANDS 同段单源，供 rank.js 问剑与 E445 雷台同源消费）——
+       * 稳 ×1.0 无罚 / 险 ×1.4 败北功勋折半 / 搏命 ×1.8 败北功勋倒扣全差 */
+      RISK_BANDS: [
+        { name: '旗鼓相当', risk: '稳', mult: 1.0, lossPenalty: 0, lossTxt: '' },
+        { name: '劲敌', risk: '险', mult: 1.4, lossPenalty: 0.5, lossTxt: '败北功勋折半' },
+        { name: '鏖战', risk: '搏命', mult: 1.8, lossPenalty: 1, lossTxt: '败北功勋倒扣全差' },
       ],
     },
     // 突破
@@ -198,6 +207,10 @@ const GameData = {
         { id: 'shawei', name: '煞威', slot: 'weapon', w: 35, minGrade: 2, bonus: { atkPct: 10, crit: 3 }, desc: '攻击+10%，暴击+3%（二阶法宝起方可现世）' },
         { id: 'huyu', name: '护瑜', slot: 'armor', w: 35, minGrade: 2, bonus: { defPct: 10, hpPct: 6 }, desc: '防御+10%，气血+6%（二阶法宝起方可现世）' },
         { id: 'yunling', name: '蕴灵', slot: 'accessory', w: 35, minGrade: 2, bonus: { cult: 5, luck: 3 }, desc: '修炼效率+5%，福缘+3（二阶法宝起方可现世）' },
+        /* ---- v41（E454）防御轴直减词缀：坚壁——所受伤害直减（bonus.dr 以百分点计，4/8/12% 三档随品阶，
+         *  battle.js enemyStrike 减伤连乘段消费、12% 封顶、85% 总封顶同段受钳；出现率无 w 加权与他系持平；
+         *  玉骨/坚韧保留原值扛 def 轴，两轴自此分工——E376 分母锚不动） ---- */
+        { id: 'jianbi', name: '坚壁', slot: 'armor', bonus: { dr: 4 }, per: { dr: 2 }, desc: '所受伤害直减4%（每品阶再+2%，12%封顶）' },
       ],
       suffix: [
         /* v31 词缀补全：后缀补 score 标量估值（洗练/重铸「保底不降」的比对基础——原后缀无估值恒 0 分，
@@ -523,7 +536,7 @@ const GameData = {
    * ====================================================================== */
   XIAN_TIERS: [
     { id: 1, name: '地仙', layerNeed: 17500, life: 2000,  ascendText: '脱去凡骨，初证仙班——山河在望，云路初开。', aura: '#7cc7a1' },   // v40（E397）：5000→17500——落名首轮溢流即晋层沦为一次长按，首阶须 ≥2 游戏日（仙阶行在案）
-    { id: 2, name: '天仙', layerNeed: 12000, life: 5000,  ascendText: '御风而行，天门在侧——雷部闻其名，星官识其路。', aura: '#6aa8e8' },
+    { id: 2, name: '天仙', layerNeed: 24000, life: 5000,  ascendText: '御风而行，天门在侧——雷部闻其名，星官识其路。', aura: '#6aa8e8' },   // v41（E456）：12000→24000——仙阶曲线单调复归（17500<24000<30000<80000），天仙比地仙便宜的节奏倒挂自此纠正
     { id: 3, name: '金仙', layerNeed: 30000, life: 12000, ascendText: '金光铸体，万劫不磨——一念之间，沧海化桑田。', aura: '#e8c56a' },
     { id: 4, name: '大罗', layerNeed: 80000, life: 30000, ascendText: '跳出三界外，不在五行中——大罗天上，再无拘束。', aura: '#c77ce8' },
   ],
@@ -573,6 +586,18 @@ const GameData = {
     { id: 'longyuan', name: '龙渊海眼', recRealm: 6, recText: '炼虚期及以上', desc: '大海中央的万丈漩涡，渊底隐约可见沉睡的巨大轮廓。龙裔盘踞、海兽横行，渊底魔影幢幢——此为化外绝地。',
       pool: [{ id: 'm_haiyi', weight: 30 }, { id: 'm_jiaojiao', weight: 25 }, { id: 'm_longgui', weight: 25 }, { id: 'm_shuiling', weight: 20 }],
       elite: 'm_yuanmo', weights: { battle: 55, treasure: 14, fortune: 11, npc: 6, trap: 9, nothing: 5 } },
+    /* ---- v41（E452）：大乘/渡劫双新图——recRealm 序列 0~9 全境覆盖，r7/r8 的 24.7% 空窗带自此补齐。
+     *  零新怪物承诺保持（实扫 MONSTERS 65 只：p27~29 带五只、p31~35 带四只——计划核数「8/5 只」系
+     *  正则误计，在案）：宗门征讨池=同带五只原生；雷池旧地池=同带原生 + p35+/p38+ 两只下调借用
+     *  （dPool 负偏移，探索与天下大事两侧同消费（world.js 兽潮/夺宝 v41 修偏接线），构建落同阶±1），
+     *  r8 薄池以既有精英词缀/习性模板变体扩表现层，不新增 MONSTERS 条目。 */
+    { id: 'zhengtao', name: '宗门征讨', recRealm: 7, recText: '大乘期', desc: '魔宗在群山间扎下的据点，寨墙森然、护山阵纹隐现。据点里豢养的凶兽、役使的鬼物与阵傀昼夜巡山——此行不为寻宝，为拔钉子。军械与门中贡献，皆自战功里来。',
+      pool: [{ id: 'm_xuling', weight: 22 }, { id: 'm_shuiling', weight: 20 }, { id: 'm_yuemei', weight: 20 }, { id: 'm_haiyi', weight: 19 }, { id: 'm_zhouling', weight: 19 }],
+      elite: 'm_zhouling', weights: { battle: 56, treasure: 13, fortune: 10, npc: 7, trap: 9, nothing: 5 } },
+    { id: 'leichi', name: '雷池旧地', recRealm: 8, recText: '渡劫期', desc: '上古仙人引雷洗剑的旧池，池底雷纹至今未熄，渡劫修士常来此借雷淬体。雷属妖兽盘踞其间，池畔时有渡劫丹材与雷属功法残页遗落。',
+      pool: [{ id: 'm_jiaojiao', weight: 22 }, { id: 'm_longgui', weight: 20 }, { id: 'm_yuanmo', weight: 19 }, { id: 'm_linglu', weight: 20 }, { id: 'm_leixiao', weight: 19 }],
+      dPool: { m_linglu: -1, m_leixiao: -4, m_leimen: -6 },
+      elite: 'm_leimen', weights: { battle: 56, treasure: 13, fortune: 11, npc: 5, trap: 10, nothing: 5 } },
     /* ---- v18 灵界篇：飞升后新地图 ---- */
     { id: 'lingxu', name: '灵墟仙泽', recRealm: 9, recText: '真仙期', desc: '飞升之后的第一站——灵墟仙泽，灵气成雾、仙禽翔集。泽水深处，有上古仙门遗留下的禁制与守卫。',
       pool: [{ id: 'm_linglu', weight: 30 }, { id: 'm_xianmo', weight: 25 }, { id: 'm_lingjiang', weight: 25 }, { id: 'm_lingxue', weight: 20 }],
@@ -724,10 +749,10 @@ const GameData = {
   SETS: {
     /* v37（E249）：tech = 套装炼化三阶解锁的「套装技」（机制技，成套在身时生效；消费端唯一漏斗） */
     xuantian: { name: '玄天套装', pieces: ['s_xt_jian', 's_xt_jia', 's_xt_pei'], bonus: { defPct: 15, hpPct: 10 }, tech: 'zhenyuanOnHit', text: '守御之道：防御 +15%，气血 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【磐岩之意】——受击回真元 5%' },
-    chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, tech: 'liaoyuan', text: '杀伐之道：攻击 +15%，暴击 +5%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【燎原之意】——入场自带攻势之势、会心伤害 +8%（v38 E339 补全）' },
+    chixiao:  { name: '赤霄套装', pieces: ['s_cx_jian', 's_cx_pao', 's_cx_gou'], bonus: { atkPct: 15, crit: 5 }, tech: 'liaoyuan', text: '杀伐之道：攻击 +15%，暴击 +5%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【燎原之意】——入场自带攻势之势、会心伤害 +8%' },
     /* ---- v19 新增套装 ---- */
     xuehe:    { name: '血河套装', pieces: ['s_hj_sha', 's_hj_pao', 's_hj_ling'], bonus: { atkPct: 12, crit: 4 }, tech: 'killAtk', text: '血河遗锋：攻击 +12%，暴击 +4%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【血河叠浪】——击杀叠攻 3%（至多五层）' },
-    xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, tech: 'tiancheng', text: '仙缘天成：攻击、防御、气血俱 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【天成之意】——游历奇遇权重 +8%、机缘收获 +10%（v38 E339 补全）' },
+    xianyuan: { name: '仙缘套装', pieces: ['s_xy_jian', 's_xy_ling', 's_xy_huan'], bonus: { atkPct: 10, defPct: 10, hpPct: 10 }, tech: 'tiancheng', text: '仙缘天成：攻击、防御、气血俱 +10%（两件即得六成，两件另享仙器散件共鸣 +1%/件）；炼化三阶解锁套装技【天成之意】——游历奇遇权重 +8%、机缘收获 +10%' },
   },
 
   /* ---- v37（E249）：套装技名录（炼化三阶解锁；名称与效果单源，ui/forge 引用）
@@ -804,7 +829,7 @@ const GameData = {
     { id: 't_dan',    name: '丹道宗师', cond: p => (p.counters.craftsOk || 0) >= 200, mech: 'danCrit', desc: '炼丹大成 200 炉——炼丹暴击率 +5%' },
     { id: 't_beast',  name: '御兽行家', cond: p => (p.beasts.list || []).some(b => b.evolved), mech: 'beastAssist', desc: '驯出一头蜕变灵兽——协战追击率 +5%' },
     { id: 't_explore', name: '行遍天下', cond: p => (p.counters.explores || 0) >= 500, mech: 'exploreGain', desc: '游历 500 次——游历灵石收获 +5%' },
-    { id: 't_top',    name: '天骄第一', cond: p => typeof RankSys !== 'undefined' && RankSys.isTop && RankSys.isTop(p), mech: 'wenjian2', desc: '身居天骄榜首——问剑可越一位递帖' },
+    { id: 't_top',    name: '天骄第一', cond: p => !!(p.flags && p.flags.everTop), mech: 'wenjian2', desc: '曾登临天骄榜首——问剑可越一位递帖' },   // v41（E419）：cond 改「曾登顶」——原 isTop 实时判定与越位问剑互斥成死锁（榜首不可问剑、称号即告破）；everTop 由 RankSys 落 flags 子字段
     { id: 't_hero',   name: '侠名远播', cond: p => (p.reputation || 0) >= 120, mech: 'heroChain', desc: '声望 120——悬赏连锁续链率 +5%' },
     { id: 't_free',   name: '散人不羁', cond: p => !p.sect && !!(p.flags && p.flags.ascended), mech: 'freeRep', desc: '飞升而未入宗门——声望获取 +10%、黑市售价 -5%' },
     { id: 't_slayer', name: '伏魔尊者', cond: p => (p.counters.killsElite || 0) >= 100, mech: 'slayerLoot', desc: '诛精英 100——精英战利品 +8%' },
@@ -1029,16 +1054,18 @@ const GameData = {
    *  雷→御（法宝导电挡）、心→避（魔音宜身法脱）、火/风→应（硬撼正解）；小惠：应=免当段气血、
    *  避=必成且免劫势、御=法宝灵光未损（终局法宝挡劫不耗宝体）。 */
   TRIB_OMENS: [
-    { id: 'lei',  name: '雷劫', icon: '⚡', desc: '紫雷千丈贯顶而下，轰击道基。', best: 'yu',   worst: 'ying' },
-    { id: 'huo',  name: '火劫', icon: '🔥', desc: '心火自燃，焚尽周天三万窍。', best: 'ying', worst: 'bi' },
-    { id: 'feng', name: '风劫', icon: '🌪️', desc: '罡风如刀，削肉剔骨裂金躯。', best: 'ying', worst: 'bi' },
-    { id: 'xin',  name: '心劫', icon: '🫀', desc: '心湖翻涌，魔音灌耳试道心。', best: 'bi',   worst: 'yu' },
+    { id: 'lei',  name: '雷劫', icon: '⚡', desc: '紫雷千丈贯顶而下，轰击道基。雷性善走金铁——引雷入鞘可导其锋，宜御不宜应。', best: 'yu',   worst: 'ying' },
+    { id: 'huo',  name: '火劫', icon: '🔥', desc: '心火自燃，焚尽周天三万窍。心火愈避愈炽——凝神定志以身承之，方是正解。', best: 'ying', worst: 'bi' },
+    { id: 'feng', name: '风劫', icon: '🌪️', desc: '罡风如刀，削肉剔骨裂金躯。罡风无孔不入——避无可避，唯有凝劲承之。', best: 'ying', worst: 'bi' },
+    { id: 'xin',  name: '心劫', icon: '🫀', desc: '心湖翻涌，魔音灌耳试道心。魔音无形无质，硬撼徒伤——身形游走，其奈我何。', best: 'bi',   worst: 'yu' },
   ],
   /* v40（E392）：合体期（目标境 ≥6）起劫象扩池——复用 best 对策框架零新机制：
-   * 仙元潮汐（御=法宝引潮入鞘灵光未损/应=凝神免当段伤）、道伤反噬（应=燃修为代伤/避=身法卸劫） */
+   * 仙元潮汐（御=法宝引潮入鞘灵光未损/应=凝神免当段伤）、道伤反噬（应=燃修为代伤/避=身法卸劫）
+   * v41（E455）：两张表六象 desc 全部埋入 best 对策暗语（雷→御/火→应/风→应/心→避/潮→御/伤→应，
+   * 六/六逐表配齐）；首遇无提示，渡过录 p.flags.tribOmens 后再遇按钮标「前世感悟」 */
   TRIB_OMENS_HIGH: [
-    { id: 'chaoxi',   name: '仙元潮汐', icon: '🌊', desc: '天外仙元如潮汐倒灌，蛮横霸烈难以硬撼。', best: 'yu',   worst: 'ying' },
-    { id: 'daoshang', name: '道伤反噬', icon: '🕳️', desc: '道基裂隙反噬真元，伤势沿经脉寸寸爬行。', best: 'ying', worst: 'yu' },
+    { id: 'chaoxi',   name: '仙元潮汐', icon: '🌊', desc: '天外仙元如潮汐倒灌，蛮横霸烈难以硬撼。潮势可引不可挡——法宝为引，导潮入鞘。', best: 'yu',   worst: 'ying' },
+    { id: 'daoshang', name: '道伤反噬', icon: '🕳️', desc: '道基裂隙反噬真元，伤势沿经脉寸寸爬行。创在己身，避无可避——凝神承之，以待功成。', best: 'ying', worst: 'yu' },
   ],
 
   /* ---------- v38（E300）：道途双脉——六大道在道境 3/6 重各一次分岔，二选一不可回改。

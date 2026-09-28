@@ -13,7 +13,11 @@ const Game = {
     UI.cache();
     Log.init();
     Ambience.init();   // v5：氛围音效（默认关，读回上次的开关偏好）
+    // v41（E429⑤）：日推进后置钩子——v41（E434）B2 retarget：回调自「state 常规预热」改为
+    // ensure() 写侧单点（期次滚茬重掷 + 寄售结算），渲染层 tips/state 恒纯读；time.js 本体零改动
+    Time.onAdvanceHook((p) => { try { if (typeof AuctionSys !== 'undefined' && AuctionSys.ensure) AuctionSys.ensure(p); } catch (err) { console.error('拍卖期滚茬异常:', err); } });
     UI.renderStart();
+    StartScreen.renderShadow();   // v41（E463）：岁月残影卡随开始界面渲染（可见/可回捞/可清除）
     // v31 修瑕（E24）：PWA shortcuts 深链消费——manifest 声明的 ?tab= 此前无任何代码读取（死链）
     try {
       const qtab = new URLSearchParams(location.search).get('tab');
@@ -307,10 +311,19 @@ const Game = {
     // v32 修瑕（E60）：离线逐日回放标记 + 收益聚合——弟子历练/仙界访客等 auto 钩子原逐日刷屏
     //（30 日离线 30~40 条），现聚合为一条「离线日报」
     this._offlineAgg = {};
+    // v41（E430）：离线小结按年归组——逐日快照各系统聚合的增量入年份桶（长离线「第 N 年」可回看）
+    const offlineYears = {};
+    let prevDayAgg = {};
     for (let i = 0; i < realDays && !p.dead; i++) {
       Time.add(1);
       this.dailySettle(p, true);
+      const aggNow = this._offlineAgg || {};
+      const yr = Math.floor((p.day || 0) / 365) + 1;
+      const yb = offlineYears[yr] = offlineYears[yr] || { spring: 0, disciple: 0, xianVisit: 0, avatarExp: 0, avatarStones: 0, nightRaid: 0, oathGather: 0, oathGatherGoldlan: 0, oathTrial: 0 };   // v41 修偏：补 E445②/E451 oath 三键（原聚合入档却零出口）
+      for (const k of Object.keys(yb)) yb[k] += Math.max(0, (aggNow[k] || 0) - (prevDayAgg[k] || 0));
+      prevDayAgg = { ...aggNow };
     }
+    this._offlineYearRows = offlineYears;
     p._settleDay = Math.floor(p.day || 0);   // v33（E81）：回放已逐日补结——原不同步 _settleDay，读档后首次行动再补结一轮（至多 30 次冗余日结，全靠各钩子日界防重兜底）
     const aggSnap = Object.assign({}, this._offlineAgg);   // v34（E1）：快照聚合（flush 会清空）
     this.flushOfflineAgg();
@@ -324,7 +337,12 @@ const Game = {
       Log.add(`离山的日子你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（按${UI.FACTS.offlineEff}效率折算，不计闭关加成，共 ${realDays} 日${offlineRushBonus > 0 ? `；聚灵加护 +${Utils.fmtNum(offlineRushBonus)}` : ''}）。`, 'gain');   // v36（E217）：口径如实——闭关流实得落差从暗亏变明示
     }
     // v34（E1）：离线小结——回家一份四行账的「仪式」，收益不再藏在默认折叠的日志红点后
-    if (!p.dead && realDays >= 1 && (offlineExp > 0 || aggSnap.spring || aggSnap.disciple || aggSnap.xianVisit || aggSnap.avatarExp || aggSnap.avatarStones || aggSnap.nightRaid)) {
+    if (!p.dead && realDays >= 1 && (offlineExp > 0 || aggSnap.spring || aggSnap.disciple || aggSnap.xianVisit || aggSnap.avatarExp || aggSnap.avatarStones || aggSnap.nightRaid || aggSnap.oathGather || aggSnap.oathTrial)) {   // v41 修偏：义聚/守誓独发亦出小结面板
+      // v41（E430）：跨年离线改按年归组流水（「第 N 年：灵泉 +X、化身行功 +Y」），单年内维持平铺
+      const yList = Object.keys(this._offlineYearRows || {})
+        .map(yr => [yr, this._offlineYearRows[yr]])
+        .filter(([yr, yb]) => yb.spring || yb.disciple || yb.xianVisit || yb.avatarExp || yb.avatarStones || yb.nightRaid || yb.oathGather || yb.oathTrial);
+      const byYear = yList.length > 1;
       const rows = [
         [`离线时长`, `${realDays} 日（现实 ${Math.floor(elapsedMs / 60000)} 分钟，效率 ${UI.FACTS.offlineEff}）`],
         // v37（E277）：小结拆「基础/聚灵加护」两段——窗口补乘的收益明示
@@ -332,21 +350,85 @@ const Game = {
           [`修行精进（基础）`, `<b class="hl">+${Utils.fmtNum(offlineBase)}</b> 修为`],
           [`聚灵加护`, `<b class="hl">+${Utils.fmtNum(offlineRushBonus)}</b> 修为`],
         ] : [[`修行精进`, `<b class="hl">+${Utils.fmtNum(offlineExp)}</b> 修为`]]) : []),
-        ...(aggSnap.spring ? [[`灵泉涌出`, `<b class="hl">${Utils.fmtNum(aggSnap.spring)}</b> 灵石`]] : []),
-        ...(aggSnap.disciple ? [[`弟子历练`, `缴回灵石 ${Utils.fmtNum(aggSnap.disciple)}`]] : []),
-        ...(aggSnap.xianVisit ? [[`仙界访客`, `到访 ${aggSnap.xianVisit} 次`]] : []),
-        ...(aggSnap.avatarExp ? [[`化身闭关`, `<b class="hl">+${Utils.fmtNum(aggSnap.avatarExp)}</b> 修为`]] : []),   // v38（E302/E327）
-        ...(aggSnap.avatarStones ? [[`化身游历`, `觅得灵石 ${Utils.fmtNum(aggSnap.avatarStones)}`]] : []),
-        ...(aggSnap.nightRaid ? [[`洞府夜袭`, `遇袭 ${aggSnap.nightRaid} 次（日志详载）`]] : []),
       ];
+      if (byYear) {
+        for (const [yr, yb] of yList) {
+          const segs = [];
+          if (yb.spring) segs.push(`灵泉涌出 ${Utils.fmtNum(yb.spring)}`);
+          if (yb.disciple) segs.push(`弟子历练缴回 ${Utils.fmtNum(yb.disciple)}`);
+          if (yb.avatarExp) segs.push(`<b class="hl">化身行功 修为 +${Utils.fmtNum(yb.avatarExp)}</b>`);
+          if (yb.avatarStones) segs.push(`化身游历觅得 ${Utils.fmtNum(yb.avatarStones)}`);
+          if (yb.xianVisit) segs.push(`仙界访客 ×${yb.xianVisit}`);
+          if (yb.nightRaid) segs.push(`洞府夜袭 ×${yb.nightRaid}（日志详载）`);
+          if (yb.oathGather) segs.push(`义聚补聚 ×${yb.oathGather}${yb.oathGatherGoldlan ? `（金兰缔结 ×${yb.oathGatherGoldlan}）` : ''}`);
+          if (yb.oathTrial) segs.push(`誓约试炼守誓 ×${yb.oathTrial}`);   // v41 修偏：E445②/E451 两行补齐
+          rows.push([`第 ${yr} 年`, segs.join('、')]);
+        }
+      } else {
+        rows.push(
+          ...(aggSnap.spring ? [[`灵泉涌出`, `<b class="hl">${Utils.fmtNum(aggSnap.spring)}</b> 灵石`]] : []),
+          ...(aggSnap.disciple ? [[`弟子历练`, `缴回灵石 ${Utils.fmtNum(aggSnap.disciple)}`]] : []),
+          ...(aggSnap.xianVisit ? [[`仙界访客`, `到访 ${aggSnap.xianVisit} 次`]] : []),
+          ...(aggSnap.avatarExp ? [[`化身闭关`, `<b class="hl">+${Utils.fmtNum(aggSnap.avatarExp)}</b> 修为`]] : []),   // v38（E302/E327）
+          ...(aggSnap.avatarStones ? [[`化身游历`, `觅得灵石 ${Utils.fmtNum(aggSnap.avatarStones)}`]] : []),
+          ...(aggSnap.nightRaid ? [[`洞府夜袭`, `遇袭 ${aggSnap.nightRaid} 次（日志详载）`]] : []),
+          ...(aggSnap.oathGather ? [[`义聚补聚`, `${aggSnap.oathGather} 场${aggSnap.oathGatherGoldlan ? `（金兰缔结 ${aggSnap.oathGatherGoldlan} 次）` : ''}`]] : []),
+          ...(aggSnap.oathTrial ? [[`誓约试炼`, `守誓 ${aggSnap.oathTrial} 次`]] : []),   // v41 修偏：E445②/E451 两行补齐
+        );
+      }
+      this._offlineYearRows = null;
+      // v41（E464）：云归见闻挂在离线小结之后——小账收卷，再问归途（弹窗单例，须等小账合上再开）
       UI.popup({
         title: '云 归 · 离 线 小 结',
         html: `<div class="seclude-report">${rows.map(([k, v]) => `<div class="sr-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
           <div class="tip-line" style="text-align:center">· 归来尘满衣，袖中天地宽。</div>`,
         options: [{ text: '返 府', value: true, primary: true }],
-      }).catch(() => {});
+      }).then(() => this.cloudReturnGate(p, realDays)).catch(() => {});
+    } else {
+      this.cloudReturnGate(p, realDays);   // v41（E464）：无小账时归途见闻直接开场
     }
   },
+
+  /** v41（E464）：云归见闻闸门——离线 ≥7 日归来 30% 概率一场归途三选一（每次归来至多一场）；
+   *  挂机/自动化静默语境不弹窗，取首项入日志（「auto 零弹窗入日报」） */
+  cloudReturnGate(p, realDays) {
+    if (!p || p.dead || realDays < 7 || !Utils.chance(30)) return;
+    this.cloudReturnTale(p, realDays);
+  },
+
+  /** v41（E464）：归途见闻——复用红尘劫式三选一轻叙事（小奖励：感悟 +2 / 灵石小赏 / 气运 +1），
+   *  让「回归时刻」成为一次确定的小惊喜； webdriver/挂机静默语境取首项并入日志 */
+  async cloudReturnTale(p, realDays) {
+    p.counters = p.counters || {};
+    p.counters.cloudTales = (p.counters.cloudTales || 0) + 1;   // 触发计次（stub 断言用）
+    const tale = Utils.pick(this.CLOUD_TALES);
+    const opts = [
+      { text: '听罢了故事再赶路（感悟 +2）', value: 'insight' },
+      { text: '给说书人打赏几文（灵石小赏）', value: 'stones' },
+      { text: '把故事记在心里（气运 +1）', value: 'fortune' },
+    ];
+    const silent = (typeof navigator !== 'undefined' && navigator.webdriver) || (typeof AutoCult !== 'undefined' && AutoCult.active);
+    let pick = opts[0].value;
+    if (!silent) {
+      pick = await UI.popup({
+        title: `☁ 归途见闻 · ${tale.title}`,
+        html: `${tale.text}<br><br><span class="tip-line">· 离家 ${realDays} 日，归途上也有际遇。</span>`,
+        options: opts,
+      }) || opts[0].value;   // ESC/遮罩关闭亦不白来——回落首项
+    }
+    let got = '';
+    if (pick === 'stones') { const n = Math.round(40 * GameData.stoneEco(p.realmIdx || 0)); Bag.addStones(n); got = `灵石 +${Utils.fmtNum(n)}`; }
+    else if (pick === 'fortune') { KarmaSys.addFortune(1); got = '气运 +1'; }
+    else { Cultivate.addInsight(p, 2); got = '感悟 +2'; }
+    Log.add(`【归途见闻】${tale.title}——${tale.text}（${got}）`, silent ? 'info' : 'flavor');
+    Game.afterAction();
+  },
+
+  CLOUD_TALES: [
+    { title: '渡口灯影', text: '归来渡口，老船工的一盏灯还亮着。他说你走的这些时日，山那边的云换了三回颜色，贩灵草的商队也改走了新路。' },
+    { title: '亭中旧客', text: '半路凉亭里有位旧客在煮茶，见你来，也不多问，只推过来一盏：「远行归来的人，先饮一口热的。」' },
+    { title: '集市新声', text: '山下的集市比走时热闹了些，孩童们传唱着一支新谣——细听，唱的竟是修行人的故事，词里还隐约有个熟悉的影子。' },
+  ],
 
   /** v27：每日例行结算（行动收尾与离线回放共用）——所有子项内部自带日界防重，重复调用无副作用。
    *  auto=离线回放模式：节庆自动从简（不弹窗不开战）、访客/灵泉不回环 afterAction、
@@ -376,7 +458,8 @@ const Game = {
     try { if (typeof FestivalSys !== 'undefined') FestivalSys.check(p, auto); } catch (err) { console.error('节庆检查异常:', err); }   // v20：节庆触发
     try { if (typeof SectSys !== 'undefined' && SectSys.tourneyCheck) SectSys.tourneyCheck(p); } catch (err) { console.error('大比检查异常:', err); }   // v22：宗门大比（每五年一届）
     if (!auto) { try { if (typeof NpcSys !== 'undefined' && NpcSys.companionCheck) NpcSys.companionCheck(p); } catch (err) { console.error('共修检查异常:', err); } }   // v20：道侣共修
-    try { if (!auto && typeof NpcSys !== 'undefined' && NpcSys.oathGatherTick) NpcSys.oathGatherTick(p); } catch (err) { console.error('义聚检查异常:', err); }   // v40（E402）：义聚 30 日节拍
+    // v40（E402）：义聚 30 日节拍——v41（E438）：!auto 门放开（离线缺席由 P5/E445 补聚逻辑按默认项补算入日报）
+    try { if (typeof NpcSys !== 'undefined' && NpcSys.oathGatherTick) NpcSys.oathGatherTick(p, auto); } catch (err) { console.error('义聚检查异常:', err); }
     try { DaoxinSys.shadowNudge(p); } catch (err) { console.error('窥伺检查异常:', err); }   // v18：玄影窥伺（软约束）
     // v24：日常结算统一收口到行动后（原先藏在各页签渲染函数里，打开页面才结算）
     try { if (typeof RankSys !== 'undefined' && RankSys.dailyReward && RankSys.isTop(p)) RankSys.dailyReward(p); } catch (err) { console.error('登顶日赏异常:', err); }
@@ -387,6 +470,43 @@ const Game = {
     try { if (typeof XianSys !== 'undefined' && XianSys.courtDaily) XianSys.courtDaily(p, auto); } catch (err) { console.error('仙庭差遣异常:', err); }   // v38（E309）：仙庭差遣换日 + 心魔罢黜
     try { if (typeof AvatarSys !== 'undefined' && AvatarSys.daily) AvatarSys.daily(p, auto); } catch (err) { console.error('化身行功异常:', err); }   // v38（E302/E327）：化身逐日行功（离线同源同量）
     try { if (typeof CaveSys !== 'undefined' && CaveSys.nightRaidCheck) CaveSys.nightRaidCheck(p, auto); } catch (err) { console.error('夜袭检查异常:', err); }   // v38（E305）：宿敌夜袭（离线自动结算）
+    // v41（E429④）：每日一句——按当日大事（突破/斩获/邂逅/亏空）从 DAO_FLAVOR 拼一句入日志（内建日界防重）
+    try { if (!auto) this.dailyLine(p); } catch (err) { console.error('每日一句异常:', err); }
+  },
+
+  /** v41（E429④）：当日大事快照（会话内存，非存档字段）——与下一次跨日比对出「突破/斩获/邂逅/亏空」 */
+  dailySnapOf(p) {
+    return {
+      day: Math.floor(p.day || 0),
+      realm: p.realmIdx * 4 + p.layer,
+      wins: (p.counters && p.counters.wins) || 0,
+      befriends: (p.counters && p.counters.befriends) || 0,
+      stones: (typeof Bag !== 'undefined' && Bag.stonesTotal) ? Bag.stonesTotal(p) : 0,
+    };
+  },
+  /** v41（E429④）：每日一句——「挂了一天」变成「过了一天」：跨日时按当日大事从 DAO_FLAVOR
+   *  取一句本色台词拼装入日志（'flavor' 类型与 E431 flavor 通道同型——lite 密度可见，
+   *  P3 落 TYPES.flavor 与过滤钮后即可按「见闻」归档）。 */
+  dailyLine(p) {
+    if (!p || p.dead) return;
+    const today = Math.floor(p.day || 0);
+    const snap = this._dailySnap;
+    this._dailySnap = this.dailySnapOf(p);
+    if (!snap || today <= snap.day) return;
+    const dao = (p.dao && GameData.DAO_FLAVOR[p.dao]) || null;
+    const pick = k => (dao && Array.isArray(dao[k]) && dao[k].length) ? Utils.pick(dao[k]) : '';
+    const parts = [];
+    let mood = '';
+    if (p.realmIdx * 4 + p.layer > snap.realm) { parts.push('境界更上'); mood = pick('tribSuccess'); }
+    const wins = ((p.counters && p.counters.wins) || 0) - snap.wins;
+    if (wins > 0) { parts.push(`斩获 ${wins} 场`); if (!mood) mood = pick('victory'); }
+    if (((p.counters && p.counters.befriends) || 0) > snap.befriends) {
+      parts.push('结识新友');
+      if (!mood) mood = (dao && typeof dao.greet === 'string') ? dao.greet : '';
+    }
+    if (typeof Bag !== 'undefined' && Bag.stonesTotal && Bag.stonesTotal(p) < snap.stones) { parts.push('破财消灾'); if (!mood) mood = pick('defeat'); }
+    if (!mood) mood = '青灯黄卷，吐纳自匀——寻常一日，亦是修行。';
+    Log.add(`【每日一句】${parts.length ? parts.join('、') + '——' : ''}${mood}`, 'flavor');
   },
 
   /** v32 修瑕（E60）：离线日报——auto 回放期间各系统聚合的收益在此收口成一条日志
@@ -399,6 +519,8 @@ const Game = {
     if (agg.avatarExp) parts.push(`化身代主行功，修为 +${Utils.fmtNum(agg.avatarExp)}`);   // v38（E302/E327）
     if (agg.avatarStones) parts.push(`化身游历，觅得灵石 ${Utils.fmtNum(agg.avatarStones)}`);
     if (agg.nightRaid) parts.push(`洞府遭夜袭 ${agg.nightRaid} 次（胜负已分，详情见日志）`);
+    if (agg.oathGather) parts.push(`义聚补聚 ${agg.oathGather} 场${agg.oathGatherGoldlan ? `、金兰缔结 ${agg.oathGatherGoldlan} 次` : ''}`);   // v41 修偏：E445② 写侧「聚合入日报」承诺自此兑现
+    if (agg.oathTrial) parts.push(`誓约试炼守誓 ${agg.oathTrial} 次`);   // v41 修偏：E451 auto 守誓同上
     if (parts.length) Log.add(`${title}${parts.join('；')}。`, 'info');
     this._offlineAgg = null;
   },
@@ -419,9 +541,14 @@ const Game = {
     // 句柄存 Game._snapTimer，exitToStart/删档时清理防多开泄漏）
     if (this._snapTimer) clearInterval(this._snapTimer);
     this._snapTimer = setInterval(() => Save.snapshotAuto(), 600000);
+    // v41（E434/E439）：读档/新档 materialize——拍期已过即滚茬、寄售到期即结算（写侧主动口，
+    // 此后渲染层 state() 恒纯读，「读档+拍期已过 tips 两次渲染一致」由本口保证）
+    try { if (typeof AuctionSys !== 'undefined' && AuctionSys.ensure) AuctionSys.ensure(this.player); } catch (err) { console.error('拍卖滚茬异常:', err); }
     this.computeOfflineProgress();  // v18：离线进度
+    // v41（E429④）：每日一句基线快照（离线回放不计入，读档后的第一天才开始记账）
+    if (this.player) this._dailySnap = this.dailySnapOf(this.player);
     // v30 修瑕：离线逐日回放中寿元坐化时，不再闪一下游戏界面再弹回开始界面——坐化结算直接接住
-    if (this.player && this.player.dead) { UI.renderStart(); return; }
+    if (this.player && this.player.dead) { UI.renderStart(); StartScreen.renderShadow(); return; }   // v41（E463）：残影卡随动
     // v32 修瑕（A3）：秘境「先清 choices 再开战」竞态残留自愈——战斗中刷新/关页后读档，
     // 本层节点凭空消失只剩撤离（深入进度与门票沉没）。空 choices 则重掷本层。
     // v40（E373）：stuck 守卫随 stuck 分支删除而收窄
@@ -460,6 +587,7 @@ const Game = {
     document.getElementById('create-screen').classList.add('hidden');
     document.getElementById('start-screen').querySelector('.start-inner').classList.remove('hidden');
     UI.renderStart();
+    StartScreen.renderShadow();   // v41（E463）：残影卡随动
   },
 
   /** 每次玩家行动后统一收尾：钳制数值 → 渲染 → 自动存档 */
@@ -474,6 +602,24 @@ const Game = {
     // +autoSave（一次行动双份整树渲染、双份全量序列化）。检查只改数据不发渲染，先跑后统一渲染落盘。
     Achieve.check();   // v6：成就检查（解锁即发奖播报）
     try { QuestSys.check(); } catch (err) { console.error('剧情检查异常:', err); }   // v11：主线推进
+    // v41（E429②）：升档新知三旗标迁至行动时机——一次性 toast（tips() 恢复纯只读，v33 教学不再被建议区裁剪吞掉）
+    if (p.flags && p.counters) {
+      if (!p.flags.tut_v33sign && (p.counters.signs || 0) > 0 && (p.signStreak || 0) < 7) {
+        p.flags.tut_v33sign = true;
+        UI.toast('新知：黄历连签三日内不断即延续——满七日必得上上签、气运 +3');
+      }
+      if (!p.flags.tut_v33rule && (p.counters.maxDepth || 0) > 0) {
+        p.flags.tut_v33rule = true;
+        UI.toast('新知：十座秘境各有地脉规则——入秘先识规则，守敌随之变形；战中亦可见');
+      }
+      if (!p.flags.tut_v33fee && (p.counters.forges || 0) > 0) {
+        p.flags.tut_v33fee = true;
+        UI.toast('新知：炼器坊开炉今起收取工费——配方行已标价；善用残片入炉可省材料');
+      }
+    }
+    // v41（E471 修偏）：境界目标链结算随行动收尾——原挂 renderCultivateTab 渲染路径（写 flags+发气运
+    // +toast），与 E429②「渲染纯只读」同反模式；迁此口后旧档历史达标在下次行动补发（realmGoals 记账防重发不变）
+    try { UI.settleRealmGoals(p); } catch (err) { console.error('境界目标结算异常:', err); }
     UI.markDirty('all');
     try { UI.renderAll(); } catch (err) { console.error('渲染异常（不影响存档）:', err); }
     Save.autoSave();
@@ -492,6 +638,9 @@ const Game = {
       }
       p.day = realDay;
       p._settleDay = settleToday;
+      // v41（E434）：虚拟逐日不走 Time.add（钩子不触发）——补结后按真实日对齐一次拍期写侧，
+      // 防补结窗口内拍期/寄售到期而渲染层读到滞留旧期
+      try { if (typeof AuctionSys !== 'undefined' && AuctionSys.ensure) AuctionSys.ensure(p); } catch (err) { console.error('拍卖滚茬异常:', err); }
       this.flushOfflineAgg(`【${crossed} 日总账】`);   // v33（E82）：补结收益不再静默入账
     }
     this.dailySettle(p);   // 当日例行（v27：日更系统统一收口：节庆/大比/共修/窥伺/登顶/洞府/图鉴）
@@ -593,6 +742,41 @@ const Game = {
       } catch (e) { UI.toast('回捞失败', true); return; }
       Game.loadFrom('auto');
     },
+    /* v41（E463）：岁月残影——回捞/清除（残影卡在 start-screen.js，动作挂既有 bak2 回捞流程旁） */
+    'st-shadow-restore': async (d) => {
+      const key = String(d.key || '');
+      if (!StartScreen.SHADOW_KEYS.some(k => k.key === key) || key === 'lasterror') return;
+      const snap = Save.peekRaw(key);
+      if (!snap || !snap.player) { UI.toast('残影已散，无从回捞'); return; }
+      // v35（E137）同款护栏：死档残影不回捞（原档先行校验，覆写前另落二级保险）
+      if (snap.meta && snap.meta.dead) { UI.toast('该残影来自一位已坐化的修士，无法回捞', true); return; }
+      const ok = await UI.popup({
+        title: '回捞岁月残影',
+        html: `残影时间：第 ${snap.meta.day} 日 · ${Utils.esc(snap.meta.realmText || '?')} · ${Utils.esc(snap.meta.name || '?')}。<br>将把这份残影写入自动存档并读取（当前 auto 会覆盖，原档暂存于「回捞前旧档」）。`,
+        options: [{ text: '回 捞', value: true, primary: true }, { text: '作罢', value: false }],
+      });
+      if (!ok) return;
+      try {
+        const cur = Save.read('auto');
+        if (key !== 'auto_pre_bak2' && cur && cur.player) Save.writeRaw('auto_pre_bak2', JSON.stringify(cur));   // 二级保险（残影本身是 auto_pre_bak2 时不再自覆）
+        Save.writeRaw('auto', JSON.stringify(snap));
+      } catch (e) { UI.toast('回捞失败', true); return; }
+      Game.loadFrom('auto');
+    },
+    'st-shadow-clear': async (d) => {
+      const key = String(d.key || '');
+      if (!StartScreen.SHADOW_KEYS.some(k => k.key === key)) return;
+      const ok = await UI.popup({
+        title: '拂去残影',
+        html: `将拂去这份旧档残影——拂去便再寻不回，确定吗？`,
+        options: [{ text: '拂 去', value: true, primary: true }, { text: '作罢', value: false }],
+      });
+      if (!ok) return;
+      Save.remove(key);
+      UI.toast('残影已拂去');
+      UI.renderStart();
+      StartScreen.renderShadow();
+    },
     'act-mirror': () => ReincarnationSys.mirror(),   // v30：轮回镜（游戏内）
     'st-start': () => {
       const name = (document.getElementById('create-name').value || '').trim() || Utils.pick(GameData.NAMES);
@@ -603,7 +787,7 @@ const Game = {
       const ok = await UI.popup({ title: '删除存档', html: '此档一删，仙途尽消，确定吗？', options: [{ text: '删除', value: true }, { text: '取消', value: false }] });
       if (ok) {
         if (this._snapTimer) { clearInterval(this._snapTimer); this._snapTimer = null; }   // v37（E268）：删档随会话清理快照定时器
-        Save.remove(d.slot); UI.renderStart();
+        Save.remove(d.slot); UI.renderStart(); StartScreen.renderShadow();   // v41（E463）：残影卡随动
       }
     },
     /* --- 标签页 / 背包 --- */
@@ -725,8 +909,9 @@ const Game = {
       p.sect.contrib -= 300;
       p.listenDay = today;
       const before = p.insight || 0;
-      Cultivate.addInsight(p, 8);
-      Log.add(`你随长老听讲经义一日${before >= 100 ? '，感悟圆融，余韵化作修为。' : '，顿悟处不少。（突破感悟 +8）'}`, 'gain');
+      const lm = SectSys.listenMul(p);   // v41（E442）接线：勤修季讲道加开——听讲感悟 ×2（单源 SectSys.listenMul，此前定义+公示后零消费）
+      Cultivate.addInsight(p, 8 * lm);
+      Log.add(`你随长老听讲经义一日${before >= 100 ? '，感悟圆融，余韵化作修为。' : `，顿悟处不少。（突破感悟 +${8 * lm}${lm > 1 ? ' · 勤修季讲道加开，所得倍之' : ''}）`}`, 'gain');
       Time.add(1);
       if (p.dead) return;
       Game.afterAction();
@@ -928,15 +1113,18 @@ const Game = {
     'act-bounty-claim': (d) => BountySys.claim(Number(d.i)),
     'act-bounty-reroll': () => BountySys.reroll(),   // v39（E353）：悬赏换一批（每窗口一次免费）
     'act-black-buy': (d) => BlackSys.buy(d.item),
+    'act-black-sell': (d) => BlackSys.sell(d.item),   // v41（E438）：暗巷销赃（黑市卡「出 售」入口落 E470）
     'act-bid': (d) => AuctionSys.bid(d.mode),
     'act-auction-reroll': () => AuctionSys.reroll(),   // v39（E353）：换一批（每期一次 20×eco）
+    'act-consign': (d) => AuctionSys.consign(d.item),   // v41（E439）：委托寄售（寄售卡入口落 E470）
+    'act-consign-claim': () => AuctionSys.claimConsign(),   // v41（E439）：寄售取回/到账领取（入口落 E470）
     'act-donate': (d) => DonateSys.donate(d.d),
     'act-sect-command': () => SectSys.command(),
     /* --- v3 秘境 --- */
     'act-realm-enter': (d) => DungeonSys.enter(Number(d.realm)),
     'act-realm-node': (d) => DungeonSys.resolve(Number(d.node)),
     'act-realm-retreat': () => DungeonSys.retreat(),
-    'dmn-scout': () => DungeonSys.scout(),   // v40（E372）：窥探符接回——耗一符窥见本层岔路（E245 心魔来源随之生效）
+    'dmn-scout': () => DungeonSys.scout(),   // v40（E372）：窥探符接回——v41（E458）重做为三问式斥候：窥前路一符/窥异变两符，每窥心魔 +2（E245 心魔来源随之生效）
     'act-dung-auto': () => DungeonSys.toggleAuto(),   // v39（E362）：秘境连推开关
     'act-dungeon-purify': (d) => DungeonSys.purify(d.mut),   // v38（E307）：净化一条秘境异变
     'act-realm-synth': () => DungeonSys.synth(),

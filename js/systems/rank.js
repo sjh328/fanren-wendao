@@ -25,6 +25,7 @@ const RankSys = {
   /** 登顶每日气运：每天首次查看天骄榜且在榜首时领取 */
   dailyReward(p) {
     if (!this.isTop(p)) return false;
+    this.markEverTop(p);   // v41（E419）：登顶落旗（首次入年表）
     const today = Math.floor(p.day);
     if ((p.topTitle || {}).day === today) return false;
     p.topTitle = { day: today };
@@ -34,7 +35,11 @@ const RankSys = {
     return true;
   },
   /** v37（E244）：问剑夺位——对身前一位递问剑帖（强化切磋、点到为止），胜负按双方综合战力
-   *  三档成算预估；胜则榜序对调（rankHonor 折算恰好越位的小层差）。日限 1 次（Daily.resetIfNew 单源） */
+   *  三档成算预估；胜则榜序对调（rankHonor 折算恰好越位的小层差）。日限 1 次（Daily.resetIfNew 单源）
+   *  v41（E420）：递帖弹窗加风险自选档（RISK_BANDS 同段单源，雷台 E445 同源消费）——
+   *  稳 ×1.0 无罚 / 险 ×1.4 败北功勋折半 / 搏命 ×1.8 败北功勋倒扣全差；
+   *  v41（E419③）：日常问剑不再入年表（仅首次夺位/登顶入册，见 onWenjianWin / markEverTop）；
+   *  v41（E421）：宿敌回帖——结怨之敌在问剑帖上回一句场面话（lineFor hostile 台词池，纯渲染） */
   async challengeAhead() {
     const p = Game.player;
     if (Battle.active) return;
@@ -44,44 +49,110 @@ const RankSys = {
     const rows = this.board(p);
     const myIdx = rows.findIndex(r => r.id === 'me');
     if (myIdx <= 0) { UI.toast('你已身居榜首——天上地下，再无问剑之靶'); return; }
-    // v38（E340）：称号「天骄第一」——可越一位递帖（隔位问剑，声名所至）
+    // v38（E340）：称号「天骄第一」——可越一位递帖（隔位问剑，声名所至）；v41（E419）：称号改「曾登顶」可佩戴，skip 随 ctx 落到胜局结算
     const skip = Game.titleOn(p, 'wenjian2') && myIdx >= 2 ? 2 : 1;
     const ahead = rows[myIdx - skip];
     const st = p.npcs[ahead.id];
     if (!st || !st.alive) { UI.toast('身前一位无从问剑'); return; }
     if (NpcSys.isAway(p, ahead.id)) { UI.toast(`${ahead.name} 行游在外，旬末方归`); return; }
     // v40（E374）：三档带——npcCombatPower（已并入 parity 乘区）vs Stat.power 定带，
-    // 对手属性按带生成（可敌 ≈1.00 / 略逊 ≈0.90 / 远逊 ≈0.78），估算与实战同口径
+    // 对手属性按带生成（旗鼓相当 ≈1.00 / 劲敌 ≈0.90 / 鏖战 ≈0.78），估算与实战同口径
     const band = NpcSys.rivalBand(p, ahead.id);
-    // v40（E374）：带比语义 = 对手战力/我方战力——略逊即敌弱我一筹，胜算文案随带走
-    const odds = band.name === '可敌' ? '胜算五五 · 势均力敌' : band.name === '略逊' ? '胜算偏高 · 敌略逊一筹' : '胜算在握 · 可堪一战';
+    // v41（E420）：带比语义 = 对手战力/我方战力——劲敌即敌弱我一筹，胜算文案随带走（带名强度语）
+    const odds = band.name === '旗鼓相当' ? '胜算五五 · 势均力敌' : band.name === '劲敌' ? '胜算偏高 · 敌弱我一筹' : '胜算在握 · 可堪一战';
+    // v41（E420）：风险自选档三选一
+    const risks = (GameData.BALANCE.COMBAT.RISK_BANDS || []).slice();
+    const riskOf = i => risks[i] || { name: '旗鼓相当', risk: '稳', mult: 1.0, lossPenalty: 0, lossTxt: '' };
+    // v41（E421）：宿敌回帖（lineFor hostile 仅在结怨 rel ≤ -15 时命中，无恩怨不显）
+    const grudgeLine = NpcSys.lineFor(p, ahead.id, 'hostile');
     const ok = await UI.popup({
       title: `问剑 · ${ahead.name}`,
-      html: `你修书一封问剑帖，递与身前一位——点到为止的强化切磋，<b>胜则榜序对调</b>。<br>· 对手：<b>${Utils.esc(ahead.name)}</b>（${GameData.REALM_NAMES[Math.min(9, Math.floor(ahead.power / 4))]}${GameData.LAYER_NAMES[Utils.clamp(ahead.power % 4, 0, 3)]}）<br>· 成算：<b>${odds}</b><br><span class="tip-line">· 每日一问；落败无折损，唯榜上留名未改。当前功勋 ${this.honorOf(p)} 层。</span>`,
+      html: `你修书一封问剑帖，递与身前一位——点到为止的强化切磋，<b>胜则榜序对调</b>。<br>· 对手：<b>${Utils.esc(ahead.name)}</b>（${GameData.REALM_NAMES[Math.min(9, Math.floor(ahead.power / 4))]}${GameData.LAYER_NAMES[Utils.clamp(ahead.power % 4, 0, 3)]}）<br>· 成算：<b>${odds}</b><br>· 险档 <select id="wj-risk">${risks.map((r, i) => `<option value="${i}" ${i === 0 ? 'selected' : ''}>${r.risk}（${r.name} · 赏格功勋 ×${r.mult}${r.lossTxt ? `，${r.lossTxt}` : '，败北无罚'}）</option>`).join('')}</select><br>${grudgeLine ? `<div class="tip-line">· ${Utils.esc(ahead.name)} 在帖尾回了一句：<b>${grudgeLine}</b></div>` : ''}<span class="tip-line">· 每日一问；当前功勋 ${this.honorOf(p)} 层。</span>`,
       options: [{ text: '递帖问剑', value: true, primary: true }, { text: '再等等', value: false }],
     });
     if (!ok) return;
-    Log.add(`你向 <b>${ahead.name}</b> 递上问剑帖——一战定榜！`, 'event');
-    if (typeof Story !== 'undefined' && Story.chron) Story.chron(`向 ${ahead.name} 问剑`);
-    Battle.start(null, { enemy: NpcSys.buildEnemy(p, ahead.id, 0, { ratio: band.ratio, bandName: band.name }), npcId: ahead.id, spar: true, wenjian: true, mapName: '问剑台' });
+    const ri = riskOf(Number((typeof document !== 'undefined' && document.getElementById('wj-risk')) ? document.getElementById('wj-risk').value : 0));
+    Log.add(`你向 <b>${ahead.name}</b> 递上问剑帖——一战定榜！（险档「${ri.risk}」· ${ri.name}）`, 'event');
+    Battle.start(null, { enemy: NpcSys.buildEnemy(p, ahead.id, 0, { ratio: band.ratio, bandName: band.name }), npcId: ahead.id, spar: true, wenjian: true, mapName: '问剑台', wenjianSkip: skip, risk: ri });
     Game.afterAction();   // v35（E143）：先 start 后 afterAction——防节庆在开战前触发后被静默丢弃
   },
-  /** v37（E244）：问剑胜局——榜序对调：功勋补足「恰越身前一位」的小层差 */
-  onWenjianWin(p, id) {
+  /** v37（E244）：问剑胜局——榜序对调：功勋补足「恰越身前一位」的小层差
+   *  v41（E419）：接受隔位问剑（tIdx === myIdx - skip，skip=2 胜局原零功勋零换榜的死锁），
+   *  功勋按 diff + skip 发；v41（E419③）：仅首次夺位入年表，日常问剑不再入册；
+   *  v41（E420）：功勋随险档乘区发（RISK_BANDS.mult，稳档 ×1.0 逐字不变） */
+  onWenjianWin(p, id, skip = 1, risk = null) {
     const rows = this.board(p);
     const myIdx = rows.findIndex(r => r.id === 'me');
     const tIdx = rows.findIndex(r => r.id === id);
-    if (myIdx < 0 || tIdx !== myIdx - 1) return;
+    if (myIdx < 0 || tIdx !== myIdx - skip) return;
     const diff = rows[tIdx].score - rows[myIdx].score;
-    p.rankHonor = this.honorOf(p) + diff + 1;
-    Log.add('<b>问剑得胜</b>——榜上名次，自此对调！（功勋 +' + (diff + 1) + '）', 'gain');
+    const gain = Math.ceil((diff + skip) * ((risk && risk.mult) || 1));
+    p.rankHonor = this.honorOf(p) + gain;
+    Log.add('<b>问剑得胜</b>——榜上名次，自此对调！（功勋 +' + gain + (risk && risk.mult > 1 ? `，险档「${risk.risk}」×${risk.mult}` : '') + '）', 'gain');
+    p.flags = p.flags || {};
+    if (!p.flags.wenjianFirst) {   // v41（E419③）：首次夺位入册
+      p.flags.wenjianFirst = true;
+      if (typeof Story !== 'undefined' && Story.chron) Story.chron(`初问剑夺位·胜${(rows[tIdx] || {}).name || ''}`);
+    }
+    this.markEverTop(p);
+  },
+  /** v41（E420）：问剑败北罚——险档功勋折半差、搏命倒扣全差（稳档无罚）；功勋为零时不倒扣 */
+  onWenjianLoss(p, id, risk = null) {
+    const pen = (risk && risk.lossPenalty) || 0;
+    if (pen <= 0 || !this.honorOf(p)) return;
+    const rows = this.board(p);
+    const myIdx = rows.findIndex(r => r.id === 'me');
+    const tIdx = rows.findIndex(r => r.id === id);
+    if (myIdx < 0 || tIdx < 0) return;
+    const diff = Math.max(0, rows[tIdx].score - rows[myIdx].score);
+    const lose = Math.ceil(diff * pen);
+    if (lose <= 0) return;
+    p.rankHonor = Math.max(0, this.honorOf(p) - lose);
+    Log.add(`<b>问剑败北</b>——${risk.risk === '搏命' ? '搏命之约，功勋倒扣全差' : '险档之约，功勋折半差'} -${lose}。`, 'loss');
+  },
+  /** v41（E445）⑥ 修偏：雷台败北罚——险档功勋折半差、搏命倒扣全差（稳档无罚）；功勋为零时不倒扣。
+   *  与 onWenjianLoss 同式（diff × lossPenalty，E445⑥「与问剑同源」验收口径），battle.js defeat()
+   *  的 showdown 分支消费——补上此前「选项公示败罚、败局从不兑现」的半截接线 */
+  onConfrontLoss(p, id, risk = null) {
+    const pen = (risk && risk.lossPenalty) || 0;
+    if (pen <= 0 || !this.honorOf(p)) return;
+    const rows = this.board(p);
+    const myIdx = rows.findIndex(r => r.id === 'me');
+    const tIdx = rows.findIndex(r => r.id === id);
+    if (myIdx < 0 || tIdx < 0) return;
+    const diff = Math.max(0, rows[tIdx].score - rows[myIdx].score);
+    const lose = Math.ceil(diff * pen);
+    if (lose <= 0) return;
+    p.rankHonor = Math.max(0, this.honorOf(p) - lose);
+    Log.add(`<b>雷台败北</b>——${risk.risk === '搏命' ? '搏命之约，功勋倒扣全差' : '险档之约，功勋折半差'} -${lose}。`, 'loss');
+  },
+  /** v41（E419）：登顶落旗（p.flags.everTop 子字段，零新顶层）——榜面渲染/登顶日赏/问剑换榜
+   *  三口皆查；首次登顶入年表一句（E419③「登顶入册」），称号 t_top 自此按「曾登顶」可佩戴 */
+  markEverTop(p) {
+    if (!this.isTop(p)) return;
+    p.flags = p.flags || {};
+    if (!p.flags.everTop) {
+      p.flags.everTop = true;
+      if (typeof Story !== 'undefined' && Story.chron) Story.chron('名压天骄，登临榜首');
+    }
   },
   render(p) {
     const rows = this.board(p);
     const myIdx = rows.findIndex(r => r.id === 'me');
     const top = this.isTop(p);
+    // v41（E419/E421 复核取舍注记）：下两处为渲染路径一次性落旗（幂等、消费端纯展示、无经济后果），
+    // 随下次行动 afterAction 落盘；裸渲染场景由 visibilitychange/beforeunload autoSave 兜底。
+    // 迁 afterAction/dailySettle 覆盖不了「境界/功勋自然登顶不经任何 rank 钩子」的兜底语义，
+    // 工程量与收益不成比例——就地留档取舍（E429② 同版「渲染纯只读」原则的已记录例外）
+    this.markEverTop(p);   // v41（E419）：榜面亦落 everTop 旗（大比魁首/雷台功勋自然推上榜首的路径同此入册）
     const myPower = p.realmIdx * 4 + p.layer;
     const topPower = Math.max(1, rows[0].power);
+    // v41（E421）：蝉联榜首小记——在位 N 日本世连庄自首次登顶日起算；跌落榜首即清，再登顶重新起算
+    //（取舍同上：渲染期一次性落旗，随下次行动落盘）
+    p.flags = p.flags || {};
+    if (top) { if (p.flags.everTopDay == null) p.flags.everTopDay = Math.floor(p.day || 0); }
+    else if (p.flags.everTopDay != null) delete p.flags.everTopDay;
+    const topTenure = top && p.flags.everTopDay != null ? Math.max(1, Math.floor(p.day || 0) - p.flags.everTopDay + 1) : 0;
     // v37（E244）：榜位变动标注——与上次渲染快照对比，↑升 / ↓降（首见不标）
     const prev = (p.rankPrev && typeof p.rankPrev === 'object') ? p.rankPrev : null;
     const arrowOf = (r, i) => {
@@ -96,16 +167,19 @@ const RankSys = {
       const gapTxt = r.id === 'me' ? '此即是你'
         : !st || !st.alive ? '' : (gap > 0 ? `高 ${gap} 小层` : gap < 0 ? `低 ${-gap} 小层` : '与你并肩');
       // v36（E227）：战力对比档位——npcCombatPower（buildEnemy 口径反推）vs Stat.power 同量纲三档
+      // v41（E420）：带名改强度语（旗鼓相当/劲敌/鏖战，RIVAL_BANDS 单源同语）
       let vsTxt = '';
       if (st && st.alive) {
         const ratio = NpcSys.npcCombatPower(p, r.id) / Math.max(1, Stat.power(p));
-        vsTxt = (ratio >= 0.9 && ratio <= 1.1) ? '可敌' : (ratio >= 0.7 && ratio <= 1.3) ? '略逊' : '远逊';
+        vsTxt = (ratio >= 0.9 && ratio <= 1.1) ? '旗鼓相当' : (ratio >= 0.7 && ratio <= 1.3) ? '劲敌' : '鏖战';
       }
+      // v41（E421）：恩怨小标——结怨之敌在榜上一眼可辨（NpcSys.grudge 单源，无恩怨不显）
+      const grudgeTxt = st && st.grudge && st.alive ? ' <i class="rank-rel" style="color:#d05b5b">与你有隙</i>' : '';
       const w = Math.round(Utils.clamp(r.power / topPower * 100, 5, 100));
       return `
       <div class="rank-row ${r.id === 'me' ? 'me' : ''}">
         <span class="rank-no ${i < 3 ? 'top' + (i + 1) : ''}">${i + 1}</span>
-        <span class="rank-name">${Utils.esc(r.name)}${arrowOf(r, i)}${relTxt ? ` <i class="rank-rel">${relTxt}</i>` : ''}${vsTxt ? ` <i class="rank-rel">${vsTxt}</i>` : ''}</span>
+        <span class="rank-name">${Utils.esc(r.name)}${arrowOf(r, i)}${relTxt ? ` <i class="rank-rel">${relTxt}</i>` : ''}${vsTxt ? ` <i class="rank-rel">${vsTxt}</i>` : ''}${grudgeTxt}</span>
         <span class="rank-bar"><span style="width:${w}%"></span></span>
         <span class="rank-pow">${GameData.REALM_NAMES[Math.min(9, Math.floor(r.power / 4))]}${GameData.LAYER_NAMES[Utils.clamp(r.power % 4, 0, 3)]}<i class="rank-gap">${gapTxt}</i></span>
       </div>`;
@@ -116,7 +190,7 @@ const RankSys = {
     const chaseTip = ahead ? `<div class="tip-line">· 距上一位 <b>${Utils.esc(ahead.name)}</b> 还差 <b class="hl">${ahead.power - myPower}</b> 小层——境界精进，名次自至。</div>` : '';
     return `
     <div class="card">
-      <div class="card-title">✦ 天骄榜 ${top ? '<span class="tag warn">天下第一 · 全属性 +2%</span>' : `<span class="tag">你的排名 · 第 ${myIdx + 1} 位</span>`}<button class="btn btn-sm" data-action="act-wenjian" style="margin-left:auto" title="向身前一位递问剑帖——点到为止的强化切磋，胜则榜序对调（每日一次）">⚔ 问剑</button></div>
+      <div class="card-title">✦ 天骄榜 ${top ? `<span class="tag warn">天下第一 · 全属性 +2%</span>${topTenure > 0 ? `<span class="tag" title="本世连庄——自你首次登临榜首之日起算">在位 ${topTenure} 日</span>` : ''}` : `<span class="tag">你的排名 · 第 ${myIdx + 1} 位</span>`}<button class="btn btn-sm" data-action="act-wenjian" style="margin-left:auto" title="向身前一位递问剑帖——点到为止的强化切磋，胜则榜序对调（每日一次；险档可自选，赏格功勋随之浮动）">⚔ 问剑</button></div>
       <div class="card-desc">修行界在世风云修士与你的排名（境界小层 + 功勋排序；殒身者自榜上除名）。问剑夺位、大比魁首、雷台了断皆折算功勋——当前 <b>${this.honorOf(p)}</b> 层。登顶者名动天下：全属性 +2%，每日另有气运小赏。</div>
       <div class="tip-line">· 你的综合战力 ⚔ <b>${Utils.fmtNum(Stat.power(p))}</b>（装备/功法/灵兽一应计入）——境界是名次，战力是底气。</div>
       ${chaseTip}

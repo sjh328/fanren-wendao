@@ -89,13 +89,26 @@ const Explore = {
     if (huntForce) { p.flags = p.flags || {}; p.flags._huntJustNow = true; }
     switch (type) {
       case 'battle': {
-        // v40（E375）：遭遇难度带——同阶为主（80%）+ 两成几率 +1~2 小层凶兽（秒胜线与精英墙
-        // 之间重开「紧张但可赢」带：delta 兽经验/灵石/掉落 ×(1+0.5×delta)，精英率再 +3%/层）
-        const delta = Utils.chance(20) ? Utils.rand(1, 2) : 0;
+        // v41（E453）：动态威胁带——Δ=玩家境−图推荐境 <2 时同 v40（E375）口径（两成几率 +1~2 小层）；
+        // Δ≥2 时按 Δ 扩展：chance(20+5Δ)？rand(1, 2+Δ)（上限 Δ+2 层），收益 ×(1+0.5Δ) 同式——
+        // 高境玩家刷旧图重开「紧张但可赢」带，秒胜率随 Δ 显著下降
+        const dRealm = p.realmIdx - map.recRealm;
+        const delta = dRealm >= 2
+          ? (Utils.chance(20 + 5 * dRealm) ? Utils.rand(1, 2 + dRealm) : 0)
+          : (Utils.chance(20) ? Utils.rand(1, 2) : 0);
         const eliteChance = (under ? 14 : 8) + delta * 3 + deepTier * 4;   // v20 深耕：精英率 +；v40（E375）：delta ×3%/层
         let monsterId = Utils.chance(eliteChance) && map.elite
           ? map.elite
           : Utils.pickWeighted(map.pool);
+        // v41（E452）：dPool 借用怪的负偏移（雷池旧地下调借用 p35+ 之怪，构建落同阶±1；
+        // v41 修偏后天下大事侧 world.js 兽潮/夺宝同消费本偏移，两侧口径归一）
+        const baseD = (map.dPool && map.dPool[monsterId]) || 0;
+        // v41（E453）：怪 power 钳 ≤ 玩家 rp×1.35（rp 量纲同 buildMonster）——防必败保底，
+        // 低境玩家误入高图时钳到可战档；baseD 负偏移不受钳抬升
+        const rpCap = Math.ceil((p.realmIdx * 4 + p.layer) * 1.35);
+        const effDelta = GameData.MONSTERS[monsterId].power + baseD + delta > rpCap
+          ? rpCap - GameData.MONSTERS[monsterId].power
+          : baseD + delta;
         // v40（E382）：前二图精英 mercy=0.75——数学上零胜机的必败目标先削三档（削弱明示，如实入日志）
         const earlyElite = (map.id === 'village' || map.id === 'qingfeng') && monsterId === map.elite;
         // v20 夜行妖兽：夜半（及中元）出没，境界相近者主动寻人
@@ -115,13 +128,18 @@ const Explore = {
         const bctx = { mapName: map.name, mapId: map.id, firstStrike, arraySetup, arrayPotent: arrayTier >= 3, arrayGrand: arrayTier >= 6, explore: true };   // v38（E323）：秒胜「探索时关闭」判据
         // v40（E382）：前二图精英 mercy=0.75（全属性折算，首战保底并存取更低者；战报有「未出全力」明示）
         if (earlyElite) bctx.mercy = Math.min(bctx.mercy || 1, 0.75);
-        // v40（E375）：delta 凶兽——+1~2 小层，经验/灵石 ×(1+0.5×delta)、掉落同倍率
-        if (delta > 0 && monsterId !== map.elite) {
-          const den = buildMonster(monsterId, delta);
+        // v40（E375）/v41（E452/E453）：delta 凶兽与 dPool 借用怪一律走 bctx.enemy 显式构建——
+        // 经验/灵石 ×(1+0.5×delta)、掉落同倍率（收益式随威胁带同式）；精英被掷中时不吃威胁带加成
+        //（原口径保留），但 dPool 偏移精英（雷池旧地·九霄雷灵）仍须显式构建，否则 Battle.start
+        // 缺省按原生 power 造怪（p40 直落 r9 带）
+        if ((delta > 0 || baseD !== 0) && monsterId !== map.elite) {
+          const den = buildMonster(monsterId, effDelta);
           den.expGain = Math.round(den.expGain * (1 + 0.5 * delta));
           den.stoneGain = Math.round(den.stoneGain * (1 + 0.5 * delta));
           bctx.enemy = den;
           bctx.dropMul = (bctx.dropMul || 1) * (1 + 0.5 * delta);
+        } else if (baseD !== 0) {
+          bctx.enemy = buildMonster(monsterId, effDelta);
         }
         // v20 深耕掉落与兽潮掉落
         if (deepTier > 0) {

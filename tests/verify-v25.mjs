@@ -176,8 +176,8 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA43 塔纳财折半 60×eco + 玄铁矿 ×4 补点击价值（E352）') : fail('SA43 纳财', '');
   cult.includes('Math.round(60 * GameData.stoneEco(p.realmIdx))') && ui.includes('日均 ≈1.6×') && ui.includes('日均 ≈1×')
     ? pass('SA44 闭关成本 60×eco 且修炼页两钮如实日均披露（E352）') : fail('SA44 闭关', '');
-  balance.includes('raw * 2.5 / (10 + r)') && balance.includes('120 * se') && balance.includes('Math.round(60 * eco)')
-    ? pass('SA45 balance-sim 三口径：悟道分母 10+r、塔纳财行 120×se、闭关 sink 60×eco（E352）') : fail('SA45 sim 口径', '');
+  balance.includes('raw * 2.5 / (10 + r)') && balance.includes('120 * se') && balance.includes('Math.round(60 * se)')
+    ? pass('SA45 balance-sim 三口径：悟道分母 10+r、塔纳财行 120×se、闭关 sink 60×se（E352；v41（E459）灵石侧 stoneEco 双轨改名）') : fail('SA45 sim 口径', '');
 
   /* ---- WP4（E353/E354/E355/E356） ---- */
   auction.includes('Math.round(ev * 0.95)') && !auction.includes('ev * 0.85')
@@ -203,10 +203,11 @@ console.log('===== SA 源码静态组 =====');
     && oath.includes("RepSys.add(p, 1, '散财行善（誓约加成后 +1~2）')")
     ? pass('SA53 宽恕每誓每世限 2 次（第 3 次唯余破誓）+ 散财声望 RepSys.add 实发（E358）') : fail('SA53 誓约', '');
   karma.includes("name: '声名鹊起'") && karma.includes("name: '名动一方', color: 'gold'") && karma.includes("{ min: 120")
-    && karma.includes("name: '威震天下'") && ui.includes('RepSys.level(p)') && ui.includes('30 悬赏加成 ×1.15')
+    && karma.includes("name: '威震天下'") && ui.includes('RepSys.level(p)') && ui.includes('30 买价九二折 · 悬赏加成 ×1.15')
     && !ui.includes('40 悬赏加成') && ui.includes('60 坊市九五折') && ui.includes('90 奇遇 +5%')
+    && ui.includes('80 买价八五折')
     && npcjs.includes('LEVELS 新「名动一方」显示档')
-    ? pass('SA54 声望档位单源：LEVELS 80/120/150 三档名归位、repChip/义声卡消费 LEVELS、40 错档清除、60/90 机制行保留（E358）') : fail('SA54 声望档位', '');
+    ? pass('SA54 声望档位单源：LEVELS 80/120/150 三档名归位、repChip/义声卡消费 LEVELS、40 错档清除、60/90 机制行保留（E358；v41（E433）阶梯 30/60/80/90/120 升序重排+补买价两档）') : fail('SA54 声望档位', '');
   explore.indexOf("wx0.sky === 'fog'") < explore.indexOf('Utils.pickWeighted(weights)')
     && explore.indexOf('Utils.pickWeighted(weights)') < explore.indexOf("switch (type)")
     && gdata.includes('xianhai: [') && gdata.includes('xianhai2: [')
@@ -532,7 +533,8 @@ if (browser) {
       await Battle.act('attack');
       const h = (Battle.history || [])[0];
       out.from = h && h.from;
-      out.chron = (p.chronicle || []).slice(chronN).some(c => c.txt.includes('问剑胜') && c.txt.includes('·夺位'));
+      // v41（E419③）：问剑入册改「仅首次夺位入册」——年表文案为「初问剑夺位·胜○○」
+      out.chron = (p.chronicle || []).slice(chronN).some(c => c.txt.includes('初问剑夺位') && c.txt.includes('·胜'));
       // 回顾弹窗渲染来由
       let html = '';
       const op = UI.popup; UI.popup = async (o) => { html = o.html || ''; return true; };
@@ -544,7 +546,7 @@ if (browser) {
       return out;
     });
     rb10.from === '问剑' && rb10.chron && rb10.review
-      ? pass('RB10 问剑胜局：history 条目含 from、年表入『问剑胜×·夺位』、回顾弹窗渲染来由（E348）') : fail('RB10 关键战', JSON.stringify(rb10));
+      ? pass('RB10 问剑胜局：history 条目含 from、年表入『初问剑夺位·胜○○』（v41（E419③）仅首次入册）、回顾弹窗渲染来由（E348）') : fail('RB10 关键战', JSON.stringify(rb10));
 
     /* ---- WP2 RB：破招泛化 / 读招扩容 / 爆发会伤 / 被控三钮（E349/E350） ---- */
     // 公共口径：坦克敌 + 去随机（chance=false 不失手；randF=1 伤害可精确复算）+ 关秒胜（p._autoWin='off'）
@@ -692,8 +694,8 @@ if (browser) {
       window.__bk.restore();
       const dmgA = calls[calls.length - 2].dmg, dmgB = calls[calls.length - 1].dmg;
       const mm = 1 + 100 * GameData.BALANCE.COMBAT.MORALE_PER_POINT;
-      // v40（E378）：1.8→2.4、清零改 −60、必会心；E380：总乘数封顶 2.0——杀剑 1.7×1.25=2.125 被封顶，开/关对照相等
-      const expA = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * 2.4, Battle.enDef(B.enemy), B.enemy.power) * mm * 2.0);
+      // v40（E378）：1.8→2.4、清零改 −60、必会心；v41（E417）：总乘数封顶 2.0→2.4——杀剑 1.7×1.25=2.125 不再触顶，开/关对照恰 +25%
+      const expA = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * 2.4, Battle.enDef(B.enemy), B.enemy.power) * mm * 2.125);
       const expB = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * 2.4, Battle.enDef(B.enemy), B.enemy.power) * mm * 1.7);
       out.exact = dmgA === expA && dmgB === expB;
       if (Battle.active) { Battle.active.over = true; document.getElementById('battle-modal').classList.add('hidden'); Battle.active = null; }
@@ -701,7 +703,7 @@ if (browser) {
       return out;
     }, SETUP);
     rb18.exact
-      ? pass('RB18 爆发会心 = 1.7×critDmgBonus（杀剑流对照恰 +25%，逐值复算一致）（E349）') : fail('RB18 爆发会伤', JSON.stringify(rb18));
+      ? pass('RB18 爆发会心 = 1.7×critDmgBonus（v41（E417）CAP 2.4 下杀剑 2.125 不触顶，对照恰 +25%，逐值复算一致）（E349）') : fail('RB18 爆发会伤', JSON.stringify(rb18));
 
     const rb19 = await page.evaluate(async () => {
       const out = {};
@@ -804,8 +806,8 @@ if (browser) {
       p.realmIdx = 3; p.gongfa = p.gongfa || {};
       Game.player = p;
       for (let seq = 0; seq < 8; seq++) {
-        p.auction = { seq, until: -1 };   // until=-1 强制 state 重掷该期号
-        const a = AuctionSys.state(p);
+        p.auction = { seq, until: -1 };   // until=-1 强制重掷该期号（v41（E434）：重掷收写侧 ensure()，state() 自此恒纯读）
+        const a = AuctionSys.ensure(p);
         if (a.item === 'mystery') continue;
         const lot = AuctionSys.LOT_POOL.find(x => x.item === a.item);
         const gate = Math.min(8, lot.minRealm || 0);
@@ -1171,8 +1173,8 @@ if (browser) {
       const out = {};
       const p = Game.player;
       p.sect = null; p.cave = null; p.bounties = { day: Math.floor(p.day || 0), list: [] };
-      p._autoRush = 'always'; p.signDay = Math.floor(p.day || 0); p._restDay = Math.floor(p.day || 0); p._wenjianDay = Math.floor(p.day || 0); p._sparCount = 3; p._wuDaoDay = -1;
-      p.insight = 500; p._pref = { damode: 'skip', wudao: 'always' };
+      p.signDay = Math.floor(p.day || 0); p._restDay = Math.floor(p.day || 0); p._wenjianDay = Math.floor(p.day || 0); p._sparCount = 3; p._wuDaoDay = -1;
+      p.insight = 500; p.ui = { rush: 'always', damode: 'skip', wudao: 'always' };   // v41（E428）：偏好容器 p.ui 单源（旧 _autoRush/_pref 散键已删）
       const insight0 = p.insight;
       let popupN = 0; const op = UI.popup; UI.popup = async () => { popupN++; return true; };
       const rho = Cultivate.insightPurity(p, Cultivate.wuDaoCost(p));
@@ -1183,7 +1185,7 @@ if (browser) {
       if (rho >= 0.3) { out.wudaoAuto = p._wuDaoDay === Math.floor(p.day || 0) && p.exp > exp0; }   // 纯度 ≥30% 自动执行
       else { out.wudaoAuto = p._wuDaoDay !== Math.floor(p.day || 0); }   // 不足自动跳过
       // 弹窗计数基线：ask 态小账恢复弹窗一次
-      p._pref.damode = 'ask'; p.day = (p.day || 0) + 1; p._settleDay = Math.floor(p.day); p.signDay = Math.floor(p.day); p._restDay = Math.floor(p.day); p._wenjianDay = Math.floor(p.day); p._sparCount = 3;
+      p.ui.damode = 'ask'; p.day = (p.day || 0) + 1; p._settleDay = Math.floor(p.day); p.signDay = Math.floor(p.day); p._restDay = Math.floor(p.day); p._wenjianDay = Math.floor(p.day); p._sparCount = 3;
       popupN = 0;
       UI.popup = async () => { popupN++; return true; };
       await Guide.dailyAll();

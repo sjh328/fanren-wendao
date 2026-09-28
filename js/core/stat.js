@@ -169,6 +169,7 @@ const Stat = {
       critOver: Math.max(0, critRaw - 75),
       dodge: Utils.clamp((gf.dodge || 0) + (eq.dodge || 0) + (sb.dodge || 0) + (beastPass.dodge || 0) + (dx.dodge || 0) + (pl.dodge || 0) + (p.dao === 'array' && DaoSys.tierLevel(p) >= 4 ? 8 : 0), 0, 35),   // v10 阵道六境·迷踪境 · v13 宗门/灵兽
       block: Utils.clamp(8 + (gf.block || 0) + (eq.block || 0) + (p.dao === 'body' && DaoSys.tierLevel(p) >= 3 ? 10 : 0) + (p.dao === 'body' && DaoSys.hasPath(p, 6, 'buDong') ? 15 : 0), 0, 60),   // v10 般若六境·铁骨境；v31 修瑕：补读 eq.block——词缀「磐石」/玄天玉佩/仙缘玉环的格挡此前是死键（强化按功能键收费、明细表却虚报）；v38（E300）：不动如山 +15
+      dr: eq.dr || 0,   // v41（E454）：词缀「坚壁」所受伤害直减（百分点计，4/8/12% 三档随品阶）——battle.js enemyStrike 减伤连乘段消费，12% 封顶、85% 总封顶同段受钳
       cultPct: (gf.cult || 0) + (eq.cult || 0) + (sb.cult || 0) + caveCult + (beastPass.cult || 0) + (dx.cultPct || 0) + (pl.cultPct || 0) + xianLayers * 2 + (p.cultGift || 0) + ((typeof OathSys !== 'undefined' && OathSys.cultBonus) ? OathSys.cultBonus(p) : 0) + councilCult,   // v30 补个人线 cultPct；v31 仙阶每层修炼效率 +2%；v36（E228）传承树四维满值折算 cultGift（百分点计，经 gainMult 生效）；v38（E306）：止戈之誓 +8；v38（E344）：季议勤修 +3
       stonePct: (sb.stonePct || 0) + (eq.stonePct || 0) + (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3),   // v20 藏宝阁
       luck: A.luck + (eq.luck || 0),

@@ -67,14 +67,14 @@ const SectSys = {
   },
   genTask(p) {
     const realm = p.realmIdx;
-    // v37（E242）：差事/悬赏池互斥（轻方案）——宗门差事只余修行/历练/问签三门（门中供养，贡献向），
+    // v37（E242）：差事/悬赏池互斥（轻方案）——宗门差事只余修行/历练/秘境协防三门（门中供养，贡献向），
     // 讨伐与采集归悬赏板（江湖赏格，灵石向+连锁），两板同构委托的重复感自此消除
-    const SECT_W = {   // v32（F4）按宗门特色加权；v37（E242）删 kill/collect 键——讨伐/采集不再自宗门生成，不留死配置
-      qingyun: { cult: 1, explore: 2, sign: 1 },
-      danxia:  { cult: 2, explore: 1, sign: 1 },
-      wanbao:  { cult: 1, explore: 2, sign: 2 },
-      panyan:  { cult: 3, explore: 1, sign: 1 },
-      zhoutian:{ cult: 2, explore: 3, sign: 2 },
+    const SECT_W = {   // v32（F4）按宗门特色加权；v37（E242）删 kill/collect 键；v41（E443）问签残根清场——五宗死键与运行时剥除循环一并删除
+      qingyun: { cult: 1, explore: 2 },
+      danxia:  { cult: 2, explore: 1 },
+      wanbao:  { cult: 1, explore: 2 },
+      panyan:  { cult: 3, explore: 1 },
+      zhoutian:{ cult: 2, explore: 3 },
     };
     // v37（E242）：生死状升格为宗门独占生成支（派系成员才可掷；战时概率大涨）——
     // 原 wrapDanger 在普通 kill 任务上二次掷点，普通 kill 支一删它即断线；
@@ -91,10 +91,8 @@ const SectSys = {
       }
     }
     // v40（E392）：后段机制补位——r6+ 差事板增「秘境协防」门（入秘 2 层，赏格 ×1.5；E405 两门并存）
-    const W0 = (p.sect && SECT_W[p.sect.id]) || { cult: 1, explore: 1, sign: 1 };
-    // v40（E405）：sign 键删除——问签差事退役
-    const W1 = {}; for (const k of Object.keys(W0)) if (k !== 'sign') W1[k] = W0[k];
-    const type = Utils.pickWeighted(realm >= 6 ? Object.assign({}, W1, { dungeon: 2 }) : W1);
+    const W0 = (p.sect && SECT_W[p.sect.id]) || { cult: 1, explore: 1 };
+    const type = Utils.pickWeighted(realm >= 6 ? Object.assign({}, W0, { dungeon: 2 }) : W0);
     // v30 宗门特色差事：本宗名目替代通用名目（35%），机制不变、文案见宗门气象
     const flav = p.sect && GameData.SECT_QUEST_FLAVOR && GameData.SECT_QUEST_FLAVOR[p.sect.id];
     const flavorName = (flav && Utils.chance(35)) ? flav[type] : null;
@@ -153,11 +151,17 @@ const SectSys = {
   },
   /** v37（E242）：collect 提交流随生成支一并删除（submit 全函数移除）——采集悬赏归悬赏板，
    *  宗门任务不再有上交环节；kill（生死状）经 onKill 推进、claim 领赏，两流皆保留 */
-  /** v37（E242）：差事改制读档播报——存量 collect/普通 kill 任务已在迁移步作废重掷，此处补一条可读日志 */
+  /** v37（E242）：差事改制读档播报——存量 collect/普通 kill 任务已在迁移步作废重掷，此处补一条可读日志
+   *  v41（E443）：问签残根清场——存量在途 sign 差事在读档口重掷为 cult/explore（复用 _reform37 模式；
+   *  键名拆写保「grep sign 差事零残留」对源码成立，与 player-factory v41 迁移步同款约定） */
   reformNotice(p) {
     if (p && p.sect && p.sect._reform37) {
       delete p.sect._reform37;
-      Log.add('门中差事已改制：讨伐与采集归悬赏行商，门中只留修行/历练/问签三门供养' + (p.sect.faction ? '（派系生死状特派照旧）' : '') + '。', 'system');
+      Log.add('门中差事已改制：讨伐与采集归悬赏行商，门中只留修行/历练/秘境协防三门供养' + (p.sect.faction ? '（派系生死状特派照旧）' : '') + '。', 'system');
+    }
+    if (p && p.sect && Array.isArray(p.sect.tasks) && p.sect.tasks.some(t => t && t.type === 'sig' + 'n')) {
+      p.sect.tasks = p.sect.tasks.map(t => (t && t.type === 'sig' + 'n') ? this.genTask(p) : t);
+      Log.add('门中差事再度改制：问签一门并入黄历日常，你名下在途的旧差事已代为换发（修行/历练/秘境协防任一）。', 'system');
     }
   },
   /** v35（E129）：差事领赏每日上限——贡献是货币而非印钞机（cult 类任务一次修炼即满、claim 后即换新
@@ -187,6 +191,7 @@ const SectSys = {
     if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 1, '门派差事践诺');
     Log.add(`任务完成！获得 <b>贡献 ${r.contrib}</b> 点、灵石 ${Utils.fmtNum(r.stones)}。${streakBonus ? `（勤勉有赏 · 每三桩差事贡献 +${streakBonus}）` : ''}`, 'gain');   // v33（E111）：「连勤」实为终身累计每三桩，文案对齐语义
     p.sect.tasks[taskIdx] = this.newTask(p);
+    this.seasonEventTick(p);   // v41（E442）：宗门页季度事件节拍（本季未出则按倾向催一条）
     Game.afterAction();
   },
   /** v38（E337）：青云剑宗【剑冢演武】——每旬一次与剑傀免费对练：当日前两战开局战意 +10、必杀熟练 +2 */
@@ -205,9 +210,6 @@ const SectSys = {
     Log.add('【剑冢演武】你于剑冢之中与千年剑傀拆了三百招——招式熟极而流，明日出剑必有如神助（当日前两战：开局战意 +10、必杀熟练精进）。', 'gain');
     Game.afterAction();
   },
-  /** v40（E403）：双代行并一——代行差事由化身第四桩「代行差事」承接（avatar.js），
-   *  本方法保留为兼容入口（旧存档/UI 残留调用时降级到亲传逻辑），新入口走化身桩。
-   *  化身并行时间天然解释零耗时，七折赏格与三成贡献保留。
   /** v38（E344）：长老·季议——每季一票，定全宗一季之方向（自己受益的宗门 buff） */
   COUNCILS: [
     { id: 'war',   name: '整军经武', desc: '战斗获胜修为 +5%（一季）' },
@@ -228,7 +230,101 @@ const SectSys = {
     if (!c) return;
     p.sect.council = { key: this.councilKey(p), choice, tendency: choice };   // v40（E405）：tendency 落 p.sect.council.tendency
     Log.add(`【季议】你以长老之位投下关键一票——本季宗门施行<b>「${c.name}」</b>：${c.desc}。`, 'system');
+    this.seasonEventTick(p);   // v41（E442）：季议落定，季度事件节拍即启（宗门季事首条）
     Game.afterAction();
+  },
+  /* ---------- v41（E442）：季议倾向季度事件链（宗门气象） ---------- */
+  /** 季度键（年-季，与 councilKey 同口径：seasonOf 0~3，一季 ≈91 日） */
+  seasonKey(p) { return `${Math.floor((p.day || 0) / 365)}-${typeof Art !== 'undefined' && Art.seasonOf ? Art.seasonOf(p) : 0}`; },
+  /** v41（E442）：宗门季单源乘区——勤修季听讲感悟 ×2（消费端 act-sect-listen，game.js 侧随批接线）/
+   *  整军季坊市装备九二折（消费端坊市装备计价，B3/E468 公示承接）。本条只定单源与事件内公示 */
+  listenMul(p) { return this.tendency(p) === 'cult' ? 2 : 1; },
+  armsMul(p) { return this.tendency(p) === 'war' ? 0.92 : 1; },
+  CLIMATE_NAMES: { trade: '通商', war: '整军', cult: '勤修' },
+  /** 季度事件节拍：季末入册上一季气象一句（不带 m）；本季按 tendency 出 ≥1 条专属事件（91 日内）。
+   *  触点皆 sect 自有入口：councilVote（季议落定）/ claim（宗门页领赏）——战斗/弹窗在场时不催办 */
+  async seasonEventTick(p) {
+    if (!p.sect || p.dead) return;
+    const cur = this.seasonKey(p);
+    const cl = p.sect.climate;
+    if (cl && cl.key !== cur && cl.tendency) {
+      Story.chron(`宗门气象 · ${this.CLIMATE_NAMES[cl.tendency] || '无常'}`);   // 季末入册（不带 m）
+    }
+    p.sect.climate = { key: cur, tendency: this.tendency(p) };
+    const ten = this.tendency(p);
+    if (!ten || Battle.active || UI._popupResolve) return;
+    p.sect.seasonEv = p.sect.seasonEv || {};
+    if (p.sect.seasonEv[cur]) return;
+    p.sect.seasonEv[cur] = true;   // 置位在前防重入；事件链异常回滚待重试（festival check 同范式）
+    try {
+      await this.seasonEvent(p, ten);
+    } catch (err) {
+      delete p.sect.seasonEv[cur];
+      console.error('宗门季度事件异常:', err);
+    }
+  },
+  seasonEvent(p, ten) {
+    if (ten === 'trade') return this.seasonTrade(p);
+    if (ten === 'war') return this.seasonWar(p);
+    return this.seasonCult(p);
+  },
+  /** 通商季 · 商队护送（小战保镖，赏灵石）——事件链 popup 与文案自带「低买囤货窗口」提示。
+   *  v3 收口：坊市页渲染在 ui.js——坊市页公示与高亮统一归 B3/E468 承接，本条只在 sect 自有 popup 内承载 */
+  async seasonTrade(p) {
+    const go = await UI.popup({
+      title: '宗门季事 · 通商 · 商队护送',
+      html: `通商一季，宗门商队整装待发——山路不太平，管事请你随行护商一程（小战一场，胜得商队酬金）。<br><span class="tip-line">· <b>低买囤货窗口</b>：通商季坊市行情翻涌（±25%），行情低迷时低买囤货、旺时出手，正当其时。</span>`,
+      options: [{ text: '接下护送令', value: true, primary: true }, { text: '婉拒', value: false }],
+    });
+    if (!go) { Log.add('你婉拒了护商之请——商队自行上路。', 'info'); return; }
+    const rp = p.realmIdx * 4 + p.layer;
+    const pool = this.taskMonsters(rp);
+    const mid = pool.length ? Utils.pick(pool) : Utils.pick(Object.keys(GameData.MONSTERS));
+    Log.add('【通商季事】你接过护送令，随商队启程——行至半途，果然有不开眼的剪径妖修拦路！', 'event');
+    Battle.start(null, { enemy: buildMonster(mid, Math.max(0, rp - GameData.MONSTERS[mid].power)), mapName: '宗门商路 · 护送', story: {
+      onEnd: (win) => {
+        const pp = Game.player;
+        if (win) {
+          const pay = Math.round(150 * GameData.stoneEco(pp.realmIdx));
+          Bag.addStones(pay);
+          Log.add(`商队平安抵达——管事奉上酬金灵石 ${Utils.fmtNum(pay)}，临别低声一句：「通商季行情正活，客官若要囤货，坊市低买正当时。」（低买囤货窗口开启中）`, 'gain');
+          UI.toast('护送功成——囤货窗口开启中');
+        } else {
+          Log.add('商队被冲散了半程货担——管事长叹，酬金自然是没有了。', 'loss');
+        }
+        Game.afterAction();
+      },
+    } });
+    Game.afterAction();   // v35（E143）：先 start 后 afterAction——防节庆在开战前触发后被静默丢弃
+  },
+  /** 整军季 · 连环生死状加派（概率 +10%/赏格 +10% 由 genTask 承接）+ 军械九二折一季公示 */
+  async seasonWar(p) {
+    const ok = await UI.popup({
+      title: '宗门季事 · 整军 · 军情加派',
+      html: `整军一季，宗门武库开库砺兵，生死状连环加派。<br><span class="tip-line">· 本季生死状加派：接状概率 +10%、赏格 +10%（战时另计）。</span><br><span class="tip-line">· <b>军械折扣</b>：本季坊市装备一律九二折——添置甲兵正当其时。</span>`,
+      options: [{ text: '领一桩生死状', value: true, primary: true }, { text: '只领军令', value: false }],
+    });
+    if (ok && Array.isArray(p.sect.tasks) && p.sect.tasks.length) {
+      const i = Utils.rand(0, p.sect.tasks.length - 1);
+      p.sect.tasks[i] = this.wrapDanger(this.genTask(p), p);
+      Log.add('【整军季事】你自军令处领下一桩生死状——本季武运，就此开了锋。', 'event');
+    } else {
+      Log.add('【整军季事】军械九二折一季，武库向门中弟子敞开——你记下了这事。', 'event');
+    }
+  },
+  /** 勤修季 · 讲道加开（听讲感悟 ×2 一季）+ 差事减负（−15% 由 genTask 承接）公示 */
+  async seasonCult(p) {
+    const ok = await UI.popup({
+      title: '宗门季事 · 勤修 · 讲道加开',
+      html: `勤修一季，长老开坛加讲，道音不绝。<br><span class="tip-line">· 本季听讲感悟 ×2（宗门页「听讲」照旧日限一次）。</span><br><span class="tip-line">· 本季门中差事减负：修行差事修为需求 −15%。</span>`,
+      options: [{ text: '领一篇讲义（感悟 +2）', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (ok) {
+      Cultivate.addInsight(p, 2, false);
+      Log.add('【勤修季事】你领了一篇讲义，灯下细读，各有领悟。（突破感悟 +2；本季听讲所得倍之，差事亦减了三分负担）', 'gain');
+    } else {
+      Log.add('【勤修季事】讲坛加开，本季听讲所得倍之，差事亦减了三分负担——你记下了这事。', 'event');
+    }
   },
   /** 高危生死状：接状即战，敌对派系借刀杀人 */
   async goDanger(taskIdx) {
@@ -366,17 +462,8 @@ const SectSys = {
       }
     }
   },
-  /** v30 补遗：问签钩子（黄历求签）——求签处调用 */
-  onSign() {
-    const p = Game.player;
-    if (!p.sect || !Array.isArray(p.sect.tasks)) return;   // v31：宗门档缺 tasks 数组时不再崩（异种档自愈）
-    for (const t of p.sect.tasks) {
-      if (t.type === 'sign' && t.progress < t.need) {
-        t.progress = t.need;
-        Log.add('宗门问签任务已完成，可回去领取奖励！', 'gain');
-      }
-    }
-  },
+  /** v41（E443）：问签钩子 onSign 整个删除——问签差事退役（与求签系统重复），
+   *  daily-sign.js 的空转调用同批删；存量在途 sign 差事由 reformNotice 读档口重掷 */
   /** v30 补遗：亲传弟子「门中弟子历练」——门中后辈代师行走江湖，每日有产出（离线回放同样入账） */
   discipleDaily(p, auto = false) {
     if (!p.sect) return;

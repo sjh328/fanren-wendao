@@ -16,6 +16,11 @@ const FestivalSys = {
    *  v27 auto=离线回放模式：互动型节庆自动从简（不弹窗、不开战），资源型节庆照常入账
    *  v37（E247）：非 auto 收尾先查挂起补办；auto 遇互动节庆改挂 p.pendingFestival（双同步迁移） */
   check(p, auto = false) {
+    // v41（E451）：誓约试炼心跳——持誓者每季至多一试（守/破走 OathSys 既有通道；auto 静默默认守誓）。
+    // 前置于此：节庆按年内日序早退，不可吞掉试炼节拍；弹窗/战斗在场与 auto 静默由 trialCheck 自守
+    if (p && !p.dead && typeof OathSys !== 'undefined' && OathSys.trialCheck) {
+      try { OathSys.trialCheck(p, auto); } catch (err) { console.error('誓约试炼检查异常:', err); }
+    }
     if (!auto) this.resolvePending(p);
     const f = this.today(p);
     if (!f || !p || p.dead) return;
@@ -203,11 +208,15 @@ const FestivalSys = {
       if (choice !== 'fight') { Log.add('你紧闭门户，听了一夜风吼——天亮时，雪地上满是巨大的爪印。', 'info'); return; }
       const rp = Utils.clamp(p.realmIdx * 4 + p.layer + 1, 1, 60);
       const rIdx = Utils.clamp(Math.floor(rp / 4), 0, 9);
+      // v41（E449）：年兽叠 E374 parity 乘区——除魔年兽压迫感随 v40 全线下滑，按玩家装备当量复权：
+      // ×(0.9 + 0.2×min(1, 玩家 Stat.power / 同境裸装基准 PARITY_BENCH))，bench 单源 game-data
+      const bench = ((GameData.BALANCE.COMBAT.PARITY_BENCH || [])[rIdx]) || 0;
+      const parity = (bench > 0 && typeof Stat !== 'undefined' && Stat.power) ? 0.9 + 0.2 * Math.min(1, Stat.power(p) / bench) : 1;
       const enemy = {
         id: null, name: '年兽', elite: true, power: rp, species: 'beast',
         realmLabel: GameData.REALM_NAMES[rIdx] + GameData.LAYER_NAMES[Utils.clamp(rp % 4, 0, 3)],
-        hpMax: Math.round((55 + Math.pow(rp, 1.6) * 5) * 1.7 * 1.2),
-        atk: Math.round((6 + rp * 2.6) * 1.35),
+        hpMax: Math.round((55 + Math.pow(rp, 1.6) * 5) * 1.7 * 1.2 * parity),
+        atk: Math.round((6 + rp * 2.6) * 1.35 * parity),
         def: Math.round((4 + rp * 2.2) * 0.9), spd: Math.round(7 + rp * 0.9),
         dodge: 5, crit: 10,
         skills: [

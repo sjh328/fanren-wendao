@@ -524,12 +524,12 @@ try {
     Battle.setSpeed(3);
     const zzz = (ms) => new Promise(r => setTimeout(r, ms));
     Battle.act('item', 'pill_kuangbao');
-    await zzz(600);
-    const atkup = StatusFx.pctOf(B.myFx, 'atkup');
+    let atkup = 0;
+    for (let i = 0; i < 20 && !(atkup = StatusFx.pctOf(B.myFx, 'atkup')); i++) await zzz(300);   // 批跑负载下轮询等生效
     B.busy = false;
     Battle.act('item', 'tal_fuling');
-    await zzz(600);
-    const slow = StatusFx.pctOf(B.enemy.fx, 'slow');
+    let slow = 0;
+    for (let i = 0; i < 20 && !(slow = StatusFx.pctOf(B.enemy.fx, 'slow')); i++) await zzz(300);
     // 冰封（立即消耗型状态）的生效与消耗另由 m2c 机制验证
     Battle.end();
     return { atkup, slow };
@@ -597,7 +597,7 @@ try {
     scenes: document.querySelectorAll('.map-scene svg').length,
     mapCards: document.querySelectorAll('.map-card').length,
   }));
-  v1.scenes === 13 && v1.mapCards === 13 ? pass('V1 十三张地图（含仙阙云海×2）皆渲染山水插画') : fail('V1 场景插画', JSON.stringify(v1));
+  v1.scenes === 15 && v1.mapCards === 15 ? pass('V1 十五张地图（含仙阙云海×2、v41（E452）宗门征讨/雷池旧地）皆渲染山水插画') : fail('V1 场景插画', JSON.stringify(v1));
   const v1b = await page.evaluate(async () => {
     Game.player._autoWin = 'off';   // v38（E323）
     if (Game.player) Game.player._autoWin = 'off';   // v38（E323）：测试需完整战斗，关碾压秒胜

@@ -259,10 +259,15 @@ try {
     // 本节只验「目标达成即停」，预置旗标使节庆不与挂机赛跑（原先日 15 上元弹窗把 rounds 卡死）
     p.flags = p.flags || {};
     for (const y of [1, 2]) for (const id of ['shangyuan', 'zhongyuan', 'chuxi', 'duanwu', 'chongyang']) p.flags['fest_' + id + '_' + y] = true;
-    p._autoRush = 'always';   // v40（E393）：聚灵偏好 always——挂机循环不因首问弹窗挂起（无人值守语义）
+    p.ui = Object.assign({}, p.ui, { rush: 'always', wudao: 'skip', damode: 'skip', engine: 'normal' });   // v40（E393）聚灵偏好 always；v41（E422/E428）：偏好迁 p.ui.rush 单源；本节节奏/战斗暂停/圆满待决断言皆按普通修炼轮设计——智能档另由 verify-v27 RB3/RB4 专测（E423）
+    Battle.active = null; Tribulation.state = null;   // 前序段（转世/渡劫试炼）残留的战斗/天劫状态会令 AutoCult「遇战自停」——开工前清场
+    // v41（E423）智能档轮速快，主线/奇遇剧情会在轮间触发——v15「剧情中挂起」语义与本节
+    // 「目标达成即停」赛跑，测试桩使 Story.active 直通（F 段毕即还原）
+    window.__v6StoryActive = Story.active;
+    Story.active = () => false;
     UI.renderAll();
   });
-  const tryStart = () => page.evaluate(() => AutoCult.start({ kind: 'exp', need: 60, label: '攒够 60 修为' }));
+  const tryStart = () => page.evaluate(() => AutoCult.start({ kind: 'exp', need: 600, label: '攒够 600 修为' }));   // 普通轮均益 30~55，600 保『多轮循环后达成即停』语义且 90s 轮询窗内可达成
   await tryStart();
   // v20 加固：负载下轮询等待启动，替代固定 300ms 单查；v40（E394）批跑负载下允许一次重试
   let f1 = { active: false, btn: false };
@@ -277,15 +282,41 @@ try {
   let f2 = { active: true, rounds: 0, summary: false };
   for (let i = 0; i < 180 && !(!f2.active && f2.rounds >= 2 && f2.summary); i++) {   // v40（E393）：挂机内嵌 dailyAll——轮速含家务耗时，上限放宽至 90s
     await sleep(500);   // v40（E393）：首日 dailyAll/聚灵首问插账拖慢轮速——上限放宽至 45s
-    f2 = await page.evaluate(() => ({
-      active: AutoCult.active,
-      rounds: AutoCult.rounds,
-      summary: Log.entries.join('|').includes('自动修炼小结'),
-    }));
+    f2 = await page.evaluate(() => {
+      // v41（E423）智能档轮速快、晋层频——叩问大道/道途分岔弹窗按 v15 语义挂起循环，
+      // 本节只验「目标达成即停」，轮询侧代为从缺驳回（不择道，后续晋层再问再驳）
+      const dm = document.getElementById('dao-modal');
+      if (dm && !dm.classList.contains('hidden')) {
+        Game.player.pendingDao = false;
+        Game.player.pendingDaoPath = null;
+        dm.classList.add('hidden');
+      }
+      if (Battle.active) { Battle.active = null; }
+      Tribulation.state = null;
+      return {
+        active: AutoCult.active,
+        rounds: AutoCult.rounds,
+        summary: Log.entries.join('|').includes('自动修炼小结'),
+      };
+    });
+  }
+  if (!(!f2.active && f2.rounds >= 2 && f2.summary)) {
+    f2.dbg = await page.evaluate(() => {
+      const vis = id => { const el = document.getElementById(id); return el ? !el.classList.contains('hidden') : null; };
+      return { pr: !!UI._popupResolve, battle: !!Battle.active, trib: !!Tribulation.state,
+        storyVis: vis('story-modal'), popupVis: vis('popup-modal'),
+        popupTitle: (document.getElementById('popup-title') || {}).innerText || '',
+        daoVis: vis('dao-modal') };
+    });
   }
   !f2.active && f2.rounds >= 2 && f2.summary
     ? pass(`F2 攒修为目标自动完成（${f2.rounds} 轮）并输出小结`)
     : fail('F2 目标达成', JSON.stringify(f2));
+  await page.evaluate(() => {
+    Story.active = window.__v6StoryActive || Story.active;   // F 段毕还原剧情挂起语义
+    document.getElementById('story-modal') && document.getElementById('story-modal').classList.add('hidden');
+    Story.cur = null; Story.q = [];
+  });
   // 圆满自动暂停
   await page.evaluate(() => {
     const p = Game.player;

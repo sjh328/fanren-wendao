@@ -215,7 +215,7 @@ console.log('===== SA 源码静态组 =====');
       // v39（E365）：wrapDanger 缩为「入派立威」单支——force 参数删除、短路收窄为非派系守卫，newTask 直出 genTask
       const wrapKept = sect.includes('wrapDanger(t, p) {') && sect.includes('if (!t || !p.sect || !p.sect.faction) return t;') && sect.includes('onKill(monsterId)') && sect.includes('newTask(p) { return this.genTask(p); }');
       const submitGone = !sect.includes('submit(taskIdx)') && !gamejs.includes("'act-task-submit'");
-      factionBranch && noKillCollectGen && noDeadW && noDeadFlavor && wrapKept && submitGone && ui.includes('门中差事只留<b>修行/历练/问签</b>三门')
+      factionBranch && noKillCollectGen && noDeadW && noDeadFlavor && wrapKept && submitGone && ui.includes('门中差事只留<b>修行/历练/秘境协防</b>三门')
         ? pass('SA24 差事/悬赏池互斥：生死状独占生成支（派系限定+战时 55/26）+ kill/collect 支与权重/名目死配置清除 + wrapDanger 入派立威单支且普通路径不绕行 + onKill/claim 存续 + submit 删除 + 分工文案（E242；v39 E365 新语义）') : fail('SA24 池互斥', JSON.stringify({ factionBranch, noKillCollectGen, noDeadW, noDeadFlavor, wrapKept, submitGone }));
     }
 
@@ -237,9 +237,9 @@ console.log('===== SA 源码静态组 =====');
         ? pass('SA26 大事覆写留痕：旧事件按「观望未决」入年表 + 不了了之日志（E252）') : fail('SA26 覆写留痕', '');
       /* E244 问剑夺位 */
       rankjs.includes('honorOf(p)') && rankjs.includes('score: p.realmIdx * 4 + p.layer + honor') && rankjs.includes('async challengeAhead()')
-        && rankjs.includes("Daily.resetIfNew(p, '_wenjianDay')") && rankjs.includes('onWenjianWin(p, id)') && rankjs.includes('const myScore = p.realmIdx * 4 + p.layer + this.honorOf(p)')
-        && battle.includes('if (B.ctx.wenjian) RankSys.onWenjianWin(p, B.ctx.npcId);')
-        && sect.includes('p.rankHonor = (p.rankHonor || 0) + 1;') && npc.includes('p.rankHonor = (p.rankHonor || 0) + 1;')
+        && rankjs.includes("Daily.resetIfNew(p, '_wenjianDay')") && rankjs.includes('onWenjianWin(p, id, skip = 1, risk = null)') && rankjs.includes('const myScore = p.realmIdx * 4 + p.layer + this.honorOf(p)')
+        && battle.includes('RankSys.onWenjianWin(p, B.ctx.npcId, B.ctx.wenjianSkip || 1, B.ctx.risk);')
+        && sect.includes('p.rankHonor = (p.rankHonor || 0) + 1;') && npc.includes('p.rankHonor = (p.rankHonor || 0) + Math.max(1, Math.round(mul));')
         && gamejs.includes("'act-wenjian': () => RankSys.challengeAhead(),")
         && rankjs.includes('data-action="act-wenjian"') && rankjs.includes('rankPrev') && rankjs.includes('↑')
         && pfac.includes('rankHonor: 0,')
@@ -382,7 +382,7 @@ console.log('===== SA 源码静态组 =====');
       const releasemjs = readFileSync(join(__dirname, 'scripts', 'release.mjs'), 'utf8').replace(/\r\n/g, '\n');
       const readme = readFileSync(join(__dirname, 'README.md'), 'utf8');
       buildmjs.includes('未登记进 scripts/modules.json') && buildmjs.includes('process.exit(1);') && releasemjs.includes('当前版本 **v${ver}')
-        && readme.includes('当前版本 **v40') && readme.includes('53 个模块') && readme.includes('26 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
+        && readme.includes('当前版本 **v41') && readme.includes('53 个模块') && readme.includes('26 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
         ? pass('SA43 build 反向校验（孤儿模块拒建）+ README 守卫（假版本号拒绝）与根 README 四口径刷新（E259/E257）') : fail('SA43 守卫', '');
       /* E262 死重清理 */
       const scriptsDir = join(__dirname, 'scripts');

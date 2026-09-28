@@ -41,19 +41,66 @@ const AvatarSys = {
       : '神识归窍，化身散作清光——元神回归本尊。', p.avatar.on ? 'system' : 'info');
     Game.afterAction();
   },
-  setTask(p, task, slot) {
+  setTask(p, task, slot, mapId) {
     const a = p.avatar;
     if (!a || !a.on) return;
     const key = slot === 2 ? 'task2' : 'task';
     const today = Math.floor(p.day || 0);
-    if (a[key] === task) return;
+    // v41（E446）①：游历指定图——setTask 会话参数落 a.exploreMap（消费端 daily explore 分支与
+    // E472 管理台共用），接活 v40 空头承诺；换图不占神识调转冷却
+    let mapName = '';
+    if (task === 'explore' && mapId != null) {
+      const ok = (GameData.MAPS || []).some(m => m.id === mapId && (m.recRealm || 0) <= p.realmIdx + 1);
+      if (ok) {
+        a.exploreMap = mapId;
+        mapName = (GameData.MAPS.find(m => m.id === mapId) || {}).name || '';
+      }
+    }
+    if (a[key] === task) {
+      if (mapName) Log.add(`化身游历取向调整为【<b>${mapName}</b>】。`, 'info');
+      return;
+    }
     if (a.cdDay && a.cdDay > today) { UI.toast(`神识调转需时——${a.cdDay - today} 日后方可换差`); return; }
     a[key] = task;
     a.cdDay = today + this.SWITCH_CD;
     const NAMES = { cult: '代主闭关', explore: '代主游历', guard: '驻守护府', delegate: '代行差事' };   // v40（E403）：第四桩
 
-    Log.add(`化身领命——<b>${NAMES[task] || task}</b>${slot === 2 ? '（第二差事）' : ''}。神识调转，三日内不再更换。`, 'info');
+    Log.add(`化身领命——<b>${NAMES[task] || task}</b>${task === 'explore' && mapName ? `（指定图：${mapName}）` : ''}${slot === 2 ? '（第二差事）' : ''}。神识调转，三日内不再更换。`, 'info');
     Game.afterAction();
+  },
+  /** v41（E446）②：日均收益预览 helper——三桩差事的日均收益与实发同式单源（E472 管理台消费）：
+   *  闭关=baseGain×日均系数（与 daily() cult 分支同式）/ 游历=stoneEco 口径期望值（rand(8,16) 取中值 12，
+   *  单日实发 ±33% 波动、长程均值对表）/ 驻守=灵泉 ×1.2（与 cave.js springDaily 同式；
+   *  灵泉系数随 E441 定 15，若 cave.js 侧尚未同批落地则以 cave.js 实发为准） */
+  dailyYield(p, task) {
+    if (!p || !this.unlocked(p)) return 0;
+    const eff = this.eff(p);
+    if (task === 'cult') {
+      const st = Stat.compute(p);
+      return Math.round(Cultivate.baseGain(p) * (1 + (st.cultPct || 0) / 100) * this.AVATAR_CULT_DAY_RATE * eff);
+    }
+    if (task === 'explore') {
+      const a = p.avatar || {};
+      const maps = (GameData.MAPS || []).filter(m => (m.recRealm || 0) <= p.realmIdx + 1);
+      const map = (a.exploreMap && maps.find(m => m.id === a.exploreMap)) || maps[maps.length - 1] || GameData.MAPS[0];
+      const er = Math.max(map.recRealm || 0, p.realmIdx - 2);
+      return Math.round(12 * GameData.stoneEco(Math.min(9, er)) * eff / 0.5 * 0.4);
+    }
+    if (task === 'guard') {
+      const spring = (p.cave && p.cave.builds && p.cave.builds.spring) || 0;
+      if (!spring) return 0;
+      return Math.round(15 * Math.min(4, spring) * GameData.stoneEco(Math.min(4, p.realmIdx)) * 1.2);
+    }
+    return 0;   // delegate：贡献向，赏格随差事浮动，无固定日均灵石
+  },
+  /** v41（E446）③：驻守期夜袭挡劫记录（近 3 次 {day, raid}，p.avatar.guardLog 子字段，读侧 ||[] 兜底）——
+   *  消费端 E472 管理台；写入口在 cave.js resolveNightRaid 驻守挡袭分支（v41 修偏接线） */
+  noteGuard(p, raid) {
+    const a = p && p.avatar;
+    if (!a) return;
+    a.guardLog = Array.isArray(a.guardLog) ? a.guardLog : [];
+    a.guardLog.push({ day: Math.floor(p.day || 0), raid: !!raid });
+    if (a.guardLog.length > 3) a.guardLog.splice(0, a.guardLog.length - 3);
   },
   upgrade(p) {
     if (!this.unlocked(p)) return;

@@ -523,23 +523,29 @@ const BeastSys = {
     if ((p.beastArena.streak || 0) < 3) { UI.toast('场内连胜三场，擂主方会应战'); return; }
     const today = Math.floor(p.day || 0);
     if (p.beastArena.champDay === today) { UI.toast('今日已挑战过擂主——擂主也要歇气，明日再来'); return; }
-    const best = p.beasts.list.reduce((m, x) => Math.max(m, x.power || 0), 0);
-    const foeP = Math.min(70, Math.round(best * 1.15 * (1 + 0.05 * (p.beastArena.streak || 0))));
+    // v41（E447）①：foeP 锚改出战兽 b.power（原按全栏 max power——换弱兽毫无区别）；
+    // 对手生成（makeChampFoe）与推演（simBeastDuel）自此同源
+    const foeP = Math.min(70, Math.round(b.power * 1.15 * (1 + 0.05 * (p.beastArena.streak || 0))));
     // v40（E399）：擂主战实战化——simBeastDuel 快算（技能池/物种克制/tactic 真实参与），
-    // 胜率展示与结算同源（同种子复现）；对手兽按我方出战兽 power ×0.9~1.1 生成、带 2 门技
+    // 胜率展示与结算同源（同种子复现）；对手兽按出战兽 power ×0.9~1.1 生成、带 2 门技
     const foe = this.makeChampFoe(foeP);
-    const sim = this.simBeastDuel(b, foe);
+    const seed = Date.now();
+    // v41（E447）③：三策略并列推演（同种子同对手——赛前换策略即见分晓；当前策略行与结算同种子一致）
+    const rows = Object.keys(this.TACTICS).map(t => ({ name: this.TACTICS[t], p: this.simBeastDuel(Object.assign({}, b, { tactic: t }), foe, seed).winP }));
+    const sim = this.simBeastDuel(b, foe, seed);
+    const rowsTxt = rows.map(r => `${r.name} ${r.p}%`).join(' · ');
     const ok = await UI.popup({
       title: `擂主战 · 第 ${p.beastArena.streak} 连胜`,
       html: `场内连胜三场，<b>老擂主</b>亲自下场会你——其座下灵兽战力约 <b class="hl">${foeP}</b>（你方 ${b.name} 战力 ${b.power}、技能 ${b.skills.length} 门）。<br>
-        <span class="tip-line">· 演武推演胜算 <b class="hl">${sim.winP}%</b>（技能/克制/协战策略尽入推演）<br>· 胜：玄铁 ×(3+连胜)、器魂 ×2、灵石 ${Utils.fmtNum(Math.round(200 * GameData.stoneEco(Math.min(5, p.realmIdx))))}；败：连胜清零。</span>`,
+        <span class="tip-line">· 协战策略推演胜算（当前「${this.TACTICS[b.tactic || 'focus']}」 <b class="hl">${sim.winP}%</b>）：${rowsTxt}</span>
+        <span class="tip-line">· 技能/克制/协战策略尽入推演；胜：玄铁 ×(3+连胜)、器魂 ×2、灵石 ${Utils.fmtNum(Math.round(200 * GameData.stoneEco(Math.min(5, p.realmIdx))))}；败：连胜清零。</span>`,
       options: [{ text: '应 战', value: true, primary: true }, { text: '改日再战', value: false }],
     });
     if (!ok) return;
     p.beastArena.champDay = today;
     Time.add(1);
     // 结算与推演同源：种子 = 推演种子（胜率展示与结果一致，可复现）
-    const result = this.simBeastDuel(b, foe, sim.seed);
+    const result = this.simBeastDuel(b, foe, seed);
     Log.add(`⚔ 擂主战——${result.report[0]}${result.report[1]}${result.report[2]}`, result.won ? 'gain' : 'loss');
     if (result.won) {
       const streak = p.beastArena.streak || 0;
@@ -556,7 +562,8 @@ const BeastSys = {
     }
     Game.afterAction();
   },
-  /** v40（E399）：擂主座下灵兽生成——power 0.9~1.1 倍、必带 2 门技（1 天生 + 1 随机）、物种自五族随选 */
+  /** v40（E399）：擂主座下灵兽生成——power 0.9~1.1 倍、必带 2 门技（1 天生 + 1 随机）、物种自五族随选；
+   *  v41（E447）②：对手 tactic 三选随机——simOne 真实参与（配置不再虚标） */
   makeChampFoe(power) {
     const baseP = Utils.clamp(Math.round(power * Utils.randF(0.9, 1.1)), 1, 70);
     const species = Utils.pick(['beast', 'snake', 'swarm', 'plant', 'element']);
@@ -566,7 +573,7 @@ const BeastSys = {
     if (SK[species]) skills.push({ ...SK[species] });
     if (skills.length < 2 && SK2[species]) skills.push({ ...SK2[species] });
     while (skills.length < 2) skills.push({ name: '野性撕咬', kind: 'bleed', pct: 3, rounds: 2 });
-    return { name: NAME[species] || '擂主灵兽', species, power: baseP, level: 10, evolved: true, tactic: 'focus', skills };
+    return { name: NAME[species] || '擂主灵兽', species, power: baseP, level: 10, evolved: true, tactic: Utils.pick(['focus', 'control', 'guard']), skills };
   },
   /** v40（E399）：simBeastDuel——灵兽单挑快算（assist 同式伤害 + 物种克制 + tactic 加权 + 技能池全量），
    *  种子可选（缺省 Date.now）：同种子复现一致。返回 { won, winP, rounds, report:[首回/中盘/决胜] }。
@@ -583,6 +590,7 @@ const BeastSys = {
       let rnd = s;
       const rand = () => { rnd = (rnd * 1103515245 + 12345) & 0x7fffffff; return rnd / 0x7fffffff; };
       const hpOf = b => 100 + b.power * 4;
+      const tacOf = b => (b && b.tactic) || 'focus';   // v41（E447）②：tactic 真实入推演
       const skBonus = b => (b.skills || []).slice(0, 4).reduce((s2, sk) => s2 + (['poison', 'burn', 'bleed', 'defdown', 'slow', 'weaken'].includes(sk.kind) ? (sk.pct || 3) * 2 : sk.kind === 'heal' ? 2 : sk.kind === 'stun' || sk.kind === 'freeze' ? 3 : 1), 0);
       const myHp = hpOf(my), foeHp = hpOf(foe);
       const myAtk = my.power * (1 + skBonus(my) / 100);
@@ -590,12 +598,22 @@ const BeastSys = {
       let curA = myHp, curF = foeHp, round = 0;
       while (curA > 0 && curF > 0 && round < 200) {
         round++;
+        // v41（E447）②：tactic 与 assist（:159-166）语义对表——集火=敌残血 <30% 伤害 ×1.15 /
+        // 护主=己残血 <40% 受击减伤 ×1.15 / 控场=我方首轮伤害 +15% 先手
+        let myMul = 1;
+        if (tacOf(my) === 'focus' && curF <= foeHp * 0.3) myMul *= 1.15;
+        if (tacOf(my) === 'control' && round === 1) myMul *= 1.15;
+        if (tacOf(foe) === 'guard' && curF <= foeHp * 0.4) myMul /= 1.15;
         // 我方先手：伤害 = power×克制×随机（0.8~1.2）
-        const dA = Math.max(1, Math.round(myAtk * relMul * (0.8 + rand() * 0.4)));
+        const dA = Math.max(1, Math.round(myAtk * relMul * myMul * (0.8 + rand() * 0.4)));
         curF = Math.max(0, curF - dA);
         if (curF <= 0) return { win: 1, round };
+        let foeMul = 1;
+        if (tacOf(foe) === 'focus' && curA <= myHp * 0.3) foeMul *= 1.15;
+        if (tacOf(foe) === 'control' && round === 1) foeMul *= 1.15;
+        if (tacOf(my) === 'guard' && curA <= myHp * 0.4) foeMul /= 1.15;
         // 敌方反击
-        const dF = Math.max(1, Math.round(foeAtk * relMulF * (0.8 + rand() * 0.4)));
+        const dF = Math.max(1, Math.round(foeAtk * relMulF * foeMul * (0.8 + rand() * 0.4)));
         curA = Math.max(0, curA - dF);
       }
       return { win: curA > 0 ? 1 : 0, round };

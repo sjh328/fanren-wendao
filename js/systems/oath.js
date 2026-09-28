@@ -162,4 +162,78 @@ const OathSys = {
     }
     await this.poorCheck(p);
   },
+
+  /* ========== v41（E451）：誓约试炼事件线（季度一试，festival check 心跳调用） ========== */
+  /** 季度键（年-季，与 SectSys.councilKey 同口径：seasonOf 0~3，一季 ≈91 日） */
+  trialKey(p) {
+    const y = Math.floor((p.day || 0) / 365);
+    const season = (typeof Art !== 'undefined' && Art.seasonOf) ? Art.seasonOf(p) : 0;
+    return `${y}-${season}`;
+  },
+  TRIALS: {
+    kill: {
+      title: '血亲复仇局', oath: '不杀之誓',
+      text: '山道转角，一名与你有血债的旧仇拦路——眼里烧着现成的杀意。<br>杀了，旧恨得雪，然不杀之誓碎在当场；放了，到手的赏格就此作罢，然天道记你一善。',
+      breakTxt: '血亲的债当前，你终究举起了剑——誓言碎在血里。',
+      keepTxt: '你垂下手，侧身让开了路——那人的刀风擦着你耳边过去，你只当听了一阵风。（失了赏格，气运 +2）',
+      keep: (p) => { KarmaSys.addFortune(2, true); },
+    },
+    still: {
+      title: '当众挑衅', oath: '止戈之誓',
+      text: '市集中央，一名修士当众讥你怯战，指名道姓要你接招——四下看客越聚越多。<br>应战，止戈之誓当场而碎；忍下，这一口气咽下去，反倒品出几分剑理。',
+      breakTxt: '当众的火油泼到脸上，你终究应了这一战。',
+      keepTxt: '你拂了拂袖，自人群中穿了过去——身后喧声渐远，心里那点剑理反倒清亮起来。（悟性 +1）',
+      keep: (p) => { Cultivate.addInsight(p, 1); },
+    },
+    solo: {
+      title: '结交良机', oath: '独行之道',
+      text: '驿亭避雨，一位落魄修士与你拼了半张桌——言谈投契，对方郑重递来名帖，想与你结个道友。<br>伸手接了，独行之道就此而破；婉拒了，这份萍水之缘也就散在雨里。',
+      breakTxt: '你接过名帖的那一刻，独行的道就走到了岔口。',
+      keepTxt: '你双手拢袖：「心意领了，只是我行路惯了独身。」——雨停，各自上路。（气运 +1）',
+      keep: (p) => { KarmaSys.addFortune(1, true); },
+    },
+  },
+  /** 誓约试炼节拍：三誓（不杀/止戈/独行）各配季度试炼，每季每誓 ≤1 次；auto 静默默认守誓 */
+  trialCheck(p, auto = false) {
+    if (!p || p.dead || !p.oaths) return;
+    if (!auto && (Battle.active || Story.active() || UI._popupResolve)) return;
+    const key = this.trialKey(p);
+    p.oaths.trial = p.oaths.trial || {};
+    for (const id of ['kill', 'still', 'solo']) {
+      if (!this.active(p, id) || p.oaths.trial[id + '#' + key]) continue;
+      p.oaths.trial[id + '#' + key] = true;   // 置位在前防重入；守/破皆自此走一次性通道
+      if (auto) {
+        // auto 静默默认守誓：守誓大赏一次性入账，聚合入日报不弹窗
+        this.TRIALS[id].keep(p);
+        const agg = Game._offlineAgg = Game._offlineAgg || {};
+        agg.oathTrial = (agg.oathTrial || 0) + 1;
+        return;
+      }
+      this.trialPopup(p, id);
+      return;   // 一次心跳至多开一场试炼
+    }
+  },
+  async trialPopup(p, id) {
+    const t = this.TRIALS[id];
+    if (!t) return;
+    Log.add(`【誓约试炼】${t.title}——${this.NAMES[id]}在身，天道正看着你怎么落子。`, 'event');
+    const pick = await UI.popup({
+      title: `誓约试炼 · ${t.title}`,
+      html: `${t.text}<br><span class="tip-line">· 持守 <b>${this.NAMES[id]}</b> 中——守誓大赏一次性入账；破誓代价走天道旧例（心魔 +15、气运 -20、${this.BAN_DAYS} 日禁立）。</span>`,
+      options: [
+        { text: `守住誓言（${id === 'kill' ? '放行失赏，气运 +2' : id === 'still' ? '忍下，悟性 +1' : '婉拒，气运 +1'}）`, value: 'keep', primary: true },
+        { text: '破誓', value: 'break' },
+      ],
+    });
+    if (pick === 'break') {
+      await this.breakOath(id, t.breakTxt);   // 破誓代价走既有 oathBanDay 通道（宽恕限次弹窗随行）
+      return;
+    }
+    if (pick !== 'keep') return;   // ESC/遮罩——罪证不落，试炼本季不再开（天道不逼人）
+    t.keep(p);
+    Log.add(`【守誓】${t.keepTxt}`, 'gain');
+    this.partnerComment(p, `方才那一幕我都看见了——你守住了自己的话。`, '誓约试炼守誓');
+    if (typeof Story !== 'undefined' && Story.chron) Story.chron(`誓约试炼 · ${t.title}守誓`);
+    Game.afterAction();
+  },
 };

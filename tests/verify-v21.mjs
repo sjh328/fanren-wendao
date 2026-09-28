@@ -191,9 +191,9 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA38 斗兽场胜算单点定夺+面板预估（U2/E177）') : fail('SA38 斗兽', '');
   cave.includes('careCore(p) {') && guide.includes('CaveSys.careCore(p)')
     ? pass('SA39 一键行权吸收一键照料·共用 careCore（U3）') : fail('SA39 日常归一', '');
-  guide.includes("今日聚灵阵尚未点燃") && guide.includes("p._autoRush === 'always'")
-    && guide.includes("p._autoRushSkipDay !== today") && guide.includes("else if (c === 'skip') { p._autoRushSkipDay = today; }")
-    ? pass('SA40 聚灵扣款明示+不再询问记忆+单日跳过三态（U3/E205）') : fail('SA40 聚灵明示', '');
+  guide.includes("今日聚灵阵尚未点燃") && guide.includes("this.prefMode(p, 'rush') === 'always'")
+    && guide.includes("this._rushDeclineDay !== today") && guide.includes("else if (c === 'skip') { this._rushDeclineDay = today; }")
+    ? pass('SA40 聚灵扣款明示+不再询问记忆+单日跳过三态（U3/E205；v41（E422/E428）偏好迁 p.ui.rush 单源、跳过改会话内记账）') : fail('SA40 聚灵明示', '');
   ui.includes('灵田浇水') && ui.includes('灵兽抚摸') && ui.includes('虫害')
     ? pass('SA41 今日修行卡补浇水/抚兽/除虫行（U3）') : fail('SA41 修行卡', '');
   cave.includes('if (remaining <= 0) continue;   // 已熟之田无需雨露')
@@ -246,8 +246,9 @@ console.log('===== SA 源码静态组 =====');
   npc.includes('if (midautumn) gain *= 2;\n      likeNote')
     ? pass('SA63 中秋投其所好统一 ×2 口径（E158）') : fail('SA63 中秋', '');
   explore.includes('const autumn = Art.seasonOf(p) === 2;') ? pass('SA64 季秋判定归位（E153）') : fail('SA64 季节', '');
-  dungeon.includes(".sort((a, b) => (GameData.ITEMS[a].price || 0) - (GameData.ITEMS[b].price || 0))[0]")
-    ? pass('SA65 窥探秘术耗价最低符（E155）') : fail('SA65 侦查符', '');
+  dungeon.includes('useTalismans(p, n)') && dungeon.includes('.sort((a, b) => (GameData.ITEMS[a].price || 0) - (GameData.ITEMS[b].price || 0))')
+    && dungeon.includes('Bag.removeItem(ids[0], 1)')
+    ? pass('SA65 窥探秘术耗价最低符（E155；v41（E458）三档情报耗符收 useTalismans 单源，价最低者先耗口径不变）') : fail('SA65 侦查符', '');
   world.includes('魔气复炽') && world.includes("Utils.pick(GameData.MAPS.filter(m => w.magicMaps.includes(m.id)))")
     ? pass('SA66 魔域兜底不再波及新手村+去重（E156）') : fail('SA66 魔域', '');
 
@@ -425,10 +426,11 @@ try {
     // 静态已锁行序；此处验证 Tribulation 状态对象不含成功折寿路径的调用面
     const srcOK = true;
     out.tribShapeOK = srcOK;
-    // E175：until=-1 使 state() 当日轮换
+    // E175：until=-1 当日轮换（v41（E434）：轮换收写侧 ensure() 单点，state()/peek() 恒纯读不重掷）
     p.auction = { item: 'm_danfang', seq: 3, base: 4000, until: -1 };
-    const a = AuctionSys.state(p);
+    const a = AuctionSys.ensure(p);
     out.auctionRotated = a.until > Math.floor(p.day) && a.seq === 3;   // until=-1 当日即轮换（seq 由 bid 递增后保留）
+    out.peekPure = (() => { p.auction = { item: 'm_danfang', seq: 4, base: 4000, until: -1 }; const b1 = AuctionSys.state(p); const b2 = AuctionSys.peek(p); return b1.until === -1 && b2.until === -1; })();   // 纯读不重掷（E434）
     // E191：remove 回收 _v
     localStorage.setItem('fanren_wd_t1_v', 'x');
     Save.remove('t1');
@@ -443,7 +445,7 @@ try {
     out.firstLifeReinc = p.reinc && p.reinc.firstLife === true && p.reinc.marks === 2;
     return out;
   });
-  rD.auctionRotated ? pass('RB11 拍卖中标当日轮换恢复（E175）') : fail('RB11 拍卖哨兵', JSON.stringify(rD));
+  rD.auctionRotated && rD.peekPure ? pass('RB11 拍卖中标当日轮换恢复（E175；v41（E434）轮换收 ensure() 写侧、state()/peek() 纯读不重掷）') : fail('RB11 拍卖哨兵', JSON.stringify(rD));
   rD.vOrphanGone ? pass('RB12 删档回收 _v 孤儿键（E191）') : fail('RB12 孤儿键', JSON.stringify(rD));
   rD.daoTai ? pass('RB13 道胎练气中期语义（E149）') : fail('RB13 道胎', JSON.stringify(rD));
   rD.firstLifeReinc ? pass('RB14 首世印记当世生效且带 firstLife（E180）') : fail('RB14 首世印记', JSON.stringify(rD));

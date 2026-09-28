@@ -46,7 +46,7 @@ try {
     ? pass('A4 界面新组件样式（交情量表 / 问道汇总 / 声望徽记）') : fail('A4 新组件样式', '');
   !css.includes('--bg-soft') && !css.includes('--panel-2')
     ? pass('A5 死令牌清理（--bg-soft / --panel-2）') : fail('A5 死令牌', '仍存在');
-  css.includes('env(safe-area-inset-top, 0px)) 12px 8px')
+  css.includes('calc(var(--sp-2) + env(safe-area-inset-top, 0px)) var(--sp-3)')
     ? pass('A6 刘海避让并入顶栏 padding（不再被简写覆盖）') : fail('A6 刘海避让', '');
   /style\.css\?v=\d+/.test(html) && /game\.js\?v=\d+/.test(html) && /fanren-wd-v\d+/.test(swSrc)
     ? pass('A7 缓存号在位 + SW 版本在位（版本无关 v32）') : fail('A7 缓存号', '');

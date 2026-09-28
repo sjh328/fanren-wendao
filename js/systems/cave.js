@@ -13,7 +13,7 @@ const CaveSys = {
     { id: 'lib',   name: '藏经室', icon: '📖', desc: '藏经参悟：功法参悟所得 +20%/阶。' },
     /* ---- v20 营造扩容 ---- */
     { id: 'forge',    name: '炼器室', icon: '⚒', desc: '炉火纯青：炼器成器率 +4%/阶。' },
-    { id: 'spring',   name: '灵泉',   icon: '⛲', desc: '每日涌出灵石：80 × 阶 × 境界系数（六境封顶），自动入账。' },   // v33（E108）：描述补齐封顶口径（实现为 min(6, realm)，防「后期灵泉失灵」误解）
+    { id: 'spring',   name: '灵泉',   icon: '⛲', desc: '每日涌出灵石：15 × 阶（至四阶）× 境界系数（四境封顶），自动入账。' },   // v41（E441）：口径随降档实值同步（原「80×阶·六境封顶」为两代前的旧账）
     { id: 'treasury', name: '藏宝阁', icon: '💎', desc: '聚财有道：灵石获取 +3%/阶。' },
   ],
   BUILD_KEYS: ['beast', 'train', 'lib', 'forge', 'spring', 'treasury'],
@@ -214,7 +214,10 @@ const CaveSys = {
     // v40（E383）：灵泉降档——80×spring×stoneEco(min(6,r)) → 45×min(4,spring)×stoneEco(min(4,r))：
     // r6 裸值 72.26 万→2.81 万/日（−96.1%），「挂一口泉即富」翻转为主动收入大头（实收/建模比行监控）；
     // 驻守 ×1.2 保留单列（化身身份差异，不参与降档口径）
-    const gain = Math.round(45 * Math.min(4, p.cave.builds.spring) * GameData.stoneEco(Math.min(4, p.realmIdx)) * (guardOn ? 1.2 : 1));
+    // v41（E441）：前期再降档——系数 45→15（结构与 min(4,·) 帽不动）：r1~r4 比值 2.77→0.92、
+    // r5 0.24、r6 0.064；r6 裸值锚 28149→9383（−66.7%，锚的勘误修订，UPDATE_NOTES 削弱明示）——
+    // E383「让钱流向参与」本意在筑基~化神前中期被恒 2.77 背叛，今全境比值带内（balance-sim 全境门）
+    const gain = Math.round(15 * Math.min(4, p.cave.builds.spring) * GameData.stoneEco(Math.min(4, p.realmIdx)) * (guardOn ? 1.2 : 1));
     Bag.addStones(gain);
     if (auto && typeof Game !== 'undefined' && Game._offlineAgg) Game._offlineAgg.spring = (Game._offlineAgg.spring || 0) + gain;   // v34（E1）：灵泉离线入账并入日报——原只报「照常涌出」不给数额，玩家对不上账
     if (!auto) Log.add(`【灵泉】洞府灵泉今日涌出灵石 <b>${Utils.fmtNum(gain)}</b> 枚，已自动收入储物袋。${guardOn ? '（化身驻守，泉眼愈旺 ×1.2）' : ''}`, 'gain');
@@ -321,6 +324,7 @@ const CaveSys = {
     const guardOn = p.avatar && p.avatar.on && (p.avatar.task === 'guard' || (p.avatar.lv >= 9 && p.avatar.task2 === 'guard'));
     if (guardOn) {   // v40（E401）：驻守必挡（原 chance(45)——驻守身份做实防御性差异）
       p.avatar.cdDay = Math.floor(p.day || 0) + AvatarSys.SWITCH_CD;
+      AvatarSys.noteGuard(p, true);   // v41（E446）③ 接线：驻守挡袭入挡劫录（E472 管理台消费——原单源零写入恒空）
       Log.add(`【夜袭】<b>${d.name}</b> 趁夜来犯——化身凝形拦在府门：「此地有我。」一场恶斗后贼人遁去（化身神识受挫，${AvatarSys.SWITCH_CD} 日不可换差）。`, 'warn');
       return;
     }

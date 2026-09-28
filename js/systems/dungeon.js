@@ -7,20 +7,78 @@ const DungeonSys = {
   dm(depth) { return 1 + depth * 0.25; },
   /** v18：侦查符预览节点风险（消耗一张符箓）
    *  v40（E372）：原为全工程零调用的死方法（连带 E245 心魔「窥探符 +2」来源永不触发）——
-   *  现接回秘境节点卡「窥 探」按钮，花一张符换本层岔路情报 */
-  hasTalisman(p) { return Object.keys(p.bag || {}).some(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman'); },
-  scout() {
+   *  现接回秘境节点卡「窥 探」按钮，花一张符换本层岔路情报
+   *  v41（E458）：斥候三问——本层岔路以图标+全名印在节点按钮、depth+1~+2 又有免费灵觉预览，
+   *  旧窥探是「花符买已知」的纯陷阱按钮，故改三档情报：①一符窥「灵觉之外」（depth+3~+5 层节点
+   *  与守关词条）；②两符窥本层异变详情并置 D.scoutedMuts（净化钮门控 P8/E470⑤ 读此，净化本身
+   *  走 E369 既有通道不变换）+ 一成五窥陷阱层反噬（心魔再 +2）。每窥心魔 +2 维持（E245 口径） */
+  hasTalisman(p) { return this.talismanCount(p) > 0; },
+  talismanCount(p) {
+    return Object.keys(p.bag || {}).reduce((s, id) => s + ((GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman') ? (p.bag[id] || 0) : 0), 0);
+  },
+  /** 耗符 n 枚（价最低者先耗——v35（E155）口径延续），不足返回 false */
+  useTalismans(p, n) {
+    for (let i = 0; i < n; i++) {
+      const ids = Object.keys(p.bag || {}).filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman' && (p.bag[id] || 0) > 0)
+        .sort((a, b) => (GameData.ITEMS[a].price || 0) - (GameData.ITEMS[b].price || 0));
+      if (!ids.length) return false;
+      Bag.removeItem(ids[0], 1);
+    }
+    return true;
+  },
+  async scout() {
     const p = Game.player;
     const D = p.dungeon;
     if (!D || Battle.active) return;
-    if (!this.hasTalisman(p)) { UI.toast('需消耗一张符箓以施展窥探秘术'); return; }
-    const talId = Object.keys(p.bag).filter(id => GameData.ITEMS[id] && GameData.ITEMS[id].type === 'talisman').sort((a, b) => (GameData.ITEMS[a].price || 0) - (GameData.ITEMS[b].price || 0))[0];   // v35（E155）：改耗价最低的符——原取首个命中，可能无声烧掉金光符等保命高符
-    Bag.removeItem(talId, 1);
-    const nodeNames = { battle: '⚔ 战斗', treasure: '🎁 宝箱', fortune: '✨ 奇遇', trap: '⚠ 陷阱', npc: '🗣 遭遇', boss: '☠ 守关' };
-    const info = D.choices.map((t, i) => `${i === 0 ? '左' : '右'}路：${nodeNames[t] || t}`).join(' | ');
-    UI.toast(`窥探结果：${info}`);
-    if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 2, '窥探秘术，心事被暗处记下');   // v37（E245）：窥探符 +2——心魔新行为来源
-    Log.add(`你以符箓为媒，灵光一闪窥得前路——${info}。`, 'info');
+    if (!this.hasTalisman(p)) { UI.toast('需消耗符箓以施展窥探秘术'); return; }
+    const R = GameData.SECRET_REALMS[D.realm];
+    const choice = await UI.popup({
+      title: '窥探秘术 · 三问',
+      html: `以符为媒，窥探前路。每窥一次，心事便被暗处多记一分（<span class="neg">心魔 +2</span>）。<br>· <b>窥前路</b>（一符）——灵觉之外第 ${D.depth + 3}~${D.depth + 5} 层动静，与守关之秘<br>· <b>窥异变</b>（两符）——此行地脉异变详情，窥见后方可引灵石净化<br><span class="tip-line">· 异变之中若有陷阱层，一成五几率反被禁制记恨（心魔再 +2）。</span>`,
+      options: [
+        { text: '窥前路（符 ×1）', value: 'deep', primary: true },
+        { text: '窥异变（符 ×2）', value: 'mut' },
+        { text: '作罢', value: 'no' },
+      ],
+    });
+    if (!choice || choice === 'no') return;
+    if (choice === 'deep') {
+      if (this.talismanCount(p) < 1) { UI.toast('囊中已无符箓'); return; }
+      this.useTalismans(p, 1);
+      const nodeNames = { battle: '⚔ 战斗', treasure: '🎁 宝箱', fortune: '✨ 奇遇', trap: '⚠ 陷阱', npc: '🗣 遭遇', boss: '☠ 守关' };
+      const lines = [];
+      const total = D.total || GameData.DUNGEON_TOTAL_LAYERS;
+      for (let d = D.depth + 3; d <= Math.min(D.depth + 5, total - 1); d++) {
+        const types = (D.route || [])[d];
+        if (types) lines.push(`第 ${d + 1} 层：${types.map(t => nodeNames[t] || t).join(' / ')}`);
+      }
+      lines.push(`守关之秘：☠ 最深处 · ${(R && R.rule && R.rule.txt) ? R.rule.txt : '地脉无异'}`);
+      const info = lines.join('；');
+      UI.toast(`窥探结果：${info}`);
+      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 2, '窥探秘术，心事被暗处记下');   // v37（E245）：每窥 +2 维持
+      Log.add(`你以符箓为媒，灵光越过眼前三重雾障——${info}。`, 'info');
+      return;
+    }
+    // 窥异变（两符）：置 D.scoutedMuts + 详情弹窗 + 窥陷阱层反噬
+    if (this.talismanCount(p) < 2) { UI.toast('窥异变需符箓两枚'); return; }
+    this.useTalismans(p, 2);
+    const muts = Array.isArray(D.muts) ? D.muts : [];
+    D.scoutedMuts = muts.slice();   // 净化钮门控（P8/E470⑤）读此；净化走 E369 既有通道不变换
+    const detail = muts.length
+      ? muts.map(id => { const d = (GameData.DUNGEON_MUTATIONS || []).find(x => x.id === id); return d ? `<b>${d.name}</b>（${d.desc}）` : ''; }).filter(Boolean).join('；')
+      : '此地脉并无异变。';
+    let extra = '';
+    if (muts.length && (D.choices || []).includes('trap') && Utils.chance(15)) {
+      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 2, '窥探触及陷阱禁制，遭其反噬');
+      extra = '<br><span class="neg">禁制灵光顺着窥探的神识倒卷而回——你被陷阱层记恨了（心魔再 +2）。</span>';
+    }
+    if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 2, '窥探秘术，心事被暗处记下');
+    await UI.popup({
+      title: '窥探秘术 · 异变详情',
+      html: `${detail}${extra}<br><br><span class="tip-line">· 已窥见的异变可引灵石净化——秘境卡上的「净 化」钮自此亮起。</span>`,
+      options: [{ text: '收 势', value: true, primary: true }],
+    });
+    Log.add(`你以两符窥尽此地异变之秘——${detail}。`, 'info');
   },
   /** v29：秘境门票——按推荐境界灵石经济定价，入历一次一付
    *  v30 复核：×0.6 只占单次满通关收入约 0.2%，形同虚设——提至 ×2（约占 0.7%，保门票体感） */

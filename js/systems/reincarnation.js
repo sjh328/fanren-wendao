@@ -77,8 +77,121 @@ const ReincarnationSys = {
     { name: '轮回行者', desc: '每次兵解额外 +1 印记', apply: (p2) => { p2.flags.reincWalker = true; } },
   ],
   get TREE_NAMES() { return this.TREE_EFFECTS.map(t => `${t.name}（${t.desc}）`); },
-  /** v38（E319）：一世报告——坐化/兵解/飞升/证道祖四终局的总结屏（数据全取 counters/chronicle，零新状态） */
-  lifeReport(p, kind) {
+  /** v38（E319）：一世报告——坐化/兵解/飞升/证道祖四终局的总结屏（数据全取 counters/chronicle，零新状态）
+   *  v41（E462）：升级为「一世碑文页」——m 旗标条目全列 + 首末两笔 + 境界刻度。境界折线为条件交付：
+   *  counters 为累计值、无逐境时间序列（v2 修订⑫如实说明），故以年表中境界类条目（突破/晋境入册）
+   *  为采样点渲染折线，采样 <4 点降级为境界徽标行（一世止境+飞升态），不做假数据；
+   *  另有「说书人评传」（chronicle m / story.choices / NpcSys.mem 三类素材拼装，缺失自动跳过）
+   *  与「拓印碑文」一键导出（rubStele，showLifeReport 侧挂入口）。 */
+  /** v41（E462）：年表境界采样点（碑文折线用）——只认「晋入/突破/飞升/仙籍/证道祖」类入册条目；
+   *  境名须整词捕获（「晋入X期」/「初入·晋入 仙阶名」/证道祖/飞升）——「渡劫功成」的「渡劫」
+   *  二字若按子串匹配，会把每一条突破入册都误配成渡劫境，折线全坏 */
+  realmSamples(p) {
+    const RN = GameData.REALM_NAMES || [];
+    const XN = (GameData.XIAN_TIERS || []).map(x => x.name);
+    const XN_ALT = XN.join('|');
+    const pts = [];
+    for (const e of (p.chronicle || [])) {
+      const txt = String(e.txt || '');
+      if (!/晋入|突破|飞升|仙籍|证道祖/.test(txt)) continue;
+      let ord = -1;
+      let m = txt.match(/晋入([^\s，,。；!！?？期]+)期/);   // 「渡劫功成，晋入化神期」
+      if (m) {
+        const i = RN.indexOf(m[1]); if (i >= 0) ord = i;
+        const j = XN.indexOf(m[1]); if (j >= 0) ord = 10 + j;
+      }
+      if (ord < 0) {
+        m = txt.match(new RegExp('(?:初入|晋入)(' + XN_ALT + ')'));   // 「仙籍落名，初入地仙」「仙劫功成，晋入天仙」
+        if (m) ord = 10 + XN.indexOf(m[1]);
+      }
+      if (ord < 0 && /证道祖/.test(txt)) ord = 13;   // 证道祖即大罗之巅
+      if (ord < 0 && /飞升/.test(txt)) ord = 9;      // 「飞升 · 尾声」类无名条目：飞升即真仙之巅
+      if (ord >= 0) pts.push({ d: Math.floor(e.d || 0), ord, txt });
+    }
+    return pts;
+  },
+  /** v41（E462）：此世止境的境序（0~9 凡界九境 + 10~13 仙籍四阶） */
+  stopOrdOf(p) {
+    if (typeof XianSys !== 'undefined' && XianSys.unlocked && XianSys.unlocked(p) && XianSys.cur(p) > 0) return 9 + XianSys.cur(p);
+    return p.realmIdx || 0;
+  },
+  /** v41（E462）：境界刻度段——采样 ≥4 渲染折线（x=年份 y=境序），不足 4 点降级徽标行 */
+  realmSection(p) {
+    const pts = this.realmSamples(p);
+    const RN = GameData.REALM_NAMES || [];
+    const XN = (GameData.XIAN_TIERS || []).map(x => x.name);
+    const ordName = o => o < 10 ? (RN[o] || '?') : (XN[o - 10] || '?');
+    const stopO = this.stopOrdOf(p);
+    const ascTxt = p.flags && p.flags.ascended ? ' · 白日飞升' : '';
+    if (pts.length < 4) {
+      const ladder = [];
+      for (const t of pts) if (ladder.indexOf(ordName(t.ord)) < 0) ladder.push(ordName(t.ord));
+      const stopName = ordName(stopO) + (stopO < 10 ? GameData.LAYER_NAMES[p.layer] || '' : '');
+      if (ladder.indexOf(ordName(stopO)) < 0) ladder.push(stopName); else ladder[ladder.length - 1] = stopName;
+      return { line: false, html: `<div class="tip-line">· ${ladder.join(' ▸ ')}${ascTxt}</div>`, text: ladder.join(' ▸ ') + ascTxt };
+    }
+    const all = [{ d: 0, ord: 0, txt: '初入道途' }, ...pts, { d: Math.floor(p.day || 0), ord: stopO, txt: '一世止境' }];
+    const maxD = Math.max(1, all[all.length - 1].d);
+    const maxO = Math.max(...all.map(t => t.ord));
+    const W = 360, H = 132, L = 48, R = 12, T = 14, B = 26;
+    const x = d2 => L + (W - L - R) * (d2 / maxD);
+    const y = o => T + (H - T - B) * (1 - (maxO ? o / maxO : 0));
+    const poly = all.map(t => `${x(t.d).toFixed(1)},${y(t.ord).toFixed(1)}`).join(' ');
+    const ticks = [...new Set(all.map(t => t.ord))].sort((a, b) => a - b);
+    while (ticks.length > 5) ticks.splice(1, 1);   // y 轴刻度抽稀：保首尾，中间至多 5 档防拥挤
+    const tickSvg = ticks.map(o => `<text x="${L - 6}" y="${(y(o) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--text-faint,#8a7f68)">${ordName(o)}</text>
+      <line x1="${L}" y1="${y(o).toFixed(1)}" x2="${W - R}" y2="${y(o).toFixed(1)}" stroke="var(--text-faint,#8a7f68)" stroke-width="0.5" stroke-dasharray="2 3" opacity="0.4"/>`).join('');
+    const dots = all.map(t => `<circle cx="${x(t.d).toFixed(1)}" cy="${y(t.ord).toFixed(1)}" r="2.6" fill="var(--gold,#b98a2f)"><title>第${Math.floor(t.d / 365) + 1}年 · ${Utils.esc(t.txt)}</title></circle>`).join('');
+    const xAxis = [0, Math.floor(maxD / 2), maxD].map(d2 => `<text x="${x(d2).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="9" fill="var(--text-faint,#8a7f68)">第${Math.floor(d2 / 365) + 1}年</text>`).join('');
+    return {
+      line: true,
+      html: `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;display:block;margin:2px auto" role="img" aria-label="境界刻度折线">${tickSvg}<polyline points="${poly}" fill="none" stroke="var(--gold,#b98a2f)" stroke-width="1.6"/>${dots}${xAxis}</svg>`,
+      text: all.map(t => `第${Math.floor(t.d / 365) + 1}年 ${ordName(t.ord)}`).join(' → '),
+    };
+  },
+  /** v41（E462）：说书人评传——chronicle m 条 + story.choices 十章抉择 + NpcSys.mem 共同记忆
+   *  三类素材按可得拼装（呼应 c10 茶棚说书人），素材缺失对应分句自动跳过，开场与收梢恒在 */
+  steleCommentary(p, kind) {
+    const mFlagged = (p.chronicle || []).filter(e => e.m);
+    const segs = [];
+    segs.push(`「啪！」醒木一响——列位看官，今日说一位${GameData.REALM_NAMES[p.realmIdx] || '?'}期修士，道号${p.name || '?'}，凡尘行止 ${p.age || '?'} 载，端的是一段奇话。`);
+    if (mFlagged.length) {
+      const picks = [mFlagged[0], mFlagged[mFlagged.length - 1]].filter((e, i, a) => e && a.indexOf(e) === i);
+      for (const e of picks) segs.push(`「却说第${Math.floor((e.d || 0) / 365) + 1}年，${e.txt}——满座茶客，无不耸动。」`);
+    }
+    if (typeof QuestSys !== 'undefined' && QuestSys.CHOICE_LABELS && p.story) {
+      const choices = p.story.choices || {};
+      const keys = Object.keys(QuestSys.CHOICE_LABELS).filter(k => choices[k] && QuestSys.CHOICE_LABELS[k][choices[k]]);
+      if (keys.length) {
+        const k = keys[keys.length - 1];
+        const ci = Math.min(QuestSys.CHAPTERS.length - 1, Math.max(0, parseInt(k.slice(1), 10) - 1));
+        const chT = QuestSys.CHAPTERS[ci] ? `「${QuestSys.CHAPTERS[ci].title}」` : '';
+        segs.push(`「若问此人如何？十章问答，落子无悔。${chT}一章，他走了『${QuestSys.CHOICE_LABELS[k][choices[k]]}』一途——单这一念，便知心性。」`);
+      }
+    }
+    if (typeof NpcSys !== 'undefined' && NpcSys.MEM_TYPE && p.npcs) {
+      const near = [p.partner, ...(p.sworn || [])].filter(Boolean);
+      const ids = [...near, ...Object.keys(p.npcs).filter(i => near.indexOf(i) < 0)];
+      const mems = [];
+      for (const id of ids) {
+        const arr = p.npcs[id] && Array.isArray(p.npcs[id].mem) ? p.npcs[id].mem : [];
+        if (!arr.length) continue;
+        const nd = NpcSys.def(id) || {};
+        if (nd.name) mems.push(`${nd.name}——曾${NpcSys.MEM_TYPE[arr[arr.length - 1].t] || '共事'}：${arr[arr.length - 1].x}`);
+        if (mems.length >= 2) break;
+      }
+      if (mems.length) segs.push(`「茶棚里还有故人念叨：${mems.join('；')}。江湖路远，情义未散。」`);
+    }
+    let tail;
+    if (kind === '白日飞升' || kind === '证道祖' || (p.flags && p.flags.ascended)) tail = '「后来如何？有人说他白日飞升，仙门之外另有一番天地——这话，留与后人评说。」';
+    else if (p.lifeCut) tail = `「可惜天不假年，折寿 ${p.lifeCut} 年，抱憾而终。然其行止，够老朽在这茶棚里说与三代人听。」`;
+    else if ((p.karma || 0) >= 60) tail = '「善哉恶哉，各有评说——列位若问到底，且再吃一盏茶。」';
+    else tail = '「此生行止，俱入年表。欲知来世如何，且听下回分解。」';
+    segs.push(tail);
+    return { html: segs.join('<br>'), text: segs.join('\n') };
+  },
+  /** v41（E462）：碑文数据单源——行账/境界刻度/丰碑全列/首末两笔/评传（lifeReport 与 steleText 共用） */
+  steleData(p, kind) {
     const c = p.counters || {};
     const legacy = this.readLegacy();
     const marksThisLife = Math.max(0, (legacy.marksEarned || 0) - (c.marksStart != null ? c.marksStart : legacy.marksEarned));
@@ -88,13 +201,7 @@ const ReincarnationSys = {
     const stopRealm = (typeof XianSys !== 'undefined' && XianSys.unlocked(p) && XianSys.cur(p) > 0)
       ? `${XianSys.label(p)}（仙籍）`
       : `${GameData.REALM_NAMES[p.realmIdx] || '?'}${GameData.LAYER_NAMES[p.layer] || ''}`;
-    // v40（E408）：m 旗标条目优先，不足补末 3 条
-    const mFlagged = (p.chronicle || []).filter(e => e.m);
-    const tail = (p.chronicle || []).slice(-3);
-    const merged = [];
-    for (const e of mFlagged) { if (!merged.includes(e)) merged.push(e); }
-    for (const e of tail) { if (!merged.includes(e)) merged.push(e); }
-    const events = merged.slice(0, 6).map(e => e.txt || e).join('；') || '——';
+    const chr = p.chronicle || [];
     const rows = [
       ['一世止境', `<b class="hl">${stopRealm}</b>`],
       ['红尘岁月', `${p.age || '?'} 岁（历 ${Math.floor(p.day || 0)} 日）`],
@@ -103,29 +210,88 @@ const ReincarnationSys = {
       ['杀伐', `${c.wins || 0} 胜 · 诛精英 ${c.killsElite || 0} · 秘境深处第 ${c.maxDepth || 0} 层`],
       ['情谊', `${partners.length ? `与 ${partners.join('、')} 结伴` : '独来独往'} · 莫逆 ${bosom} 人`],
       ['印记', `本世 ${marksThisLife} 枚（累计 ${legacy.marksEarned || 0}）`],
-      ['此世大事', events],
     ];
-    const title = { '兵解转世': '一世总结 · 兵解之际', '坐化': '一世总结 · 灯尽之际', '白日飞升': '一世小结 · 飞升之际', '证道祖': '一世小结 · 道祖之境' }[kind] || '一世总结';
+    return { rows, stopRealm, realm: this.realmSection(p), mFlagged: chr.filter(e => e.m), firstE: chr[0] || null, lastE: chr.length > 1 ? chr[chr.length - 1] : null, comm: this.steleCommentary(p, kind) };
+  },
+  lifeReport(p, kind) {
+    const c = p.counters || {};
+    const legacy = this.readLegacy();
+    const marksThisLife = Math.max(0, (legacy.marksEarned || 0) - (c.marksStart != null ? c.marksStart : legacy.marksEarned));
+    const d = this.steleData(p, kind);
+    const yearOf = e => `第${Math.floor((e.d || 0) / 365) + 1}年`;
+    const mRows = d.mFlagged.map(e => `<div class="tip-line">· ${yearOf(e)} · ${e.txt}</div>`).join('');
+    const mBlockHtml = d.mFlagged.length
+      ? (d.mFlagged.length > 6 ? `<div style="max-height:26vh;overflow:auto">${mRows}</div>` : mRows)
+      : '<div class="tip-line">· ——（此世无里程碑入册）</div>';
+    const sec = t => `<div class="shop-section-title" style="margin-top:8px">${t}</div>`;
+    const html = `<div class="seclude-report">${d.rows.map(([k, v]) => `<div class="sr-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`
+      + sec('◈ 境界刻度') + d.realm.html
+      + sec(`◈ 此世丰碑 · ${d.mFlagged.length} 笔`) + mBlockHtml
+      + sec('◈ 首末两笔')
+      + (d.firstE ? `<div class="tip-line">· 初入江湖：${yearOf(d.firstE)} · ${d.firstE.txt}</div>` : '<div class="tip-line">· 初入江湖：——</div>')
+      + (d.lastE && d.lastE !== d.firstE ? `<div class="tip-line">· 绝笔：${yearOf(d.lastE)} · ${d.lastE.txt}</div>` : '')
+      + sec('◈ 说书人评传') + `<div class="tip-line" style="line-height:1.9">${d.comm.html}</div>`;
+    const title = { '兵解转世': '一世碑文 · 兵解之际', '坐化': '一世碑文 · 灯尽之际', '白日飞升': '一世碑文 · 飞升之际', '证道祖': '一世碑文 · 道祖之境' }[kind] || '一世碑文';
     return {
-      brief: `${stopRealm} · ${c.wins || 0} 胜 · 印记 +${marksThisLife}`,
-      html: `<div class="seclude-report">${rows.map(([k, v]) => `<div class="sr-row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`,
+      brief: `${d.stopRealm} · ${c.wins || 0} 胜 · 印记 +${marksThisLife}`,
+      html,
       title,
     };
   },
+  /** v41（E462）：碑文拓片全文（「拓印碑文」导出用，纯文本可粘贴） */
+  steleText(p, kind) {
+    const d = this.steleData(p, kind);
+    const yearOf = e => `第${Math.floor((e.d || 0) / 365) + 1}年`;
+    const lines = [];
+    lines.push(`『${this.lifeReport(p, kind).title}』`);
+    for (const [k, v] of d.rows) lines.push(`【${k}】${v.replace(/<[^>]*>/g, '')}`);
+    lines.push(`【境界刻度】${d.realm.text}`);
+    lines.push(`【此世丰碑 · ${d.mFlagged.length} 笔】`);
+    if (d.mFlagged.length) for (const e of d.mFlagged) lines.push(`  · ${yearOf(e)} · ${e.txt}`);
+    else lines.push('  · ——（此世无里程碑入册）');
+    lines.push('【首末两笔】');
+    if (d.firstE) lines.push(`  · 初入江湖：${yearOf(d.firstE)} · ${d.firstE.txt}`);
+    if (d.lastE && d.lastE !== d.firstE) lines.push(`  · 绝笔：${yearOf(d.lastE)} · ${d.lastE.txt}`);
+    lines.push('【说书人评传】');
+    for (const seg of d.comm.text.split('\n')) lines.push(`  ${seg}`);
+    lines.push('· 回望来路，字字皆途。——《凡人问道》');
+    return lines.join('\n');
+  },
+  /** v41（E462）：「拓印碑文」——剪贴板 + 文件下载 + 文本码三通道，导出非空可粘贴 */
+  async rubStele(p, kind) {
+    const text = this.steleText(p, kind);
+    try { if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text); } catch (e) { /* 剪贴板不可用不阻断 */ }
+    try {
+      const blob = new Blob([text], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `凡人问道_碑文_${p.name || '道友'}.txt`;
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 800);
+    } catch (e) { /* 下载不可用则仅文本码 */ }
+    await UI.popup({
+      title: '📜 碑文拓片',
+      html: `碑文已拓，副本已存——整段文本亦可复制带走。<br><textarea class="save-code" readonly>${Utils.esc(text)}</textarea>`,
+      options: [{ text: '收 好', value: true, primary: true }],
+    });
+  },
   /** v38（E319）：终局/里程碑报告弹窗（坐化/兵解/飞升/证道祖共用）
-   *  webdriver（E2E）环境下自动降级为日志行，不弹窗不阻塞测试链 */
+   *  webdriver（E2E）环境下自动降级为日志行，不弹窗不阻塞测试链
+   *  v41（E462）：碑文页增「拓印碑文」入口——拓毕回到碑文页，谨记方歇 */
   async showLifeReport(p, kind) {
     const rep = this.lifeReport(p, kind);   // v40（E408）：一世报告 chronicle 取 m 旗标优先
     if (typeof navigator !== 'undefined' && navigator.webdriver) {
       Log.add(`【${rep.title}】${(p.chronicle || []).slice(-1).map(x => x.txt || x).join('') || '此生行止，俱入年表。'}`, 'system');
       return;
     }
+    const show = () => UI.popup({
+      title: `✦ ${rep.title} ✦`,
+      html: `${rep.html}<div class="tip-line" style="text-align:center">· 回望来路，字字皆途。</div>`,
+      options: [{ text: '📜 拓印碑文', value: '__rub' }, { text: '谨 记', value: true, primary: true }],
+    });
     try {
-      await UI.popup({
-        title: `✦ ${rep.title} ✦`,
-        html: `${rep.html}<div class="tip-line" style="text-align:center">· 回望来路，字字皆途。</div>`,
-        options: [{ text: '谨 记', value: true, primary: true }],
-      });
+      let act = await show();
+      while (act === '__rub') { await this.rubStele(p, kind); act = await show(); }
     } catch (e) { /* 弹窗被取消不阻塞流程 */ }
   },
   grantMarks(n, why) {

@@ -22,12 +22,20 @@ const ShopSys = {
     const repMul = (typeof RepSys !== 'undefined' && RepSys.priceMul) ? RepSys.priceMul(p) : 1;
     // v33（E91）：灵疫当年药价腾贵（丹药与灵药材 ×1.15；卖价同乘，ratio 不变无套利口）
     const drug = (def.type === 'pill' || WorldSys.isHerb(itemId)) ? WorldSys.herbMul(p) : 1;
-    return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId) * repMul * drug));
+    // v41（E442 接线）：整军季「坊市装备一律九二折」——单源 SectSys.armsMul（此前定义+季事弹窗公示后零消费）；
+    // 按公示口径仅装备（type=artifact）生效，丹药/材料/功法不折；seasonWar 弹窗为公示口（sect.js:304）
+    const arms = (def.type === 'artifact' && typeof SectSys !== 'undefined' && SectSys.armsMul) ? SectSys.armsMul(p) : 1;
+    return Math.max(1, Math.round(base * (1 - disc / 100) * WorldSys.priceMul(p) * WorldSys.marketMul(p, itemId) * repMul * drug * arms));
   },
   sellPrice(itemId) {
     const p = Game.player;
     const def = GameData.ITEMS[itemId];
     let base = def.price || 0;
+    // v41（E436）：0 价稀有物卖价回落——套装件/秘境功法/天级神兵 price:0 曾按 max(1,0×0.45)=1 灵石贱卖；
+    // 现按品阶兜底 GRADE_FALLBACK×0.1 计基数（grade5 → 基数 4000，卖出 ≥40000×0.1×0.45=1800）
+    if (!base && (def.type === 'artifact' || def.type === 'gongfa' || def.set)) {
+      base = Math.round((GameData.GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500) * 0.1);
+    }
     // 符箓为时价之物：随境界经济浮动
     if (def.ecoPrice) base = Math.round(base * GameData.stoneEco(p.realmIdx));
     let v = Math.max(1, Math.floor(base * 0.45));   // v32（E16）：卖价基数 0.4→0.45 微补偿——获取加成自此不吃卖价（斩断倒卖套利）
@@ -136,13 +144,17 @@ const ShopSys = {
     Game.afterAction();
   },
   /* ---------- v4 一键减负：凡品清理 ---------- */
-  /** 背包中可按「凡品」打包出售的物品：凡级（grade 0）装备 + 一阶（tier 1）材料 */
+  /** 背包中可按「凡品」打包出售的物品：凡级（grade 0）装备 + 一阶（tier 1）材料
+   *  v41（E436）：消费料排除——清单单源 ForgeSys.CONSUMED_MATS，玄铁矿等炼器/强化/炼化咽喉料
+   *  不再被「凡品」一键贱卖（此前 tier≤1 收口把强化全线咽喉卖进坊市） */
   commonSaleList() {
     const p = Game.player;
     if (!p) return [];
+    const consumed = (typeof ForgeSys !== 'undefined' && ForgeSys.CONSUMED_MATS) || [];
     return Object.keys(p.bag).filter(id => {
       const d = GameData.ITEMS[id];
       if (!d) return false;
+      if (consumed.includes(id)) return false;   // v41（E436）：炼器坊消费料同源排除
       if (d.type === 'artifact') return (d.grade || 0) === 0;
       if (d.type === 'material') return (d.tier || 0) <= 1;
       return false;

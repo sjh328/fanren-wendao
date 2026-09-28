@@ -50,11 +50,15 @@ const WorldSys = {
     }
     return w.market;
   },
-  /** 单件商品的行情系数：0.8 ~ 1.2，同 30 日内稳定（确定性哈希） */
+  /** 单件商品的行情系数：常态 0.8 ~ 1.2，通商季 0.75 ~ 1.25，同 30 日内稳定（确定性哈希）
+   *  v41（E440）：通商季波幅实装——E405「通商=行情 ±25%」原是假票（marketMul 恒 ±20%、从不读
+   *  tendency）；今季议倾向 trade 时波幅放宽至 ±25%（坊市页公示「通商季 · 行情更烈」归 B3/E468）。
+   *  price-audit 新增通商检测路同源断言：trade 季 mul∈[0.75,1.25] */
   marketMul(p, itemId) {
     const m = this.marketState(p);
     const h = Utils.hashStr(itemId + '@' + m.seed);
-    return 0.8 + (h % 1001) / 1000 * 0.4;
+    const trade = typeof SectSys !== 'undefined' && SectSys.tendency && SectSys.tendency(p) === 'trade';
+    return trade ? 0.75 + (h % 1001) / 1000 * 0.5 : 0.8 + (h % 1001) / 1000 * 0.4;
   },
   marketDaysLeft(p) {
     const m = this.marketState(p);
@@ -195,17 +199,49 @@ const WorldSys = {
       return;
     }
     if (ev.type === 'preach') {
-      const gain = Math.round(260 * GameData.eco(p.realmIdx));
-      Cultivate.addExp(p, gain);
-      Cultivate.addInsight(p, 15);   // v28：满百溢出折算修为
-      Time.add(10);
-      Log.add(`你在圣地一坐十日，听道音如饮甘露——修为 +${Utils.fmtNum(gain)}，突破感悟 +15。`, 'gain');
+      // v41（E440）：领奖事件取舍化——讲道：静参十日（修为感悟）或 抄录道音分赠同门（声望），零成本取舍
+      const c4 = await UI.popup({
+        title: '天下大事 · 圣地讲道',
+        html: '道音如缕，绕梁不散。十日光阴，你打算如何听？',
+        options: [
+          { text: '静参十日（修为与感悟）', value: 'self', primary: true },
+          { text: '抄录道音，分赠同门（声望）', value: 'share' },
+        ],
+      });
+      if (c4 === 'share') {
+        if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 4, '抄录道音分赠同门');
+        Cultivate.addInsight(p, 6, false);
+        Time.add(10);
+        Log.add(`你将十日所闻笔录成册，送与同门参详——同门称谢，你的名字也随之传开。（声望 +4，感悟 +6）`, 'gain');
+      } else {
+        const gain = Math.round(260 * GameData.eco(p.realmIdx));
+        Cultivate.addExp(p, gain);
+        Cultivate.addInsight(p, 15);   // v28：满百溢出折算修为
+        Time.add(10);
+        Log.add(`你在圣地一坐十日，听道音如饮甘露——修为 +${Utils.fmtNum(gain)}，突破感悟 +15。`, 'gain');
+      }
     } else if (ev.type === 'ruins') {
-      Bag.addItem('m_gupian', 2);
-      const stones = Math.round(60 * GameData.stoneEco(p.realmIdx));
-      Bag.addStones(stones);
-      Time.add(10);
-      Log.add(`你于现世秘境中寻得上古法宝碎片 ×2、灵石 ${Utils.fmtNum(stones)}。`, 'gain');
+      // v41（E440）：取舍——独探厚赏（碎片灵石归己）或 报官同门（贡献声望共有）
+      const c5 = await UI.popup({
+        title: '天下大事 · 上古秘境现世',
+        html: '秘境之门洞开，宝光隐现。你可以——',
+        options: [
+          { text: '独探厚赏（所获归己）', value: 'solo', primary: true },
+          { text: '报与宗门，同门共探（贡献）', value: 'report' },
+        ],
+      });
+      if (c5 === 'report') {
+        if (p.sect) p.sect.contrib += 120;
+        if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 2, '上报秘境机缘');
+        Time.add(5);
+        Log.add(`你把秘境的方位路径报与宗门——同门结队而入，满载而归。${p.sect ? '贡献 +120、' : ''}声望 +2。`, 'gain');
+      } else {
+        Bag.addItem('m_gupian', 2);
+        const stones = Math.round(60 * GameData.stoneEco(p.realmIdx));
+        Bag.addStones(stones);
+        Time.add(10);
+        Log.add(`你于现世秘境中寻得上古法宝碎片 ×2、灵石 ${Utils.fmtNum(stones)}。`, 'gain');
+      }
     } else if (ev.type === 'war') {
       // v34（E119）：不绑挚友——原从全部存活 NPC 随机抽敌（仅避道侣/结拜），rel≥70 的莫逆之交
       // 也可能被拖入死战、胜即结怨，社交资产遭无预警惩罚。现只从中立/敌对（rel<30）中抽。
@@ -224,17 +260,36 @@ const WorldSys = {
       Log.add(`你在战乱中辗转护送商旅，得灵石 ${Utils.fmtNum(stones)}。`, 'gain');
     } else if (ev.type === 'lingchao') {
       // v20 灵潮涌动：静坐采灵（时段加成已在修炼中生效）
-      const gain = Math.round(200 * GameData.eco(p.realmIdx));
-      Cultivate.addExp(p, gain);
-      Cultivate.addInsight(p, 8, false);
-      Time.add(10);
-      Log.add(`你在灵潮最盛处吐纳十日，经脉尽润——修为 +${Utils.fmtNum(gain)}，突破感悟 +8。`, 'gain');
+      // v41（E440）：取舍——吞潮速修（修为归己）或 引潮入阵（全门小惠）
+      const c6 = await UI.popup({
+        title: '天下大事 · 灵潮涌动',
+        html: '地脉灵潮奔涌而至，灵机如潮水般可掬。你可以——',
+        options: [
+          { text: '吞潮速修（修为归己）', value: 'self', primary: true },
+          { text: '引潮入阵，惠及全门（贡献）', value: 'array' },
+        ],
+      });
+      if (c6 === 'array') {
+        if (p.sect) p.sect.contrib += 100;
+        if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 1, '引潮入阵惠及全门');
+        Time.add(10);
+        Log.add(`你引灵潮入护山大阵，全门弟子这个月修行都顺当了些。${p.sect ? '贡献 +100、' : ''}声望 +1。`, 'gain');
+      } else {
+        const gain = Math.round(200 * GameData.eco(p.realmIdx));
+        Cultivate.addExp(p, gain);
+        Cultivate.addInsight(p, 8, false);
+        Time.add(10);
+        Log.add(`你在灵潮最盛处吐纳十日，经脉尽润——修为 +${Utils.fmtNum(gain)}，突破感悟 +8。`, 'gain');
+      }
     } else if (ev.type === 'beastwave') {
       // v20 兽潮：猎杀头兽
       const map = GameData.MAPS.find(m => m.id === ev.mapId) || GameData.MAPS[2];
       Log.add(`你奔赴${map.name}兽潮前线，与出山的群兽战作一团！`, 'event');
       const mid = Utils.pickWeighted(map.pool);
-      const en = buildMonster(mid, Math.max(0, p.realmIdx * 4 + 2 - GameData.MONSTERS[mid].power));
+      // v41（E452 修偏）：dPool 借用怪负偏移两侧同消费（原仅探索侧——天下大事侧按原生 power 参战，
+      // 雷池 r8 兽潮可掷出 rp+4 超带敌）；口径归一，与 explore.js 同式
+      const baseD = (map.dPool && map.dPool[mid]) || 0;
+      const en = buildMonster(mid, Math.max(0, p.realmIdx * 4 + 2 + baseD - GameData.MONSTERS[mid].power));
       en.hpMax = Math.round(en.hpMax * 1.3); en.atk = Math.round(en.atk * 1.2);
       en.expGain = Math.round(en.expGain * 1.8); en.stoneGain = Math.round(en.stoneGain * 2);
       en.hp = en.hpMax;
@@ -243,15 +298,33 @@ const WorldSys = {
       return;
     } else if (ev.type === 'zhongbao') {
       // v30 重宝现世：争夺战——胜者得宝
+      // v41（E440）：取舍——亲赴夺宝（一战定音）或 卖消息（转手风声，灵石落袋）
+      const c7 = await UI.popup({
+        title: '天下大事 · 重宝现世',
+        html: '一位散修偶得上古重宝，风声走漏，修士云集。你可以——',
+        options: [
+          { text: '亲赴夺宝（直入夺宝之地）', value: 'grab', primary: true },
+          { text: '卖消息（转手风声，静观其变）', value: 'sell' },
+        ],
+      });
+      if (c7 === 'sell') {
+        const stones5 = Math.round(90 * GameData.stoneEco(p.realmIdx));
+        Bag.addStones(stones5);
+        if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 1, '消息灵通');
+        Time.add(1);
+        Log.add(`你把重宝的风声卖给了几拨赶路的散修——灵石 ${Utils.fmtNum(stones5)} 落袋，至于他们谁夺得到，与你无关了。（声望 +1）`, 'gain');
+      } else {
       Log.add('重宝现世之地，修士云集。你循着灵光追至谷底，宝光之侧，已有人虎视眈眈。', 'event');
       const map = GameData.MAPS.find(m => m.id === ev.mapId) || GameData.MAPS[2];
       const mid = Utils.pickWeighted(map.pool);
-      const en = buildMonster(mid, Math.max(0, p.realmIdx * 4 + 1 - GameData.MONSTERS[mid].power), { elitePlus: true });
+      const baseD = (map.dPool && map.dPool[mid]) || 0;   // v41（E452 修偏）：dPool 负偏移两侧同消费（口径归一，同 beastwave）
+      const en = buildMonster(mid, Math.max(0, p.realmIdx * 4 + 1 + baseD - GameData.MONSTERS[mid].power), { elitePlus: true });
       en.hpMax = Math.round(en.hpMax * 1.3); en.hp = en.hpMax;
       en.expGain = Math.round(en.expGain * 1.5); en.stoneGain = Math.round(en.stoneGain * 1.5);
       Battle.start(null, { enemy: en, weType: 'zhongbao', mapName: '夺宝之地', dropMul: 1.5 });
       Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
       return;
+      }
     } else if (ev.type === 'neiluan') {
       // v30 宗门内乱：三选一
       Log.add('邻宗内乱的烽烟隔着山都能望见。有门人跪在山道边求援，也有人趁夜背着库房细软出逃。', 'event');
@@ -380,14 +453,30 @@ const WorldSys = {
       }
     } else if (ev.type === 'meteor') {
       // v20 陨星坠落：拾取星陨异宝
-      const tier = Utils.clamp(Math.floor(p.realmIdx / 2) + 2, 2, 4);
-      const mat = Utils.pick(GameData.matsByTier(tier));
-      Bag.addItem(mat, 2);
-      Bag.addItem('m_gupian', 1);
-      const stones4 = Math.round(60 * GameData.stoneEco(p.realmIdx));
-      Bag.addStones(stones4);
-      Time.add(10);
-      Log.add(`你在星陨坑中翻捡十日——得【${GameData.ITEMS[mat].name}】×2、上古法宝碎片 ×1、灵石 ${Utils.fmtNum(stones4)}。`, 'gain');
+      // v41（E440）：取舍——星陨之物自用 或 献于宗门（贡献声望）
+      const c8 = await UI.popup({
+        title: '天下大事 · 陨星坠落',
+        html: '星陨坑中天材地宝俯拾即是。你可以——',
+        options: [
+          { text: '自用（异宝归己）', value: 'keep', primary: true },
+          { text: '献于宗门（贡献声望）', value: 'dedicate' },
+        ],
+      });
+      if (c8 === 'dedicate') {
+        if (p.sect) p.sect.contrib += 150;
+        if (typeof RepSys !== 'undefined' && RepSys.add) RepSys.add(p, 3, '献星陨之物于宗门');
+        Time.add(5);
+        Log.add(`你把星陨坑中拾得之物尽数献于宗门库房——长老亲笔致谢。${p.sect ? '贡献 +150、' : ''}声望 +3。`, 'gain');
+      } else {
+        const tier = Utils.clamp(Math.floor(p.realmIdx / 2) + 2, 2, 4);
+        const mat = Utils.pick(GameData.matsByTier(tier));
+        Bag.addItem(mat, 2);
+        Bag.addItem('m_gupian', 1);
+        const stones4 = Math.round(60 * GameData.stoneEco(p.realmIdx));
+        Bag.addStones(stones4);
+        Time.add(10);
+        Log.add(`你在星陨坑中翻捡十日——得【${GameData.ITEMS[mat].name}】×2、上古法宝碎片 ×1、灵石 ${Utils.fmtNum(stones4)}。`, 'gain');
+      }
     }
     // v39（E360）：共历大事折好感——天下大事结算尾，在场相熟者交情 +2（随机 1~2 名）
     if (typeof NpcSys !== 'undefined' && NpcSys.comradesRelBonus) NpcSys.comradesRelBonus(p, '共历天下大事');

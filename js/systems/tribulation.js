@@ -129,6 +129,10 @@ const Tribulation = {
       const biOdds = Utils.clamp(Math.round(35 + spd * 1.5), 25, 85);
       const canYu = !!S.artifact || this.anyArmorArtifact(p);
       const hpCost = Math.max(1, Math.round(stNow.maxHp * 0.06));
+      // v41（E455）：前世感悟——渡过（无论成败）录 p.flags.tribOmens 后，二遇该劫象在对策按钮上
+      // 标注上回所用之策；首遇无标注（读侧 ||{} 兜底，零迁移）
+      const mem = (p.flags && p.flags.tribOmens) ? p.flags.tribOmens[om.id] : null;
+      const memNote = k => mem === k ? `<br><span style="color:var(--gold)">✦ 前世感悟：上回你以「${{ ying: '逆势承应', bi: '身法闪避', yu: '法宝御劫' }[k]}」渡此劫</span>` : '';
       document.getElementById('trib-box').innerHTML = `
       <div class="battle-head" style="color:var(--gold)">— ${S.xian ? '仙 劫' : '天 劫'} · 第 ${S.stageIdx + 1} / 3 重 —</div>
       <div class="card-desc" style="margin-bottom:6px">劫云翻卷，劫象已显——每一重皆须亲身应对：</div>
@@ -137,17 +141,17 @@ const Tribulation = {
         <button class="btn trib-opt" data-action="trib-stage" data-stage="ying" ${S.busy ? 'disabled' : ''}>
           <span class="trib-name">逆势承应</span>
           <span class="trib-chance">气血 -${hpCost} · 劫势 +1</span>
-          <span class="trib-note">以肉身硬撼此重劫威——胆气可嘉，渡劫成算每应一重 +2%（三重皆应者，功成得【根骨如渊】）</span>
+          <span class="trib-note">以肉身硬撼此重劫威——胆气可嘉，渡劫成算每应一重 +2%（三重皆应者，功成得【根骨如渊】）${memNote('ying')}</span>
         </button>
         <button class="btn trib-opt" data-action="trib-stage" data-stage="bi" ${S.busy ? 'disabled' : ''}>
           <span class="trib-name">身法闪避</span>
           <span class="trib-chance">成算 ${biOdds}%（身法 ${spd}）</span>
-          <span class="trib-note">以身法卸去此劫——成则无伤；失手则劫势 +2、小损气血（两重皆避者，道基虚浮）</span>
+          <span class="trib-note">以身法卸去此劫——成则无伤；失手则劫势 +2、小损气血（两重皆避者，道基虚浮）${memNote('bi')}</span>
         </button>
         <button class="btn trib-opt" data-action="trib-stage" data-stage="yu" ${S.busy || !canYu ? 'disabled' : ''} title="${canYu ? '' : '需持一件护身法宝（防具）'}">
           <span class="trib-name">法宝御劫</span>
           <span class="trib-chance">无得无失</span>
-          <span class="trib-note">祭护身法宝挡下此重——不耗不损（法宝本体留待三策定夺时再论）</span>
+          <span class="trib-note">祭护身法宝挡下此重——不耗不损（法宝本体留待三策定夺时再论）${memNote('yu')}</span>
         </button>
       </div>
       <div class="card-desc" style="margin-top:6px">当前劫势 <b class="hl">${S.stress || 0}</b>（劫势愈高，三策成算愈低）</div>
@@ -257,6 +261,13 @@ const Tribulation = {
       } else this.log(`宝光乍现，${om.name || '劫威'}之势被挡在丈许之外——有惊无险。`, 'log-system');
     }
     if (worst) { S.stress++; this.log(`错配下策——${om.name || '劫威'}性恶此道，劫势再 +1。`, 'log-loss'); }
+    // v41（E455）：渡过录册——无论本劫最终成败，凡亲身应对过的劫象皆录 p.flags.tribOmens（flags
+    // 既有容器子字段，读侧 ||{} 兜底，零迁移）；二遇同一劫象，对策按钮标「前世感悟」
+    if (om.id) {
+      p.flags = p.flags || {};
+      p.flags.tribOmens = p.flags.tribOmens || {};
+      p.flags.tribOmens[om.id] = a;
+    }
     S.stageIdx++;
     if (S.stageIdx >= 3) {
       const rootTxt = (S.yingN >= 3 || (S.perfectN || 0) >= 3) ? '劫象尽在掌握——若渡劫功成，可得【根骨如渊】厚赐（全属性再 +5%）'
@@ -354,7 +365,7 @@ const Tribulation = {
         return;
       }
       if (p.hp >= Stat.compute(p).maxHp * 0.999) { p.flags = p.flags || {}; p.flags.tribFullHp = true; }   // v20 无伤渡劫成就（判定须在回血前，且先于 st 声明避免 TDZ）
-      p.realmIdx++; p.layer = 0; p.exp = Math.min(Math.floor((p.expOverflow || 0) / 2), GameData.layerNeed(p.realmIdx, 0) - 1); p.insight = 0; p.insightSrc = []; p.expOverflow = 0;   // v37（E264）：感悟清零时来源 FIFO 池同步清空（双池一致）
+      p.realmIdx++; p.layer = 0; p.exp = Math.min(p.expOverflow || 0, GameData.layerNeed(p.realmIdx, 0) - 1); p.insight = 0; p.insightSrc = []; p.expOverflow = 0;   // v37（E264）：感悟清零时来源 FIFO 池同步清空（双池一致）；v41（E426）：溢流改全额结转（原折半暗扣已修）
       p.breakStreak = 0;   // v8 挫而愈坚：成功即清零
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;
@@ -530,7 +541,9 @@ const Tribulation = {
       if (ambushNpc) {
         p.pendingDao = true;
         await Utils.sleep(400);
-        Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambushNpc), npcId: ambushNpc, mode: 'hunt', ambush: true, mapName: '渡劫之地' });
+        // v41（E457）：偷袭敌补 fury 25——「趁虚而入」原走 buildEnemy 无 fury，实为全游戏最弱面板；
+        // ≈1.25× 威胁（npc.js fury 乘区现成，同雷台了断口径）仍可胜
+        Battle.start(null, { enemy: NpcSys.buildEnemy(p, ambushNpc, 25), npcId: ambushNpc, mode: 'hunt', ambush: true, mapName: '渡劫之地' });
         Game.afterAction();
       } else {
         p.pendingDao = true;

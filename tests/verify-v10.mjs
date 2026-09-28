@@ -962,7 +962,7 @@ try {
   const w8 = await page.evaluate(async () => {
     const p = Game.player;
     const today = Math.floor(p.day);
-    p.signDay = -1; p._autoRush = 'always'; p._restDay = today; p._wuDaoDay = today; p._sparCount = 3; p._wenjianDay = today;   // v38（E325）：预置跳过新增行，维持本段断言面
+    p.signDay = -1; p.ui = Object.assign({}, p.ui, { rush: 'always' }); p._restDay = today; p._wuDaoDay = today; p._sparCount = 3; p._wenjianDay = today;   // v38（E325）：预置跳过新增行，维持本段断言面；v41（E428）：聚灵偏好迁 p.ui.rush
     p.cave = { lv: 1, plots: [{ seed: 'seed_lingcao', crop: 'm_lingcao', days: 1, plantedDay: today - 3 }], builds: {} };
     p._restDay = Math.floor(p.day); p._wuDaoDay = Math.floor(p.day); p._sparCount = 3; p._wenjianDay = Math.floor(p.day);   // v38（E325）
     p.bounties = { day: Math.floor(p.day), list: [{ name: '测试悬赏', type: 'kill', target: 'm_lingcao', need: 1, progress: 1, desc: 'x', chain: 3 }] };   // v30：chain 3 为连锁终点（领完不再续，测试确定）
@@ -1184,11 +1184,12 @@ try {
     const day0 = p.day;
     const quest0 = JSON.parse(JSON.stringify(p.quest || {}));
     p.signDay = Math.floor(day0 / 30) * 30 + 1;    // 抵掉黄历提示
+    const dao0 = p.dao; if (!p.dao) p.dao = 'sword';   // v41（E429）建议区仅留 3 条——驳「大道未定」占位，保双奇市提示同框可断言
     p.day = Math.floor(day0 / 30) * 30 + 1;        // 月初一日 → 黑市开市 + 拍卖将止并存
-    p.auction = { item: 'w_sanqing', base: 1000, until: Math.floor(p.day) + 5 };
+    p.auction = { item: 'w_sanqing', base: 1000, until: Math.floor(p.day) + 2 };   // v41（E429③）：催办窗口 10→3 日，坏样例改 2 日后到期（窗口内方入建议）
     UI.renderStatus();
     const tip = (document.querySelector('.guide-box') || {}).innerText || '';
-    p.day = day0; p.quest = quest0;
+    p.day = day0; p.quest = quest0; p.dao = dao0;
     delete p.auction;
     UI.renderStatus();
     return { black: tip.includes('黑市'), auction: tip.includes('拍卖行'), tip: tip.slice(0, 100) };
@@ -1496,9 +1497,10 @@ try {
   const z17 = (() => {
     const wired = /离线修行/.test(fs.readFileSync('game.js', 'utf8'));
     const css = fs.readFileSync('style.css', 'utf8');
-    const safe = /env\(safe-area-inset-top, 0px\)\) 12px 8px/.test(css);   // v27：刘海避让并入顶栏 padding 简写
-    const sep = /\.tab-sep { display: none; }/.test(css);
-    const btn = /\.btn-sm { min-height: 42px; padding: 6px 10px; }/.test(css);
+    const safe = /calc\(var\(--sp-2\) \+ env\(safe-area-inset-top, 0px\)\) var\(--sp-3\)/.test(css);   // v27：刘海避让并入顶栏 padding；v41（E467）token 化随动（var 间距阶）
+    const sep = /\.tab-sep \{ display: none; \}/.test(css);
+    const btn = /\.btn-sm \{ font-size: 13px; padding: var\(--sp-15\) var\(--sp-3\); min-height: 32px;/.test(css)
+      && /\.btn-sm \{ min-height: 42px;/.test(css);   // v41（E467）token 化：基础触控目标 + 移动端 42px 保底双在
     return { wired, safe, sep, btn };
   })();
   z17.wired && z17.safe && z17.sep && z17.btn

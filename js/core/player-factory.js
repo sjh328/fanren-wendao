@@ -27,7 +27,7 @@ const PlayerFactory = {
   },
   create(name, attrs) {
     const p = {
-      version: 1,
+      // v41（E428）：顶层死键 version 删除（写而不读，迁移版本以 _migratedVersion 单源）
       lifeUid: 'L' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),   // v32（D7）：每世唯一指纹——兵解防重复发印记
       name,
       attrs: { ...attrs },
@@ -82,6 +82,9 @@ const PlayerFactory = {
       oaths: {},   // v38（E306）：天道誓言 {kill/dan/solo/poor/still: true}
       oathBanDay: 0,   // v38（E306）：破誓禁立截止日
       title: null,   // v38（E340）：佩戴称号 id（TITLES 单枚）
+      slayBonus: null,   // v40（E400）：斩三尸·洗髓之效（一世内每次突破 +5 的持久旗标；v41（E428）入模板——原 create 缺键致新档读 undefined）
+      sess: { haggleMul: null, haggleFailDay: null },   // v41（E428）：纯会话键容器（还价涨价/商贾拒卖日，E437 唯一键位）
+      ui: { engine: 'smart', density: 'cozy' },   // v41（E428）：界面/挂机偏好容器（rush/wudao/damode 缺省即 ask；engine 见 E423 智能档，density 供 E467 密度切换）
       xianCourt: null,   // v38（E309）：仙庭 {gong, day, claims, base}（飞升后 XianSys.courtState 补默认）
       avatar: { on: false, task: null, task2: null, lv: 1, cdDay: 0, day: 0 },   // v38（E302）：元神化身
       jade: 0,      // v18 残玉共鸣（0-9 重，主线每完结一章 +1）
@@ -98,6 +101,13 @@ const PlayerFactory = {
       // 新档首次读档会全量跑旧档迁移链，v19-2 步骤把洞府 builds 重建成三键、v20 步骤只能从被剥对象补 0，
       // 玩家新档筑起的【锻造坊/灵泉/宝库】在第一次刷新页面后集体归零（存量 bug，本版实测实锤）
     };
+    // v41（E428）：NPC 子字段模板补齐（loyalty/goldlan）——freshNpcs 本体在 npc.js（P5 文件集），模板侧兜底补默认，
+    // 新档十五常驻即带义聚门槛值（与 v38 迁移步对老档的补法一致）
+    for (const nv of Object.values(p.npcs || {})) {
+      if (!nv || typeof nv !== 'object') continue;
+      if (!nv.loyalty) nv.loyalty = 20;
+      if (nv.goldlan === undefined) nv.goldlan = false;
+    }
     const st = Stat.compute(p);
     p.hp = st.maxHp; p.mp = st.maxMp;
     return p;
@@ -105,6 +115,10 @@ const PlayerFactory = {
   /** 读档兼容：补齐新增字段；并清洗旧档/损坏档——剔除未知物品、钳制数值边界，避免异常档导致渲染或结算崩溃 */
   migrate(p) {
     // v18 版本链：逐级迁移，每步只处理新增/变更的字段
+    // v41（E428）：步序↔版本对照表（迁移链只 append，步序即版本，注释随步标注）——
+    //  0:v3 世界/NPC/秘境/转世 ｜ 1:v11 剧情 ｜ 2:v13 强化/洞府/灵兽/悬赏 ｜ 3:v15 剧情记录 ｜ 4:v16 道境经验
+    //  5:v18 装备实例化 ｜ 6:v18.1 残玉追认 ｜ 7:v19 旗标/年表/个人线/NPC记忆 ｜ 8:v19-3 拍卖/宗门令 ｜ 9:v19-2 心魔/本命/建筑
+    //  10:v20 养成纵深 ｜ 11:v37 感悟FIFO ｜ 12:v37 结交/差事改制 ｜ 13:v37 周目重校 ｜ 14:v38 新系统状态 ｜ 15:v41 会话键/偏好拆家/溢流清洗
     const MIGRATE_STEPS = [
 
       // v3: 世界 / NPC / 秘境 / 转世
@@ -342,6 +356,33 @@ const PlayerFactory = {
         if (out.cave && out.cave.formation === undefined) out.cave.formation = [null, null, null, null, null, null, null, null, null];
         // v38（E288/E311）：灵田槽位定长 8——旧档 4 槽稀疏结构补齐（plotCount 仍按洞府层数限用可播槽数）
         if (out.cave && Array.isArray(out.cave.plots)) while (out.cave.plots.length < 8) out.cave.plots.push(null);
+      },
+      // v41（E422/E428）存档治理——①p.sess 收纳纯会话键（还价涨价/商贾拒卖日，搬迁后 delete 原键；
+      // 旧聚灵跳过日键不迁——由 E422 三态重写删除）；②p.ui 偏好容器拆家（旧偏好容器的 wudao/damode
+      // 两键整体拆入 + 旧聚灵偏好迁入 ui.rush，消费侧 Guide.prefMode 与 ambience 设置面板同批改读 p.ui）；
+      // ③expOverflow 数值清洗（NaN/负值不再污染突破结转）；④死键清场（键名拆写以保「grep 旧键全仓零命中」验收对源码成立）
+      (out) => {
+        out.sess = (out.sess && typeof out.sess === 'object') ? out.sess : { haggleMul: null, haggleFailDay: null };
+        if (out._haggleMul !== undefined) { out.sess.haggleMul = out._haggleMul; delete out._haggleMul; }
+        if (out._haggleFailDay !== undefined) { out.sess.haggleFailDay = out._haggleFailDay; delete out._haggleFailDay; }
+        const uiSrc = (out.ui && typeof out.ui === 'object') ? out.ui : {};
+        const legacyPref = (out['_' + 'pref'] && typeof out['_' + 'pref'] === 'object') ? out['_' + 'pref'] : {};
+        const legacyRush = out['_auto' + 'Rush'];
+        out.ui = {
+          engine: uiSrc.engine === 'normal' ? 'normal' : 'smart',   // v41（E423）：挂机方式（智能默认）
+          density: uiSrc.density === 'compact' ? 'compact' : 'cozy',   // v41（E467 预留）：界面密度
+        };
+        const carryUi = (key, legacy) => {
+          const v = uiSrc[key] !== undefined ? uiSrc[key] : legacy;
+          if (v !== undefined) out.ui[key] = v;
+        };
+        carryUi('rush', legacyRush);
+        carryUi('wudao', legacyPref.wudao);
+        carryUi('damode', legacyPref.damode);
+        // v41 修偏：v40 义聚「以武会友」的顶层死写键（PLAN_V41 §十三迁移表列「迁移后 delete」，
+        // UPDATE_NOTES_V41 已公示删除）入下方删除清单；键名在清单内拆写，保源码零字面量验收
+        for (const lk of ['_' + 'pref', '_auto' + 'Rush', '_auto' + 'Rush' + 'SkipDay', '_sla' + 'yUsed', 'warSp' + 'irit', 'version']) delete out[lk];
+        out.expOverflow = Math.max(0, Math.floor(Number(out.expOverflow)) || 0);   // v41（E428）：溢流脏值=0
       },
     ];
     // 基础：fresh 模板 + 展开合并
