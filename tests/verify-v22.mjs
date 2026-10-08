@@ -621,7 +621,7 @@ try {
     const p = Game.player;
     const savedXj = p.xianjie, savedFlags = p.flags, savedReinc = p.reinc;
     const savedLegacy = JSON.parse(JSON.stringify(ReincarnationSys.readLegacy()));   // legacy 一并快照——daozuCheck→grantMarks 写 legacy.marksEarned，RB14 的 marks 是其镜像
-    p.xianjie = { idx: 5, layer: 3 }; p.flags = { daozu: false };
+    p.xianjie = { idx: 5, layer: 3, worlds: [{ land: 'a', vein: 'b', life: 'c', name: '复算界', era: 3, createdDay: 1, lastTickDay: 1 }] }; p.flags = { daozu: false };   // v42（E528·P3 整合）：E520 证道祖三纪门槛随动
     p.reinc = { lives: 0, marks: 0, compPct: 0, grudges: [], firstLife: true };
     XianSys.daozuCheck(p);   // 证道结算（Log → realmShow 演出 → announce → chron）
     out.settled = p.flags.daozu === true;   // 结算行先落（flags 已置）
@@ -638,7 +638,7 @@ try {
   const rB8 = await page.evaluate(async () => {
     const out = {};
     const p = Game.player;
-    const op = UI.popup; UI.popup = async () => true;
+    const op = UI.popup; UI.popup = async (o) => (o && o.title && String(o.title).includes('纳财')) ? 'stone' : true;   // v42（E528·P3 整合）：E511 纳财卦象化——确定应答「灵石卦」防贪卦 25% 扣押随机性
     try {
       p.day = 500; p._settleDay = 500;
       p.counters.towerWins = 1000;

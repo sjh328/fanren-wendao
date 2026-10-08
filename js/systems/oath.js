@@ -192,14 +192,26 @@ const OathSys = {
       keepTxt: '你双手拢袖：「心意领了，只是我行路惯了独身。」——雨停，各自上路。（气运 +1）',
       keep: (p) => { KarmaSys.addFortune(1, true); },
     },
+    // v42（E517）：dan 誓试炼补全——「重伤垂危之际唯有丹药可续」守/破抉择（守=硬抗失血、
+    // 破=服丹破誓走 oathBanDay 既有通道）；poor 誓无试炼豁免在 trialCheck 注明（贫誓自有
+    // poorCheck 每日清算，积蓄超限即审，不另设季度试炼）
+    dan: {
+      title: '重伤垂危', oath: '辟谷丹誓',
+      text: '山道夜雨，你撞见一桩仇杀的尾声——溅了一身血，内腑震伤，气血折损不少。<br>怀中那枚疗伤丹是唯一能续命的东西，可辟谷丹誓在身：服丹，誓碎；不服，这一夜能不能扛过去，只有天知道。',
+      breakTxt: '「命要紧，还是誓要紧？」你摸出了那枚疗伤丹——誓言碎在药香里。',
+      keepTxt: '你把丹瓶推远，硬生生抗过一阵眩晕——气血折损三成，道心却如淬火。（气运 +2）',
+      keep: (p) => { p.hp = Math.max(1, p.hp - Math.round(Stat.compute(p).maxHp * 0.3)); KarmaSys.addFortune(2, true); },
+    },
   },
-  /** 誓约试炼节拍：三誓（不杀/止戈/独行）各配季度试炼，每季每誓 ≤1 次；auto 静默默认守誓 */
+  /** 誓约试炼节拍：四誓（不杀/止戈/独行/辟谷丹）各配季度试炼，每季每誓 ≤1 次；auto 静默默认守誓。
+   *  v42（E517）：dan 入列补全（五誓覆盖 4/5）；poor 誓显式豁免——贫誓已有 poorCheck 清算
+   * （afterAction 尾积蓄超限即审），季度试炼对它只会重复开审，故不设。 */
   trialCheck(p, auto = false) {
     if (!p || p.dead || !p.oaths) return;
     if (!auto && (Battle.active || Story.active() || UI._popupResolve)) return;
     const key = this.trialKey(p);
     p.oaths.trial = p.oaths.trial || {};
-    for (const id of ['kill', 'still', 'solo']) {
+    for (const id of ['kill', 'still', 'solo', 'dan']) {
       if (!this.active(p, id) || p.oaths.trial[id + '#' + key]) continue;
       p.oaths.trial[id + '#' + key] = true;   // 置位在前防重入；守/破皆自此走一次性通道
       if (auto) {
@@ -221,7 +233,7 @@ const OathSys = {
       title: `誓约试炼 · ${t.title}`,
       html: `${t.text}<br><span class="tip-line">· 持守 <b>${this.NAMES[id]}</b> 中——守誓大赏一次性入账；破誓代价走天道旧例（心魔 +15、气运 -20、${this.BAN_DAYS} 日禁立）。</span>`,
       options: [
-        { text: `守住誓言（${id === 'kill' ? '放行失赏，气运 +2' : id === 'still' ? '忍下，悟性 +1' : '婉拒，气运 +1'}）`, value: 'keep', primary: true },
+        { text: `守住誓言（${id === 'kill' ? '放行失赏，气运 +2' : id === 'still' ? '忍下，悟性 +1' : id === 'dan' ? '硬抗失血，气运 +2' : '婉拒，气运 +1'}）`, value: 'keep', primary: true },
         { text: '破誓', value: 'break' },
       ],
     });

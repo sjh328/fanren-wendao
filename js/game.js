@@ -34,9 +34,10 @@ const Game = {
       if (fn) {
         if (el._busy) return;   // v24 防重入：同一按钮上一笔尚未结清时忽略连点
         el._busy = true;
+        this._userActing = true;   // v42（E506）：玩家点击语境标记——挂机热路径渲染增量只对无人值守轮生效
         try { await fn(el.dataset, el); }
         catch (err) { console.error('动作执行出错:', el.dataset.action, err && err.stack || err); UI.toast('操作出了点问题，请重试', true); }
-        finally { el._busy = false; }
+        finally { el._busy = false; this._userActing = false; }
       }
     });
     // v24 折叠开合记忆：toggle 不冒泡，用捕获监听统一记账
@@ -275,6 +276,9 @@ const Game = {
     // v27 修瑕：不再回拨熟期——作物按真实日数自然生长与过熟（原 Math.max 回拨让
     // 「过熟廿日减半」的规则在长离线下永远无法成立）
     const offlineCrops = (p.cave && p.cave.plots || []).filter(pl => pl && pl.seed).length;
+    // v42（E505）：离线静默语境自此全程置位（含其后的修为折算 addExp——离线升级若在此弹顿悟三选
+    // 即为回归； Cultivate.promptInsight 读此标自动取凝神）
+    this._offlineReplaying = true;
     // v24 离线修行：放置游戏名实相符——离线期间行功不辍，修为按折算效率入账（不冲关、不积丹毒）
     // v30 修瑕：折算剔除聚灵加速（rushDay 只是在线单日增益，曾把整段离线一并放大五成）
     // v34（A4）：效率 0.4→0.6——在线挂机每 0.28s 推 3 日，旧参数下挂夜 8 小时只得 12 有效日，
@@ -294,13 +298,16 @@ const Game = {
         // UI.FACTS.offlineEff 与 verify 断言随版更新，增益已并入「增益明示」）
         // v39（E346）：窗口长度改消费 CaveSys.RUSH_WINDOW() 单源（洞天灵潮 4 日离线同享）
         const OFFLINE_EFF = 0.85;   // 离线折算效率（v34 A4 定档 0.6；v40 E393 上调 0.85）
+        // v42（E502）：离线折算按「周天」口径——行功路线单源 Cultivate.MEDIT_ROUTES.zhoutian.mult
+        //（离线固定走周天不弹选；OFFLINE_EFF 本体不动，周天倍率单源计价）
+        const routeMul = (typeof Cultivate !== 'undefined' && Cultivate.MEDIT_ROUTES) ? (Cultivate.MEDIT_ROUTES.zhoutian.mult || 1) : 1;
         let rushMul = 1;
         if (p.rushDay != null) {
           const rushLeft = Utils.clamp(p.rushDay + CaveSys.RUSH_WINDOW() - Math.floor(p.day || 0), 0, realDays);
           if (rushLeft > 0) rushMul = (realDays + 0.5 * rushLeft) / realDays;
         }
-        offlineExp = Math.round(perRound / 3 * OFFLINE_EFF * rushMul * realDays);
-        offlineBase = Math.round(perRound / 3 * OFFLINE_EFF * realDays);
+        offlineExp = Math.round(perRound / 3 * OFFLINE_EFF * rushMul * realDays * routeMul);
+        offlineBase = Math.round(perRound / 3 * OFFLINE_EFF * realDays * routeMul);
         offlineRushBonus = Math.max(0, offlineExp - offlineBase);
         if (offlineExp > 0) Cultivate.addExp(p, offlineExp);
       } catch (err) { console.error('离线修行折算异常:', err); offlineExp = 0; offlineBase = 0; offlineRushBonus = 0; }
@@ -319,14 +326,18 @@ const Game = {
       this.dailySettle(p, true);
       const aggNow = this._offlineAgg || {};
       const yr = Math.floor((p.day || 0) / 365) + 1;
-      const yb = offlineYears[yr] = offlineYears[yr] || { spring: 0, disciple: 0, xianVisit: 0, avatarExp: 0, avatarStones: 0, nightRaid: 0, oathGather: 0, oathGatherGoldlan: 0, oathTrial: 0 };   // v41 修偏：补 E445②/E451 oath 三键（原聚合入档却零出口）
+      const yb = offlineYears[yr] = offlineYears[yr] || { spring: 0, disciple: 0, xianVisit: 0, avatarExp: 0, avatarStones: 0, nightRaid: 0, oathGather: 0, oathGatherGoldlan: 0, oathTrial: 0, subworld: 0 };   // v41 修偏：补 E445②/E451 oath 三键；v42（E520）：subworld 纪年键
       for (const k of Object.keys(yb)) yb[k] += Math.max(0, (aggNow[k] || 0) - (prevDayAgg[k] || 0));
       prevDayAgg = { ...aggNow };
     }
+    this._offlineReplaying = false;   // v42（E505）：回放结束即摘标
     this._offlineYearRows = offlineYears;
     p._settleDay = Math.floor(p.day || 0);   // v33（E81）：回放已逐日补结——原不同步 _settleDay，读档后首次行动再补结一轮（至多 30 次冗余日结，全靠各钩子日界防重兜底）
     const aggSnap = Object.assign({}, this._offlineAgg);   // v34（E1）：快照聚合（flush 会清空）
     this.flushOfflineAgg();
+    // v42（E503）：离线归乡包——按真实时长分档确定性发放（材料包 + 感悟 + ≥4h 档故人来信），
+    // p.flags.homecoming 记录所依据的存档 ts 防同次离线重领；auto 静默入离线小结零弹窗
+    const homePack = this.offlineHomecoming(p, elapsedMs / 3600000, data.meta.ts);
     // v34（E125）：文案笔误——「个时辰」实为日、「裡」为繁体混入
     if (offlineCrops > 0) {
       Log.add(`你不在的${realDays}日里，灵田中的${offlineCrops}块作物并未荒废——它们仍在生长。`, 'info');
@@ -334,7 +345,7 @@ const Game = {
     if (springOn && !p.dead) Log.add('【灵泉】离线的日子里，洞府灵泉照常日日涌出灵石，皆已收入储物袋。', 'gain');
     if (offlineExp > 0) {
       // v37（E277）：口径引 UI.FACTS 单源拼串；聚灵加护段随补乘明示
-      Log.add(`离山的日子你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（按${UI.FACTS.offlineEff}效率折算，不计闭关加成，共 ${realDays} 日${offlineRushBonus > 0 ? `；聚灵加护 +${Utils.fmtNum(offlineRushBonus)}` : ''}）。`, 'gain');   // v36（E217）：口径如实——闭关流实得落差从暗亏变明示
+      Log.add(`离山的日子你行功不辍——修为自行精进 <b>+${Utils.fmtNum(offlineExp)}</b>（按${UI.FACTS.offlineEff}效率折算，不计闭关加成，行功走周天，共 ${realDays} 日${offlineRushBonus > 0 ? `；聚灵加护 +${Utils.fmtNum(offlineRushBonus)}` : ''}）。`, 'gain');   // v36（E217）：口径如实——闭关流实得落差从暗亏变明示；v42（E502）：行功路线口径随明示
     }
     // v34（E1）：离线小结——回家一份四行账的「仪式」，收益不再藏在默认折叠的日志红点后
     if (!p.dead && realDays >= 1 && (offlineExp > 0 || aggSnap.spring || aggSnap.disciple || aggSnap.xianVisit || aggSnap.avatarExp || aggSnap.avatarStones || aggSnap.nightRaid || aggSnap.oathGather || aggSnap.oathTrial)) {   // v41 修偏：义聚/守誓独发亦出小结面板
@@ -350,6 +361,8 @@ const Game = {
           [`修行精进（基础）`, `<b class="hl">+${Utils.fmtNum(offlineBase)}</b> 修为`],
           [`聚灵加护`, `<b class="hl">+${Utils.fmtNum(offlineRushBonus)}</b> 修为`],
         ] : [[`修行精进`, `<b class="hl">+${Utils.fmtNum(offlineExp)}</b> 修为`]]) : []),
+        // v42（E503）：归乡包入小结——灵石/感悟/来信一并列明
+        ...(homePack ? [[`归乡包`, `<b class="hl">灵石 +${Utils.fmtNum(homePack.stones)}</b>、感悟 +${homePack.insight}${homePack.letter ? '、故人来信一封' : ''}`]] : []),
       ];
       if (byYear) {
         for (const [yr, yb] of yList) {
@@ -390,9 +403,10 @@ const Game = {
   },
 
   /** v41（E464）：云归见闻闸门——离线 ≥7 日归来 30% 概率一场归途三选一（每次归来至多一场）；
-   *  挂机/自动化静默语境不弹窗，取首项入日志（「auto 零弹窗入日报」） */
+   *  挂机/自动化静默语境不弹窗，取首项入日志（「auto 零弹窗入日报」）
+   *  v42（E503）：30% 随机改必发——离线 ≥7 日归来必遇归途见闻（确定性小惊喜） */
   cloudReturnGate(p, realDays) {
-    if (!p || p.dead || realDays < 7 || !Utils.chance(30)) return;
+    if (!p || p.dead || realDays < 7) return;
     this.cloudReturnTale(p, realDays);
   },
 
@@ -429,6 +443,101 @@ const Game = {
     { title: '亭中旧客', text: '半路凉亭里有位旧客在煮茶，见你来，也不多问，只推过来一盏：「远行归来的人，先饮一口热的。」' },
     { title: '集市新声', text: '山下的集市比走时热闹了些，孩童们传唱着一支新谣——细听，唱的竟是修行人的故事，词里还隐约有个熟悉的影子。' },
   ],
+
+  /** v42（E503）：离线归乡包分档表——按离线真实小时确定性发放（契约十一新签名 Game.offlineHomecoming(p, realHours)）：
+   *  材料包 = stoneEco(r)×档位倍数 + 感悟 +2/5/8/12 + 一封故人来信（≥4h 档必发）。
+   *  8h 锚 = stoneEco(r)×20 + 感悟 8（verify 复算锚）；离线修为折算口径不变（OFFLINE_EFF 0.85/240 不动）。 */
+  HOMECOMING_TIERS: [
+    { minHours: 24, mul: 40, insight: 12, letter: true },
+    { minHours: 8, mul: 20, insight: 8, letter: true },
+    { minHours: 4, mul: 10, insight: 5, letter: true },
+    { minHours: 1, mul: 4, insight: 2, letter: false },
+  ],
+  /** v42（E503）：归乡包发放——p.flags.homecoming 记录发放所依据的存档 ts，同一次离线（同 ts）不重复发放。 */
+  offlineHomecoming(p, realHours, tsBasis) {
+    if (!p || p.dead || !(realHours >= 1)) return null;
+    p.flags = p.flags || {};
+    if (tsBasis && p.flags.homecoming === tsBasis) return null;   // 同次离线防重领
+    const tier = this.HOMECOMING_TIERS.find(t => realHours >= t.minHours);
+    if (!tier) return null;
+    const stones = Math.round(tier.mul * GameData.stoneEco(p.realmIdx || 0));
+    Bag.addStones(stones);
+    Cultivate.addInsight(p, tier.insight);
+    p.flags.homecoming = tsBasis || 1;
+    const letter = tier.letter ? this.homecomingLetter(p, tsBasis || 0) : '';
+    Log.add(`离山归家，乡邻故旧为你接风——<b>归乡包</b>：灵石 +${Utils.fmtNum(stones)}、突破感悟 +${tier.insight}。`, 'gain');
+    return { stones, insight: tier.insight, letter: !!letter };
+  },
+  /** v42（E503）：归乡来信——用现成 mem/交情数据选一位故人（道侣 > 结拜 > 相识者中交情最高者），
+   *  按关系与存档 ts 哈希确定性取句，日志一封短笺。 */
+  HOMECOMING_LETTERS: {
+    daolv: ['一路问道，山高水长。家中诸事我都照看着，你安心赶路，累了便回来。——道侣手书', '炉上煨着你惯饮的灵茶。归期不必赶，人安就好。——道侣手书'],
+    jinlan: ['兄弟远行，坛中酒给你留着。听闻你一路顺遂，痛快！归来再醉一场。——结拜手书', '山门一切如旧，惟你不在，演武场冷清了些。早归。——结拜手书'],
+    guren: ['闻君远游将归，坊市新到几味灵材，留了一手消息与你。——故人手书', '山雨初歇，你那亩灵田收成不错——回来记得请茶。——故人手书'],
+  },
+  homecomingLetter(p, tsBasis) {
+    const cand = [];
+    if (p.partner && p.npcs && p.npcs[p.partner]) cand.push({ id: p.partner, kind: 'daolv', rel: 999 });
+    (p.sworn || []).forEach(id => { if (p.npcs && p.npcs[id]) cand.push({ id, kind: 'jinlan', rel: (p.npcs[id].rel || 0) + 50 }); });
+    // v42（E503）：≥4h 必发——无相识者时回落到在世常驻修士（未谋面者 rel −100 排末位，仅在无人可书时启用）
+    Object.keys(p.npcs || {}).forEach(id => { const s = p.npcs[id]; if (s && s.alive) cand.push({ id, kind: 'guren', rel: (s.rel || 0) + (s.met ? 0 : -100) }); });
+    if (!cand.length) return '';
+    cand.sort((a, b) => b.rel - a.rel);
+    const who = cand[0];
+    const pool = this.HOMECOMING_LETTERS[who.kind];
+    const def = (typeof NpcSys !== 'undefined' && NpcSys.def) ? (NpcSys.def(who.id) || {}) : {};
+    const line = pool[Math.abs(tsBasis || 0) % pool.length];
+    Log.add(`【故人来信】${Utils.esc(def.name || '故人')}：${line}`, 'event');
+    return def.name || '故人';
+  },
+
+  /** v42（E506）：挂机热路径 textContent 级补丁（保守版）——只原地刷新顶栏与左侧核心条的数字/资源条
+   *  （data-nk 单点寻址 + 稳定结构选择器），长列表（页签内容/背包/页签钮/道行芯片）不重建，
+   *  由每 10 轮的全量校准渲染兜底。仅原地改值不发渲染，选择器依赖 renderTop/renderStatus 既有形态。 */
+  idlePatch(p) {
+    const st = Stat.compute(p);
+    const need = GameData.layerNeedT(p, p.realmIdx, p.layer);
+    const vals = {
+      'stones.low': [p.stones.low, true], 'stones.mid': [p.stones.mid, true], 'stones.high': [p.stones.high, true],
+      'hp': [Math.round(p.hp), false], 'mp': [Math.round(p.mp), false], 'exp': [Math.round(p.exp), true],
+      'contrib': [p.sect ? p.sect.contrib : 0, false],
+    };
+    for (const boxId of ['top-info', 'panel-left']) {
+      const box = document.getElementById(boxId);
+      if (!box) continue;
+      box.querySelectorAll('.num-anim[data-nk]').forEach(el => {
+        const hit = vals[el.dataset.nk];
+        if (!hit) return;
+        const v = hit[0];
+        if (String(el.dataset.nv) === String(v)) return;
+        el.dataset.nv = v;
+        el.textContent = hit[1] ? Utils.fmtNum(v) : String(v);
+      });
+    }
+    // 资源条：顶栏迷你双条（气血/修为）+ 左侧核心三条（hp/mp/exp）——宽度与百分比原地刷新
+    const top = document.getElementById('top-info');
+    const mini = top && top.querySelector('.m-mini-bars');
+    if (mini) {
+      const setW = (el, pct) => { if (el && el.firstElementChild) el.firstElementChild.style.width = pct + '%'; };
+      setW(mini.querySelector('.mini-bar.hp'), Utils.clamp(p.hp / st.maxHp * 100, 0, 100));
+      setW(mini.querySelector('.mini-bar.exp'), Utils.clamp(p.exp / need * 100, 0, 100));
+    }
+    const left = document.getElementById('panel-left');
+    if (left) {
+      const coreBar = (cls, val, max) => {
+        const fill = left.querySelector('.bar-fill.' + cls);
+        if (!fill || !max) return;
+        const pct = Utils.clamp(val / max * 100, 0, 100);
+        fill.style.width = pct + '%';
+        if (cls === 'hp') fill.classList.toggle('low', val / max <= 0.3);
+        const txt = fill.parentElement && fill.parentElement.querySelector('.bar-text');
+        if (txt) { txt.textContent = Math.round(pct) + '%'; txt.classList.toggle('dim', val <= 0); }
+      };
+      coreBar('hp', p.hp, st.maxHp);
+      coreBar('mp', p.mp, st.maxMp);
+      coreBar('exp', p.exp, need);
+    }
+  },
 
   /** v27：每日例行结算（行动收尾与离线回放共用）——所有子项内部自带日界防重，重复调用无副作用。
    *  auto=离线回放模式：节庆自动从简（不弹窗不开战）、访客/灵泉不回环 afterAction、
@@ -468,6 +577,7 @@ const Game = {
     try { if (typeof Codex !== 'undefined' && Codex.checkRewards) Codex.checkRewards(); } catch (err) { console.error('图鉴检查异常:', err); }
     try { if (typeof XianSys !== 'undefined' && XianSys.dailyCheck) XianSys.dailyCheck(p, auto); } catch (err) { console.error('仙界访客异常:', err); }   // v31：仙界访客（入仙籍后，离线静默入账）
     try { if (typeof XianSys !== 'undefined' && XianSys.courtDaily) XianSys.courtDaily(p, auto); } catch (err) { console.error('仙庭差遣异常:', err); }   // v38（E309）：仙庭差遣换日 + 心魔罢黜
+    try { if (typeof XianSys !== 'undefined' && XianSys.subworldTick) XianSys.subworldTick(p, auto); } catch (err) { console.error('小世界纪年异常:', err); }   // v42（E520）：小世界纪年（每 30 日一纪，产出随纪年成长）
     try { if (typeof AvatarSys !== 'undefined' && AvatarSys.daily) AvatarSys.daily(p, auto); } catch (err) { console.error('化身行功异常:', err); }   // v38（E302/E327）：化身逐日行功（离线同源同量）
     try { if (typeof CaveSys !== 'undefined' && CaveSys.nightRaidCheck) CaveSys.nightRaidCheck(p, auto); } catch (err) { console.error('夜袭检查异常:', err); }   // v38（E305）：宿敌夜袭（离线自动结算）
     // v41（E429④）：每日一句——按当日大事（突破/斩获/邂逅/亏空）从 DAO_FLAVOR 拼一句入日志（内建日界防重）
@@ -521,6 +631,7 @@ const Game = {
     if (agg.nightRaid) parts.push(`洞府遭夜袭 ${agg.nightRaid} 次（胜负已分，详情见日志）`);
     if (agg.oathGather) parts.push(`义聚补聚 ${agg.oathGather} 场${agg.oathGatherGoldlan ? `、金兰缔结 ${agg.oathGatherGoldlan} 次` : ''}`);   // v41 修偏：E445② 写侧「聚合入日报」承诺自此兑现
     if (agg.oathTrial) parts.push(`誓约试炼守誓 ${agg.oathTrial} 次`);   // v41 修偏：E451 auto 守誓同上
+    if (agg.subworld) parts.push(`小世界历纪 ${agg.subworld} 纪（所得入账）`);   // v42（E520）：小世界纪年入日报
     if (parts.length) Log.add(`${title}${parts.join('；')}。`, 'info');
     this._offlineAgg = null;
   },
@@ -539,8 +650,8 @@ const Game = {
     Save.snapshotAuto();   // v30：滚动快照——本次会话前的 auto 存一份 bak2
     // v37（E268）：纯挂机长会话兜底——每 10 分钟滚动一次 bak2（注意 setInterval 参数 fn 在前；
     // 句柄存 Game._snapTimer，exitToStart/删档时清理防多开泄漏）
-    if (this._snapTimer) clearInterval(this._snapTimer);
-    this._snapTimer = setInterval(() => Save.snapshotAuto(), 600000);
+    if (Game._snapTimer) clearInterval(Game._snapTimer);   // v42（E525·P3 整合）：写点统一 Game. 直引——对齐 actions 表写法，杜绝 this≠Game 死守卫同类陷阱
+    Game._snapTimer = setInterval(() => Save.snapshotAuto(), 600000);
     // v41（E434/E439）：读档/新档 materialize——拍期已过即滚茬、寄售到期即结算（写侧主动口，
     // 此后渲染层 state() 恒纯读，「读档+拍期已过 tips 两次渲染一致」由本口保证）
     try { if (typeof AuctionSys !== 'undefined' && AuctionSys.ensure) AuctionSys.ensure(this.player); } catch (err) { console.error('拍卖滚茬异常:', err); }
@@ -579,7 +690,7 @@ const Game = {
     UI.closeOverlays();   // 状态同步：清掉战斗 / 弹窗等覆盖层，避免遮罩滞留
     AutoCult.abort();   // v6
     this._snapAt = null;   // v39（E365）：bak2 首拍重臂——换档/删档后会话首拍保护重新生效（save.js 口径）
-    if (this._snapTimer) { clearInterval(this._snapTimer); this._snapTimer = null; }   // v37（E268）：滚动快照定时器随会话清理
+    if (Game._snapTimer) { clearInterval(Game._snapTimer); Game._snapTimer = null; }   // v42（E525·P3 整合）：滚动快照定时器随会话清理（v37 建链，写点统一 Game. 直引）
     if (this.player && !this.player.dead) Save.autoSave(true);
     this.player = null;
     document.getElementById('game-screen').classList.add('hidden');
@@ -620,8 +731,27 @@ const Game = {
     // v41（E471 修偏）：境界目标链结算随行动收尾——原挂 renderCultivateTab 渲染路径（写 flags+发气运
     // +toast），与 E429②「渲染纯只读」同反模式；迁此口后旧档历史达标在下次行动补发（realmGoals 记账防重发不变）
     try { UI.settleRealmGoals(p); } catch (err) { console.error('境界目标结算异常:', err); }
-    UI.markDirty('all');
-    try { UI.renderAll(); } catch (err) { console.error('渲染异常（不影响存档）:', err); }
+    // v42（E506）：挂机热路径渲染增量（保守版）——自动修炼在行、本次收尾非玩家点击、且无弹窗/战斗/
+    // 剧情/天劫时：数字与资源条走 textContent 级补丁（Game.idlePatch），长列表不重建；每 10 轮全量
+    // 校准一次、境界/进层变化即刻全量。其余场景全量渲染不变；失败回滚=还原 markDirty('all') 单点。
+    let idleHot = false, fullSync = false;
+    if ((typeof AutoCult !== 'undefined' && AutoCult.active) && !this._userActing && !UI._popupResolve
+      && !Battle.active && !Story.active() && !Tribulation.state && !p.dead) {
+      idleHot = true;
+      this._idleRounds = (this._idleRounds || 0) + 1;
+      const idleSig = p.realmIdx + ':' + p.layer;
+      fullSync = this._idleRounds % 10 === 0 || idleSig !== this._idleSig;
+      this._idleSig = idleSig;
+      if (fullSync) UI.markDirty('all');
+      else { try { this.idlePatch(p); } catch (err) { UI.markDirty('all'); } }   // 补丁异常回落全量渲染
+    } else {
+      this._idleRounds = 0; this._idleSig = null;
+      UI.markDirty('all');
+    }
+    // v42（E506）：纯补丁轮（无待渲脏区）跳过全量渲染——顶栏数字已由 idlePatch 原地刷新
+    if (!idleHot || fullSync || Object.keys(UI._dirty || {}).length) {
+      try { UI.renderAll(); } catch (err) { console.error('渲染异常（不影响存档）:', err); }
+    }
     Save.autoSave();
     // v32 修瑕（E27）：日更按日补结——原每行动只结一次 dailySettle：一次闭关 30 日只吃一次日更
     // 收益，而离线逐日回放 30 次（挂机关页远优于在线闭关，放置激励倒挂）。此处按跨过的游戏日
@@ -644,6 +774,8 @@ const Game = {
       this.flushOfflineAgg(`【${crossed} 日总账】`);   // v33（E82）：补结收益不再静默入账
     }
     this.dailySettle(p);   // 当日例行（v27：日更系统统一收口：节庆/大比/共修/窥伺/登顶/洞府/图鉴）
+    // v42（E504）：挂机续跑——渡劫/仙劫结算完毕自动接续原目标（勾选会话态；血线/冲突检查见 AutoCult.resume）
+    try { if (typeof AutoCult !== 'undefined' && AutoCult.resume) AutoCult.resume(); } catch (err) { console.error('挂机续跑异常:', err); }
     // 叩问大道时序：筑基之初，或兵解转世的记忆传承；战斗中则延后
     if (p.pendingDao && !p.dao && !p.dead && !Battle.active
       && (p.realmIdx >= 1 || p.reinc)) {
@@ -786,7 +918,7 @@ const Game = {
     'st-delete': async (d) => {
       const ok = await UI.popup({ title: '删除存档', html: '此档一删，仙途尽消，确定吗？', options: [{ text: '删除', value: true }, { text: '取消', value: false }] });
       if (ok) {
-        if (this._snapTimer) { clearInterval(this._snapTimer); this._snapTimer = null; }   // v37（E268）：删档随会话清理快照定时器
+        if (Game._snapTimer) { clearInterval(Game._snapTimer); Game._snapTimer = null; }   // v42（E525·P3 整合）：actions 内箭头捕获顶层 this≠Game——clearInterval 恒不执行的死守卫改为 Game 直引（对齐全表写法）
         Save.remove(d.slot); UI.renderStart(); StartScreen.renderShadow();   // v41（E463）：残影卡随动
       }
     },
@@ -854,6 +986,7 @@ const Game = {
     'save-import': () => UI.importSave(),
     /* --- 修炼 --- */
     'act-cultivate': () => Cultivate.normal({ manual: true }),   // v40（E396）：亲修偶得——悟性 ×2% 追加灵机判定
+    'med-route': (d) => Cultivate.medRoute(d),   // v42（E502）：行功路线三选一（处理器 Cultivate.medRoute 落 cultivate.js，键登记行随 E 就近写入）
     'act-autocult-pace': (d) => { AutoCult.setPace(d.pace); UI.renderAll(); },   // v40（E394）：挂机节奏三选（快/常/缓）
     'act-rest': () => Cultivate.rest(),
     'act-seclude': () => Cultivate.seclude(),
@@ -864,9 +997,12 @@ const Game = {
     'act-xian-enter': () => XianSys.enterFirst(),
     'act-xian-advance': () => XianSys.advanceLayer(),
     'act-xian-trib': () => XianSys.trib(),
+    'subworld-open': (d) => XianSys.openSubworld(Game.player),   // v42（E520）：开辟小世界（处理器 XianSys.openSubworld 落 xian.js）
+    'subworld-invest': (d) => XianSys.openSubworld(Game.player, Number(d.w) || 0),   // v42（E520）：仙元灌顶加速纪年
     /* --- 游历 --- */
     'act-explore': (d) => Explore.go(d.map),
     'act-explore-multi': (d) => Explore.goMulti(d.map, 5),   // v23 连续探索
+    'sweep5': (d) => Explore.sweep5(d.map),   // v42（E522）：同带扫荡 ×5（处理器 Explore.sweep5 落 explore.js）
     'act-tower-enter': () => TowerSys.enter(),
     'act-tower-resume': () => TowerSys.resume(),
     'act-tower-quit': () => TowerSys.leave(),
@@ -899,23 +1035,9 @@ const Game = {
     // v37（E242）：act-task-submit 随宗门 collect 提交流一并删除（采集差事归悬赏板）
     'act-exchange': (d) => SectSys.exchange(Number(d.i)),
     /** v28 联动：宗门听讲一日——贡献 300 兑感悟 +8（日限一次；感悟满溢自动化作修为）
-     *  v34（A2）：补 Time.add(1)——文案「听讲一日」此前却零时耗，白占同一天的修炼产出 */
-    'act-sect-listen': () => {
-      const p = Game.player;
-      if (!p.sect) return;
-      const today = Math.floor(p.day || 0);
-      if (p.listenDay === today) { UI.toast('今日已听讲，明日再来'); return; }
-      if (p.sect.contrib < 300) { UI.toast('贡献点不足'); return; }
-      p.sect.contrib -= 300;
-      p.listenDay = today;
-      const before = p.insight || 0;
-      const lm = SectSys.listenMul(p);   // v41（E442）接线：勤修季讲道加开——听讲感悟 ×2（单源 SectSys.listenMul，此前定义+公示后零消费）
-      Cultivate.addInsight(p, 8 * lm);
-      Log.add(`你随长老听讲经义一日${before >= 100 ? '，感悟圆融，余韵化作修为。' : `，顿悟处不少。（突破感悟 +${8 * lm}${lm > 1 ? ' · 勤修季讲道加开，所得倍之' : ''}）`}`, 'gain');
-      Time.add(1);
-      if (p.dead) return;
-      Game.afterAction();
-    },
+     *  v34（A2）：补 Time.add(1)——文案「听讲一日」此前却零时耗，白占同一天的修炼产出
+     *  v42（E501）：主体提为 Cultivate.sectListen 单源（一键行权/挂机补跑同源调用，本表只留一行一动作） */
+    'act-sect-listen': () => Cultivate.sectListen(),
     /* --- 功法 --- */
     'act-study': (d) => GongfaSys.study(d.gf),
     'act-learn': (d) => GongfaSys.learn(d.item),
@@ -1011,7 +1133,6 @@ const Game = {
       UI.toast('攻守易势——出战技能盘已切换');
       Game.afterAction();
     },
-    /* --- v13 战斗：自动 / 速度 / 驯服 --- */
     'bt-auto': () => {
       const B = Battle.active;
       if (!B || B.over) return;
@@ -1027,6 +1148,9 @@ const Game = {
     'act-ning-zy': () => Battle.ningshenZY(),   // v39（E350）：凝神双钮直达——换气（20 战意 → 1 真元）
     'act-ning-purge': () => Battle.ningshenPurge(),   // v39（E350）：凝神双钮直达——净化（15 战意 → 消散负面）
     'bt-burst': () => Battle.actBurst(),   // v38（E308）：战意爆发——满战意主动兑现一击
+    'bt-combopt': () => Battle.actComboPt(),   // v42（E483·P3 整合）：连击势点主动花点——预支钮（处理器 Battle.actComboPt 落 battle.js）
+    'pouch-use': (d) => Battle.active && Battle.pouchUse(Number(d.slot)),   // v42（E524）：锦囊一键祭出（处理器 Battle.pouchUse 落 battle.js，同 bt-item 结算通道）
+    'pouch-set': (d) => Battle.pouchSet(d.item),   // v42（E524）：乾坤袋「入锦囊」（处理器 Battle.pouchSet 落 battle.js，填入第一空槽）
     'bt-tame': () => { if (typeof BeastSys !== 'undefined' && BeastSys.tame) BeastSys.tame(); else UI.toast('此兽野性难驯'); },
     /* --- 大道 / 天劫 / 因果 / 百艺（增量扩展） --- */
     'act-dao-open': () => DaoSys.openModal(),
@@ -1117,7 +1241,7 @@ const Game = {
     'act-bid': (d) => AuctionSys.bid(d.mode),
     'act-auction-reroll': () => AuctionSys.reroll(),   // v39（E353）：换一批（每期一次 20×eco）
     'act-consign': (d) => AuctionSys.consign(d.item),   // v41（E439）：委托寄售（寄售卡入口落 E470）
-    'act-consign-claim': () => AuctionSys.claimConsign(),   // v41（E439）：寄售取回/到账领取（入口落 E470）
+    'act-consign-claim': (d) => AuctionSys.claimConsign(d && d.slot != null ? Number(d.slot) : null),   // v41（E439）；v42（E509→W2C 契约）：slot 参选格取回
     'act-donate': (d) => DonateSys.donate(d.d),
     'act-sect-command': () => SectSys.command(),
     /* --- v3 秘境 --- */
@@ -1128,6 +1252,7 @@ const Game = {
     'act-dung-auto': () => DungeonSys.toggleAuto(),   // v39（E362）：秘境连推开关
     'act-dungeon-purify': (d) => DungeonSys.purify(d.mut),   // v38（E307）：净化一条秘境异变
     'act-realm-synth': () => DungeonSys.synth(),
+    'relic-pick': (d) => DungeonSys.pickRelic(Number(d.i)),   // v42（E521）：秘境遗种三选一（处理器 DungeonSys.pickRelic 落 dungeon.js）
     /* --- v3 江湖 --- */
     'npc-befriend': (d) => NpcSys.befriend(d.npc),
     'npc-gift': (d) => NpcSys.gift(d.npc),
@@ -1166,6 +1291,8 @@ const Game = {
     'tut-next': () => Tutorial.next(),
     'tut-prev': () => Tutorial.prev(),
     'tut-skip': () => Tutorial.finish(),
+    'tut-task-done': () => Tutorial.taskDone(),   // v42（E487）：任务式引导·手动确认完成（处理器落 tutorial.js，键登记行为本包白名单微例外）
+    'ui-tip': (d, el) => UI.tip(d, el),   // v42（E489）：机制说明触屏点亮（处理器 UI.tip 落 ui.js，键登记行为本包白名单微例外）
     /* --- v15 剧情 --- */
     'story-next': () => Story.next(),
     'story-choice': (d) => Story.choose(Number(d.storyChoice)),

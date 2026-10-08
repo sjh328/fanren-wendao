@@ -87,18 +87,32 @@ const FestivalSys = {
       const right = Utils.chance(Math.min(85, 40 + Stat.compOf(p) * 2));
       // v37（E251）：正解按年哈希轮换（复用黑市 day-hash 轮子），成算不再决定「答对与否」，
       // 改作用于答对后的奖励品质第二层——消除「低悟性故意答错更优」的逆选择；primary 标记随正解走
+      // v42（E516）：谜底与本季宗门倾向联动——整军季谜底偏「战」（火符）、通商季偏「商」（明镜）、
+      // 勤修季偏「修」（灯芯），谜面给对应暗示；散修/他季维持年哈希轮换。悟性 ≥60 额外亮一条
+      // 可解析线索行（线索确定指向谜底，答对率自 33% 抽签升为可推断——E516 验收 ≥55% 锚）
+      const tend = (p.sect && typeof SectSys !== 'undefined' && SectSys.tendency) ? SectSys.tendency(p) : null;
+      const RIDDLE_BY_TEND = {
+        war: { correct: 'a', hint: '今年灯楼与演武场同办——谜底多半藏着一缕硝烟。', clue: '（你慧根不浅，看破谜眼：此物焚向敌阵，是斗战之物。）' },
+        trade: { correct: 'b', hint: '今年灯楼与商会同办——谜底多半与「照见人心」有关。', clue: '（你慧根不浅，看破谜眼：此物照见人心，买卖场上最识真伪。）' },
+        cult: { correct: 'c', hint: '灯楼主人今年与讲经堂过从甚密——谜底多半关乎「燃己照人」。', clue: '（你慧根不浅，看破谜眼：此物燃己照人，是修行之本。）' },
+      };
+      const rd = (tend && RIDDLE_BY_TEND[tend]) || null;
       const year = Math.floor((p.day || 0) / 365) + 1;
-      const correct = ['a', 'b', 'c'][Utils.hashStr('riddle' + year) % 3];
+      const correct = rd ? rd.correct : ['a', 'b', 'c'][Utils.hashStr('riddle' + year) % 3];
       const ans = await UI.popup({
         title: '上元灯会 · 灯谜',
-        html: '一盏走马灯下悬着谜面：「白日隐形，夜里提灯，照尽人间不平。——打一修行之物。」',
+        html: `一盏走马灯下悬着谜面：「白日隐形，夜里提灯，照尽人间不平。——打一修行之物。」${rd ? `<br><span class="tip-line">· ${rd.hint}</span>` : ''}${(rd && Stat.compOf(p) >= 60) ? `<br><span class="tip-line" style="color:var(--gold,#d4af37)">· ${rd.clue}</span>` : ''}`,
         options: [
           { text: '火符', value: 'a', primary: correct === 'a' },
           { text: '明镜', value: 'b', primary: correct === 'b' },
           { text: '灯芯', value: 'c', primary: correct === 'c' },
         ],
       });
-      if (ans === correct) {
+      if (ans == null) {
+        // v42（E516）：ESC/遮罩早退——原空值落「揭错」分支照发 +2 感悟并吞全年节庆旗标；
+        // 现空值早退零收益（旗标已置保持节庆状态，只是不给收益）
+        Log.add('你在灯楼前驻足片刻，终究没有揭签——灯谜之趣，留与有缘人。', 'info');
+      } else if (ans === correct) {
         if (right) {
           Cultivate.addInsight(p, 5, false);
           KarmaSys.addFortune(1);

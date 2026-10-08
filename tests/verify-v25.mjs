@@ -151,7 +151,7 @@ console.log('===== SA 源码静态组 =====');
   battle.includes("kind === 'strike'") && battle.includes('lenient: true') && battle.includes('lenient: false')
     && battle.includes("acts: ['defend', 'attack', 'skill-damage', 'ult']")
     ? pass('SA34 intentCounter 扩容：strike 入表、charge 纳会心抢断、lenient 中性字段（E349）') : fail('SA34 克制表', '');
-  battle.includes('!c.lenient && (B.insightN || 0) > 0') && battle.includes('this.addMorale(5);   // v39（E349）')
+  battle.includes('!c.lenient && (B.insightN || 0) > 0') && battle.includes('this.addMorale(4);   // v42（E478）')   // v42（E528·P3 整合）：E478 读中 +5→+4 随动
     ? pass('SA35 扣层仅 lenient=false 意图发生 + 读中 +5 战意（E349）') : fail('SA35 中性原则', '');
   !battle.includes('if (crit) dmg *= 1.7;') && battle.includes('Math.min(1.7 * this.critDmgBonus(p, st), GameData.BALANCE.COMBAT.CRIT_DMG_CAP)')
     ? pass('SA36 爆发会伤与普攻/法诀/必杀同口径（无 1.7 旧形态，E349）') : fail('SA36 爆发会伤', '');
@@ -172,7 +172,7 @@ console.log('===== SA 源码静态组 =====');
   /* ---- WP3（E351/E352） ---- */
   gdata.includes('fr <= 5 ? Math.round(Math.pow(3.4, fr)) : 243 * Math.pow(3.8, fr - 5)')
     ? pass('SA42 sinkCurve 分段单源（E351；v40（E384）r≤5 段 3.4^fr 中段补位、r≥6 段一字不动）') : fail('SA42 曲线形态', '');
-  tower.includes('Math.round(60 * GameData.stoneEco(p.realmIdx))') && tower.includes("Bag.addItem('m_xuantie', 4)") && tower.includes('60×境界经济 + 玄铁矿 ×4')
+  tower.includes('Math.round(60 * GameData.stoneEco(p.realmIdx || 0))') && tower.includes("Bag.addItem('m_xuantie', 6)") && tower.includes('贪卦')   // v42（E528·P3 整合）：E511 纳财卦象化（灵石卦 60×eco/玄铁卦 ×6/符材卦/贪卦）随动
     ? pass('SA43 塔纳财折半 60×eco + 玄铁矿 ×4 补点击价值（E352）') : fail('SA43 纳财', '');
   cult.includes('Math.round(60 * GameData.stoneEco(p.realmIdx))') && ui.includes('日均 ≈1.6×') && ui.includes('日均 ≈1×')
     ? pass('SA44 闭关成本 60×eco 且修炼页两钮如实日均披露（E352）') : fail('SA44 闭关', '');
@@ -242,8 +242,8 @@ console.log('===== SA 源码静态组 =====');
   ui.includes('QUICK_CELLS: [') && ui.includes('M_QUICK_CELLS() { return this.QUICK_CELLS.filter(c => c.m !== false); }')
     && !ui.includes('M_QUICK_CELLS: [')
     ? pass('SA64 速达双副本单源：桌面 12 格/移动 10 格同清单（E365）') : fail('SA64 速达', '');
-  tutorial.includes('html: UI.helpModal(),') && ui.includes('summary>✦ 三分钟上手</summary>')
-    ? pass('SA65 引导毕直开手册（三分钟上手与手册首节同源）（E365）') : fail('SA65 上手清单', '');
+  tutorial.includes("UI.helpSection('getting')") && ui.includes('helpSection(key) {')
+    ? pass('SA65 引导毕直开手册「三分钟上手」单节（E365；v42 E488 手册分节解锁——finish 只弹 getting 一节，helpSection 单源在 ui.js）') : fail('SA65 上手清单', '');   // v42（E528·P3 整合）：E488 分节解锁随动（旧直开全手册断言退役）
   craft.includes('const cost = this.drawPrice(p);') && !craft.includes('drawMult(p)') && !craft.includes('(p._drawCount || 0) * 0.75')
     && craft.includes("12 + (Stat.compute(p).luck + (p.fortune || 0) / 20) * 0.5")
     && craft.includes('times === 1 && p.sect && p.sect.id')
@@ -653,7 +653,7 @@ if (browser) {
       // 蓄力意图：防御=读中 +1 且战意 +5
       B.intent = { kind: 'charge' }; B.insightN = 0; B.morale = 50;
       Battle.evalInsight('defend');
-      out.chargeDefendRead = B.insightN === 1 && B.morale === 55;
+      out.chargeDefendRead = B.insightN === 1 && B.morale === 54;   // v42（E528·P3 整合）：E478 读中战意 +5→+4 随动
       // 满层破绽毕现（普通战 3 次读中达成）
       B.intent = { kind: 'charge' }; B.insightN = 0; B.morale = 50;
       Battle.evalInsight('defend'); Battle.evalInsight('defend'); Battle.evalInsight('defend');
@@ -661,7 +661,7 @@ if (browser) {
       // strike 意图：防御/破阵符皆读中；attack 意图维持无解
       B.intent = { kind: 'strike' }; B.insightN = 0; B.morale = 30; B._sureCrit = false;
       Battle.evalInsight('defend');
-      out.strikeDefend = B.insightN === 1 && B.morale === 35;
+      out.strikeDefend = B.insightN === 1 && B.morale === 34;   // v42（E528·P3 整合）：E478 读中战意 +5→+4 随动
       B.insightN = 0;
       Battle.evalInsight('item', 'tal_pozhen');
       out.strikePozhen = B.insightN === 1;
@@ -694,9 +694,10 @@ if (browser) {
       window.__bk.restore();
       const dmgA = calls[calls.length - 2].dmg, dmgB = calls[calls.length - 1].dmg;
       const mm = 1 + 100 * GameData.BALANCE.COMBAT.MORALE_PER_POINT;
+      const bm = GameData.BALANCE.COMBAT.BURST_MUL_BASE + (100 - GameData.BALANCE.COMBAT.BURST_MIN) * GameData.BALANCE.COMBAT.BURST_MUL_PER;   // v42（E528·P3 整合）：E478 沸腾 3.2 插值随动
       // v40（E378）：1.8→2.4、清零改 −60、必会心；v41（E417）：总乘数封顶 2.0→2.4——杀剑 1.7×1.25=2.125 不再触顶，开/关对照恰 +25%
-      const expA = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * 2.4, Battle.enDef(B.enemy), B.enemy.power) * mm * 2.125);
-      const expB = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * 2.4, Battle.enDef(B.enemy), B.enemy.power) * mm * 1.7);
+      const expA = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * bm, Battle.enDef(B.enemy), B.enemy.power) * mm * 2.125);
+      const expB = Math.round(Stat.afterDef(Battle.myAtk(Stat.compute(p)) * bm, Battle.enDef(B.enemy), B.enemy.power) * mm * 1.7);
       out.exact = dmgA === expA && dmgB === expB;
       if (Battle.active) { Battle.active.over = true; document.getElementById('battle-modal').classList.add('hidden'); Battle.active = null; }
       Utils.chance = oc; Utils.randF = orf; p.dao = daoBak;
@@ -749,28 +750,33 @@ if (browser) {
       p.tower = { best: 1, today: { day: Math.floor(p.day || 0), used: 0, bought: 0, stonesRedeemDay: 0, stonesRedeemN: 0 }, run: null };
       p.counters.towerWins = 100;
       const eco4 = GameData.stoneEco(4);
-      const s0 = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
+      const sTot = () => p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
       const ore0 = p.bag.m_xuantie || 0;
       const op = UI.popup; UI.popup = async () => true;
       const logBak = Log.add; Log.add = () => {};
       const aaBak = Game.afterAction; Game.afterAction = () => {};
       const raBak = UI.renderAll; UI.renderAll = () => {};
+      let pickMode = 'stone';   // v42（E528·P3 整合）：E511 纳财卦象化随动——popup 求卦桩按 pickMode 应答
+      UI.popup = async o => (o && o.title && o.title.includes('纳财')) ? pickMode : true;
+      const s0 = sTot();
+      pickMode = 'stone';
       await TowerSys.redeem('stones');
-      const s1 = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
-      out.firstGain = s1 - s0 === Math.round(60 * eco4);   // 纳财折半 60×eco
-      out.oreGain = (p.bag.m_xuantie || 0) - ore0 === 4;   // 玄铁矿 ×4 补偿
-      out.n = p.tower.today.stonesRedeemN === 1;
+      out.firstGain = sTot() - s0 === Math.round(60 * eco4);   // 灵石卦一次 60×eco
+      pickMode = 'ore';
       await TowerSys.redeem('stones');
+      out.oreGain = (p.bag.m_xuantie || 0) - ore0 === 6;   // 玄铁卦 = 玄铁矿 ×6（E511：原 +4 补偿退役归卦）
+      out.n = p.tower.today.stonesRedeemN === 2;
+      const s1 = sTot();
+      pickMode = 'stone';
       await TowerSys.redeem('stones');   // 第 3 次：日限两次不变
-      const s2 = p.stones.low + p.stones.mid * 100 + p.stones.high * 10000;
-      out.dayLimit = p.tower.today.stonesRedeemN === 2 && s2 - s1 === Math.round(60 * eco4);
+      out.dayLimit = p.tower.today.stonesRedeemN === 2 && sTot() === s1;
       // 塔日吞吐（纳财 120×eco + 层奖摊 100×eco）≤ 240×eco
       out.throughput = (2 * Math.round(60 * eco4) + 100 * eco4) <= 240 * eco4;
       UI.popup = op; Log.add = logBak; Game.afterAction = aaBak; UI.renderAll = raBak;
       return out;
     });
     rb22.firstGain && rb22.oreGain && rb22.n && rb22.dayLimit && rb22.throughput
-      ? pass('RB22 纳财一次 60×eco + 玄铁矿 ×4、日限两次不变、塔日吞吐 220×eco ≤ 240×eco（E352）') : fail('RB22 纳财', JSON.stringify(rb22));
+      ? pass('RB22 纳财卦象化：灵石卦一次 60×eco、玄铁卦玄铁矿 ×6（E511 四卦 popup——贪卦 25% 扣押方差见 tower.js 期望表留档）、日限两次不变、塔日吞吐 220×eco ≤ 240×eco（E352+E511）') : fail('RB22 纳财', JSON.stringify(rb22));
 
     const rb23 = await page.evaluate(async () => {
       const out = {};

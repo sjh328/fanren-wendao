@@ -46,7 +46,14 @@ const buildMonster = (id, delta = 0, opts = {}) => {
 };
 
 const Explore = {
+  /** v42（E513）：go 重入守卫——与 goMulti 同源（Explore._going）：连续快速双击探索只触发一次，
+   *  杜绝「上一轮 go 的 await 链未走完又入新一轮」的交错执行（goMulti 同款护栏，本批补齐单发路） */
   async go(mapId) {
+    if (this._going) { UI.toast('上一轮历练尚未走完'); return; }
+    this._going = true;
+    try { await this._go(mapId); } finally { this._going = false; }
+  },
+  async _go(mapId) {
     const p = Game.player;
     if (Battle.active || p.dead) return;
     const map = GameData.MAPS.find(m => m.id === mapId);
@@ -218,13 +225,127 @@ const Explore = {
         const nextMap = GameData.MAPS[Math.min(idx + 1, GameData.MAPS.length - 1)];
         Log.add('忽然一道凌厉杀意锁定了你——孽债累累，终有仇家循迹而至！', 'warn');
         await Utils.sleep(500);
-        Battle.start(nextMap.elite || nextMap.pool[0].id, { mapName: '仇家埋伏之地', mapId: map.id, ambush: true });
+        // v42（E513）：伏击同带缩放——原直抽下一张图精英且不经 rpCap 钳制（村口被高一档图精英伏击、
+        // 先手必败）；现按玩家 rp 同带显式构建（Δ 钳 ±4 小层，buildMonster 单源），前二图吃
+        // mercy=0.75（与 v40（E382）前二图精英 mercy 同口径，mercy 豁免对伏击生效）
+        const rpNow = p.realmIdx * 4 + p.layer;
+        const ambId = nextMap.elite || nextMap.pool[0].id;
+        const amb = buildMonster(ambId, Utils.clamp(rpNow - (GameData.MONSTERS[ambId].power || 0), -4, 4));
+        const bctx = { enemy: amb, mapName: '仇家埋伏之地', mapId: map.id, ambush: true };
+        if (map.id === 'village' || map.id === 'qingfeng') bctx.mercy = 0.75;
+        Battle.start(null, bctx);
         Game.afterAction();   // v35（E143）：先 start 后 afterAction——对齐 dungeon 模式，防节庆在开战前触发后被 Battle.start 静默丢弃
         return;
       }
     }
     Game.afterAction();
   },
+
+  /** v42（E522）：同带扫荡 ×5——同一图「一念定胜负」（≥2.8×）连胜三场后解锁，每日每图一次。
+   *  结算与手动 victory 同式（arrBonus/派系/季议/守财/福缘/掉落 rollDrops 逐项保留），收益差 ≤±1%；
+   *  逐日结算复用离线回放式（Time.add(2)+dailySettle(auto)），只播总结；
+   *  扫荡不触发剧情/奇遇/仙界轶闻/伏击等一次性事件（构造上不进事件掷点）。 */
+  sweepOk(p, mapId) {
+    return ((p.counters && p.counters.sweepStreak) || {})[mapId] >= 3
+      && !(p.flags && p.flags.sweepDay === Math.floor(p.day || 0) && p.flags.sweepMap === mapId);
+  },
+  /** 与手动 victory 同式的单场收益结算（sweep 内部用；exp/stone/drops 三段逐项同源） */
+  _sweepSettle(p, e, map) {
+    const arrBonus = (map.id === 'ruins' && p.dao === 'array') ? 1.2 : 1;
+    const expGain = Math.round(e.expGain * arrBonus * (p.sect && p.sect.faction === 'tianshu' ? 1.1 : 1)
+      * ((typeof SectSys !== 'undefined' && SectSys.council && SectSys.council(p) === 'war') ? 1.05 : 1));
+    const stoneGain = Math.round(e.stoneGain * arrBonus * (e._fxGold ? 1.5 : 1) * (p.dao === 'demonic' && DaoSys.tierLevel(p) >= 5 ? 1.5 : 1)
+      * (e.elite && Game.titleOn(p, 'slayerLoot') ? 1.08 : 1));
+    const st = Stat.compute(p);
+    const luckBonus = (st.luck >= 8 && Utils.chance(15)) ? Math.max(1, Math.round(stoneGain * 0.15)) : 0;
+    Cultivate.addExp(p, expGain);
+    Bag.addStones(stoneGain + luckBonus);
+    let demonicExtra = 0;
+    if (p.dao === 'demonic') {
+      demonicExtra = Math.round(expGain * (DaoSys.hasPath(p, 3, 'shiHun') ? 0.4 : (DaoSys.tierLevel(p) >= 1 ? 0.3 : 0.2)));
+      Cultivate.addExp(p, demonicExtra);
+      DaoSys.gain(p, 20);
+      if (typeof XinmoSys !== 'undefined') XinmoSys.add(p, 3, '吞噬精元，魔焰蚀心');
+    }
+    const drops = Battle.rollDrops(e, { explore: true, mapId: map.id, sweep: true });
+    return { expGain, stoneGain: stoneGain + luckBonus, demonicExtra, drops };
+  },
+  async sweep5(mapId) {
+    const p = Game.player;
+    const map = GameData.MAPS.find(m => m.id === mapId);
+    if (!map || Battle.active || p.dead) return;
+    if (this._going) { UI.toast('上一轮历练尚未走完'); return; }
+    const streak = ((p.counters && p.counters.sweepStreak) || {})[mapId] || 0;
+    if (streak < 3) { UI.toast('扫荡未解锁——需在同一图连胜三场碾压局（一念定胜负 ≥2.8×）'); return; }
+    const today = Math.floor(p.day || 0);
+    p.flags = p.flags || {};
+    if (p.flags.sweepDay === today && p.flags.sweepMap === mapId) { UI.toast('此图今日已扫荡过——每日每图一次，明日再来'); return; }
+    // 预估与手动五场同式（弹窗公示，复算式与实发同源）
+    const probe = this._sweepSettle(p, buildMonster(Utils.pickWeighted(map.pool)), map);
+    const ok = await UI.popup({
+      title: `扫荡 ×5 · ${map.name}`,
+      html: `连胜三场碾压局，此地妖物已不在话下——一念之间连扫五场，直结所获：<br>
+        · 按本图常态预估：修为 ≈${Utils.fmtNum(probe.expGain * 5)}、灵石 ≈${Utils.fmtNum(probe.stoneGain * 5)}（掉落照常掷取）<br>
+        · 每场 2 日共 10 日，日更照常结算；连胜计次清零，今日此图不可再扫<br>
+        <span class="neg">· 扫荡不触发剧情、奇遇与遗物类一次性事件。</span>`,
+      options: [{ text: '扫 荡', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    this._going = true;
+    try {
+      p.flags.sweepDay = today;
+      p.flags.sweepMap = mapId;
+      p.counters.sweepStreak = p.counters.sweepStreak || {};
+      p.counters.sweepStreak[mapId] = 0;   // 扫荡消耗连胜资格（重新打出）
+      p.counters.sweeps = (p.counters.sweeps || 0) + 1;   // v42（P3 整合）：扫荡累计计次——成就 nw3「一念定胜负」读点（counters 子键）
+      const rpCap = Math.ceil((p.realmIdx * 4 + p.layer) * 1.35);
+      const deepN = (p.counters.mapExplores || {})[mapId] || 0;
+      const deepTier = deepN >= 100 ? 3 : deepN >= 50 ? 2 : deepN >= 20 ? 1 : 0;
+      const aggOpen = Game._offlineAgg = Game._offlineAgg || {};
+      let totExp = 0, totStone = 0, totDemo = 0;
+      const dropNames = [];
+      let eliteN = 0;
+      for (let i = 0; i < 5; i++) {
+        if (p.dead || Battle.active) break;
+        Time.add(2);
+        if (p.dead) break;
+        Game.dailySettle(p, true);   // 逐日结算复用离线回放式（auto 静默，日更入聚合）
+        p.counters.mapExplores = p.counters.mapExplores || {};
+        p.counters.mapExplores[mapId] = (p.counters.mapExplores[mapId] || 0) + 1;
+        if (typeof SectSys !== 'undefined' && SectSys.onExplore) SectSys.onExplore();
+        // 选敌与手动 battle 分支同式：精英几率/夜行/负偏移省略（夜行属一次性遭遇语义）+ rp 钳制
+        const delta = Utils.chance(20) ? Utils.rand(1, 2) : 0;
+        let monsterId = Utils.chance((p.realmIdx < map.recRealm ? 14 : 8) + delta * 3 + deepTier * 4) && map.elite ? map.elite : Utils.pickWeighted(map.pool);
+        const baseD = (map.dPool && map.dPool[monsterId]) || 0;
+        const effDelta = GameData.MONSTERS[monsterId].power + baseD + delta > rpCap
+          ? rpCap - GameData.MONSTERS[monsterId].power
+          : baseD + delta;
+        const e = (delta > 0 || baseD !== 0) ? buildMonster(monsterId, effDelta) : buildMonster(monsterId);
+        if (e.id) Meta.see('monster', e.id);
+        const r = this._sweepSettle(p, e, map);
+        totExp += r.expGain + r.demonicExtra; totStone += r.stoneGain; totDemo += r.demonicExtra;
+        dropNames.push(...r.drops);
+        p.counters.wins++;
+        if (e.elite) { p.counters.killsElite = (p.counters.killsElite || 0) + 1; eliteN++; }
+        if (e.id) { SectSys.onKill(e.id); BountySys.onKill(e.id); }
+      }
+      if (typeof WorldSys !== 'undefined' && WorldSys.beastWaveActive && WorldSys.beastWaveActive(p, mapId)) {
+        Log.add('【扫荡】兽潮未退——妖物较往常更凶，所获亦丰（手动同式，此处不另计）。', 'info');
+      }
+      this.flushSweepLog(p, map, totExp, totStone, dropNames, eliteN);
+      Game.afterAction();
+      Save.autoSave(true);
+    } finally {
+      this._going = false;
+    }
+    UI.renderAll();
+  },
+  /** 扫荡总结播报（只播总结） */
+  flushSweepLog(p, map, totExp, totStone, dropNames, eliteN) {
+    Log.add(`【扫荡 ×5 · ${map.name}】五场皆一念而定——修为 +${Utils.fmtNum(totExp)}、灵石 +${Utils.fmtNum(totStone)}${eliteN ? `、诛精英 ×${eliteN}` : ''}${dropNames.length ? `，捡获：${dropNames.join('、')}` : ''}。（胜负直结，日更照常；连胜计次已清零）`, 'gain');
+    try { this.flushAggSafe(p); } catch (err) { /* 聚合冲洗失败不影响结算 */ }
+  },
+  flushAggSafe(p) { if (typeof Game !== 'undefined' && Game.flushOfflineAgg) Game.flushOfflineAgg(`【扫荡 · 10 日总账】`); },
 
   /** v23 连续探索：最多 times 次历练，遇战斗/剧情/弹窗/天下大事自动暂停（处置后可续点）
    *  v32 修瑕（E55）：模块级 in-flight 防重入——按钮级 _busy 随重渲染失效，循环 await 期间
@@ -238,7 +359,7 @@ const Explore = {
       for (let i = 0; i < times; i++) {
         if (Battle.active || p.dead) break;
         if (p.world && p.world.pending) { UI.toast('天下大势正待抉择——先定乾坤，再行历练'); break; }
-        await this.go(mapId);
+        await this._go(mapId);   // v42（E513）：直调内层（外层 go 的重入守卫由本函数持有）
         if (Battle.active || Story.active() || UI._popupResolve || p.dead) break;   // 战斗/剧情/弹窗即停
       }
     } finally {

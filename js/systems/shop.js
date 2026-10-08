@@ -33,7 +33,9 @@ const ShopSys = {
     let base = def.price || 0;
     // v41（E436）：0 价稀有物卖价回落——套装件/秘境功法/天级神兵 price:0 曾按 max(1,0×0.45)=1 灵石贱卖；
     // 现按品阶兜底 GRADE_FALLBACK×0.1 计基数（grade5 → 基数 4000，卖出 ≥40000×0.1×0.45=1800）
-    if (!base && (def.type === 'artifact' || def.type === 'gongfa' || def.set)) {
+    // v42（E508）：兜底三类扩四类——pill 入列（pill_xisui 等研创/宗门 0 价丹曾卖 1 灵石），
+    // 与寄售估值（AuctionSys.consignValue 同日同式 GF×0.1）口径归一，杜绝 0 价物「坊市 1 灵石、寄售 4 万」双标
+    if (!base && (def.type === 'artifact' || def.type === 'gongfa' || def.type === 'pill' || def.set)) {
       base = Math.round((GameData.GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500) * 0.1);
     }
     // 符箓为时价之物：随境界经济浮动

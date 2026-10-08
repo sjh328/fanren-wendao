@@ -62,11 +62,17 @@ const TowerSys = {
 
   /** v30 塔绩兑换所：塔绩 = p.counters.towerWins（累计胜层），兑换扣除；最高层纪录不受影响 */
   REDEEMS: [
-    { id: 'stones', name: '塔灵纳财', cost: 15, desc: '灵石 60×境界经济 + 玄铁矿 ×4（日限两次）' },   // v39（E352）：纳财折半分流，玄铁矿补点击价值
+    { id: 'stones', name: '塔灵纳财', cost: 15, desc: '求卦取财：灵石/玄铁/符材三卦任选，另有贪卦搏双倍（日限两次）' },   // v42（E511）：纳财卦象化
     { id: 'ore',    name: '玄铁一匣', cost: 20, desc: '玄铁矿 ×8' },
     { id: 'pill',   name: '培元丹一炉', cost: 30, desc: '培元丹 ×1' },
     { id: 'qihun', name: '器魂五枚', cost: 40, desc: '器魂 ×5——塔中金石之精，淬器之魂' },
     { id: 'leijing', name: '雷晶核（塔心所藏）', cost: 60, desc: '雷晶核 ×1——渡劫丹主材' },
+  ],
+  /** v42（E511）：符材卦奖池（强化石/器胚残片入池，固定面值随份数平衡——符材不随境界经济缩放，
+   *  低境价值凸出、高境为锦上添花，期望表在案：强化石 ×2=6000 面值 / 器胚残片 ×10=4000 面值，各半） */
+  FUCAI_POOL: [
+    { id: 'm_qianghua', qty: 2 },
+    { id: 'm_qipei', qty: 10 },
   ],
   /** 塔绩兑换实耗（v31 E10：雷晶核等渡劫主材随境界加价 + 日限一枚——原恒 60 塔绩，后期约两日白拿一枚） */
   redeemCost(p, r) { return r.id === 'leijing' ? r.cost + (p.realmIdx || 0) * 15 : r.cost; },
@@ -87,6 +93,51 @@ const TowerSys = {
       // 深爬每胜层 +1 绩线性变现 8×eco/层且不占游戏日。日限两次后 r9 深爬 30 层×2 次
       // 日灵石进账 240×eco ≤ 层奖日额度 300×eco 同量级，口子封死
       if (p.tower.today.stonesRedeemDay === today && (p.tower.today.stonesRedeemN || 0) >= 2) { UI.toast('塔灵今日的纳财已尽（日限两次）——塔库也要细水长流，明日再来'); return; }
+      // v42（E511）：纳财卦象化——掷三卦任选 + 贪卦（原 60×eco+玄铁×4 纯点击改博弈四选）。
+      // 期望表（node 复算留档，verify/price-audit 同式）：灵石卦 = 60×eco；玄铁卦 = 6×玄铁面值（固定）；
+      // 符材卦 = {强化石 ×2、器胚残片 ×10} 各半（固定面值）；贪卦每掷 = 0.75×120×eco = 90×eco，
+      // 25% 案发另扣当日一次（机会成本 ≈0.25×60×eco=15×eco，净 ≈75×eco）——贪卦期望更优而方差大
+      //（四分之一颗粒无收且当日纳财即止），「贪」字取舍如实留档；日限两次不变。
+      const s1 = Math.round(60 * GameData.stoneEco(p.realmIdx || 0));
+      const fucai = Utils.pick(this.FUCAI_POOL);
+      const pick = await UI.popup({
+        title: '塔灵纳财 · 求卦',
+        html: `塔灵掌库，纳财以卦断——铜钱落在龟甲上，是哪一卦？（今日已纳 ${p.tower.today.stonesRedeemN || 0}/2 次，需塔绩 <b>${cost}</b>）<br>
+          <span class="tip-line">· 灵石卦：灵石 ${Utils.fmtNum(s1)}<br>· 玄铁卦：玄铁矿 ×6<br>· 符材卦：符材随机一份（强化石或器胚残片）<br>· 贪卦：灵石 ${Utils.fmtNum(s1 * 2)}——然两成五几率被塔灵扣押，当日纳财次数再 −1</span>`,
+        options: [
+          { text: `灵石卦（+${Utils.fmtNum(s1)}）`, value: 'stone', primary: true },
+          { text: '玄铁卦（玄铁矿 ×6）', value: 'ore' },
+          { text: '符材卦（随机符材）', value: 'fucai' },
+          { text: '贪卦（灵石 ×2，险）', value: 'greed' },
+          { text: '改日再求', value: null },
+        ],
+      });
+      if (!pick) return;   // 作罢不耗塔绩
+      if ((p.counters.towerWins || 0) < cost) { UI.toast('塔绩不足'); return; }
+      p.counters.towerWins -= cost;
+      p.tower.today.stonesRedeemDay = today;
+      p.tower.today.stonesRedeemN = (p.tower.today.stonesRedeemN || 0) + 1;
+      if (pick === 'stone') {
+        Bag.addStones(s1);
+        Log.add(`塔灵倾囊——灵石卦成，灵石 +${Utils.fmtNum(s1)}（塔基深处所凝）。`, 'gain');
+      } else if (pick === 'ore') {
+        Bag.addItem('m_xuantie', 6);
+        Log.add('塔灵倾囊——玄铁卦成，玄铁矿 ×6（塔基深处所凝）。', 'gain');
+      } else if (pick === 'fucai') {
+        Bag.addItem(fucai.id, fucai.qty);
+        Log.add(`塔灵倾囊——符材卦成，【${GameData.ITEMS[fucai.id].name}】×${fucai.qty}（塔中符房的陈年存货）。`, 'gain');
+      } else {
+        if (Utils.chance(25)) {
+          p.tower.today.stonesRedeemN = (p.tower.today.stonesRedeemN || 0) + 1;   // 扣押：当日纳财次数再 −1
+          Log.add('贪卦既起，塔灵却翻了个白眼——铜钱被塔基吸了回去，今日的纳财一并扣押！（灵石分文未得，当日纳财次数已尽）', 'warn');
+        } else {
+          Bag.addStones(s1 * 2);
+          Log.add(`贪卦得手——塔灵咬牙倾囊，灵石 +${Utils.fmtNum(s1 * 2)}！塔基深处传来一声轻叹。`, 'gain');
+        }
+      }
+      UI.renderAll();
+      Game.afterAction();
+      return;
     }
     // v39（E365）：删 popup 前的塔绩预检——保留 popup 后复查（防等待期间余额变化，对齐 C4 双开防护语义）
     const ok = await UI.popup({
@@ -147,7 +198,7 @@ const TowerSys = {
     const cost = this.extraCost(p);
     const ok = await UI.popup({
       title: '登天塔 · 灵石加购',
-      html: `今日免费次数已尽。燃 <b class="hl">${Utils.fmtNum(cost)}</b> 灵石再登一次塔？<br><span class="tip-line">· 日限加购一次；塔内祝福与宝箱照常。</span>`,
+      html: `今日免费次数已尽。燃 <b class="hl">${Utils.fmtNum(cost)}</b> 灵石再登一次塔？<br><span class="tip-line">· 日限加购一次；塔内祝福与宝箱照常。<br>· ${Bag.wealthText()}。</span>`,   // v42（E518）：大额消费家资折合行
       options: [{ text: '加购一次', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;

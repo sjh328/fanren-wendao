@@ -95,7 +95,8 @@ console.log('===== SA 源码静态组 =====');
   reinc.includes('TREE_EFFECTS') ? pass('SA40 传承树效果单源（E22）') : fail('SA40 传承树', '');
   !guide.includes('blessings') && !guide.includes('挡劫 grade') ? pass('SA41 要诀术语中文化（E23）') : fail('SA41 术语', '');
   gamejs.includes('_deepLinkTab') && gamejs.includes("new URLSearchParams(location.search).get('tab')") ? pass('SA42 深链消费（E24）') : fail('SA42 深链', '');
-  idxhtml.includes('waitStart') && idxhtml.includes('inGameTip') ? pass('SA43 更新提示游戏内不落空（E25）') : fail('SA43 更新提示', '');
+  // v42（E526）：更新提示链自 index.html 收编进 js/core/sw-reg.js，断言随迁
+  R('core/sw-reg.js').includes('waitStart') && R('core/sw-reg.js').includes('inGameTip') ? pass('SA43 更新提示游戏内不落空（E25；E526 收编随迁）') : fail('SA43 更新提示', '');
   save.includes("this.storage.removeItem(this.KEY + 'meta_' + key)") ? pass('SA44 删档清 meta 孤儿键（E26）') : fail('SA44 孤儿键', '');
   ui.includes("key !== 'auto' && data && data.player ? `<button class=\"btn btn-sm btn-danger\" data-action=\"act-delete-save\"") ? pass('SA45 auto 不再可删（E27）') : fail('SA45 auto', '');
   gamejs.includes('Save.write(slot, Game.player);\n      Meta.load();') || gamejs.includes('Meta.load();   // v31 修瑕（E28）') ? pass('SA46 切槽重载 Meta（E28）') : fail('SA46 Meta.load', '');
@@ -122,7 +123,7 @@ console.log('===== SA 源码静态组 =====');
   trib.includes('XianSys.tribSuccess(p, S.xianTo, strategy)') ? pass('SA66 仙劫成功走仙阶口径（C3）') : fail('SA66 仙劫成功', '');
   trib.includes('!S.xian) p.exp = Math.round') && trib.includes("Time.cutLife(p, cutYears, '天劫反噬')") && trib.includes('!p.dead && !S.xian) {') ? pass('SA67 仙劫失利折仙元不折寿（C3；v40 E395 折寿改比例口径多行块）') : fail('SA67 仙劫失利', '');
   stat.includes('xianLayers * 0.015') && stat.includes('xianLayers * 2') && stat.includes('XIAN_TIERS.slice(0, XianSys.cur(p))') ? pass('SA68 仙阶属性/修炼/仙寿入总线（C4/C5）') : fail('SA68 总线', '');
-  pfac.includes('xianjie: { idx: 0, layer: 0 }') && pfac.includes('out.xianjie = {') ? pass('SA69 仙阶模板+迁移自愈（C1）') : fail('SA69 模板', '');
+  pfac.includes('xianjie: { idx: 0, layer: 0, worlds: [] }') && pfac.includes('out.xianjie = {') ? pass('SA69 仙阶模板+迁移自愈（C1；v42（E528·P3 整合）：E507 worlds 容器入模板随动）') : fail('SA69 模板', '');
   ui.includes("data-action=\"act-xian-enter\"") && ui.includes('data-action="act-xian-advance"') && ui.includes('data-action="act-xian-trib"') ? pass('SA70 仙阶卡三按钮（C6）') : fail('SA70 仙阶卡', '');
   ui.includes('GameData.XIAN_TIERS.map((x) =>') && ui.includes('仙界四阶 ·') ? pass('SA71 仙途条四阶节点（C6）') : fail('SA71 仙途条', '');
   gamejs.includes("'act-xian-enter': () => XianSys.enterFirst()") && gamejs.includes('XianSys.dailyCheck(p, auto)') ? pass('SA72 仙阶动作+访客钩子（C7）') : fail('SA72 接线', '');
@@ -396,8 +397,8 @@ if (browser) {
       out.cult = st.cultPct >= 10;
       // 仙寿：地仙 +2000
       out.life = st.lifespan === GameData.LIFESPAN[0] + 2000;
-      // 大罗圆满→道祖
-      p.xianjie = { idx: 4, layer: 3 };
+      // 大罗圆满→道祖（v42（E528·P3 整合）：E520 证道祖门槛——需一方小世界历三纪在册，随动）
+      p.xianjie = { idx: 4, layer: 3, worlds: [{ land: 'a', vein: 'b', life: 'c', name: '复算界', era: 3, createdDay: 1, lastTickDay: 1 }] };
       p.flags.daozu = false;
       XianSys.daozuCheck(p);
       out.daozu = p.flags.daozu === true;
@@ -441,10 +442,12 @@ if (browser) {
       const out = {};
       // A3：教程接力——真首机 show() 真展示（onDone 保留给 finish 消费）；已看过则早退（返回 false，由调用方接力）
       localStorage.removeItem('fanren_wd_tutorial');
-      Tutorial.onDone = () => ({ kept: true });
+      let doneCalled = false;
+      Tutorial.onDone = () => { doneCalled = true; };
       const shown = Tutorial.show();
       out.shownTrue = shown === true;
-      out.onDoneKept = typeof Tutorial.onDone === 'function';
+      // v42（E528·P3 整合）：E487 任务链非阻塞——show() 返回即接力开篇剧情并消费 onDone（旧「回调保留给 finish」随动）
+      out.onDoneKept = doneCalled === true && Tutorial.onDone === null;
       document.getElementById('tutorial').classList.add('hidden');
       localStorage.setItem('fanren_wd_tutorial', '1');
       const shown2 = Tutorial.show();

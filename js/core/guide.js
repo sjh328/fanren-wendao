@@ -66,7 +66,8 @@ LOCKS: {
       const undone = qc.steps.find(st => !QuestSys.stepDone(st, p, qc.supR));
       if (undone) t.splice(Math.min(1, t.length), 0, { text: `<b>主线·${qc.title}</b>：${undone.desc}`, go: 'quest' });
     }
-    if (AutoCult.active) t.push({ text: `自动修炼中（${AutoCult.rounds} 轮，修为 +${Utils.fmtNum(Math.max(0, this.totalExp(p) - AutoCult.startExp))}），可随时停止`, go: 'cultivate' });
+    // v42（E501）：挂机占位句移出建议区——修炼页仙途条（运行中提示行 + 停止按钮）已全程承接同信息，
+    // 建议区 3 个位置全留内容型提醒（主线/支线/新知不再被占位句挤占）
     if ((p.karma || 0) >= 100 && fa !== 'karma') t.push({ text: '孽障缠身，可于修炼页<b>斩三尸</b>', go: 'cultivate' });
     else if ((p.karma || 0) >= 60) t.push({ text: '孽障渐高，仇家窥伺于后——宜谨言慎行' });
     if (p.poison > cap * 0.75 && fa !== 'poison') t.push({ text: '丹毒将满，宜服解毒丹或停药休养', go: 'cultivate' });
@@ -241,8 +242,10 @@ LOCKS: {
       if (sn) done.push(`宗门任务领赏 ×${sn}`);
     }
     // v38（E325）：行权扩容——调息 / 悟道 / 宗门听讲（安静三件，逐项自停）
+    // v42（E501）：opts.rideAlong（挂机闭关轮逐日补跑语境）——调息/听讲随行免时耗（ Cultivate.rest/sectListen
+    // 的 noTime 参数），否则 30 日轮被自带日耗拖成 60~90 日；手动一键行权不传 rideAlong，维持原一日时耗
     if (!p.dead && p._restDay !== today && !Battle.active) {
-      try { Cultivate.rest(); if (p._restDay === today) done.push('打坐调息'); } catch (e) { console.error('行权·调息异常:', e); }
+      try { Cultivate.rest({ noTime: !!opts.rideAlong }); if (p._restDay === today) done.push('打坐调息'); } catch (e) { console.error('行权·调息异常:', e); }
     }
     // v39（E362）：悟道挂三态偏好——ask 弹窗确认（原样，选「再想想」也如实回执）、
     // always 静默直悟但纯度预览 <30% 自动跳过、skip 整步跳过；skip/不足均入小账「悟道：今日未行」
@@ -267,8 +270,8 @@ LOCKS: {
         } catch (e) { console.error('行权·悟道异常:', e); }
       }
     }
-    if (!p.dead && p.sect && p.listenDay !== today && p.sect.contrib >= 300 && !Battle.active && Game.actions['act-sect-listen']) {
-      try { await Game.actions['act-sect-listen']({}, null); if (p.listenDay === today) done.push('宗门听讲'); } catch (e) { console.error('行权·听讲异常:', e); }
+    if (!p.dead && p.sect && p.listenDay !== today && p.sect.contrib >= 300 && !Battle.active && typeof Cultivate !== 'undefined' && Cultivate.sectListen) {
+      try { Cultivate.sectListen({ noTime: !!opts.rideAlong, silent: !!opts.silent }); if (p.listenDay === today) done.push('宗门听讲'); } catch (e) { console.error('行权·听讲异常:', e); }
     }
     if (!done.length) { UI.toast('今日诸事皆已办妥——安心修行便是'); return; }
     // v39（E362）：小账挂三态偏好（fanren_wd_damode）——ask 弹窗（原样）、always toast 汇总不弹窗、

@@ -330,7 +330,7 @@ const report = await page.evaluate(() => {
         if (!d || !d.price) continue;
         let buy = null, ch = '';
         if (shopT.has(m)) { buy = d.price; ch = '坊市'; }
-        else if (blackT.has(m)) { buy = Math.round(d.price * 1.6); ch = '黑市'; }
+        else if (blackT.has(m)) { buy = Math.round(d.price * (BlackSys.MARKUP || 1.65)); ch = '黑市'; }   // v42（E518）：黑市购入价随 MARKUP 单源
         if (buy == null) continue;   // 无购入渠道——无环可言（掉落/拍卖非可循环购入口径）
         if (floorPc > buy) bountyLoopProblems.push(`[购料环正期望] tier${t} ${d.name} floor ${floorPc}/件 > 最廉购入 ${buy}/件（${ch}渠道）`);
       }
@@ -361,8 +361,8 @@ const report = await page.evaluate(() => {
       { id: '本命升一阶(lv0)', where: 'forge.js:601', f: r => Math.round(3000 * 1 * G.sinkCurve(r) / 2.2) },
       { id: '聚灵升级(lv0)', where: 'cave.js:26', f: r => Math.round(4000 * 1 * G.sinkCurve(r) / 16) },
       { id: '洞天升级(lv0)', where: 'cave.js:60', f: r => Math.round(4000 * 1 * G.sinkCurve(r)) },
-      { id: '灵田营造(lv1)', where: 'cave.js:484', f: r => Math.round(2000 * 1 * G.sinkCurve(r) / 2.2) },   // v41 修偏重锚：cave.js resolveNightRaid 驻守分支接 AvatarSys.noteGuard +1 行（483→484）
-      { id: '布施(large)', where: 'auction.js:343', f: r => Math.round(50000 * Math.max(1, G.sinkCurve(r) / 2.2)) },
+      { id: '灵田营造(lv1)', where: 'cave.js:486', f: r => Math.round(2000 * 1 * G.sinkCurve(r) / 2.2) },   // v41 修偏重锚（483→484）；v42（E517）：夜袭死项注释 +2 行随迁（484→486）
+      { id: '布施(large)', where: 'auction.js:433', f: r => Math.round(50000 * Math.max(1, G.sinkCurve(r) / 2.2)) },   // v42（E509）：寄售 V2 重写与滚茬透传随迁（343→430）
       { id: '灵兽蜕变', where: 'beast.js:350', f: r => Math.round(8000 * G.sinkCurve(r) / 2.2) },
       { id: '结契', where: 'beast.js:659', f: r => Math.round(5000 * G.sinkCurve(r) / 2.2) },
       { id: '自创功法(灵石段)', where: 'gongfa.js:147', f: r => Math.round(2000 * G.sinkCurve(r)) },
@@ -448,26 +448,23 @@ const report = await page.evaluate(() => {
     const ratio = 1 - dup.length / BlackSys.POOL.length;
     if (ratio < 0.7) blackExclusiveProblems.push(`[黑市独家格不足] 独家 ${BlackSys.POOL.length - dup.length}/${BlackSys.POOL.length}（占比 ${(ratio * 100).toFixed(0)}% < 70%）；同款格：${dup.map(x => x.id).join('、') || '无'}`);
   }
-  /* ---- v40（E388）新增第十二路：三档含截胡期望成本差——按「至成功所需期望出价倍数」计量
-   * （稳健 85%×1.3 失利必抬价 ×1.1；激进 60%×0.9 失利 25% 抬价；天价 100%×1.6；封顶 5 轮）。
-   * 门禁语义：稳健档期望成本须较最廉档贵 ≥15%——E388 的本义即「稳健 ×1.15/95% 无脑最优」不可复辟；
-   * 天价档为确定性溢价（花钱免险），天然贵于两档，不入差门。期望成本 = mul×p/(1−(1−p)×esc)（几何级数） ---- */
+  /* ---- v42（E510）第十二路随 E510 改门：三档每成功件成本差——激进 60%→45% 后每成功件
+   * = mul/rate = 0.9/0.45 = 2.0×base，与稳健 1.3/0.85 ≈1.53×base 拉开 30.8%（门 ≥1.25，注入锚：
+   * 激进回 60% 时比值 0.98 证红）；另锚激进每成功件 ≥1.9×base。天价 1.6×base 必成为确定性溢价。
+   * 含截胡的期望成本表（esc：稳健 1.1 / 激进 1.1【E510 落标必截胡】/ 天价 0）随行展示；
+   * 旧 E388「效率散布 ≤15%」门随三档重定位退役（激进自此为「低成算高单价」的真赌博档） ---- */
   const auctionSpreadProblems = [];
   const auctionSpread = {};
   {
     const expCost = (p, mul, esc) => mul * p / (1 - (1 - p) * esc);   // esc=失利后期望成本增长因子
-    const BM = AuctionSys.BID_MODES;   // v40（E388）：与 bid() 同源（注入改动即红）
-    // v41（E460）：稳健 esc 1.0→1.1——原传 1.0 与行注「稳健失利必抬价 ×1.1」及 bid() 实装相反；
-    // 复算散布 ≈4.7% ≤15% 仍绿
-    const mks = { steady: expCost(BM.steady.rate / 100, BM.steady.mul, 1.1), bold: expCost(BM.bold.rate / 100, BM.bold.mul, 1.025), dump: expCost(BM.dump.rate / 100, BM.dump.mul, 0) };
-    auctionSpread.steady = +mks.steady.toFixed(3);
-    auctionSpread.bold = +mks.bold.toFixed(3);
-    auctionSpread.dump = +mks.dump.toFixed(3);
-    // 效率 = 成交率 / 期望成本倍数（含截胡抬价）——三档效率散布 ≤15% 即「无哪档无脑占优」（E388 重定目标；注入锚：稳健回 1.15/95% 散布 ≈24% 证红）
-    const eff = { steady: BM.steady.rate / 100 / mks.steady, bold: BM.bold.rate / 100 / mks.bold, dump: BM.dump.rate / 100 / mks.dump };
-    auctionSpread.eff = { steady: +eff.steady.toFixed(3), bold: +eff.bold.toFixed(3), dump: +eff.dump.toFixed(3) };
-    const hi = Math.max(eff.steady, eff.bold, eff.dump), lo = Math.min(eff.steady, eff.bold, eff.dump);
-    if (lo > 0 && (hi - lo) / hi > 0.15) auctionSpreadProblems.push(`[三档效率散布超限] 稳健 ${eff.steady.toFixed(3)} / 激进 ${eff.bold.toFixed(3)} / 天价 ${eff.dump.toFixed(3)}——散布 ${(((hi - lo) / hi) * 100).toFixed(1)}% > 15%（E388 三档重定失效，复归无脑最优）`);
+    const BM = AuctionSys.BID_MODES;   // 与 bid() 同源（注入改动即红）
+    const per = m => +(m.mul / (m.rate / 100)).toFixed(3);   // 每成功件成本倍数（出价倍率/成交率）
+    auctionSpread.per = { steady: per(BM.steady), bold: per(BM.bold), dump: per(BM.dump) };
+    const mks = { steady: expCost(BM.steady.rate / 100, BM.steady.mul, 1.1), bold: expCost(BM.bold.rate / 100, BM.bold.mul, 1.1), dump: expCost(BM.dump.rate / 100, BM.dump.mul, 0) };
+    auctionSpread.cost = { steady: +mks.steady.toFixed(3), bold: +mks.bold.toFixed(3), dump: +mks.dump.toFixed(3) };
+    if (!(per(BM.bold) >= 1.9 - 1e-9)) auctionSpreadProblems.push(`[激进档个性失效] 激进每成功件 ${per(BM.bold)}×base < 1.9×（E510 锚 ≈2.0×：低成算高单价的真赌博档）`);
+    const ratio = per(BM.bold) / per(BM.steady);
+    if (!(ratio >= 1.25 - 1e-9)) auctionSpreadProblems.push(`[三档成本差不足] 激进/稳健每成功件 = ${ratio.toFixed(2)} < 1.25（E510：两档须拉开 ≥30% 量级，激进回 60% 时 ≈0.98 证红）`);
   }
   /* ---- v40（E389）新增路：手作溢价防套利两路 ----
    * ①逐配方 Σ材料坊市购价 ≤ sellPrice(out) 即报警（买料炼出必亏卖——E389 溢价 1.12 不得反转为正环）；
@@ -479,7 +476,7 @@ const report = await page.evaluate(() => {
     const purchasable = id => {
       if (G.SHOP.some(r => r.item === id)) return G.ITEMS[id].price || 0;                 // 坊市全价渠道
       const b = BlackSys.POOL.find(x => x.id === id);
-      if (b) return Math.round((G.ITEMS[id].price || 0) * 1.6);                            // 黑市 1.6× 渠道
+      if (b) return Math.round((G.ITEMS[id].price || 0) * (BlackSys.MARKUP || 1.65));     // 黑市渠道（v42（E518）：随 MARKUP 单源）
       return null;                                                                          // 无购入渠道——自采，无环
     };
     const recipes = [...(G.ALCHEMY_RECIPES || []), ...(G.EXP_RECIPES || []), ...(G.FORGE_RECIPES || [])];
@@ -553,35 +550,93 @@ const report = await page.evaluate(() => {
       if (tradeSpread.tradeMax - tradeSpread.tradeMin <= tradeSpread.normalMax - tradeSpread.normalMin + 1e-9) tradeProblems.push('[通商波幅未放宽] trade 值域未宽于常态（E405 假票复辟）');
     } finally { Game.player = savedPlayer3; }
   }
-  /* ---- v41（E460）新增路②：寄售佣金 sink（E439 随动）——CONSIGN_TIERS 单源现金 EV 曲线
-   * （EV = mul×rate/100×0.95，流拍退件留存不计）+ settleConsign 功能复算两支：
-   * 速售 0.8 档 EV ≈0.61 > 坊市秒卖 0.45（稳档寄售成立）、天价 2.0 档 EV ≈0.08 < 0.45（博高价=纯赌） ---- */
+  /* ---- v42（E509）E460 寄售路随 E509 重写：CONSIGN_TIERS_V2 单源现金 EV——
+   * 口径升级为「含续拍期望折算的每 60 日均收」马尔可夫式（高档成交吃 prem 溢价、流拍自动降档续拍
+   * 不另收费、速售档流拍退件）：X_i = q_i·G_i + (1−q_i)(X_{i−1}−0.02)，D_i = 60+(1−q_i)D_{i−1}，
+   * EV_i = X_i/D_i×60（tier0 退件即一期止）。门：极差 ≤0.15、高价档 ≥0.50、速售 ≥0.45（稳档寄售成立）、
+   * 速售不再严格最优（与最优档差 ≤5%）、EV/成交率双双单调降 + settleConsign 三支功能复算
+   * （V2 成交吃溢价 / V2 流拍降档续拍 / 旧档 tierV:1 按 E439 旧规则） ---- */
   const consignProblems = [];
   const consignRows = {};
   {
     const savedPlayer4 = Game.player;
     try {
       Game.player = fake;
-      const ev = (AuctionSys.CONSIGN_TIERS || []).map(t => +(t.mul * t.rate / 100 * 0.95).toFixed(3));
-      consignRows.ev = ev;
-      if (ev.length >= 5) {
-        if (!(ev[0] > 0.45)) consignProblems.push(`[寄售稳档失效] 速售档现金 EV ${ev[0]} ≤ 坊市 0.45（稳档寄售不成立）`);
-        if (!(ev[ev.length - 1] < 0.45)) consignProblems.push(`[寄售天价档失效] 天价档现金 EV ${ev[ev.length - 1]} ≥ 坊市 0.45（博高价非纯赌，E439 口径破）`);
-        for (let i = 1; i < ev.length; i++) if (ev[i] >= ev[i - 1]) consignProblems.push(`[寄售 EV 非单调] 第${i + 1}档 ${ev[i]} ≥ 第${i}档 ${ev[i - 1]}（成交率应随底价单调降）`);
+      const T2 = AuctionSys.CONSIGN_TIERS_V2 || [];
+      const q = T2.map(t => t.rate / 100);
+      const Gv = T2.map(t => t.mul * (1 + t.prem) * 0.95);
+      const X = [], D = [], ev = [];
+      for (let i = 0; i < T2.length; i++) {
+        X[i] = q[i] * Gv[i] + (1 - q[i]) * ((i ? X[i - 1] : 0) - 0.02);
+        D[i] = i ? 60 + (1 - q[i]) * D[i - 1] : 60;
+        ev.push(+(X[i] / D[i] * 60).toFixed(3));
       }
-      // 功能复算：成交支（五厘佣金入账）与流拍支（二厘手续费 + 退件回包）
-      fake.auction = { item: null, until: -1, consign: { item: 'm_gupian', base: 10000, rate: 100, tier: '速售', until: 0 } };
+      consignRows.ev = ev;
+      if (T2.length >= 5) {
+        const hi = Math.max(...ev), lo = Math.min(...ev);
+        if (hi - lo > 0.15 + 1e-9) consignProblems.push(`[寄售 EV 极差超限] ${ev.join(' / ')} 极差 ${(hi - lo).toFixed(3)} > 0.15（E509 五档重做失效）`);
+        if (!(ev[3] >= 0.5 - 1e-9)) consignProblems.push(`[寄售高价档失效] 高价档现金 EV ${ev[3]} < 0.50（E509 溢价+续拍未兑现）`);
+        if (!(ev[0] > 0.45)) consignProblems.push(`[寄售稳档失效] 速售档现金 EV ${ev[0]} ≤ 坊市 0.45（稳档寄售不成立）`);
+        if (!((hi - ev[0]) / hi <= 0.05 + 1e-9)) consignProblems.push(`[寄售速售独大] 速售较最优档差 ${(((hi - ev[0]) / hi) * 100).toFixed(1)}% > 5%（E509 速售仍严格最优）`);
+        for (let i = 1; i < ev.length; i++) if (ev[i] >= ev[i - 1]) consignProblems.push(`[寄售 EV 非单调] 第${i + 1}档 ${ev[i]} ≥ 第${i}档 ${ev[i - 1]}`);
+        for (let i = 1; i < T2.length; i++) if (T2[i].rate >= T2[i - 1].rate) consignProblems.push(`[寄售成交率非单调] ${T2[i].name} ${T2[i].rate}% ≥ ${T2[i - 1].name} ${T2[i - 1].rate}%`);
+      }
+      // 功能复算①：V2 成交支（溢价 ×1.2 + 五厘佣金）——base 10000 高价档（prem 0.20）→ 入账 11400
+      fake.stones = { low: 0, mid: 0, high: 0 }; fake.bag = {};
+      fake.auction = { item: null, until: -1, slots: 1, consigns: [{ tierV: 2, item: 'm_gupian', base: 10000, rate: 100, prem: 0.2, tier: '高价', tierIdx: 3, until: 0 }, null, null] };
       AuctionSys.settleConsign(fake, 1);
-      const stoneTotal = fake.stones.high * 10000 + fake.stones.mid * 100 + fake.stones.low;   // addStonesRaw 逢百进位，验总额
-      if (stoneTotal !== 9500) consignProblems.push(`[寄售佣金漂移] 成交入账 ${stoneTotal} ≠ 9500（五厘佣金口径破）`);
-      fake.auction.consign = { item: 'm_gupian', base: 10000, rate: 0, tier: '天价', until: 0 };
+      const tot2 = fake.stones.high * 10000 + fake.stones.mid * 100 + fake.stones.low;
+      if (tot2 !== 11400) consignProblems.push(`[寄售 V2 成交漂移] 溢价成交入账 ${tot2} ≠ 11400（prem 口径破）`);
+      // 功能复算②：V2 流拍支（二厘手续费 + 自动降一档续拍 60 日不另收费）——预存 500 下品验费实扣
+      fake.stones = { low: 500, mid: 0, high: 0 }; fake.bag = {};
+      fake.auction.consigns[0] = { tierV: 2, item: 'm_gupian', base: 10000, rate: 0, prem: 0.12, tier: '增价', tierIdx: 2, until: 0 };
       AuctionSys.settleConsign(fake, 1);
-      if ((fake.bag.m_gupian || 0) !== 1) consignProblems.push('[寄售退件失效] 流拍未退件回包');
+      const c2 = fake.auction.consigns[0];
+      const tot3 = fake.stones.high * 10000 + fake.stones.mid * 100 + fake.stones.low;
+      if (!(c2 && c2.tierIdx === 1 && c2.until === 61 && c2.rate === 60 && tot3 === 300)) consignProblems.push(`[寄售 V2 续拍失效] 降档续拍异常（tierIdx=${c2 && c2.tierIdx} until=${c2 && c2.until} 余 ${tot3}）`);
+      // 功能复算③：旧档 tierV:1 按 E439 旧规则结算（无溢价无续拍：成交 9500 / 流拍退件）
+      fake.stones = { low: 0, mid: 0, high: 0 }; fake.bag = {};
+      fake.auction.consigns[0] = { tierV: 1, item: 'm_gupian', base: 10000, rate: 100, tier: '速售', until: 0 };
+      AuctionSys.settleConsign(fake, 1);
+      const tot4 = fake.stones.high * 10000 + fake.stones.mid * 100 + fake.stones.low;
+      if (tot4 !== 9500) consignProblems.push(`[寄售旧档漂移] tierV:1 成交入账 ${tot4} ≠ 9500（E439 旧规则破）`);
+      fake.auction.consigns[0] = { tierV: 1, item: 'm_gupian', base: 10000, rate: 0, tier: '天价', until: 0 };
+      AuctionSys.settleConsign(fake, 1);
+      if ((fake.bag.m_gupian || 0) !== 1) consignProblems.push('[寄售旧档退件失效] 流拍未退件回包');
       delete fake.auction;
-      fake.bag = {};
+      fake.bag = {}; fake.stones = { low: 0, mid: 0, high: 0 };
     } finally { Game.player = savedPlayer4; }
   }
-  return { rows: rows.length, zeroPrice, problems, auctionProblems, sectProblems, sectPillRatioProblems, sectPillRatios, drawProblems, auctionGradeProblems, tierProblems, top10, boardProblems, boardAll: actionBoard.length, boardV37N: actionBoard.filter(x => x.v37).length, bountyLoopProblems, sinkBand, mysteryProblems, zeroTierProblems, bountyBandProblems, blackExclusiveProblems, auctionSpreadProblems, auctionSpread, craftLoopProblems, craftArbProblems, dualPriceProblems, dualPriceExempted, springProblems, tradeProblems, tradeSpread, consignProblems, consignRows  };
+  /* ---- v42（E508）新增路：0 价物「坊市/寄售」双标检测——E508 统一后两渠道同基数（GF×0.1）：
+   * 寄售速售现金 EV（基数×0.8×0.8×0.95）/ 坊市卖价（max(1, floor(基数×0.45))）∈ [1.2, 1.5]
+   * （0 价 grade5 锚 ≈1.35=4000×0.608/1800）；寄售估值须与坊市兜底同基数；pill_xisui 卖店
+   * ≥GF×0.1×0.45（静态锚）×0.8（坊市行情 ±20% 噪声带宽下探；确定性画像 seed0 实测 85/静态 90）——
+   * 旧口径 0 价 grade5 两渠道差 16.9 倍、约 47 种 0 价物卖坊市亏 94% ---- */
+  const dualChannelProblems = [];
+  const dualChannelRows = [];
+  {
+    const savedPlayer5 = Game.player;
+    try {
+      Game.player = fake;
+      for (const [id, def] of Object.entries(G.ITEMS)) {
+        if (def.price || !(def.grade >= 1)) continue;
+        const base0 = Math.round((G.GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500) * 0.1);
+        const sellBase = Math.max(1, Math.floor(base0 * 0.45));
+        const quickEV = base0 * 0.8 * 0.8 * 0.95;
+        const ratio = quickEV / sellBase;
+        const cv = AuctionSys.consignValue(fake, id);
+        if (cv !== base0) dualChannelProblems.push(`[寄售估值双标] ${id}(${def.name}) consignValue ${cv} ≠ 坊市兜底基数 ${base0}（E508 GF×0.1 口径破）`);
+        if (!(ratio >= 1.2 - 1e-9 && ratio <= 1.5 + 1e-9)) dualChannelProblems.push(`[0价双标超带] ${id}(${def.name}) 速售EV/坊市卖价 ${ratio.toFixed(2)} ∉ [1.2,1.5]`);
+        dualChannelRows.push(`${id}:${ratio.toFixed(2)}`);
+      }
+      const xisui = ShopSys.sellPrice('pill_xisui');
+      const xisuiStatic = Math.round((G.GRADE_FALLBACK[G.ITEMS['pill_xisui'].grade || 0] || 500) * 0.1 * 0.45);
+      const xisuiFloor = Math.floor(xisuiStatic * 0.8);   // 行情 ±20% 噪声带宽下探（确定性画像内仍有市场乘数）
+      dualChannelRows.push(`pill_xisui 卖店 ${xisui}（静态锚 ${xisuiStatic}，门 ≥${xisuiFloor}）`);
+      if (!(xisui >= xisuiFloor)) dualChannelProblems.push(`[0价丹卖店失效] pill_xisui 卖店 ${xisui} < GF×0.1×0.45×0.8=${xisuiFloor}（E508 兜底四类未生效）`);
+    } finally { Game.player = savedPlayer5; }
+  }
+  return { rows: rows.length, zeroPrice, problems, auctionProblems, sectProblems, sectPillRatioProblems, sectPillRatios, drawProblems, auctionGradeProblems, tierProblems, top10, boardProblems, boardAll: actionBoard.length, boardV37N: actionBoard.filter(x => x.v37).length, bountyLoopProblems, sinkBand, mysteryProblems, zeroTierProblems, bountyBandProblems, blackExclusiveProblems, auctionSpreadProblems, auctionSpread, craftLoopProblems, craftArbProblems, dualPriceProblems, dualPriceExempted, springProblems, tradeProblems, tradeSpread, consignProblems, consignRows, dualChannelProblems, dualChannelRows };
 });
 
 await browser.close();
@@ -600,13 +655,14 @@ if (report.mysteryProblems.length) gateLines.push(...report.mysteryProblems.map(
   for (const p of report.dualPriceProblems) gateLines.push('⚠ E390 ' + p);
   for (const p of report.springProblems) gateLines.push('⚠ E383 ' + p);
   for (const p of report.tradeProblems) gateLines.push('⚠ E460/通商 ' + p);
-  for (const p of report.consignProblems) gateLines.push('⚠ E460/寄售 ' + p);
+  for (const p of report.consignProblems) gateLines.push('⚠ E509/寄售 ' + p);
+  for (const p of report.dualChannelProblems) gateLines.push('⚠ E508/双标 ' + p);
   /* v41（E460）：SITES 行号源码断言——标签行号处文本须含 sinkCurve，防再漂（重锚后行号漂移即红） */
   {
     const SITES_LINE_GUARDS = [
       ['js/systems/forge.js', [49, 416, 495, 565, 601]],
-      ['js/systems/cave.js', [26, 60, 484]],   // v41 修偏重锚：cave.js noteGuard 接线 +1 行（483→484）
-      ['js/systems/auction.js', [343]],
+      ['js/systems/cave.js', [26, 60, 486]],   // v41 修偏重锚：cave.js noteGuard 接线 +1 行（483→484）；v42（E517）夜袭死项注释 +2 行（484→486）
+      ['js/systems/auction.js', [433]],   // v42（E509）寄售 V2 重写 +79 行，DonateSys.priceOf 重锚（343→422）；v42 P3：TIERS 表定稿 +2 行随迁（430→432）
       ['js/systems/beast.js', [350, 659]],
       ['js/systems/gongfa.js', [147]],
     ];
@@ -623,7 +679,7 @@ if (gateLines.length) {
 } else {
   console.log(`✓ 第九路 sink 日数比带全零（出带 ${report.sinkBand.exempted.length} 条均已显式列名豁免）· 第十路古匣稳健 EV 全负 · E460 通商波幅/寄售佣金两路绿 · SITES 行号断言全中`);
 }
-let md = `# v20 经济审计报告（scripts/price-audit.mjs 自动生成）\n\n采样画像：realm3、行情种子=0 确定性口径（v41（E460）：freshWorld 后钉死 market={seed:0,next:Infinity}，报告逐跑逐字节可复现）。\n\n- 物品总数：${report.rows}\n- 定价为 0 的稀有物（无坊市渠道，按品阶折算黑市价）：${report.zeroPrice.join('、') || '无'}\n\n## 问题清单（${report.problems.length}）\n`;
+let md = `# v20 经济审计报告（scripts/price-audit.mjs 自动生成）\n\n采样画像：realm3、行情种子=0 确定性口径（v41（E460）：freshWorld 后钉死 market={seed:0,next:Infinity}，报告逐跑逐字节可复现）。v42（E518）：问题清单=0 为门禁口径（全绿首版）。\n\n- 物品总数：${report.rows}\n- 定价为 0 的稀有物（无坊市渠道，按品阶折算黑市价）：${report.zeroPrice.join('、') || '无'}\n\n## 问题清单（${report.problems.length}）\n`;
 md += report.problems.length ? report.problems.map(p => `- ${p}`).join('\n') + '\n' : '- 无套利路径与定价倒挂。\n';
 md += `\n## v34 扩容检测\n\n- 拍卖池倒挂（${report.auctionProblems.length}）：\n` + (report.auctionProblems.length ? report.auctionProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 无。\n');
 md += `- 黑市赌袋路：v40（E387）随 buyMystery 删除整路退役（存废注释见源码第六路段）\n`;
@@ -648,12 +704,15 @@ md += `- E385 0 价 tier 物（材料池定价 0 即断裂）：${report.zeroTie
 md += `- E386 悬赏带宽（同 tier 兜底逐位相等，门 ≤2×）：${report.bountyBandProblems.length ? '\n' + report.bountyBandProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - tier1~4 兜底带宽 1.0×。\n'}`;
 md += `- E386/E387 第八路·购料环（tierAvg floor vs 最廉可购渠道）：${report.bountyLoopProblems.length ? '\n' + report.bountyLoopProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 全 tier 全渠道负期望，环已破。\n'}`;
 md += `- E387 黑市独家格占比（门 ≥70%）：${report.blackExclusiveProblems.length ? '\n' + report.blackExclusiveProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 达标。\n'}`;
-md += `- E388 第十二路·三档期望成本（含截胡；稳健 ${report.auctionSpread.steady}× / 激进 ${report.auctionSpread.bold}× / 天价 ${report.auctionSpread.dump}×base）：${report.auctionSpreadProblems.length ? '\n' + report.auctionSpreadProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 三档效率散布 ≤15%——稳健不再无脑最优、天价确定性溢价在门内。\n'}`;
+md += `- E510 第十二路·三档每成功件成本（mul/rate 口径：稳健 ${report.auctionSpread.per.steady}× / 激进 ${report.auctionSpread.per.bold}× / 天价 ${report.auctionSpread.per.dump}×base；含截胡期望成本：稳健 ${report.auctionSpread.cost.steady}× / 激进 ${report.auctionSpread.cost.bold}× / 天价 ${report.auctionSpread.cost.dump}×）：${report.auctionSpreadProblems.length ? '\n' + report.auctionSpreadProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - 激进每成功件 ≥1.9×base 且较稳健拉开 ≥25%（E510 三档个性锚）、天价必成确定性溢价。\n'}`;
 md += `- E389 手作溢价防套利两路：${report.craftLoopProblems.length || report.craftArbProblems.length ? '\n' + [...report.craftLoopProblems, ...report.craftArbProblems].map(p => `  - ${p}`).join('\n') + '\n' : '  - 逐配方 Σ材料购价 > sellPrice(out) 零命中；sellPrice(out) ≤ 直购价零命中。\n'}`;
 md += `- E390 宗门同物双价（通用列 vs 派系 exclusive）：${report.dualPriceProblems.length ? '\n' + report.dualPriceProblems.map(p => `  - ${p}`).join('\n') + '\n' : '  - pill_jiuzhuan 双挂点 4000 同价，全表零双价。\n'}`;
+md += `\n## v42 扩容检测（E508/E509/E510）\n\n`;
+md += `- E508 0 价双标路（坊市兜底四类 GF×0.1 与寄售估值同基数；速售 EV/坊市卖价 ∈[1.2,1.5]；pill_xisui 卖店 ≥GF×0.1×0.45）：${report.dualChannelProblems.length ? '\n' + report.dualChannelProblems.map(p => `  - ${p}`).join('\n') + '\n' : `  - 全部 0 价物比值落带（${report.dualChannelRows.length} 项采样：${report.dualChannelRows.slice(0, 6).join('、')}…）。\n`}`;
+md += `- E509 寄售五档 V2（CONSIGN_TIERS_V2 单源，含续拍期望折算的每 60 日均收 EV + settleConsign 三支功能复算）：${report.consignProblems.length ? '\n' + report.consignProblems.map(p => `  - ${p}`).join('\n') + '\n' : `  - 五档 EV = ${report.consignRows.ev.join(' / ')}——极差 ≤0.15、高价档 ≥0.50、速售 ≥0.45 且不再严格最优（与最优档差 ≤5%）；V2 溢价成交/降档续拍/旧档 tierV:1 三支实测在案。\n`}`;
 md += `\n## v41 扩容检测（E460）\n\n`;
 md += `- E460 通商波幅（常态 ∈[0.8,1.2]、trade 季 ∈[0.75,1.25] 且值域真放宽；行情 seed=0 全 ITEMS 采样）：${report.tradeProblems.length ? '\n' + report.tradeProblems.map(p => `  - ${p}`).join('\n') + '\n' : `  - 常态 ∈ [${report.tradeSpread.normalMin}, ${report.tradeSpread.normalMax}]、trade ∈ [${report.tradeSpread.tradeMin}, ${report.tradeSpread.tradeMax}]，两带落位且 trade 更烈。\n`}`;
-md += `- E460 寄售佣金 sink（CONSIGN_TIERS 单源现金 EV=mul×rate/100×0.95 + settleConsign 功能两支）：${report.consignProblems.length ? '\n' + report.consignProblems.map(p => `  - ${p}`).join('\n') + '\n' : `  - 五档 EV = ${report.consignRows.ev.join(' / ')}——速售 ≈0.61 > 坊市 0.45（稳档成立）、天价 ≈0.08 < 0.45（博高价=纯赌）；成交入账 9500/10000（五厘佣金）、流拍退件回包（二厘费）两支实测在案。\n`}`;
+md += `- E460 寄售佣金 sink：v42（E509）随五档重做升级为 CONSIGN_TIERS_V2 单源（含 prem 溢价与降档续拍，见上 v42 节），旧 mul×rate×0.95 单乘式口径随 E439→E509 退役；E439 骨架（佣金 5%/流拍退件费 2%/滚茬透传）不动。\n`;
 md += `- E460 SITES 重锚与行号断言：44/397/476/546/582 → 49/416/495/565/601（另 cave 26/60/483、auction 343、beast 350/659）；「器魂匣(lv0)」改名「套装炼化(lv0)」；标签行文本含 sinkCurve 源码断言（漂移即非零退出）。\n`;
 md += `\n## v39 扩容检测（E351/E352）\n\n`;
 md += `- 第九路·大额 sink 日数比带（采样 grep \`sinkCurve(\` 实测 12 处随动面 × r6~r9；带 [0.3, 2.5] 日、邻境日数比变化 ≤1.3×；分母 = 建模日均收入 125×stoneEco，与 balance-sim dayIn 同式；r10 为投影行——境界轴真仙 r9 为顶，仅验证曲线增长稳定）：\n`;

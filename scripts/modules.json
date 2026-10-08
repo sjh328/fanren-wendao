@@ -10,6 +10,7 @@
   "js/core/autocult.js",
   "js/core/codex.js",
   "js/data/game-data.js",
+  "js/data/flavor-v42.js",
   "js/core/log.js",
   "js/core/save.js",
   "js/core/player-factory.js",
@@ -51,5 +52,6 @@
   "js/ui/quest.js",
   "js/ui/ui.js",
   "js/ui/start-screen.js",
-  "js/game.js"
+  "js/game.js",
+  "js/core/sw-reg.js"
 ]

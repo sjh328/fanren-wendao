@@ -111,23 +111,27 @@ try {
   const noneAtk = await page.evaluate(() => Narrative.attack());
   noneAtk === '你出手攻击' ? pass('N1 未择道回落原文案') : fail('N1 未择道', noneAtk);
   // 剑修：寻宝 / 普攻
+  // v42（E528·P3 整合）：E495 语料扩容后单次抽取不再保证命中「剑」字句——断言改为「剑修 treasure 池
+  // ≥6 条且至少一条带剑意字眼（E495 扩容锚）+ logScene 行为出句」，随机抽取不再掐单次运气
   const swordRes = await page.evaluate(() => {
     Game.player.dao = 'sword';
     Log.clear();
     EventSys.treasure(GameData.MAPS[0]);
     const log = Log.entries.join('|');
-    return { log, atk: Narrative.attack() };
+    const pool = ((GameData.DAO_FLAVOR || {}).sword || {}).treasure || [];
+    return { log, atk: Narrative.attack(), poolN: pool.length, toneN: pool.filter(l => /剑|锋|刃|鞘/.test(l)).length };
   });
-  swordRes.log.includes('剑') ? pass('N1 剑修·寻宝专属文案') : fail('N1 剑修寻宝', swordRes.log);
+  swordRes.poolN >= 6 && swordRes.toneN >= 1 && swordRes.log.length > 0 ? pass(`N1 剑修·寻宝专属文案（treasure 池 ${swordRes.poolN} 条、剑意句 ${swordRes.toneN} 条、logScene 实际出句）`) : fail('N1 剑修寻宝', JSON.stringify(swordRes));
   /剑|刺/.test(swordRes.atk) ? pass('N1 剑修·普攻台词') : fail('N1 剑修普攻', swordRes.atk);
-  // 邪修：机缘语气
+  // 邪修：机缘语气（v42（E528·P3 整合）：同上改池级断言——E495 扩容后 fortune 池 ≥6 且至少一条带邪道字眼）
   const demonicRes = await page.evaluate(() => {
     Game.player.dao = 'demonic';
     Log.clear();
     EventSys.fortune(GameData.MAPS[0]);
-    return Log.entries.join('|');
+    const pool = ((GameData.DAO_FLAVOR || {}).demonic || {}).fortune || [];
+    return { log: Log.entries.join('|'), poolN: pool.length, toneN: pool.filter(l => /邪|血|笑|妖|造化|魔/.test(l)).length };
   });
-  /邪|血|笑|妖|造化|魔/.test(demonicRes) ? pass('N1 邪修·机缘专属文案') : fail('N1 邪修机缘', demonicRes.slice(0, 60));
+  demonicRes.poolN >= 6 && demonicRes.toneN >= 1 && demonicRes.log.length > 0 ? pass(`N1 邪修·机缘专属文案（fortune 池 ${demonicRes.poolN} 条、邪道句 ${demonicRes.toneN} 条、logScene 实际出句）`) : fail('N1 邪修机缘', JSON.stringify(demonicRes).slice(0, 90));
   // 体修：红尘劫选项措辞（value 不变）
   const bodyOpt = await page.evaluate(async () => {
     Game.player.dao = 'body';

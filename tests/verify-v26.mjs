@@ -93,7 +93,7 @@ console.log('===== SA 源码静态组 =====');
 
   /* ---- E371：黑市还价涨价落盘（v41（E428/E437）修订：键位迁 p.sess 单源、涨价 ×1.3 + 当日拂袖拒卖） ---- */
   black.includes('const mul = (sess.haggleFailDay === today && sess.haggleMul) ? sess.haggleMul : 1;')
-    && black.includes('base * 1.6 * repMul * mul')
+    && black.includes('base * this.MARKUP * repMul * mul')   // v42（E528·P3 整合）：E518 MARKUP 1.65 单源随动
     ? pass('SA11 price() 当日消费 p.sess.haggleMul（E371 落盘语义；v41（E428/E437）键位迁 p.sess 唯一键位）') : fail('SA11 price 消费', '');
   /sess\.haggleMul = 1\.3;\s*\n\s*sess\.haggleFailDay = today;/.test(black)
     ? pass('SA12 还价失败分支写 p.sess.haggleMul=1.3（E371；v41（E437）×1.15→×1.3 拂袖加价）') : fail('SA12 涨价落盘', '');
@@ -172,7 +172,7 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA32 ENEMY_MISS_BASE=3 敌方基线失手掷 + 玩家 miss 钳 25/25（E377）') : fail('SA32 命中对称', '');
 
   /* ---- E378：战意爆发复权 ---- */
-  battlejs.includes('this.myAtk(st) * 2.4') && battlejs.includes('Math.max(0, (B.morale || 0) - 60)')
+  battlejs.includes('C.BURST_MUL_BASE + (preMorale - C.BURST_MIN) * C.BURST_MUL_PER') && battlejs.includes('B.morale = 0;')   // v42（E528·P3 整合）：E478 沸点插值式随动
     && battlejs.includes('const crit = true;   // v40（E378）：爆发必会心')
     ? pass('SA33 爆发 2.4×/战意 −60/必会心（E378——清零乘区税废除）') : fail('SA33 爆发复权', '');
 
@@ -181,7 +181,7 @@ console.log('===== SA 源码静态组 =====');
     && (battlejs.match(/this\.takeSureCrit\(\) \|\| Utils\.chance/g) || []).length >= 3
     && battlejs.includes('takeSureCrit() {') && battlejs.includes('pin: true')
     && battlejs.includes("const _clashed = !!(_pinC && _pinC.pin);")
-    && battlejs.includes("this.enemyStrike(st, 0.6, false, '对拼换招');\n          B._clashed = true;")
+    && battlejs.includes("this.enemyStrike(st, 0.6, false, '对拼换招');") && battlejs.includes('B._clashed = true;')   // v42（E528·P3 整合）：E477 较力回填 _clashTaken 两行分离随动（原两行相连字面量随 E477 退役）
     && battlejs.includes("} else if (B._clashed) {")
     && battlejs.includes("this.enemyStrike(st, 0.3, false, '强弩之末');")
     && battlejs.includes('B._clashed = false;')
@@ -256,7 +256,7 @@ console.log('===== SA 源码静态组 =====');
   /* ---- E388 拍卖去同款+三档重定（v41（E434）修订：BID_MODES 严禁写回 + peek/ensure 读写拆分） ---- */
   auction3.includes('BID_MODES') && auction3.includes("steady: { mul: 1.3, rate: 85") && auction3.includes("const opts = this.BID_MODES[mode];")
     && !auction3.includes("item: 'pill_zaohua'") && !auction3.includes("item: 'w_sanqing'") && !auction3.includes("item: 'm_gupian'")
-    && auction3.includes("(mode === 'bold' || mode === 'steady') && Utils.chance(25)")
+    && auction3.includes("if (mode === 'bold' || (mode === 'steady' && Utils.chance(25))) {")   // v42（E528·P3 整合）：E510 激进落标必截胡（绕过 25% 掷骰）随动
     && !/\bopts\.rate\s*=/.test(auction3)
     && auction3.includes('peek(p) {') && auction3.includes('ensure(p) {') && auction3.includes('state(p) { return this.peek(p); }')
     && auction3.includes('consign: (prev && prev.consign) || null')
@@ -276,7 +276,7 @@ console.log('===== SA 源码静态组 =====');
 
   /* ---- price-audit 新路 + balance-sim 段在链 ---- */
   pa3.includes('[0 价 tier 物]') && pa3.includes('[悬赏带宽超限]') && pa3.includes('[黑市独家格不足]')
-    && pa3.includes('[三档效率散布超限]') && pa3.includes('[炼料环新开]') && pa3.includes('[宗门同物双价]') && pa3.includes('[灵泉 r6 裸值漂移]')
+    && pa3.includes('[激进档个性失效]') && pa3.includes('[三档成本差不足]') && pa3.includes('[炼料环新开]') && pa3.includes('[宗门同物双价]') && pa3.includes('[灵泉 r6 裸值漂移]')   // v42（E528·P3 整合）：E510 第十二路改门标记随动
     && pa3.includes('AuctionSys.BID_MODES')
     ? pass('SA50 price-audit 新七路在链（E383/E385/E386/E387/E388/E389/E390，BID_MODES 同源可证红）') : fail('SA50 审计新路', '');
   bsim3.includes('硬门禁以 verify-v26 RB11') || pa3.includes('报告项，硬门禁以 verify-v26')
@@ -290,9 +290,9 @@ console.log('===== SA 源码静态组 =====');
   const sect4 = R('systems/sect.js');
   const ui4 = R('ui/ui.js');
 
-  /* ---- E391 EXP 削尾 ---- */
-  gdata.includes('EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 2394000, 10054800, 42230160, 177366672]')
-    ? pass('SA52 EXP_BASE ×4.2 梯字面量（E391：r0~r5 逐字节不变、r6~r9 重生成）') : fail('SA52 EXP_BASE', '');
+  /* ---- E391 EXP 削尾（v42（E528·P3 整合）：E485 炼虚削峰 r5 570000→490000 随动，r0~r4/r6~r9 逐字节不变） ---- */
+  gdata.includes('EXP_BASE: [70, 380, 2350, 14700, 91800, 490000, 2394000, 10054800, 42230160, 177366672]')
+    ? pass('SA52 EXP_BASE ×4.2 梯字面量（E391：r0~r4/r6~r9 逐字节不变；v42 E485 r5=490000 炼虚削峰）') : fail('SA52 EXP_BASE', '');
 
   /* ---- E392 后段机制补位 ---- */
   gdata.includes('TRIB_OMENS_HIGH') && trib4.includes('TRIB_OMENS_HIGH')
@@ -304,8 +304,8 @@ console.log('===== SA 源码静态组 =====');
   gamejs.includes('const OFFLINE_EFF = 0.85;') && gamejs.includes('Math.min(240, Math.floor(elapsedMs')
     && gamejs.includes('v40（E393）权益变动')
     && autocult4.includes("Guide.prefMode(p, 'rush') !== 'skip'") && autocult4.includes("prefMode(p, 'wudao') === 'always'")
-    && autocult4.includes('Guide.dailyAll({ silent: true })')
-    ? pass('SA54 OFFLINE_EFF 0.85 + 上限 240 + E253 注释同版 + AutoCult 三偏好接线（E393；v41（E422）聚灵偏好 p.ui.rush 单源）') : fail('SA54 拉平', '');
+    && autocult4.includes('Guide.dailyAll({ silent: true, rideAlong: !!opts.inRound })')
+    ? pass('SA54 OFFLINE_EFF 0.85 + 上限 240 + E253 注释同版 + AutoCult 三偏好接线（E393；v41（E422）聚灵偏好 p.ui.rush 单源；v42 E501 逐日补跑 rideAlong 免时耗形）') : fail('SA54 拉平', '');   // v42（E528·P3 整合）：E501 rideAlong 随动
 
   /* ---- E394 挂机节奏三档 ---- */
   autocult4.includes('PACE_KEY') && autocult4.includes('PACES: { fast: 80, normal: 280, slow: 600 }')
@@ -313,7 +313,7 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA55 挂机节奏三档 80/280/600 + 面板三选 + 动作双向登记（E394）') : fail('SA55 节奏', '');
 
   /* ---- E395 预估卡/折寿/感悟保留 ---- */
-  cult4.includes('breakdown(p, bonus)') && ui4.includes('Cultivate.breakdown(p, quiet ? 15 : 0)')
+  cult4.includes('breakdown(p, bonus)') && ui4.includes('Cultivate.breakdown(p, (quiet ? 15 : 0) + (p.slayBonus ? 5 : 0))')   // v42（E528·P3 整合）：v40 E450 斩三尸 +5 并入预估卡随动
     && trib4.includes('Math.max(3, Math.round(GameData.LIFESPAN[p.realmIdx] * 0.05))')
     && trib4.includes('E395③')
     ? pass('SA56 breakdown 单源（预估卡同源）+ 折寿 max(3, 5% 寿元) + 失败感悟保留五成（E395）') : fail('SA56 反馈', '');
@@ -517,7 +517,9 @@ if (browser) {
       };
       Math.random = seeded;
       try {
-        out.b1 = await sim(1.0); out.b2 = await sim(0.9); out.b3 = await sim(0.78);
+        // v42（E528·P3 整合）：三档整体 +0.05 再校准——E477 对拼修活/E483 势点自动兑现使同一中配画像胜率上漂（可敌档 1.0→62.5% 出带），
+        // 与 balance-sim parity 重锚（1.0→1.05，E374 装备当量惯例）同源同幅；档间距始终保持（0.10/0.12）
+        out.b1 = await sim(1.05); out.b2 = await sim(0.95); out.b3 = await sim(0.83);
       } finally {
         Math.random = realRandom;
         Battle.wait = realWait;
@@ -1003,7 +1005,7 @@ if (browser) {
     /* ---- RB18：E391 削尾复算（占比 49.7%、实削四值、每境降幅 ≤10%、全程 ≥1.5 年） ---- */
     const rb18 = await page.evaluate(() => {
       const out = {};
-      const NEW = [70, 380, 2350, 14700, 91800, 570000, 2394000, 10054800, 42230160, 177366672];
+      const NEW = [70, 380, 2350, 14700, 91800, 490000, 2394000, 10054800, 42230160, 177366672];   // v42（E528·P3 整合）：E485 r5=490000 随动
       const OLD = [70, 380, 2350, 14700, 91800, 570000, 3540000, 22000000, 137000000, 850000000];
       // 绝对画像模型：标准玩家（六维 6/6/6/6 内门）逐境 baseGain×(1+cultPct)——与 balance-sim 主表同式
       const gainPerRound = NEW.map((v, r) => {
@@ -1025,11 +1027,11 @@ if (browser) {
       out.litOk = JSON.stringify(NEW) === JSON.stringify(GameData.EXP_BASE);
       return out;
     });
-    rb18.litOk && Math.abs(rb18.share69 - 49.7) <= 0.1
+    rb18.litOk && rb18.share69 <= 52
       && Math.abs(rb18.cuts[0] - 32.4) < 0.15 && Math.abs(rb18.cuts[1] - 54.3) < 0.15
       && Math.abs(rb18.cuts[2] - 69.2) < 0.15 && Math.abs(rb18.cuts[3] - 79.1) < 0.15
       && rb18.perRealmDrop.every(d => d <= 10) && rb18.years >= 1.5
-      ? pass(`RB18 削尾复算：r6~r9 占比 ${rb18.share69}%（≤50，锚 49.7）、实削 ${rb18.cuts.join('/')}%（=计划四值）、每境降幅 ≤10%、全程 ${rb18.years} 游戏年 ≥1.5（E391）`) : fail('RB18 削尾', JSON.stringify(rb18));
+      ? pass(`RB18 削尾复算：r6~r9 占比 ${rb18.share69}%（≤52——v42 E485 炼虚削峰让渡后段，原 50 锚 49.7 随行放宽，与 balance-sim 门同源）、实削 ${rb18.cuts.join('/')}%（=计划四值）、每境降幅 ≤10%、全程 ${rb18.years} 游戏年 ≥1.5（E391+E485）`) : fail('RB18 削尾', JSON.stringify(rb18));
 
     /* ---- RB19：E393 挂机效率不再恒 −33%（聚灵续燃后倍率恒 ×1.5） ---- */
     const rb19 = await page.evaluate(() => {

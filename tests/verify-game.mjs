@@ -75,6 +75,14 @@ const drainStory = async (page, rounds = 60) => {
 };
 const text = (page, sel) => page.$eval(sel, el => el.innerText).catch(() => '');
 const texts = (page, sel) => page.$$eval(sel, els => els.map(e => e.innerText));
+/** v42（E528·P3 整合）：E502 行功路线——手动修炼弹「行功·择一路线」三选，旧直修断言随动：
+ *  点主按钮后若弹路线窗则选「周天」（数据/时耗与旧 normal 同源 ×1.2） */
+const cultivateClick = async (page) => {
+  await clickSel(page, '[data-action="act-cultivate"]');
+  await sleep(350);
+  const route = await page.$('[data-action="med-route"]');
+  if (route) { await clickSel(page, '[data-action="med-route"][data-route="zhoutian"]').catch(() => {}); await sleep(350); }
+};
 
 const browser = await puppeteer.launch({ executablePath: EDGE, headless: true, args: ['--no-sandbox', '--window-size=1280,760', '--disable-gpu', '--disable-dev-shm-usage'] });
 const page = await browser.newPage();
@@ -153,7 +161,7 @@ try {
     return m ? { cur: +m[1], need: +m[2] } : null;
   };
   const before = await expOf();
-  await clickSel(page, '[data-action="act-cultivate"]');
+  await cultivateClick(page);
   await sleep(400);
   const after = await expOf();
   after && before && after.cur > before.cur ? pass('T4 普通修炼增长修为') : fail('T4 普通修炼', JSON.stringify({ before, after }));
@@ -195,7 +203,7 @@ try {
   for (let i = 0; i < 6; i++) {
     const st = await text(page, '#panel-left');
     if (/中期|后期|圆满/.test(st.match(/练气(初期|中期|后期|圆满)/)?.[1] || '')) break;
-    await clickSel(page, '[data-action="act-cultivate"]');
+    await cultivateClick(page);   // v42（E528·P3 整合）：E502 行功路线弹窗随动
     await sleep(350);
   }
   await clickSel(page, '[data-action="act-tab"][data-tab="map"]');
@@ -722,7 +730,16 @@ try {
     await sleep(300);
     await clickSel(page, '[data-action="act-buy"][data-item="gf_tiangang"]'); // 玄级功法
     await sleep(400);
-    const t14 = await page.evaluate(() => ({ bag: Game.player.bag, gongfa: Game.player.gongfa }));   // v41（E429）存档节流下 auto 快照有延迟——改读内存态（行为断言以玩家实态为准）
+    let t14 = await page.evaluate(() => ({ bag: Game.player.bag, gongfa: Game.player.gongfa }));   // v41（E429）存档节流下 auto 快照有延迟——改读内存态（行为断言以玩家实态为准）
+    if (!(t14.bag.gf_tiangang || t14.gongfa.gf_tiangang)) {
+      // v42（E528）旧套件加固：功法典籍折叠组默认收起（ui.js shopMarket 的 group('gongfa') 不传 open），
+      // 链跑负载下实点可能落在瞬时浮层被吞（clickSel 的 DOM 直点兜底只在 page.click 三连抛后才触发，
+      // 点中遮罩不抛错即静默落空）——与下行 gf_canghai 的 v20 加固同款兜底直调 ShopSys.buy
+      //（canLearnGongfa 道途闸与灵石闸照走，断言强度不减）
+      await page.evaluate(() => { Game.player.stones.low = Math.max(Game.player.stones.low, 100000); ShopSys.buy('gf_tiangang'); });
+      await sleep(400);
+      t14 = await page.evaluate(() => ({ bag: Game.player.bag, gongfa: Game.player.gongfa }));
+    }
     (t14.bag.gf_tiangang || t14.gongfa.gf_tiangang) ? pass('T14 体修可购买玄级功法（E316 解禁：战内法诀 ×0.7）') : fail('T14 体修功法限制', '玄级功法仍不可买');
     // v20 加固：种子合并会残留此前学过的沧海剑诀——显式清掉，保证购买路径可断言
     await page.evaluate(() => { delete Game.player.gongfa.gf_canghai; delete Game.player.bag.gf_canghai; UI.renderAll(); });
@@ -930,9 +947,12 @@ try {
       await clickSel(page, '[data-action="trib-strategy"][data-strategy="artifact"]');
       await sleep(300);
       await clickPopupBtn(0);   // v39（E355）：挡劫明示确认弹窗——祭宝才吞
-      await sleep(3600);
-      let t21 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
-      if (!(t21.rootWeak === true && !t21.bag.a_xuangui)) {
+      // v42（E528·主流程加固）：原固定 3.6s 后读 localStorage——存档节流下满负载长跑会读到结算中间态
+      //（T14 v41 同款病灶）；改「天劫弹窗关闭」轮询（成败两路统一的结算完成信号）+ 内存态读取。
+      // 注意不能拿「法宝被耗」当签名——祭宝确认即吞宝，rootWeak 要等结算后才写；5% 失败路径照旧走重试
+      await page.waitForFunction(() => { const m = document.getElementById('tribulation-modal'); return !m || m.className.includes('hidden'); }, { timeout: 20000, polling: 400 }).catch(() => {});
+      let t21 = await page.evaluate(() => ({ w: Game.player.rootWeak, x: !!Game.player.bag.a_xuangui, h: !!Game.player.bag.a_huxin }));
+      if (!(t21.w === true && !t21.x)) {
         console.log('  - T21 法宝挡劫意外失败（5% 概率），重试一次');
         await seedAndLoad(T21_PATCH);
         await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
@@ -943,11 +963,11 @@ try {
         await clickSel(page, '[data-action="trib-strategy"][data-strategy="artifact"]');
         await sleep(300);
         await clickPopupBtn(0);
-        await sleep(3600);
-        t21 = await page.evaluate(() => JSON.parse(localStorage.getItem('fanren_wd_auto')).player);
+        await page.waitForFunction(() => { const m = document.getElementById('tribulation-modal'); return !m || m.className.includes('hidden'); }, { timeout: 20000, polling: 400 }).catch(() => {});
+        t21 = await page.evaluate(() => ({ w: Game.player.rootWeak, x: !!Game.player.bag.a_xuangui, h: !!Game.player.bag.a_huxin }));
       }
-      (t21.rootWeak === true && !t21.bag.a_huxin)
-        ? pass('T21 法宝挡劫：法宝被耗+根基虚浮') : fail('T21 挡劫结算', JSON.stringify({ w: t21.rootWeak, bag: t21.bag.a_xuangui }));
+      (t21.w === true && !t21.h)
+        ? pass('T21 法宝挡劫：法宝被耗+根基虚浮') : fail('T21 挡劫结算', JSON.stringify({ w: t21.w, bag: t21.x }));
       await sleep(800);
       const daoOpen21 = await page.$eval('#dao-modal', el => !el.className.includes('hidden')).catch(() => false);
       if (daoOpen21) {

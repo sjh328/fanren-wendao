@@ -57,8 +57,10 @@ const GameData = {
   // v40（E391）削尾：r6~r9 改 ×4.2 梯（v34 注释宣称 ×5.4 却从未落进数据，实测 r1 起每境 ×6.21——
   // r6~r9 白占全程 73.5% 修为轮数且机制零增量）。实削 −32.4/−54.3/−69.2/−79.1%，占比 73.5%→49.7%，
   // r6~r9 每境轮数 −8.7%（≤10% 门）；省下时长由 E392 每境机制补位（新劫象/秘境协防/本境解锁）承接。
-  // r0~r5 逐字节不变。
-  EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 2394000, 10054800, 42230160, 177366672],
+  // r0~r4 逐字节不变（E391 锚保护）；v42（E485）炼虚削峰：EXP_BASE[5] 570000→490000——
+  // E391 削尾把墙挪到了中段（r4→r5 跳变 1.35× 为全程峰值），复锚后 r4→r5 纯天数比 ≈1.17、
+  // r5→r6 ≈1.06（v2 算术勘误：EXP_BASE[5] 下降使 r5 一程变短、r5→r6 相对变长），全曲线相邻比 ∈[0.8,1.35]。
+  EXP_BASE: [70, 380, 2350, 14700, 91800, 490000, 2394000, 10054800, 42230160, 177366672],
   LAYER_MULT: [1, 1.5, 2, 2.5],
   /** 各境界寿元上限（岁） */
   LIFESPAN: [120, 240, 500, 1000, 2000, 4000, 8000, 16000, 32000, 99999],
@@ -143,11 +145,20 @@ const GameData = {
       PLAYER_MISS_MAX: 25,        // 玩家普攻失手上限（v40（E377）：40→25 命中对称；法诀同钳 SKILL_MISS_MAX）
       SKILL_MISS_MAX: 25,         // 玩家法诀失手上限（v40（E377）：35→25 与普攻同钳）
       ENEMY_MISS_BASE: 3,         // v40（E377）：敌方基线失手%（原敌方恒命中——身法坍缩成打木桩）
-      ENEMY_DODGE_MAX: 70,        // 敌方闪避上限（玩家侧攻击命中钳制 2~25，此处封敌方闪避收益）
+      ENEMY_DODGE_MAX: 50,        // v42（E479）：敌方闪避上限 70→50（玩家侧攻击命中钳制 2~25；E377 命中对称后，敌方「闪避近免疫」同钳）
       BLOCK_REDUCTION: 0.45,      // 格挡后伤害系数
       DEFEND_REDUCTION: 0.4,      // 防御姿态伤害系数
       MORALE_PER_POINT: 0.004,    // 每点战意伤害加成
       MORALE_MAX: 100,            // 战意上限
+      /* v42（E478）战意沸点：满值不再常驻——≥100 入沸腾态（×1.4 伤害保留），沸腾态每回合结算
+       * 流失 MORALE_BOIL_DRAIN、受击额外流失 MORALE_BOIL_HIT；爆发改「耗尽全部战意、按余量放大」：
+       * mult = BURST_MUL_BASE + (战意−BURST_MIN)×BURST_MUL_PER（60 战意 ≈2.4×、100 沸腾 ≈3.2× 线性插值，
+       * 触发门槛即 BURST_MIN=60），每场至多两次不变。 */
+      MORALE_BOIL_DRAIN: 15,      // 沸腾态每回合结算流失（v42（E478）P3 复核：parity 引擎 40 场 skill 循环战意不过沸线，流失率不参与 parity——重锚走 balance-sim 敌带 ratio 路径，本值维持 W1A MC 锚）
+      MORALE_BOIL_HIT: 15,        // 沸腾态受击额外流失
+      BURST_MIN: 60,              // 爆发最低战意（触发门槛，=2.4× 锚点）
+      BURST_MUL_BASE: 2.4,        // 60 战意爆发倍率
+      BURST_MUL_PER: 0.02,        // 每点战意倍率增量（60→100 ⇒ 2.4→3.2）
       COMBO_PER_LAYER: 0.04,      // 每层连击伤害加成
       COMBO_MAX: 5,               // 连击上限
       GUARD_DEF_BASE: 40,         // 铁壁基础防御加成%（敌方招式未带 def 时）
@@ -228,14 +239,29 @@ const GameData = {
         { id: 'lianshan', name: '连山', slot: 'weapon', score: 15, desc: '连击上限+3', onHit: { comboUp: 3 } },
       ],
     },
-    /* ---------- v19 数值说明书（平衡设计意图） ----------
-     * · 修为曲线：v30 起 EXP_BASE 每境 ×6.2 超线性（产出端 eco=4.6^r 不变）——每境耗时随境界递增、
-     *   全程约 12~20 游戏年，寿元折损与世界大事（10 余年起）自此落入正常周目视野。原口径：
-     *   实际节奏由行动频率决定；溢出修为折半带入新境，杜绝刷层浪费。
+    /* ---------- v19 数值说明书（v42（E484）逐条与现行实装对表重写——v42 调参的锚文档） ----------
+     * 每条注明对应 E 号；调参时先改实现单源、再回这里对齐文案，两处漂移即门禁红。
+     * · 修为曲线（v42（E485））：EXP_BASE[5]=490000 炼虚削峰——r4→r5 纯天数比 ≈1.17、r5→r6 ≈1.06
+     *   （全曲线相邻比 ∈[0.8,1.35]）；r0~r4 与 r6~r9（E391 ×4.2 梯）逐字节不动。产出端 eco=4.6^r、
+     *   溢出修为折半带入新境。实际节奏由行动频率决定。
      * · 灵石曲线：stoneEco=3.8^r 略慢于修为——后期灵石相对紧俏，消费端（拍卖/布施/喂养/营造）
-     *   按 2.2^r 定价吸收通胀。
-     * · 战斗：afterDef 分母 140 使防御收益在 def≈atk 时约五成减伤；闪避钳 35%、暴击钳 75%
-     *   防极端构筑；精英词缀与 Boss 二阶段补偿后期数值碾压。
+     *   按 sinkCurve 吸收通胀（v41（E459）口径：灵石轴=stoneEco、修为轴=eco 双轨分立）。
+     * · 战斗（v42（E484）对表）：
+     *   - 减伤：afterDef 分母 140×(1+受方rp/6)（v40（E376）；AFTER_DEF_DENOM=140 为基项）——
+     *     def≈atk 时约五成减伤，受方境界越高减伤越钝。
+     *   - 闪避：玩家普攻/法诀失手钳 2~25（v40（E377）PLAYER_MISS_MAX/SKILL_MISS_MAX）；敌方闪避帽
+     *     50（v42（E479）ENEMY_DODGE_MAX，70→50）；敌方基线失手 3%（E377 ENEMY_MISS_BASE）。
+     *   - 会心：玩家暴击倍率 1.7（剑修二境起 1.9），总乘数封顶 CRIT_DMG_CAP=2.4（v40（E380）
+     *     溢出折会伤+E417）；敌方暴击倍率 1.6。
+     *   - 战意（v42（E478）沸点）：普攻 +12、会心 +14、防御 +6、读中 +4、受击 −8（格挡 +4）；
+     *     ≥100 入沸腾态（×1.4 伤害保留），沸腾态每回合结算流失 15、受击额外 −15；爆发耗尽全部战意、
+     *     按余量放大（60 战意 ≈2.4×、100 ≈3.2×，BURST_MUL_BASE=2.4/BURST_MUL_PER=0.02 线性插值，
+     *     门槛 BURST_MIN=60），每场至多两次。
+     *   - 精英词缀（v42（E480）e-tier）：旧 12 条按强度分 minRp 0/3/5 三档；高境专属 T2 四条
+     *     噬灵 6/镜甲 7/影分 8/精准 8（精准=v42（E479）命中 = 基础 + rp×0.8% 直接吃玩家闪避池）；
+     *     r5+ 必双缀、r8+ 三成几率三缀；互斥对见 ELITE_AFFIX_MUTEX。
+     *   - 二阶段（v42（E481））：Boss 恒有、精英三成几率携带（入场公示）；血线过半攻 +25%，
+     *     习性分化见 PHASE2_TRAITS（狂战连蓄/铁壁汲血/狡诈窃益/坚韧回春）。
      * · 渡劫：基准 40+悟×2，气运/孽障 ±0.2/点，静修+15%；三策期望拉平（硬抗低方差/法宝高成本/
      *   借地孽障代价），劫威随境界 ×0.965^r 软化，连败保底 +5%/次（上限 15%）。
      * · 剧情/养成联动：残玉共鸣 +1.5%全属性/章、心魔凝练 +1%/次、本命喂养 +1%/阶、个人线 2~5%——
@@ -556,6 +582,25 @@ const GameData = {
     { text: '一位故人的转世托梦寻来——你在梦中替他指点了一条明路。', fn: (p) => { KarmaSys.addFortune(3); return '气运 +3'; } },
   ],
 
+  /* ---------- v42（E520）小世界三轴：地貌/灵脉/生灵——轴组合决定产出偏向（XianSys 消费；定性不入数值） ---------- */
+  WORLD_BIOMES: {
+    land: [
+      { id: 'shanhe', name: '山河图', desc: '千里山河自掌中铺开——基石厚重，广袤可耕。' },
+      { id: 'yunhai', name: '云海礁', desc: '浮岛群悬于云海之上——天风激荡，气象自生。' },
+      { id: 'xingtu', name: '星坠荒原', desc: '星屑坠落的赤地——万物生长缓慢，然地力深不见底。' },
+    ],
+    vein: [
+      { id: 'lingmai', name: '灵脉如潮', desc: '一条主灵脉贯穿世界——灵石自然凝结（灵石偏盛）。' },
+      { id: 'xuanyun', name: '玄元之眼', desc: '世界之心是一眼玄元泉——仙元自泉眼涌出（仙元偏盛）。' },
+      { id: 'daoyun', name: '道纹天成', desc: '天穹悬浮天然道纹——观之如沐春风（感悟偏盛）。' },
+    ],
+    life: [
+      { id: 'yaoshou', name: '灵禽异兽', desc: '山海有灵，禽兽自成一体——狩猎有获（灵石偏盛）。' },
+      { id: 'lingzhi', name: '仙草灵芝', desc: '遍地仙苗岁岁自荣——采撷不竭（感悟偏盛）。' },
+      { id: 'shiren', name: '石人守墟', desc: '上古石人默然守于墟中——其身俱是仙元结晶（仙元偏盛）。' },
+    ],
+  },
+
   /* ---------- 地图区域 ---------- */
   MAPS: [
     { id: 'village',  name: '新手村 · 后山', recRealm: 0, recText: '练气期', desc: '青山脚下的小村落，村后山林间偶有野兽出没，是初入道途者磨砺身心之处。',
@@ -839,24 +884,35 @@ const GameData = {
     { id: 't_daozu',  name: '道祖法印', cond: p => !!(p.flags && p.flags.daozu), mech: 'daoZuYuan', desc: '证道祖之境——仙元溢流 +10%' },
   ],
 
-  /* ---------- v19→v20 精英词缀（精英怪随机 1~2 条，战斗前可见；mutex 互斥对不同时出现） ---------- */
+  /* ---------- v19→v20 精英词缀（精英怪随机 1~2 条，战斗前可见；mutex 互斥对不同时出现）
+   *  v42（E480）境界升档 e-tier：每条词缀加 minRp（对手 rp 达标方入掷缀池），旧 12 条按强度分
+   *  0/3/5 三档；高境专属四条入 ELITE_AFFIXES_T2（噬灵 6/镜甲 7/影分 8/精准 8）。
+   *  minRp 语义：对手 power（rp，同 buildMonster 量纲）≥ minRp 才可能掷到——r0 山贼头目与
+   *  r9 雷狱主宰不再同池。 ---------- */
   ELITE_AFFIXES: [
-    { id: 'e_leech',  name: '汲血', desc: '攻击回复自身三成伤害的气血' },
-    { id: 'e_thorns', name: '魔棘', desc: '受击反弹一成五伤害' },
-    { id: 'e_swift',  name: '迅影', desc: '身法 +20%' },
-    { id: 'e_wall',   name: '坚甲', desc: '防御 +25%' },
-    { id: 'e_rage2',  name: '血性', desc: '狂暴后可再度狂暴一次' },
-    { id: 'e_reborn', name: '不灭', desc: '濒死时以三成气血复活一次' },
-    /* ---- v20 词缀扩池 ---- */
-    { id: 'e_plague', name: '瘟疫', desc: '攻击时两成五几率附带随机蚀毒/灼烧/流血' },
-    { id: 'e_soul',   name: '裂魂', desc: '命中后摄走你两成灵力' },
-    { id: 'e_mirror', name: '镜像', desc: '你每获得一项增益，其攻击便涨 8%' },
-    { id: 'e_tstorm', name: '雷皮', desc: '受法诀与符箓伤害 +30%，但自身攻击 -30%' },
-    { id: 'e_gold',   name: '守财', desc: '攻防气血 +20%，死后掉落翻倍' },
-    { id: 'e_wolf',   name: '群狼', desc: '每回合一成五几率唤来一头幼兽撕咬' },
+    { id: 'e_leech',  name: '汲血', minRp: 0, desc: '攻击回复自身三成伤害的气血' },
+    { id: 'e_thorns', name: '魔棘', minRp: 0, desc: '受击反弹一成五伤害' },
+    { id: 'e_swift',  name: '迅影', minRp: 0, desc: '身法 +20%' },
+    { id: 'e_wall',   name: '坚甲', minRp: 0, desc: '防御 +25%' },
+    /* ---- v20 词缀扩池（v42（E480）：按强度分 3/5 两档） ---- */
+    { id: 'e_rage2',  name: '血性', minRp: 3, desc: '狂暴后可再度狂暴一次' },
+    { id: 'e_mirror', name: '镜像', minRp: 3, desc: '你每获得一项增益，其攻击便涨 8%' },
+    { id: 'e_wolf',   name: '群狼', minRp: 3, desc: '每回合一成五几率唤来一头幼兽撕咬' },
+    { id: 'e_soul',   name: '裂魂', minRp: 3, desc: '命中后摄走你两成灵力' },
+    { id: 'e_plague', name: '瘟疫', minRp: 5, desc: '攻击时两成五几率附带随机蚀毒/灼烧/流血' },
+    { id: 'e_reborn', name: '不灭', minRp: 5, desc: '濒死时以三成气血复活一次' },
+    { id: 'e_tstorm', name: '雷皮', minRp: 5, desc: '受法诀与符箓伤害 +30%，但自身攻击 -30%' },
+    { id: 'e_gold',   name: '守财', minRp: 5, desc: '攻防气血 +20%，死后掉落翻倍' },
   ],
-  /** v20 精英词缀互斥对（同义/失衡组合不同时出现） */
-  ELITE_AFFIX_MUTEX: [['e_swift', 'e_wall'], ['e_leech', 'e_gold'], ['e_rage2', 'e_reborn'], ['e_plague', 'e_soul']],
+  /** v42（E480）：高境专属词缀 T2——minRp 6/7/8/8，与 T1 同掷同互斥、同情报卡展示 */
+  ELITE_AFFIXES_T2: [
+    { id: 'e_siphon',  name: '噬灵', minRp: 6, desc: '命中后摄走你一点真元' },
+    { id: 'e_marmor',  name: '镜甲', minRp: 7, desc: '你打出的会心一击将被甲镜反弹（反噬三成）' },
+    { id: 'e_shadow',  name: '影分', minRp: 8, desc: '首回合身形化作残影——你的攻击闪避面翻倍' },
+    { id: 'e_precise', name: '精准', minRp: 8, desc: '气机锁定——命中 = 基础 + 其境界×0.8%，直接吃你的闪避池' },
+  ],
+  /** v20 精英词缀互斥对（同义/失衡组合不同时出现）；v42（E480）扩两对：镜甲×不灭（复生系互斥）、影分×迅影（身法系互斥） */
+  ELITE_AFFIX_MUTEX: [['e_swift', 'e_wall'], ['e_leech', 'e_gold'], ['e_rage2', 'e_reborn'], ['e_plague', 'e_soul'], ['e_marmor', 'e_reborn'], ['e_shadow', 'e_swift']],
 
   /* ---------- v20 怪物习性模板（buildMonster 随机附加，战斗情报卡可见） ---------- */
   MONSTER_TEMPLATES: [
@@ -868,12 +924,25 @@ const GameData = {
   ],
   /** 模板掷取权重（none 为无模板普通个体） */
   MONSTER_TEMPLATE_WEIGHTS: { none: 55, swift: 9, iron: 9, berserk: 9, cunning: 9, tough: 9 },
+  /* ---------- v42（E481）Boss 二阶段习性分化表（单源，enemyTurn 血线过半时消费） ----------
+   * 原二阶段只加攻 25%；现按习性模板各给一道专属杀意（叠加于攻 +25% 之上）。
+   * chargeMul：狂战蓄力成算乘数（连续两轮蓄力概率翻倍）；guardHeal：铁壁防御轮回复最大气血比；
+   * steal：狡诈每回合必偷一增益（原两成几率）；lastGasp：坚韧首次濒死自愈解控（自愈两成、清束缚/冰封）。 */
+  PHASE2_TRAITS: {
+    berserk: { name: '血战', desc: '蓄力连击——蓄力成算翻倍，杀招绵绵不绝', chargeMul: 2 },
+    iron:    { name: '铁壁汲血', desc: '防御轮回复 8% 最大气血', guardHeal: 0.08 },
+    cunning: { name: '窃灵', desc: '每回合必偷你一项增益', steal: true },
+    tough:   { name: '回春', desc: '首次濒死自愈两成并挣脱禁锢', lastGasp: true },
+  },
 
   /* ---------- v19 职业必杀技盘（真元 0~6：普攻命中+1，会心+2，防御+1） ---------- */
   BATTLE_SKILLS: {
     sword: [
       { id: 'us1', name: '剑斩·千山', cost: 3, mult: 3.0, crit: 15, desc: '剑气纵贯，如千山崩裂（3.0×，会心+15%）' },
-      { id: 'us2', name: '剑域·囚杀', cost: 4, mult: 1.5, defdown: 30, rounds: 3, desc: '剑域困锁，敌防 -30% 三回合，再补一剑（1.5×）' },
+      /* v42（E482）：us2 重做为持续型——剑域三回合每回合 0.85× 穿防伤害（总期望 2.55× =
+       * us1 单发 3.0× 的 85% 验收锚；计划文本 0.8×/总 2.4× 与其自身「≥us1 85%」锚差 0.15×，
+       * 按 0.85× 落地，如实记录），剑域存续期内敌我两困不可遁走。 */
+      { id: 'us2', name: '剑域·囚杀', cost: 4, domain: { mult: 0.85, rounds: 3 }, desc: '剑域困锁——三回合每回合 0.85× 穿防伤害（总约 2.55×），存续期内敌我皆不可遁走' },
       { id: 'us3', name: '万剑朝宗', cost: 6, mult: 4.5, desc: '万剑齐鸣，宗门唯我（4.5×）' },
     ],
     pill: [
@@ -883,7 +952,7 @@ const GameData = {
     ],
     talisman: [
       { id: 'ut1', name: '符阵·雷狱', cost: 3, mult: 2.8, freeze: 25, desc: '雷符成狱，25% 冻结（2.8×）' },   // v32 修瑕（E11）：文案「三成」与实发 25 不符
-      { id: 'ut2', name: '双符·齐发', cost: 4, mult: 1.8, hits: 2, desc: '双符并出，两段连击（1.8××2）' },
+      { id: 'ut2', name: '双符·齐发', cost: 4, mult: 0.9, hits: 2, desc: '双符并出，两段连击（0.9× ×2）' },   // v42（E482）：mult 1.8→0.9——实发是每段各掷一次，旧文案把总倍率与段倍率挤在一处成错字兼口径双漂（总 1.8× 与文案一致；原实发 3.6× 与任何一段文案都对不上）
       { id: 'ut3', name: '天笔·紫雷', cost: 6, mult: 4.2, desc: '一笔开天门，紫雷落九霄（4.2×）' },
     ],
     body: [
@@ -893,7 +962,7 @@ const GameData = {
     ],
     array: [
       { id: 'ua1', name: '困阵·锁龙', cost: 3, mult: 1.6, slow: 35, rounds: 3, desc: '困龙锁天，敌速 -35% 三回合（1.6×）' },
-      { id: 'ua2', name: '杀阵·八方', cost: 4, mult: 2.2, hits: 2, desc: '八方杀气，两段绞杀（2.2××2）' },
+      { id: 'ua2', name: '杀阵·八方', cost: 4, mult: 1.1, hits: 2, desc: '八方杀气，两段绞杀（1.1× ×2）' },   // v42（E482）：mult 2.2→1.1——同双符口径归一（实发每段各掷一次，原实发 4.4× 与文案 2.2× 漂移一倍）
       { id: 'ua3', name: '天罗·地网', cost: 6, mult: 3.0, stun: 30, desc: '天罗地网，插翅难逃（3.0×）' },
     ],
     demonic: [
@@ -1210,6 +1279,29 @@ const GameData = {
     { id: 'shenhan',   name: '深寒彻骨', desc: '守敌身法 +10%，你施予的持续伤害 +30%。', tone: 'mix' },
     { id: 'zhangwu',   name: '瘴雾蚀体', desc: '每场战斗开局，气血折一成。', tone: 'bad' },
     { id: 'guzhou',    name: '上古古咒', desc: '层数 +1，守关者必携双重词缀。', tone: 'bad' },
+  ],
+
+  /* ---------- v42（E521）秘境秘藏遗物（14 条，本局有效、出秘境消散、不可交易不入背包）----------
+   * fx 单字母通道（DungeonSys.relicFx 汇聚、三消费点：dungeon.makeEnemy 敌侧 / Battle.start 我方
+   * gainBuff 块 / dungeon.resolve 与 onVictory 节点支）：
+   *   eAtk/eHp/eSpd——makeEnemy 敌侧乘区；atk/def/agi——Battle.start gainBuff(atkup/defup/agiup, 99 回合)；
+   *   trapExp——陷阱伤害两倍转修为；insLayer——每层感悟；treasure/fortune——宝箱/奇遇所得乘区；
+   *   stoneWin——战斗灵石所得乘区（battle.victory 挂点）；bossGupian——守关战额外碎片。 */
+  DUNGEON_RELICS: [
+    { id: 'shiLing', name: '噬灵古镜', desc: '首窥敌面而摄其魂——此行守敌攻击 -15%。', fx: { eAtk: 0.15 } },
+    { id: 'diFei', name: '地肺残息', desc: '地脉伤你一分，你炼作一分修行——陷阱伤害两倍转修为。', fx: { trapExp: 1 } },
+    { id: 'duanYue', name: '断岳残印', desc: '上古神印余威压身——此行守敌气血 -10%。', fx: { eHp: 0.10 } },
+    { id: 'fengLei', name: '封雷符胆', desc: '符胆入体，雷意灌臂——此行攻击 +12%。', fx: { atk: 12 } },
+    { id: 'xuanJing', name: '悬晶琉光', desc: '悬晶映照身形，进退生风——此行身法 +25%。', fx: { agi: 25 } },
+    { id: 'guYin', name: '古音残卷', desc: '残卷自诵上古道音——每过一层，感悟 +2。', fx: { insLayer: 2 } },
+    { id: 'liJin', name: '砺金石肤', desc: '金肤如砺，百炼不侵——此行防御 +15%。', fx: { def: 15 } },
+    { id: 'yeMing', name: '叶明珠胎', desc: '珠光照匣，尘宝自明——宝箱所得 ×1.35。', fx: { treasure: 1.35 } },
+    { id: 'tianLu', name: '天露凝魄', desc: '天露淬锋，斩之愈利——战斗灵石所得 +25%。', fx: { stoneWin: 1.25 } },
+    { id: 'shaTu', name: '纱图残页', desc: '残页绘尽地脉机枢——奇遇所得 ×1.3。', fx: { fortune: 1.3 } },
+    { id: 'moYu', name: '墨玉算筹', desc: '算筹推演敌之步法——此行守敌身法 -12%。', fx: { eSpd: 0.12 } },
+    { id: 'huXin', name: '虚心镜台', desc: '镜台护心，金光自生——每战开局金光护体两回合。', fx: { shield: 30, shieldRounds: 2 } },
+    { id: 'chanYi', name: '蝉翼残衣', desc: '蝉翼为衣，轻若无物——此行身法 +20%。', fx: { agi: 20 } },
+    { id: 'longXi', name: '龙息残珠', desc: '珠中龙息未散——守关战额外得上古法宝碎片 ×1。', fx: { bossGupian: 1 } },
   ],
 
   /* ---------- §20 红尘劫剧本（历练道德三选一）---------- */

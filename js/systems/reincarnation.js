@@ -489,6 +489,16 @@ const ReincarnationSys = {
     }
     legacy.kept = kept || null;
     legacy.grudges = grudges;
+    // v42（E523）：前世情缘——兵解时把 rel≥70 的道侣/结拜/莫逆存 legacy.bonds（NPC id+关系），
+    // 与 grudges 对偶（仇怨入轮回索债，情缘入轮回相逢）；恩怨与情缘互斥（有 grudge 者不入 bonds）
+    legacy.bonds = Object.keys(oldP.npcs || {}).filter(id => {
+      const s = oldP.npcs[id];
+      return s && s.alive && !grudges.includes(id)
+        && (id === oldP.partner || (oldP.sworn || []).includes(id) || (s.rel || 0) >= 70);
+    }).map(id => ({
+      id,
+      kind: id === oldP.partner ? 'dao' : ((oldP.sworn || []).includes(id) ? 'sworn' : 'mori'),
+    }));
     // v28 联动：跨世塔绩入传承——登天塔的足印不随轮回散去
     legacy.towerBest = Math.max(legacy.towerBest || 0, (oldP.counters && oldP.counters.towerBest) || 0);
     // v30 轮回镜：前世编年归档（保留最近三世）；v32（D7）重复兵解不重复归档
@@ -563,6 +573,21 @@ const ReincarnationSys = {
       const s = p2.npcs[gid];
       if (s) { s.rel = -35; s.grudge = true; s.pastLife = true; }
     }
+    // v42（E523）：前世情缘旗标——legacy.bonds 里的 NPC 新世带 pastBond（初逢触发「似曾相识」三幕，
+    // 相认后交情起步 +30；见 npc.js encounter 的 pastBond 管线）；_oldFriend（传承树「邻家旧识」）
+    // 空头支票自此兑现：开局用该 NPC 拼一句「旧识相迎」开场白入日志，用后 delete（死键清场）
+    for (const b of legacy.bonds || []) {
+      const s = p2.npcs[b.id];
+      if (s) { s.pastBond = b.kind; s.rel = Math.max(s.rel || 0, 0); }
+    }
+    if (p2.flags && p2.flags._oldFriend) {
+      const fid = p2.flags._oldFriend;
+      const fd = (typeof NpcSys !== 'undefined' && NpcSys.def) ? NpcSys.def(fid) : null;
+      const fs2 = p2.npcs[fid];
+      if (fd && fs2 && !fs2.grudge) fs2.rel = Math.min(30, (fs2.rel || 0) + 5);
+      Log.add(fd ? `【旧识相迎】你刚一睁眼便认得产婆臂上的州府纹章——那是${fd.name}家乡的样式。许多年后你才明白，为何此世初见熟人时，总有一声「是你」先于招呼。` : '【旧识相迎】冥冥中你觉得，此世会有故人在前方等你。', 'flavor');
+      delete p2.flags._oldFriend;   // 消费即清（field-audit 死键清场：写侧已兑为开场白）
+    }
     // v37（E246）：仙元携往生兑现——折来世气运（1000:1，cap +3）/悟性（2000:1，cap +2），
     // 当世仙元落定即清零（死货币闭环）；pastXianyuan 记档随新身入世（第二条遗产线，与轮回印记并行）
     const xyNow = (oldP.counters && oldP.counters.xianyuan) || 0;
@@ -588,6 +613,14 @@ const ReincarnationSys = {
     // v31（E22）：出生天赋清单——传承树解锁到第几层、带来哪些天赋，一目了然
     if (unlockedTalents.length) Log.add(`血脉深处的传承苏醒（传承树 ${treeTier}/15 层）：${unlockedTalents.map(t2 => t2.name).join('、')}。`, 'gain');
     if (towerBest >= 10) Log.add(`前世登天塔 <b>${towerBest}</b> 层的足印化作资粮——气运 +5${towerBest >= 20 ? '、悟性 +1' : ''}。`, 'gain');
+    // v42（E520）：小世界周目传承——前世开辟的小世界化作「一方小天地」词条随转世继承
+    //（开宗立派不在来世重启：词条记名于轮回镜，气运 +1/方 随神魂入胎）
+    if ((legacy.subworlds || []).length) {
+      const names = legacy.subworlds.map(w => `${w.name}（${w.era} 纪）`).join('、');
+      const bonus = Math.min(3, legacy.subworlds.length);
+      p2.fortune = (p2.fortune || 0) + bonus;
+      Log.add(`轮回镜底浮出一方小天地——你前世开辟的【${names}】仍悬于你所辟的虚空，此世自襁褓中便听得见它的风声。（气运 +${bonus}）`, 'gain');
+    }
     Log.add('前世记忆未消——你可即刻叩问大道，游历中偶有前世洞府机缘。', 'info');
     Game.afterAction();
     UI.toast(`转世成功 · 第${legacy.lives}世`);

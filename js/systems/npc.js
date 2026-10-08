@@ -759,7 +759,9 @@ const NpcSys = {
     if (typeof OathSys !== 'undefined' && OathSys.active(p, 'solo')) { UI.toast('独行之道在身——结义之盟，皆非此道'); return; }
     if ((p.sworn || []).includes(id)) { UI.toast('你们已是结拜之交'); return; }
     if (s.rel < 70) { UI.toast('交情尚浅，不足结拜'); return; }
-    const cost = Math.round(100 * GameData.stoneEco(s.realmIdx));
+    // v42（E515）：结拜成本对齐 U1 口径——原按 NPC 境界 stoneEco 指数膨胀（v35 结交/赠礼已改
+    // socialEco 而此处漏改），高境修士结拜动辄百万；现锚双方境界较低一方（socialEco 单源）
+    const cost = Math.round(100 * this.socialEco(p, s));
     const ok = await UI.popup({
       title: `结拜 · ${d.name}`,
       html: `撮土为香，义结金兰，自此祸福与共，危急时或可舍命相救。<br>需备三牲酒礼，灵石 <span class="hl">${Utils.fmtNum(cost)}</span>。`,
@@ -814,7 +816,8 @@ const NpcSys = {
     const d = this.def(id);
     const s = this.state(p, id);
     if (!d || !s || !s.grudge) return;
-    const cost = Math.round(80 * GameData.stoneEco(s.realmIdx));
+    // v42（E515）：化解仇怨成本同对齐 socialEco 单源（原按 NPC 境界指数膨胀，同 v35 U1 漏改项）
+    const cost = Math.round(80 * this.socialEco(p, s));
     if (s.pastLife) {
       const choice = await UI.popup({
         title: '前世恩怨 · ' + d.name,
@@ -912,10 +915,12 @@ const NpcSys = {
     const before = this.tierOf(Math.max(0, s.rel)).name;
     const relBefore2 = s.rel;
     gain = Math.round(gain * (typeof OathSys !== 'undefined' ? OathSys.relMul(p) : 1));   // v38（E306）：独行之道——既有情谊增长 +30%
-    s.rel = Utils.clamp(s.rel + gain, -100, 100);
+    // v42（E515）：赠礼增量改走 heartGain 单源——原对 rel 直接 clamp，结发道侣（rel 恒 100）
+    // 满好感送礼花钱耗物收益恒 0、日志「交情 +0」；现溢出情谊经 E361 心事线通道转心事点
+    const hg = this.heartGain(p, id, gain);
     this.mem(p, id, 'gift', '赠礼之谊');
     const after = this.tierOf(Math.max(0, s.rel)).name;
-    Log.add(`你向 ${d.name} 奉上礼物${likeNote}。${this.lineFor(p, id, 'gift') || this.dialogText(d.temper, 'gift')}（交情 ${s.rel - relBefore2 > 0 ? '+' : ''}${s.rel - relBefore2}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
+    Log.add(`你向 ${d.name} 奉上礼物${likeNote}。${this.lineFor(p, id, 'gift') || this.dialogText(d.temper, 'gift')}（交情 ${s.rel - relBefore2 > 0 ? '+' : ''}${s.rel - relBefore2}${hg.heart > 0 ? `，溢出情谊化作心事点 +${hg.heart}` : ''}${after !== before ? `，关系升为【<b>${after}</b>】` : ''}）`, 'gain');
     if (after !== before) Ambience.sfx('rare');
     Game.afterAction();
   },
@@ -1097,6 +1102,64 @@ const NpcSys = {
     if (!d || !s || !s.alive) return;
     s.met = true;
     Meta.see('npc', id);   // v6 图鉴
+    // v42（E523）：前世情缘三幕（道侣/结拜/莫逆转世 pastBond）——复用闪回→遗物→相认既有管线：
+    // 幕一 似曾相识（初逢）→ 幕二 旧缘信物（再逢）→ 幕三 执手相认（交情起步 +30，一次性）；
+    // 相认后开独占对话池（偶遇卡常驻旧缘行、叙话交情加厚）。恩怨（pastLife/grudge）与情缘互斥不入此线。
+    if (s.pastBond && !s.grudge && !s.pastLife) {
+      if (!s._bondM1) {
+        s._bondM1 = true;
+        Log.add(`<b>似曾相识——</b>${d.name} 在人群中回头，目光落到你身上的刹那怔住了：「我们……是不是在哪里见过？」你心口没来由地一热，一段不属于此生的暖意翻涌上来。`, 'event');
+        Story.chron(`似曾相识：与 ${d.name} 的旧缘初逢`);
+        Game.afterAction();
+        return;
+      }
+      if (!s._bondM2) {
+        s._bondM2 = true;
+        const pick2 = await UI.popup({
+          title: `旧缘信物 · ${d.name}`,
+          html: `（${d.name} 递来一件小物——你不曾见过，掌心却先认出了它的温度。）<br>「总觉得……这东西该归你。」<br><br>收下，还是问TA从何得来？`,
+          options: [
+            { text: '默默收下', value: 'take', primary: true },
+            { text: '问TA从何得来', value: 'ask' },
+          ],
+        });
+        this.mem(p, id, 'story', '旧缘信物');
+        if (pick2 === 'take') {
+          Cultivate.addInsight(p, 6, false);
+          s.rel = Utils.clamp(s.rel + 8, -100, 100);
+          Log.add(`你收下旧缘信物——指尖相触的刹那，前世的轮廓在雾里清晰了一分。（感悟 +6，交情 +8）`, 'gain');
+        } else {
+          s.rel = Utils.clamp(s.rel + 12, -100, 100);
+          Log.add(`「梦里有人教我打的相关结——」${d.name} 说到一半自己先笑了，「原来梦里那个人，是你。」（交情 +12）`, 'gain');
+        }
+        Story.chron(`前世事件：${d.name} 递来旧缘信物`);
+        Game.afterAction();
+        return;
+      }
+      if (!s.bondAccepted && (s.rel >= 15 || p.partner === id)) {
+        const pick3 = await UI.popup({
+          title: `相认 · ${d.name}`,
+          html: `（前世的种种在此刻对齐——你们同时开口，说出的竟是同一句话。）<br>${d.name} 深吸一口气，眸光亮得惊人：「不管轮回怎么转——<b>这一次，别再走散了。</b>」<br><br>执手相认？`,
+          options: [
+            { text: '执手相认（交情 +30，气运 +3）', value: 'yes', primary: true },
+            { text: '相视一笑，且行且看', value: 'later' },
+          ],
+        });
+        if (pick3 === 'yes') {
+          s.bondAccepted = true;
+          s.rel = Utils.clamp(s.rel + 30, -100, 100);
+          this.mem(p, id, 'story', '前世相认');
+          KarmaSys.addFortune(3);
+          Log.add(`你与 <b>${d.name}</b> 执手相认——前世未完的缘，此生接着走。（交情 +30，气运 +3；${{ dao: '结发之约犹在心口', sworn: '金兰之义未曾断', mori: '莫逆之交再续' }[s.pastBond] || '旧缘'}）`, 'gain');
+          UI.realmShow(`前世相认 · ${d.name}`, '#e8b8c8');
+          Story.chron(`前世相认：与 ${d.name} 再续前缘`);
+        } else {
+          Log.add(`你与 ${d.name} 相视一笑，谁都没再提——有些缘，不必急在一句话里。`, 'info');
+        }
+        Game.afterAction();
+        return;
+      }
+    }
     // v19 前世闪回：转世者初逢前世恩怨者，旧忆翻涌
     if (s.pastLife && !s._flashback) {
       s._flashback = true;
@@ -1137,7 +1200,7 @@ const NpcSys = {
     const tier = this.tierOf(Math.max(0, s.rel));
     const choice = await UI.popup({
       title: `偶遇 · ${d.name}`,
-      html: `${d.desc}<br>你们在 ${Utils.esc((GameData.MAPS.find(m => m.id === s.map) || {}).name || '山野')} 间打了个照面。<br><span class="tip-line">${d.name}：${this.lineFor(p, id, 'greet') || this.dialogText(d.temper, 'greeting')}</span>${s.rel >= 8 ? `<br><span class="tip-line">关系：<b>${tier.name}</b>${recall ? '　' + d.name + '先开了口：' + recall : ''}</span>` : ''}`,
+      html: `${d.desc}<br>你们在 ${Utils.esc((GameData.MAPS.find(m => m.id === s.map) || {}).name || '山野')} 间打了个照面。<br><span class="tip-line">${d.name}：${this.lineFor(p, id, 'greet') || this.dialogText(d.temper, 'greeting')}</span>${s.rel >= 8 ? `<br><span class="tip-line">关系：<b>${tier.name}</b>${recall ? '　' + d.name + '先开了口：' + recall : ''}</span>` : ''}${s.bondAccepted ? '<br><span class="tip-line" style="color:var(--gold,#d4af37)">· 前世相认的旧缘——独席话旧，随时可叙。</span>' : ''}`,
       options: [
         { text: '叙话论道', value: 'chat', primary: true },
         { text: '请教一二', value: 'ask' },
@@ -1146,9 +1209,9 @@ const NpcSys = {
     });
     if (choice === 'chat') {
       const relBefore3 = s.rel;
-      s.rel = Utils.clamp(s.rel + Utils.rand(2, 5), -100, 100);
+      s.rel = Utils.clamp(s.rel + Utils.rand(2, 5) + (s.bondAccepted ? 2 : 0), -100, 100);   // v42（E523）：前世相认者独席话旧，叙话交情加厚
       this.mem(p, id, 'chat', '途中叙话');   // v19 记忆
-      Log.add(`你们席地论道，相谈甚欢。（交情 +${s.rel - relBefore3}）`, 'gain');
+      Log.add(`你们席地论道，相谈甚欢${s.bondAccepted ? '——前世今生，话头总也不断' : ''}。（交情 +${s.rel - relBefore3}）`, 'gain');
     } else if (choice === 'ask') {
       if (Utils.chance(45 + Math.max(0, s.rel))) {
         const gain = Math.round(60 * GameData.eco(p.realmIdx));

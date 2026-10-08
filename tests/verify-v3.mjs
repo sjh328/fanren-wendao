@@ -40,6 +40,13 @@ const clickSel = async (page, sel, timeout = 6000) => {
   await page.evaluate(s => { const b = document.querySelector(s); if (b) b.click(); }, sel);
   await sleep(150);
 };
+/** v42（E528·P3 整合）：E502 行功路线——手动修炼弹「行功·择一路线」三选，点后选「周天」随动 */
+const cultivateClick = async (page) => {
+  await clickSel(page, '[data-action="act-cultivate"]');
+  await sleep(350);
+  const route = await page.$('[data-action="med-route"]');
+  if (route) { await clickSel(page, '[data-action="med-route"][data-route="zhoutian"]').catch(() => {}); await sleep(350); }
+};
 const clickPopupBtn = async (idx) => {
   // v20 加固：旧实现先 $ _$ 抓按钮快照再点击——若间隙内弹窗 DOM 被重渲染，
   // click 会落在游离节点上，事件不冒泡到委托层，Promise 永久悬置、后续全链卡死。
@@ -441,8 +448,8 @@ try {
   {
     await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
     await sleep(300);
-    await clickSel(page, '[data-action="act-cultivate"]');
-    await sleep(500);
+    await cultivateClick(page);   // v42（E528·P3 整合）：E502 行功路线弹窗随动
+    await sleep(400);
     const p = await player(page);
     p.world && p.world.pending ? pass('V4 跨年触发百年大事件（事件卡生成）') : fail('V4 事件触发', JSON.stringify(p.world));
     const w = p.world;
@@ -653,8 +660,8 @@ try {
   {
     await clickSel(page, '[data-action="act-tab"][data-tab="cultivate"]');
     await sleep(300);
-    await clickSel(page, '[data-action="act-cultivate"]');
-    await sleep(500);
+    await cultivateClick(page);   // v42（E528·P3 整合）：E502 行功路线弹窗随动
+    await sleep(400);
     const p = await player(page);
     const grew = Object.values(p.npcs).some(s => s.exp > 0);
     grew ? pass('V7 NPC随游戏时间自主修炼') : fail('V7 NPC成长', JSON.stringify(Object.values(p.npcs)[0]));

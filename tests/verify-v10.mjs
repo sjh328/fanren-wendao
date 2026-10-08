@@ -147,7 +147,7 @@ try {
     const kinds = new Set();
     for (let i = 0; i < 40; i++) {
       const a = Battle.enemyDecide();
-      if (!a || !['strike', 'skill', 'charge', 'finisher'].includes(a.kind)) return { ok: false };
+      if (!a || !['strike', 'attack', 'skill', 'charge', 'finisher'].includes(a.kind)) return { ok: false };   // v42（E528·P3 整合）：E477 修活对拼——非重击平A 独立 attack 意图形态入合法集
       kinds.add(a.kind);
     }
     en.charging = true;
@@ -1499,7 +1499,7 @@ try {
     const css = fs.readFileSync('style.css', 'utf8');
     const safe = /calc\(var\(--sp-2\) \+ env\(safe-area-inset-top, 0px\)\) var\(--sp-3\)/.test(css);   // v27：刘海避让并入顶栏 padding；v41（E467）token 化随动（var 间距阶）
     const sep = /\.tab-sep \{ display: none; \}/.test(css);
-    const btn = /\.btn-sm \{ font-size: 13px; padding: var\(--sp-15\) var\(--sp-3\); min-height: 32px;/.test(css)
+    const btn = /\.btn-sm \{ font-size: var\(--fs-13\); padding: var\(--sp-15\) var\(--sp-3\); min-height: 32px;/.test(css)   // v42（E528·P3 整合）：E486 字号阶迁移 13px→var(--fs-13) 随动
       && /\.btn-sm \{ min-height: 42px;/.test(css);   // v41（E467）token 化：基础触控目标 + 移动端 42px 保底双在
     return { wired, safe, sep, btn };
   })();
@@ -1517,7 +1517,9 @@ try {
       iconN: (mf.icons || []).filter(i => fs.existsSync(i.src)).length,
       maskable: (mf.icons || []).some(i => i.purpose === 'maskable'),
       swFetch: /addEventListener\('fetch'/.test(sw) && /stale|cache/i.test(sw),
-      htmlWired: html.includes('manifest.webmanifest') && html.includes('sw.js') && html.includes('apple-touch-icon'),
+      // v42（E526）：SW 注册链自 index.html 收编进 js/core/sw-reg.js——页面不再内联 sw.js，接线断言随迁
+      htmlWired: html.includes('manifest.webmanifest') && !html.includes('sw.js') && html.includes('apple-touch-icon')
+        && /register\('\.\/sw\.js'\)/.test(fs.readFileSync('js/core/sw-reg.js', 'utf8')),
     };
   })();
   const z18b = await page.evaluate(async () => {

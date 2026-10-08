@@ -208,19 +208,72 @@ const Ambience = {
     return true;
   },
   tone(freq, t0, dur, opts = {}) {
-    const { type = 'sine', gain = 0.4, dest = null } = opts;
+    const { type = 'sine', gain = 0.4, dest = null, filter = 0, glide = 0 } = opts;
     const o = this.ctx.createOscillator(), g = this.ctx.createGain();
     o.type = type;
     o.frequency.setValueAtTime(freq, t0);
+    // v42（E496）：滑音收尾——frequency.exponentialRamp 模拟古琴揉弦按滑（glide 为末频/初频比）
+    if (glide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq * glide), t0 + Math.min(dur, 0.35));
+    let node = o;
+    // v42（E496）：lowpass 滤波——削振荡器「电子感」毛刺，近丝弦木声
+    if (filter) {
+      try {
+        const f = this.ctx.createBiquadFilter();
+        f.type = 'lowpass'; f.frequency.value = filter; f.Q.value = 0.8;
+        o.connect(f); node = f;
+      } catch (e) { node = o; }
+    }
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t0 + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-    o.connect(g); g.connect(dest || this.master);
+    node.connect(g); g.connect(dest || this.master);
     o.start(t0); o.stop(t0 + dur + 0.05);
   },
-  /** 轻量音效：breakthrough 破境 / rare 稀有 / victory 胜利 */
+  /** v42（E496）：程序化混响——脉冲响应以噪声衰减生成（零外部资源），音乐总线干/湿两路并联 */
+  reverb: null,
+  _ensureReverb() {
+    if (this.reverb || !this.ctx || !this.musicBus || !this.master) return;
+    try {
+      const sr = this.ctx.sampleRate;
+      const len = Math.max(1, Math.floor(sr * 1.8));
+      const buf = this.ctx.createBuffer(2, len, sr);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch);
+        for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.6);
+      }
+      const conv = this.ctx.createConvolver();
+      conv.buffer = buf;
+      const wet = this.ctx.createGain();
+      wet.gain.value = 0.22;
+      conv.connect(wet); wet.connect(this.master);
+      this.musicBus.connect(conv);
+      this.reverb = conv;
+    } catch (e) { this.reverb = null; }   // 老内核无 ConvolverNode 则退回干声
+  },
+  /** v42（E496）：噪声战鼓（boss 情境）——缓冲噪声低通成形，短促轰鸣 */
+  _drum(t, gain = 0.2) {
+    if (!this.ctx || !this.musicBus) return;
+    try {
+      const len = Math.max(1, Math.floor(this.ctx.sampleRate * 0.22));
+      const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+      const d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+      const src = this.ctx.createBufferSource(); src.buffer = buf;
+      const f = this.ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 220;
+      const g = this.ctx.createGain(); g.gain.value = gain;
+      src.connect(f); f.connect(g); g.connect(this.musicBus);
+      src.start(t);
+    } catch (e) {}
+  },
+  /** v42（E497）：轻量音效节流表（per-kind 90ms 最小间隔，sfx 内部化——调用方 battle 等零改动） */
+  _sfxLast: {},
+  /** 轻量音效：breakthrough 破境 / rare 稀有 / victory 胜利（签名不变；v42（E497）加 per-kind 90ms 节流） */
   sfx(kind) {
     if (!this.sfxOn || !this.ensureCtx()) return;
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+    const last = this._sfxLast[kind];
+    if (last != null && now - last < 90) return;   // 极速档同秒叠音合流：同 kind ≥90ms 一发（≈11 次/秒）
+    this._sfxLast[kind] = now;
     const t = this.ctx.currentTime + 0.01;
     if (kind === 'breakthrough') {
       [329.63, 392.0, 440.0, 523.25, 659.25].forEach((f, i) => this.tone(f, t + i * 0.13, 0.9, { type: 'triangle', gain: 0.28 }));
@@ -312,30 +365,69 @@ const Ambience = {
       this.tone(523, t + 0.5, 1.2, { type: 'sine', gain: 0.14 });
     }
   },
-  /** 生成式古琴背景乐：五声音阶随机游走 + 弦底长音，疏落淡远（v20 六情境） */
+  /* v42（E496）：六情境动机句表——每情境一段 4~8 音动机循环变奏（互异可辨识，验证以本表断言）：
+   * notes 为 PENTA 五声音阶级度索引；tempo 拍距 ms；dur 音长；lift/damp 高低八度倾向 %；
+   * fx 特性层：secret=低音 drone+水滴滑音、market=木鱼节拍、boss=噪声战鼓（_drum），零外部资源 */
+  MOTIFS: {
+    calm:   { notes: [0, 2, 1, 4, 3, 2, 1, 0], tempo: 640, dur: 1.6, lift: 25, damp: 30, fx: 'none' },
+    battle: { notes: [0, 3, 4, 6, 4, 3, 6, 7], tempo: 460, dur: 1.1, lift: 40, damp: 0,  fx: 'none' },
+    boss:   { notes: [0, 1, 0, 3, 0, 1, 5, 4], tempo: 400, dur: 1.1, lift: 50, damp: 0,  fx: 'drum' },
+    story:  { notes: [4, 2, 3, 1, 2, 0, 1, 2], tempo: 760, dur: 1.6, lift: 0,  damp: 55, fx: 'none' },
+    secret: { notes: [0, 4, 2, 5, 3, 6, 4, 2], tempo: 700, dur: 1.9, lift: 0,  damp: 60, fx: 'drone' },
+    market: { notes: [2, 4, 0, 4, 2, 5, 4, 0], tempo: 520, dur: 1.2, lift: 30, damp: 0,  fx: 'wood' },
+  },
+  _motifWork: null,   // 当前循环中的变奏副本（相邻音偶有互换，动机仍可辨识）
+  /** 情境特性层：drone（秘境水汽）/wood（市集木鱼）/drum（雷狱战鼓）——按拍位触发 */
+  _moodFx(t, mood) {
+    const step = this.musicStep;
+    if (mood === 'secret') {
+      if (step % 8 === 1) this.tone(65.41, t, 6.5, { type: 'sine', gain: 0.07, dest: this.musicBus, filter: 320 });          // 低音氤氲
+      if (Utils.chance(22)) this.tone(1174.7, t + 0.1, 0.35, { type: 'sine', gain: 0.06, dest: this.musicBus, glide: 0.5, filter: 3000 });   // 水滴（滑音下坠）
+    } else if (mood === 'market') {
+      if (step % 2 === 1) this.tone(920, t, 0.06, { type: 'square', gain: 0.05, dest: this.musicBus, filter: 2000 });        // 木鱼正拍
+      if (step % 8 === 5) this.tone(920, t + 0.14, 0.06, { type: 'square', gain: 0.04, dest: this.musicBus, filter: 2000 }); // 弱拍补点
+    } else if (mood === 'boss') {
+      if (step % 4 === 1) this._drum(t, 0.20);
+      if (step % 8 === 7 && Utils.chance(60)) this._drum(t + 0.18, 0.13);
+    }
+  },
+  /** 生成式古琴背景乐（v42（E496）意境引擎重写）：动机句循环变奏取代纯随机游走——
+   *  六情境各成可辨识主题；弦底长音保留；tone 侧 lowpass+滑音、总线侧程序化混响 */
   startMusic() {
     if (!this.ensureCtx() || this.musicTimer) return;
     this.musicStep = 0;
-    const mood = this.mood || 'calm';
+    this._ensureReverb();
+    const M = this.MOTIFS[this.mood || 'calm'] || this.MOTIFS.calm;
+    this._motifWork = M.notes.slice();
     const tick = () => {
       const t = this.ctx.currentTime + 0.02;
       this.musicStep++;
+      const mood = this.mood || 'calm';
+      const mm = this.MOTIFS[mood] || this.MOTIFS.calm;
+      const W = this._motifWork || mm.notes;
       const P = this.PENTA;
+      // 弦底长音（每 8 拍，v20 范式保留）
       if (this.musicStep % 8 === 1) this.tone(P[0] / 2, t, mood === 'battle' || mood === 'boss' ? 2.2 : 3.2, { type: 'sine', gain: 0.20, dest: this.musicBus });
-      const density = { battle: 78, boss: 85, story: 42, calm: 62, secret: 52, market: 70 }[mood] || 62;
-      if (Utils.chance(density)) {
-        const lift = (mood === 'battle' && Utils.chance(40)) || (mood === 'boss' && Utils.chance(55)) || (mood === 'market' && Utils.chance(30));
-        const damp = (mood === 'story' || mood === 'secret') && Utils.chance(60);
-        const f = P[Math.floor(Math.random() * P.length)] * (lift ? 2 : damp ? 0.5 : 1);
-        const dur = { battle: 1.1, boss: 1.1, story: 1.6, calm: 1.6, secret: 1.9, market: 1.2 }[mood] || 1.6;
-        this.tone(f, t, dur, { type: mood === 'market' ? 'triangle' : mood === 'secret' ? 'sine' : 'triangle', gain: 0.30, dest: this.musicBus });
-        if (Utils.chance(30)) this.tone(f * 2, t + 0.03, 0.8, { type: 'sine', gain: 0.10, dest: this.musicBus });
-        if (mood === 'boss' && Utils.chance(35)) this.tone(f * 1.5, t + 0.06, 0.5, { type: 'square', gain: 0.08, dest: this.musicBus });   // 小二度摩擦，杀气
-        if (mood === 'secret' && Utils.chance(20)) this.tone(f * 0.5, t + 0.1, 2.2, { type: 'sine', gain: 0.08, dest: this.musicBus });   // 秘境低音氤氲
+      // 动机句主音：按级度走句，偶发高低八度倾向（lift/damp，旧随机味保留为「变奏」而非主轴）
+      const deg = W[(this.musicStep - 1) % W.length];
+      const lift = mm.lift && Utils.chance(mm.lift);
+      const damp = mm.damp && Utils.chance(mm.damp);
+      const f = P[deg % P.length] * (lift ? 2 : damp ? 0.5 : 1);
+      const filt = mood === 'secret' ? 1400 : mood === 'story' ? 1800 : 2600;
+      this.tone(f, t, mm.dur, { type: mood === 'secret' ? 'sine' : 'triangle', gain: 0.30, dest: this.musicBus, filter: filt, glide: (mood === 'story' || mood === 'secret') ? 0.94 : 0 });
+      if (Utils.chance(30)) this.tone(f * 2, t + 0.03, 0.8, { type: 'sine', gain: 0.10, dest: this.musicBus });
+      if (mood === 'boss' && Utils.chance(35)) this.tone(f * 1.5, t + 0.06, 0.5, { type: 'square', gain: 0.08, dest: this.musicBus });   // 小二度摩擦，杀气
+      // 情境特性层
+      this._moodFx(t, mood);
+      // 一轮奏毕：变奏（随机互换相邻两音，主题轮廓不变）
+      if (W.length > 2 && (this.musicStep % W.length) === 0 && Utils.chance(70)) {
+        const i = Math.floor(Math.random() * W.length);
+        const j = (i + 1 + Math.floor(Math.random() * (W.length - 1))) % W.length;
+        const tmp = W[i]; W[i] = W[j]; W[j] = tmp;
       }
     };
     tick();
-    const tempo = { battle: 460, boss: 400, story: 760, calm: 640, secret: 700, market: 520 }[this.mood || 'calm'];
+    const tempo = this.MOTIFS[this.mood || 'calm'] ? this.MOTIFS[this.mood || 'calm'].tempo : 640;
     this.musicTimer = setInterval(tick, tempo);
   },
   /** v19 情境配乐：战斗急促（短音阶+高八度倾向），平静舒缓 */

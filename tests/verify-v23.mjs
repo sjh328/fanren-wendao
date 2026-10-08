@@ -290,9 +290,11 @@ console.log('===== SA 源码静态组 =====');
       /* E268 bak2 滚动快照 */
       savejs.includes('const first = !Game._snapAt;') && savejs.includes('if (first && Date.now() - cur.meta.ts < 60000) return;')
         && savejs.includes('this.snapshotAuto();   // v37（E268）：写前滚动快照')
-        && gamejs.includes('setInterval(() => Save.snapshotAuto(), 600000)') && gamejs.includes('clearInterval(this._snapTimer)')
-        && (gamejs.match(/clearInterval\(this\._snapTimer\)/g) || []).length === 3
-        ? pass('SA34 bak2 滚动快照：首拍/滚动拍分治（60 秒检查只约束首拍）+ autoSave 写前调用 + enterGame 10 分钟定时器（fn 在前、句柄存 Game、exit/删档清理）（E268）') : fail('SA34 快照', '');
+        && gamejs.includes('setInterval(() => Save.snapshotAuto(), 600000)') && gamejs.includes('clearInterval(Game._snapTimer)')
+        && (gamejs.match(/clearInterval\(this\._snapTimer\)/g) || []).length === 0   // v42（E525①·P3 整合）：纯 this 形态写点清零（原 3 处全改 Game. 直引）
+        && gamejs.includes('setInterval(() => Save.snapshotAuto(), 600000)') && gamejs.includes('clearInterval(Game._snapTimer)')
+        && (gamejs.match(/clearInterval\((this|Game)\._snapTimer\)/g) || []).length === 3
+        ? pass('SA34 bak2 滚动快照：首拍/滚动拍分治（60 秒检查只约束首拍）+ autoSave 写前调用 + enterGame 10 分钟定时器（fn 在前、句柄存 Game、exit/删档清理；v42（E528·P3 整合）：E525① st-delete 守卫改 Game._snapTimer 直引——计数含 Game. 形态）（E268）') : fail('SA34 快照', '');
       /* E272 章末演出补偿 */
       gamejs.includes('!Story.isSeen(openId) && this.player.realmIdx < (def.supR || 999)')
         && gamejs.includes('Story.markSeen(openId);') && gamejs.includes('Story.play(GameData.STORIES[openId], null, true)')
@@ -382,7 +384,8 @@ console.log('===== SA 源码静态组 =====');
       const releasemjs = readFileSync(join(__dirname, 'scripts', 'release.mjs'), 'utf8').replace(/\r\n/g, '\n');
       const readme = readFileSync(join(__dirname, 'README.md'), 'utf8');
       buildmjs.includes('未登记进 scripts/modules.json') && buildmjs.includes('process.exit(1);') && releasemjs.includes('当前版本 **v${ver}')
-        && readme.includes('当前版本 **v41') && readme.includes('53 个模块') && readme.includes('26 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
+        // v42（E529·主流程随迁）：README 四口径随版本递增——v42/55 模块（E526 收编后）/27 套 verify
+        && readme.includes('当前版本 **v42') && readme.includes('55 个模块') && readme.includes('27 套 verify') && readme.includes('缓存号口径 = 16 + 版本号')
         ? pass('SA43 build 反向校验（孤儿模块拒建）+ README 守卫（假版本号拒绝）与根 README 四口径刷新（E259/E257）') : fail('SA43 守卫', '');
       /* E262 死重清理 */
       const scriptsDir = join(__dirname, 'scripts');
@@ -1188,8 +1191,9 @@ try {
       Game.computeOfflineProgress();
       const rushLeft = Math.max(0, Math.min(3, 200 + 3 - 200));   // 离线段起始日 200，窗口 [200,203) → 3 日全在窗内
       const rushMul = (3 + 0.5 * rushLeft) / 3;
-      const expect = Math.round(perRound / 3 * 0.85 * rushMul * 3);   // v40（E393）：0.6→0.85
-      out.mulOk = got === expect && expect > Math.round(perRound / 3 * 0.85 * 3);   // 高于无窗口基准（v40 E393）
+      const routeMul = (Cultivate.MEDIT_ROUTES && Cultivate.MEDIT_ROUTES.zhoutian.mult) || 1;   // v42（E528·P3 整合）：E502 离线折算按周天口径 ×1.2 随动
+      const expect = Math.round(perRound / 3 * 0.85 * rushMul * 3 * routeMul);   // v40（E393）：0.6→0.85
+      out.mulOk = got === expect && expect > Math.round(perRound / 3 * 0.85 * 3 * routeMul);   // 高于无窗口基准（v40 E393；v42 E502 ×1.2 随动）
       out.summarySplit = summaryHtml.includes('聚灵加护') && summaryHtml.includes('修行精进（基础）');
       // 对照：无窗口 → 恰为基础口径
       p.rushDay = null; p._settleDay = Math.floor(p.day);
@@ -1199,7 +1203,7 @@ try {
       Save.writeRaw('auto', JSON.stringify(auto));
       Game.computeOfflineProgress();
       const perRound2 = Cultivate.baseGain(p) * (1 + Stat.compute(p).cultPct / 100);
-      out.baseOk = got === Math.round(perRound2 / 3 * 0.85 * 3);   // v40（E393）
+      out.baseOk = got === Math.round(perRound2 / 3 * 0.85 * 3 * routeMul);   // v40（E393）；v42（E528·P3 整合）：E502 ×1.2 随动
     } finally {
       Cultivate.addExp = savedAdd;
       UI.popup = op; Game.afterAction = savedAA;
@@ -1209,7 +1213,7 @@ try {
     return out;
   });
   rb25.mulOk && rb25.summarySplit && rb25.baseOk
-    ? pass('RB25 离线聚灵乘窗：窗口日 ×1.5 加权（3 日全在窗内 rushMul=1.5）、小结拆基础/聚灵两段、无窗口恰基础口径（E277）') : fail('RB25 乘窗', JSON.stringify(rb25));
+    ? pass('RB25 离线聚灵乘窗：窗口日 ×1.5 加权（3 日全在窗内 rushMul=1.5）、小结拆基础/聚灵两段、无窗口恰基础口径（E277；v42（E528·P3 整合）：E502 离线周天 ×1.2 双支随动）') : fail('RB25 乘窗', JSON.stringify(rb25));
 
   /* ---- RB26 E235：连喂 ×5（自停条件）+ E236 批量兑换 ---- */
   const rb26 = await page.evaluate(async () => {

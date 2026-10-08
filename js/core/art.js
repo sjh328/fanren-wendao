@@ -16,11 +16,27 @@ const Art = {
     youming:  { sky: ['#d9ddd2', '#b8c2b4'], hills: ['#4a6258', '#354c44', '#22352f'], landmark: 'flame', mist: '#cfd8cc' },
     feizhou:  { sky: ['#dfe3ee', '#c3cbdd'], hills: ['#6a7898', '#4d5b7c', '#344064'], landmark: 'ship', mist: '#e2e7f2' },
     longyuan: { sky: ['#d6e2e6', '#b2c8cf'], hills: ['#3e6e80', '#2a5264', '#1a3a4a'], landmark: 'whirl', mist: '#cfdfe4' },
+    /* v42（E494）：补 6 套高境配色——此前宗门征讨/雷池旧地/灵墟仙泽/九霄雷狱/仙阙云海/仙阙深处
+     * 六图 scene() 回落 village 暖黄田舍，至此 MAPS 15 图全部命中专属配色；
+     * tints 为各图季节薄色专色（E494「季节薄色数组同步 6 图」），缺省回落全局 SEASON_TINT */
+    zhengtao: { sky: ['#d8d4c4', '#b4ac98'], hills: ['#7a6a56', '#584c3e', '#3a3228'], landmark: 'gate',    mist: '#ccc4ae', tints: ['#b8c49a', '#9ab88a', '#c8a878', '#a8b0b8'] },
+    leichi:   { sky: ['#46403a', '#5c5044'], hills: ['#6a5a46', '#4a3e30', '#2e2620'], landmark: 'rift',    mist: '#8a7a62', tints: ['#a8b89a', '#8ab89a', '#c89868', '#98a0ac'] },
+    lingxu:   { sky: ['#ddeee4', '#b8dcc8'], hills: ['#5aa88a', '#3e8468', '#2a5e4a'], landmark: 'marsh',   mist: '#d2efe2', tints: ['#a8d8a0', '#78c8a0', '#c8b088', '#a8c0c0'] },
+    leiyu:    { sky: ['#322a4e', '#4c3f74'], hills: ['#5c4c8e', '#403468', '#2a2148'], landmark: 'bolt',    mist: '#8a7ab8', tints: ['#9a8ac0', '#7a9a90', '#b09070', '#8890b0'] },
+    xianhai:  { sky: ['#dce9f5', '#bcd5ee'], hills: ['#8ab0d2', '#6a93be', '#4a74a0'], landmark: 'palace',  mist: '#e8f2fa', tints: ['#b0d8a8', '#88c8b0', '#d0b088', '#b0c0d0'] },
+    xianhai2: { sky: ['#1e2444', '#323e6c'], hills: ['#3c4674', '#2c3458', '#1c2240'], landmark: 'starpal', mist: '#4c5684', tints: ['#6a7a9a', '#5a8a8a', '#8a7a6a', '#6a7290'] },
   },
   /** 生成地图场景插画 SVG（viewBox 600x150）；season 0~3 季节薄色，wx 天气/昼夜叠加层 */
   scene(mapId, season = -1, wx = null) {
     const S = this.SCENES[mapId] || this.SCENES.village;
     const gid = 'sg' + mapId;
+    // v42（E500）：季节渐变过渡——场景键（图+季）变化时打过渡类（.scene-anim-*，W1B/E486 预留关键帧，
+    // 过渡 600ms，跨包合同）；同景重渲染（战况刷新等）不打类避免反复淡入；reduced-motion/
+    // 性能模式（body.anim-off）降级直切。E494 起季节薄色走各图 tints 专色，缺省回落全局 SEASON_TINT。
+    const key = mapId + ':' + season;
+    const anim = this._animAllowed() && key !== this._sceneKey;
+    this._sceneKey = key;
+    const tints = S.tints || this.SEASON_TINT;
     // 三层山峦（折线剪影）
     const hill = (y, amp, color, op) => {
       let pts = `0,${150 - y}`;
@@ -42,7 +58,15 @@ const Art = {
     else if (S.landmark === 'flame') landmark = `<g opacity="0.95"><path d="M470 100 q-6 -18 6 -30 q-2 14 8 20 q10 6 2 22 q-8 10 -16 0 q-6 -6 0 -12" fill="#8fd0a8" opacity="0.75"/><path d="M510 106 q-4 -12 5 -22 q-1 10 6 15 q7 5 1 16 q-6 7 -11 0 q-4 -4 -1 -9" fill="#8fd0a8" opacity="0.5"/></g>`;
     else if (S.landmark === 'ship') landmark = `<g opacity="0.95"><ellipse cx="440" cy="66" rx="52" ry="10" fill="#8c94b4"/><ellipse cx="440" cy="56" rx="34" ry="8" fill="#a6aec8"/><polygon points="430,40 466,40 448,18" fill="#b8c0d6" opacity="0.8"/><circle cx="448" cy="30" r="4" fill="#eef2ff" opacity="0.9"/></g>`;
     else if (S.landmark === 'whirl') landmark = `<g opacity="0.9"><path d="M430 66 q30 -26 60 0 q-30 26 -60 0" fill="none" stroke="#a8ccd8" stroke-width="4"/><path d="M440 66 q20 -14 40 0 q-20 14 -40 0" fill="none" stroke="#cfe6ee" stroke-width="3"/><circle cx="460" cy="66" r="7" fill="#123240"/></g>`;
-    return `<svg class="scene-svg" viewBox="0 0 600 150" preserveAspectRatio="none" aria-hidden="true">
+    /* v42（E494）：地标 else-if 链扩展 6 枝——辕门旌旗（征讨）/ 焦雷裂地（雷池）/ 玉光沼泽（灵墟）/
+     * 紫电焦土（雷狱）/ 云涛玉阙（仙海）/ 星垂道宫（深处），与九套既有地标同层叠序绘制 */
+    else if (S.landmark === 'gate') landmark = `<g opacity="0.9"><rect x="410" y="78" width="110" height="34" fill="#4a4036"/><polygon points="406,78 524,78 465,58" fill="#3a3229"/><rect x="452" y="88" width="26" height="24" fill="#241f1a"/><line x1="420" y1="78" x2="420" y2="44" stroke="#3a3229" stroke-width="3"/><polygon points="420,44 444,50 420,58" fill="#a03a2a"/><line x1="510" y1="78" x2="510" y2="46" stroke="#3a3229" stroke-width="3"/><polygon points="510,46 534,52 510,60" fill="#a03a2a"/></g>`;
+    else if (S.landmark === 'rift') landmark = `<g opacity="0.95"><path d="M420 128 L452 108 L444 96 L478 78 L470 70 L500 52" fill="none" stroke="#2a2118" stroke-width="5"/><path d="M420 128 L452 108 L444 96 L478 78 L470 70 L500 52" fill="none" stroke="#e8a04a" stroke-width="1.6" opacity="0.85"/><circle cx="500" cy="50" r="3" fill="#f4c46a" opacity="0.9"/></g>`;
+    else if (S.landmark === 'marsh') landmark = `<g opacity="0.9"><ellipse cx="150" cy="122" rx="52" ry="9" fill="#7ac8a8" opacity="0.6"/><ellipse cx="240" cy="132" rx="66" ry="10" fill="#8ad8b4" opacity="0.5"/><ellipse cx="190" cy="126" rx="20" ry="5" fill="#c8f0dc" opacity="0.7"/><path d="M300 128 q4 -18 0 -26 M310 128 q-2 -14 4 -22" stroke="#4a8a6a" stroke-width="2" fill="none"/></g>`;
+    else if (S.landmark === 'bolt') landmark = `<g opacity="0.95"><polygon points="470,10 486,48 470,44 492,86 452,54 468,52 452,22" fill="#cfc0ff" opacity="0.9"/><polygon points="380,110 420,84 470,110" fill="#2a2140"/><polygon points="470,110 520,78 570,110" fill="#221b38"/></g>`;
+    else if (S.landmark === 'palace') landmark = `<g opacity="0.92"><rect x="420" y="72" width="60" height="30" fill="#d8e8e4"/><polygon points="414,72 486,72 450,52" fill="#5ab0a4"/><polygon points="438,58 462,58 450,46" fill="#6ac0b4"/><rect x="440" y="82" width="8" height="20" fill="#8aa8a4"/><rect x="452" y="82" width="8" height="20" fill="#8aa8a4"/><ellipse cx="450" cy="106" rx="70" ry="8" fill="#eef6f4" opacity="0.8"/></g>`;
+    else if (S.landmark === 'starpal') landmark = `<g opacity="0.95"><circle cx="120" cy="30" r="1.6" fill="#e8ecff"/><circle cx="210" cy="18" r="1.2" fill="#c8d0f4"/><circle cx="320" cy="36" r="1.4" fill="#e8ecff"/><circle cx="540" cy="24" r="1.2" fill="#c8d0f4"/><rect x="430" y="76" width="40" height="26" fill="#1a2038"/><polygon points="424,76 476,76 450,60" fill="#2a3256"/><rect x="438" y="56" width="24" height="14" fill="#1a2038"/><polygon points="434,56 466,56 450,44" fill="#3a4470"/><circle cx="450" cy="40" r="2.2" fill="#f4d88a"/></g>`;
+    return `<svg class="scene-svg${anim ? ' scene-anim-on' : ''}" viewBox="0 0 600 150" preserveAspectRatio="none" aria-hidden="true">
       <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="${S.sky[0]}"/><stop offset="1" stop-color="${S.sky[1]}"/>
       </linearGradient></defs>
@@ -54,7 +78,7 @@ const Art = {
       ${hill(8, 34, S.hills[2], 0.95)}
       <ellipse cx="180" cy="132" rx="200" ry="26" fill="${S.mist}" opacity="0.65"/>
       <ellipse cx="470" cy="140" rx="220" ry="24" fill="${S.mist}" opacity="0.5"/>
-      ${season >= 0 ? `<rect width="600" height="150" fill="${this.SEASON_TINT[season] || 'none'}" opacity="0.07"/>` : ''}
+      ${season >= 0 ? `<rect${anim ? ' class="scene-anim-season"' : ''} width="600" height="150" fill="${tints[season] || 'none'}" opacity="0.07"/>` : ''}
       ${wx && wx.night ? '<rect width="600" height="150" fill="#1e2a4a" opacity="0.30"/><circle cx="500" cy="34" r="18" fill="#f4f0dc" opacity="0.9"/><circle cx="508" cy="30" r="15" fill="url(#' + gid + ')" opacity="0.35"/>' : ''}
       ${wx && wx.sky === 'rain' ? '<rect width="600" height="150" fill="#6a788a" opacity="0.14"/><g stroke="#8a98aa" stroke-width="1" opacity="0.55">' + [80,180,280,380,480,560].map((x, i) => `<line x1="${x}" y1="${10 + (i % 3) * 12}" x2="${x - 8}" y2="${34 + (i % 3) * 12}"/><line x1="${x + 40}" y1="${48 + (i % 2) * 14}" x2="${x + 32}" y2="${72 + (i % 2) * 14}"/><line x1="${x + 12}" y1="${92 + (i % 3) * 10}" x2="${x + 4}" y2="${116 + (i % 3) * 10}"/>`).join('') + '</g>' : ''}
       ${wx && wx.sky === 'fog' ? '<g fill="#f2efe4" opacity="0.45"><ellipse cx="160" cy="118" rx="210" ry="24"/><ellipse cx="440" cy="100" rx="190" ry="20"/><ellipse cx="300" cy="132" rx="260" ry="22"/></g>' : ''}
@@ -93,7 +117,6 @@ const Art = {
     return `<svg viewBox="0 0 88 66" class="fig-svg" aria-hidden="true"><g fill="${color}" stroke="${color}">
       <circle cx="40" cy="22" r="8"/>
       <path d="M26 62 L28 36 Q40 28 52 36 L54 62 Z"/>
-      <path d="M50 36 ${item.startsWith('<path') ? '' : ''}" />
       ${item}
     </g>${decor}</svg>`;
   },
@@ -160,8 +183,18 @@ const Art = {
     const t = this.TEMPER_LOOK[d.temper] || { item: 'none', hair: '#4a4038' };
     return { robe: this.SECT_ROBE[d.sect] || '#7a7a6a', hair: t.hair, item: t.item, aura: this.SECT_ROBE[d.sect] || '#8a8a7a' };
   },
-  /** v19：季节色调（孟春嫩/仲夏翠/季秋赭/隆冬灰，按游戏月叠加一层薄色） */
+  /** v19：季节色调（孟春嫩/仲夏翠/季秋赭/隆冬灰，按游戏月叠加一层薄色）；
+   *  v42（E494）：SCENES 条目可携 tints 专色覆盖（6 新图已配），此处为全局缺省 */
   SEASON_TINT: ['#a8c89a', '#8ab89a', '#c8a878', '#a8b0b8'],
+  /** v42（E500）：季节渐变降级判定——性能开关（body.anim-off）与系统 reduced-motion 均直切 */
+  _sceneKey: null,
+  _animAllowed() {
+    try {
+      if (document.body && document.body.classList.contains('anim-off')) return false;
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+    } catch (e) { /* 环境不可判则按可动画处理，类名由 CSS 侧兜底 */ }
+    return true;
+  },
   seasonOf(p) {
     // v29 修瑕：与日历同源（365 天/年）——旧算法按 360 天/年，第 6 年起整年错月，季节加成全面漂移
     const month = p ? Math.floor(((p.day || 0) % 365) / 30) : 0;

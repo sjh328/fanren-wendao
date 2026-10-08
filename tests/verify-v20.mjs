@@ -29,6 +29,7 @@ console.log('===== SA 源码静态组 =====');
   const cave = R('systems/cave.js');
   const forge = R('systems/forge.js');
   const cult = R('systems/cultivate.js');
+  const cultivate = cult;
   const trib = R('systems/tribulation.js');
   const sect = R('systems/sect.js');
   const npc = R('systems/npc.js');
@@ -52,7 +53,7 @@ console.log('===== SA 源码静态组 =====');
   const sw = readFileSync(join(__dirname, 'sw.js'), 'utf8').replace(/\r\n/g, '\n');
   const stylecss = readFileSync(join(__dirname, 'style.css'), 'utf8').replace(/\r\n/g, '\n');
   /* ---- A 节奏重校 ---- */
-  gdata.includes('EXP_BASE: [70, 380, 2350, 14700, 91800, 570000, 2394000, 10054800, 42230160, 177366672]') ? pass('SA1 EXP_BASE 字面量（A1；v40 E391 r6~r9 改 ×4.2 梯削尾，r0~r5 逐字节不变）') : fail('SA1 EXP_BASE', '');
+  gdata.includes('EXP_BASE: [70, 380, 2350, 14700, 91800, 490000, 2394000, 10054800, 42230160, 177366672]') ? pass('SA1 EXP_BASE 字面量（A1；v40 E391 r6~r9 改 ×4.2 梯削尾；v42 E485 r5 炼虚削峰 570000→490000——r0~r4/r6~r9 逐字节不变）') : fail('SA1 EXP_BASE', '');   // v42（E528·P3 整合）：E485 炼虚削峰随动
   gdata.includes('fr <= 5 ? Math.round(Math.pow(3.4, fr)) : 243 * Math.pow(3.8, fr - 5)') ? pass('SA2 sinkCurve 分段单源（D3；v40（E384）r≤5 段 3.4^fr、r≥6 段 3.8^(r-5) 与收入同速一字不动）') : fail('SA2 sinkCurve', '');
   cult.includes('const expGain = Math.round(this.baseGain(p) * 2.5 * pur2);') && !cult.includes('20 * 80 * GameData.eco') ? pass('SA3 悟道收益改 baseGain×2.5 自随缩放（A2；v37（E264）乘感悟纯度 pur2）') : fail('SA3 悟道', '');
   cult.includes('spill * this.baseGain(p) * 0.125') && !cult.includes('spill * 80 * GameData.eco') ? pass('SA4 感悟溢出汇率同悟道口径（A2）') : fail('SA4 溢出', '');
@@ -66,7 +67,7 @@ console.log('===== SA 源码静态组 =====');
     const overflowOk = !cult.includes('DaoSys.gain(p, daoGain);');
     spillBody.includes('DaoSys.gain') || wudaoBody.includes('DaoSys.gain') || !overflowOk ? fail('SA6 r9 双喂拆除（E117）', '') : pass('SA6 r9 双喂拆除（E117）');
   }
-  gamejs.includes('听讲经义一日') && gamejs.includes('p.listenDay = today;') && gamejs.includes('Time.add(1);\n      if (p.dead) return;') ? pass('SA7 听讲实耗一日 Time.add(1)（A2）') : fail('SA7 听讲耗时', '');
+  cultivate.includes('你随长老听讲经义一日') && cultivate.includes('p.listenDay = today;') && cultivate.includes('if (!opts.noTime) Time.add(1);') ? pass('SA7 听讲实耗一日（A2；v42（E528·P3 整合）：E501 听讲提为 Cultivate.sectListen 系统单源——noTime 仅为挂机逐日免时耗口，手动路径一日时耗不变）') : fail('SA7 听讲耗时', '');
   world.includes('nextEventYear: 2 + Utils.rand(0, 2), _evResched34: true') ? pass('SA8 世界大事首现 2~4 年（A3）') : fail('SA8 首现', '');
   world.includes('w.nextEventYear = y + 1 + Utils.rand(0, 2)') ? pass('SA9 世界大事后续 1~3 年一遇（A3）') : fail('SA9 后续', '');
   world.includes('!w._evResched34 && !(w.history && w.history.length)') ? pass('SA10 旧档一次性重掷防重（A3）') : fail('SA10 重掷', '');
@@ -98,12 +99,12 @@ console.log('===== SA 源码静态组 =====');
   const hookHits = (battle.match(/this\.onEnemyHit\(B, st, /g) || []).length;
   hookHits >= 8 ? pass('SA27 不灭/魔棘钩子全路径接线≥8 处（C1/C2）') : fail('SA27 钩子接线', String(hookHits));
 }
-  battle.includes("onEnemyHit(B, st, dmg) {\n    const p = Game.player;") && battle.includes("e_reborn') && !B.enemy._rebornUsed") ? pass('SA28 敌方受击统一响应单源（C1/C2）') : fail('SA28 单源', '');
+  battle.includes("onEnemyHit(B, st, dmg, opt = {}) {") && battle.includes("e_reborn') && !B.enemy._rebornUsed") ? pass('SA28 敌方受击统一响应单源（C1/C2；v42（E528·P3 整合）：E480 镜甲会心标记增 opt 形参随动）') : fail('SA28 单源', '');
   battle.includes("atk *= 1 + StatusFx.pctOf(e.fx, 'atkup') / 100;") && battle.includes("spd *= 1 + StatusFx.pctOf(e.fx, 'agiup') / 100;") && battle.includes("Utils.chance(e.crit + StatusFx.pctOf(e.fx, 'critup'))") ? pass('SA29 偷来增益敌方三读端生效（C3）') : fail('SA29 偷益', '');
   battle.includes('身被禁锢，心神难凝') && !battle.includes("'slow', 'weaken', 'stun', 'freeze', 'vuln']") ? pass('SA30 凝神被控拦截+净化剔除控制（C4）') : fail('SA30 凝神', '');
   battle.includes("if (B._ningUsed) { UI.toast('凝神一转") ? pass('SA31 凝神已用守卫防双开（C4；v39（E350）去弹窗化后为同步直达守卫）') : fail('SA31 复查', '');
   battle.includes("const extra = this.dealToEnemy(B, st, Stat.afterDef(this.myAtk(st) * 0.5, this.enDef(B.enemy), B.enemy.power), { src: 'attack' });") ? pass('SA32 法相追击走攻防口径（C5；v39（E364）落账随 dealToEnemy 单源；v40（E376）受方 rp）') : fail('SA32 法相', '');
-  battle.includes('+ (B.fogDodge || 0) + (B.enemy.dodge || 0), 2, GameData.BALANCE.COMBAT.SKILL_MISS_MAX)') ? pass('SA33 雾战法诀闪避生效（C6）') : fail('SA33 雾战', '');
+  /\(B\.fogDodge \|\| 0\) \+ \(B\.enemy\.dodge \|\| 0\)\) \* \(\(this\.eFx\(B, 'e_shadow'\) && \(B\.turn \|\| 1\) === 1\) \? 2 : 1\), 2, GameData\.BALANCE\.COMBAT\.SKILL_MISS_MAX\)/.test(battle) ? pass('SA33 雾战法诀闪避生效（C6；v42（E528·P3 整合）：E480 影分首回合 ×2 乘式入式随动）') : fail('SA33 雾战', '');
   battle.includes('if (mercyTxt) this.log(mercyTxt, \'log-system\');') ? pass('SA34 首战保底日志建档后入列（C7）') : fail('SA34 保底日志', '');
   battle.includes('if (turnFx.mpRegen > 0 && p.mp < st.maxMp)') && !battle.includes('mpRegen > 0 && p.mp > 0') ? pass('SA35 回灵 mp=0 复活（C8）') : fail('SA35 回灵', '');
   battle.includes('GameData.BALANCE.COMBAT.PLAYER_MISS_MAX') && battle.includes('GameData.BALANCE.COMBAT.SKILL_MISS_MAX') && battle.includes('GUARD_DEF_BASE;   // v34（C9）') ? pass('SA36 COMBAT 常量接线（C9）') : fail('SA36 常量', '');
@@ -132,9 +133,8 @@ console.log('===== SA 源码静态组 =====');
   guide.includes("(full && p.realmIdx < 9) ? 'realm'") && guide.includes("fa !== 'karma'") && guide.includes("fa !== 'poison'") ? pass('SA48 tips 与 focus 首命中卡精确去重（E5）') : fail('SA48 去重', '');
   log.includes("system: ['system'],") ? pass('SA49 日志系统组剔除见闻（E6）') : fail('SA49 过滤', '');
   stylecss.includes('--text-faint: #61563f;') ? pass('SA50 faint 对比度加深（E7）') : fail('SA50 对比度', '');
-  story.includes('2400 + len * 12') && story.includes('Math.min(8000, 2400 + len * 12)') ? pass('SA51 剧情自动翻页按字数自适应（E8）') : fail('SA51 自动播放', '');
-  tutorial.includes("text: () => `这里是弱肉强食的修真界") && tutorial.includes("const text = typeof s.text === 'function' ? s.text() : s.text;") ? pass('SA52 引导文案惰性求值（E9）') : fail('SA52 引导', '');
-  tutorial.includes('迷路时去那里') ? pass('SA53 引导补问道页指引（E9）') : fail('SA53 问道指引', '');
+  story.includes('Math.min(9000, Math.max(2400, len * 165))') ? pass('SA51 剧情自动翻页按字数自适应（E8；v42 E497 打字机 1 字/150ms+标点停顿——补偿式改 165ms/字 封顶 9s 同源随动）') : fail('SA51 自动播放', '');   // v42（E528·P3 整合）：E497 补偿式随动
+  tutorial.includes('TASKS') && tutorial.includes("key: 'cultivate'") && tutorial.includes('看一眼问道页目标') ? pass('SA52/SA53 引导任务化：TASKS 五步任务链（首步点一次修炼、含「看一眼问道页目标」步）（E9 → v42 E487 说明书页退役为任务链）') : fail('SA52/53 引导任务链', '');   // v42（E528·P3 整合）：E487 任务化随动（旧五页说明书文案断言退役）
   ui.includes('界面字号、战斗速度、音效开关等偏好都在右上角 <b>⚙ 设置</b>') ? pass('SA54 玩法说明补设置交叉引导（E9）') : fail('SA54 设置引导', '');
 
   /* ---- F 减负 ---- */

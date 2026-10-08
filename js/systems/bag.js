@@ -79,9 +79,16 @@ const Bag = {
     while (p.stones.mid > 0) { p.stones.mid--; p.stones.low += 100; }
     p.stones.low -= take;
     // 大额余钱回兑中品，避免下品堆积到夸张数量
-    p.stones.mid += Math.floor(p.stones.low / 100);
-    p.stones.low %= 100;
+    // v42（E518）：回兑升到最高可行面额（mid≥100→high）——原只兑到中品，50 万级支出后
+    // 钱包面额塌陷成数百枚中品（大额支出后面额塌陷病灶，E518②）
+    while (p.stones.low >= 100) { const n = Math.floor(p.stones.low / 100); p.stones.mid += n; p.stones.low -= n * 100; }
+    while (p.stones.mid >= 100) { const n = Math.floor(p.stones.mid / 100); p.stones.high += n; p.stones.mid -= n * 100; }
     return take;
+  },
+  /** v42（E518）：家资折合行——大额消费确认弹窗的「≈N 上品灵石」折合（数值=stonesTotal/10000，±1 取整） */
+  wealthText() {
+    const p = Game.player;
+    return `你的家资约合 ≈${Utils.fmtNum(Math.round(this.stonesTotal(p) / 10000))} 上品灵石`;
   },
   stonesText() {
     const s = Game.player.stones;

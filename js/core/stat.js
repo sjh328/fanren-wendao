@@ -154,11 +154,13 @@ const Stat = {
       * (1 + ((gf.mpPct || 0) + (eq.mpPct || 0) + (sb.mpPct || 0) + (dao.mpPct || 0)) / 100) * finalScale);   // v27 修瑕：装备/宗门 mpPct 此前从未生效
     // v39（E361）：道侣心事段一「旧物」——旧物随身，攻击 +3%（≤5% 档；道侣结发后心事线奖励之一）
     const partnerHeart1 = !!(p.partner && p.npcs && p.npcs[p.partner] && (p.npcs[p.partner].heart || 0) >= 1);
+    // v42（E505）：境内顿悟·凌厉/圆融（本境有效）——Cultivate.insightBonusOf 单源，改境自动失效归零
+    const insFx = (typeof Cultivate !== 'undefined' && Cultivate.insightBonusOf) ? Cultivate.insightBonusOf(p) : {};
     const atk = Math.round((8 + A.gen * 2 + rp * 3 + (eq.atk || 0))
-      * (1 + ((gf.atkPct || 0) + (eq.atkPct || 0) + (sb.atkPct || 0) + (dao.atkPct || 0) + (beastPass.atkPct || 0) + (dx.atkPct || 0) + (pl.atkPct || 0) + trainPct + (partnerHeart1 ? 3 : 0)) / 100) * finalScale);
+      * (1 + ((gf.atkPct || 0) + (eq.atkPct || 0) + (sb.atkPct || 0) + (dao.atkPct || 0) + (beastPass.atkPct || 0) + (dx.atkPct || 0) + (pl.atkPct || 0) + trainPct + (partnerHeart1 ? 3 : 0) + (insFx.atkPct || 0)) / 100) * finalScale);
     const goldLan = p.npcs && (p.sworn || []).some(id => p.npcs[id] && p.npcs[id].goldlan);
     const def = Math.round((4 + A.body * 1.2 + rp * 1.8 + (eq.def || 0))
-      * (1 + ((gf.defPct || 0) + (eq.defPct || 0) + (sb.defPct || 0) + (dao.defPct || 0) + (dx.defPct || 0) + (pl.defPct || 0) + trainPct + (goldLan ? 2 : 0)) / 100) * finalScale);   // v27 修瑕：宗门/职位 defPct 此前从未生效；v40（E402）：金兰义契防御 +2%
+      * (1 + ((gf.defPct || 0) + (eq.defPct || 0) + (sb.defPct || 0) + (dao.defPct || 0) + (dx.defPct || 0) + (pl.defPct || 0) + trainPct + (goldLan ? 2 : 0) + (insFx.defPct || 0)) / 100) * finalScale);   // v27 修瑕：宗门/职位 defPct 此前从未生效；v40（E402）：金兰义契防御 +2%；v42（E505）：境内顿悟·圆融（本境有效）
     const speed = Math.round((8 + (A.gen + A.body) / 2 + rp * 0.8 + (eq.spd || 0))
       * (1 + ((gf.spdPct || 0) + (eq.spdPct || 0)) / 100) * finalScale);   // v27 修瑕：装备词缀「迅捷」spdPct 此前从未生效
     // v40（E380）：暴击溢出折算——75 钳外的暴击率不再静默蒸发，记入 critOver 供会伤加成消费
@@ -224,6 +226,7 @@ const Stat = {
       { name: '道心烙印', v: key === 'crit' || key === 'dodge' || key === 'cultPct' ? pctOf(dx, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(dx, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '个人线', v: key === 'crit' || key === 'dodge' || key === 'pillPct' ? pctOf(pl, key) : key === 'atk' || key === 'def' || key === 'maxHp' ? pctOf(pl, key === 'maxHp' ? 'hpPct' : key + 'Pct') : 0 },
       { name: '金兰义契（结拜 loyalty≥60）', v: (p.npcs && Object.values(p.npcs).some(n => n && n.goldlan)) && key === 'def' ? 2 : 0 },   // v40（E402）【金兰】词缀：防御 +2%
+      { name: '境内顿悟（凌厉/圆融·本境有效）', v: (key === 'atk' || key === 'def') ? ((typeof Cultivate !== 'undefined' && Cultivate.insightBonusOf) ? Cultivate.insightBonusOf(p)[key + 'Pct'] || 0 : 0) : 0 },   // v42（E505）：顿悟攻/防档入明细（凝神档在修为行，cult 侧自列）
       { name: '洞府（聚灵/藏宝/演武）', v: key === 'cultPct' ? ((p.cave && p.cave.lv) || 0) * 4 : key === 'stonePct' ? (((p.cave && p.cave.builds && p.cave.builds.treasury) || 0) * 3) : key === 'atk' || key === 'def' ? (((p.cave && p.cave.builds && p.cave.builds.train) || 0) * 2) : 0 },
       { name: '轮回印记/残玉共鸣/心魔凝练', v: key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed' ? Math.round(base * (((p.reinc ? Math.min(30, p.reinc.marks || 0) * 0.01 : 0) + ((p.jade || 0) * 0.015) + (Math.min(6, (p.flags && p.flags.xinmoCleared) || 0)) * 0.01 + ((p.benming && p.benming.lv) || 0) * 0.01)) * 100) / 100 : 0 },   // v32 修瑕（E35）：心魔凝练封顶折算（v37（E245）：+20% 不可达装饰改如实 +6%，与 XinmoSys.scale 同口径）
       { name: '仙门之外（残玉终响）', v: (p.flags && p.flags.beyondGate) && (key === 'atk' || key === 'def' || key === 'maxHp' || key === 'maxMp' || key === 'speed') ? Math.round(base * 0.03 * 100) / 100 : 0 },   // v25

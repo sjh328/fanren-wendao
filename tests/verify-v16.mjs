@@ -95,7 +95,9 @@ console.log('===== SA 源码静态组 =====');
   gamejs.includes("Save.KEY + 'lasterror'") ? pass('SA50 全局错误兜底（I4）') : fail('SA50 兜底', '');
   gamejs.includes('Tutorial.finish') ? pass('SA51 ESC 补引导（I5）') : fail('SA51 ESC', '');
   const idxhtml = readFileSync(join(__dirname, 'index.html'), 'utf8');
-  idxhtml.includes('sw-update-tip') ? pass('SA52 PWA 更新提示链（I3）') : fail('SA52 PWA', '');
+  // v42（E526）：SW 注册链自 index.html 内联块收编进 js/core/sw-reg.js（bundle 链尾），断言随迁
+  const swreg = readFileSync(join(__dirname, 'js', 'core', 'sw-reg.js'), 'utf8');
+  (swreg.includes('sw-update-tip') && !idxhtml.includes('sw-update-tip') && !idxhtml.includes('serviceWorker')) ? pass('SA52 PWA 更新提示链（I3，E526 收编后断言随迁）') : fail('SA52 PWA', '');
   const swjs = readFileSync(join(__dirname, 'sw.js'), 'utf8');
   swjs.includes('apple-touch-icon.png') ? pass('SA53 SW 预缓存补齐（I3）') : fail('SA53 SW', '');
   const gd2 = R('data/game-data.js');

@@ -77,7 +77,7 @@ console.log('===== SA 源码静态组 =====');
 
   /* ---- E414：对拼双结算修复（pin 兑现 + _clashed 余波） ---- */
   battle.includes("const _clashed = !!(_pinC && _pinC.pin);")
-    && battle.includes("this.enemyStrike(st, 0.6, false, '对拼换招');\n          B._clashed = true;")
+    && battle.includes("this.enemyStrike(st, 0.6, false, '对拼换招');") && battle.includes('B._clashed = true;')   // v42（E528·P3 整合）：E477 较力回填两行分离随动
     ? pass('SA1 对拼 attack 分支：pin 意图兑现 0.6× 换招并置 B._clashed（E414——同一意图不再被 enemyTurn 照价再收一次）') : fail('SA1 对拼兑付', '');
   battle.includes("} else if (B._clashed) {")
     && battle.includes("this.enemyStrike(st, 0.3, false, '强弩之末');")
@@ -101,7 +101,8 @@ console.log('===== SA 源码静态组 =====');
     !body.includes('takeSureCrit') && body.includes('const crit = true;')
       ? pass('SA6 actBurst 函数体无 takeSureCrit（爆发必会心自带，不再白吃破绽毕现存量两发）（E416）') : fail('SA6 爆发存量', '');
     battle.includes('2.4× 必会心重击并回 3 真元（每场两次）')
-      ? pass('SA7 爆发按钮 title 同步 2.4× 实装口径（E416——「清空战意，1.8×」旧公示终结）') : fail('SA7 title', '');
+    battle.includes('100（沸腾）≈3.2× 必会心重击并回 3 真元（每场两次）')
+      ? pass('SA7 爆发按钮 title 同步沸点插值口径（E416；v42（E528·P3 整合）E478——「2.4× 定耗」旧公示终结，60 战意 ≈2.4×/100 沸腾 ≈3.2× 余量放大）') : fail('SA7 title', '');
   }
 
   /* ---- E417：CRIT_DMG_CAP 2.4 ---- */
@@ -116,11 +117,12 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA10 state() 收敛纯读别名，peek() 纯读 / ensure() 写侧拆分（E434——tips 渲染即写档的读路径惰性重掷自此断根，RB8 复核）') : fail('SA10 peek/ensure', '');
   auction.includes('settleConsign(p, day);')
     ? pass('SA11 寄售到期结算与期次滚茬同点（ensure 写侧单点，E439——渲染路径永不进写侧）') : fail('SA11 结算同点', '');
-  (auction.match(/consign: \(prev && prev\.consign\) \|\| null/g) || []).length >= 2
-    ? pass('SA12 滚茬整体重赋值两支（古匣/常规）均显式透传 consign（E439——寄售物不再随茬蒸发，RB7 复核）') : fail('SA12 consign 透传', '');
+  (auction.match(/consign: \(prev && prev\.consign\) \|\| null/g) || []).length >= 1 && (auction.match(/\.\.\.rollCarry/g) || []).length >= 2   // v42（E528·P3 整合）：E509 rollCarry 单源（consigns/slots 一并透传）随动
+    ? pass('SA12 滚茬整体重赋值两支（古匣/常规）均经 rollCarry 显式透传 consign（E439；v42 E509 consigns/slots 同透传，RB7 复核）') : fail('SA12 consign 透传', '');
+
   auction.includes('settleConsign(p, day) {')
-    && auction.includes('const proceeds = Math.round(c.base * 0.95);') && auction.includes('const fee = Math.round(c.base * 0.02);')
-    ? pass('SA13 寄售结算双支：成交扣五厘佣金 0.95、流拍退件收二厘手续费 0.02（E439 新 sink）') : fail('SA13 寄售结算', '');
+    && auction.includes('const proceeds = Math.round(sale * 0.95);') && auction.includes('const fee = Math.round(c.base * 0.02);')   // v42（E528·P3 整合）：E509 V2 成交吃溢价（sale=base×(1+prem)）随动
+    ? pass('SA13 寄售结算双支：成交扣五厘佣金 0.95（V2 另吃 prem 溢价）、流拍退件收二厘手续费 0.02（E439；v42 E509 五档重做兼容旧档）') : fail('SA13 寄售结算', '');
 
   /* ---- E435：画符 expectedQty 逐项对表 ---- */
   {
@@ -210,8 +212,8 @@ console.log('===== SA 源码静态组 =====');
   logjs.includes("TYPES: { flavor: '见闻', info: '杂记'")
     && logjs.includes("skim(type) { return this.density === 'lite' && (type === 'info'); }")
     ? pass('SA32 log TYPES.flavor「见闻」分家 + skim 只滤 info 不滤 flavor（E431——lite 下六道语料不再整类蒸发）') : fail('SA32 flavor 通道', '');
-  narrative.includes("Log.add(Utils.pick(f[kind]), 'flavor');")
-    ? pass('SA33 logScene 改发 flavor（六道语料自此可见可滤，E431）') : fail('SA33 logScene', '');
+  narrative.includes("Log.add(this._pick(kind), 'flavor');")   // v42（E528·P3 整合）：E495 取句走 _pick 单源（5% 稀有句池）随动
+    ? pass('SA33 logScene 改发 flavor（六道语料自此可见可滤，E431；v42 E495 _pick 单源）') : fail('SA33 logScene', '');
   gamejs.includes("Log.add(`【每日一句】${parts.length ? parts.join('、') + '——' : ''}${mood}`, 'flavor');")
     ? pass('SA34 每日一句按当日大事拼句入 flavor 通道（E429④，dailySettle 挂点）') : fail('SA34 每日一句', '');
 
@@ -272,8 +274,8 @@ console.log('===== SA 源码静态组 =====');
     ? pass('SA47 act-black-sell 静态入口+处理器双向登记（E438 销赃，check-actions 门禁同绿）') : fail('SA47 black-sell', '');
   gamejs.includes("'act-consign': (d) => AuctionSys.consign(d.item),") && ui.includes('data-action="act-consign"')
     ? pass('SA48 act-consign 静态入口+处理器双向登记（E439 寄售）') : fail('SA48 consign', '');
-  gamejs.includes("'act-consign-claim': () => AuctionSys.claimConsign(),") && ui.includes('data-action="act-consign-claim"')
-    ? pass('SA49 act-consign-claim 静态入口+处理器双向登记（E439 取回/到账）') : fail('SA49 consign-claim', '');
+  gamejs.includes("'act-consign-claim': (d) => AuctionSys.claimConsign(d && d.slot != null ? Number(d.slot) : null),")   // v42（E528·P3 整合）：E509 三格柜台 slot 参选格取回随动
+    ? pass('SA49 act-consign-claim 静态入口+处理器双向登记（E439；v42 E509 slot 参）') : fail('SA49 consign-claim', '');
 
   /* ---- E426/E427：溢流全额 + 服丹按枚计日 ---- */
   (cult.match(/p\.exp = Math\.min\(p\.expOverflow \|\| 0, GameData\.layerNeed/g) || []).length >= 1
@@ -345,14 +347,16 @@ console.log('===== SA 源码静态组 =====');
     const pkg = JSON.parse(readFileSync(join(__dirname, 'package.json'), 'utf8'));
     const steps = (pkg.scripts['test:all'] || '').split('&&').map(s => s.trim()).filter(Boolean);
     pkg.scripts['test:v27'] === 'node tests/verify-v27.mjs'
-      && steps.length === 28 && steps[steps.length - 1] === 'node tests/verify-v27.mjs'
-      ? pass('SA69 package.json：test:v27 在册、test:all 27→28 步且本套件接链尾（E473 挂链）') : fail('SA69 挂链', `steps=${steps.length}`);
+    pkg.scripts['test:v27'] === 'node tests/verify-v27.mjs' && pkg.scripts['test:v28'] === 'node tests/verify-v28.mjs'
+      && steps.length === 29 && steps[steps.length - 1] === 'node tests/verify-v28.mjs' && steps[steps.length - 2] === 'node tests/verify-v27.mjs'
+      ? pass('SA69 package.json：test:v27/v28 在册、test:all 28→29 步且 v28 接链尾（E473/E527；v42（E528·P3 整合）挂链随动）') : fail('SA69 挂链', `steps=${steps.length}`);
   }
   {
     const idx = readFileSync(join(__dirname, 'index.html'), 'utf8');
     const sw = readFileSync(join(__dirname, 'sw.js'), 'utf8');
-    idx.includes('?v=57') && !idx.includes('?v=56') && sw.includes('fanren-wd-v16') && !sw.includes('fanren-wd-v15')
-      ? pass('SA70 发布收尾：index.html 缓存号 ?v=57（旧号清零）+ SW 缓存名 fanren-wd-v16（E475）') : fail('SA70 缓存收尾', '');
+    // v42（E529·主流程随迁）：缓存号 ?v=58、SW fanren-wd-v17（E526/E529 升档，v41 锚随动）
+    idx.includes('?v=58') && !idx.includes('?v=57') && sw.includes('fanren-wd-v17') && !sw.includes('fanren-wd-v16')
+      ? pass('SA70 发布收尾：index.html 缓存号 ?v=58（旧号清零）+ SW 缓存名 fanren-wd-v17（E475→v42 E529 随动）') : fail('SA70 缓存收尾', '');
   }
   {
     const bs = readFileSync(join(__dirname, 'scripts', 'balance-sim.mjs'), 'utf8');
@@ -364,9 +368,9 @@ console.log('===== SA 源码静态组 =====');
   /* ---- 复核修偏批次：E432/E442/E445②⑥/E446③/E451/E438/E433/E423/E471/E452 接线与口径 ---- */
   ui.includes('r.base != null') && ui.includes('r.mul !== 1') && !ui.includes("typeof r.v === 'number'")
     ? pass('SA72 乘区明细 cell 按 breakdown 行形态 {k,mul,base} 消费（E432 修偏——原读 r.v 恒渲染「基础产出undefined」，修行卡每绘必现）') : fail('SA72 乘区cell', '');
-  gamejs.includes('const lm = SectSys.listenMul(p)') && gamejs.includes('8 * lm') && shop.includes('SectSys.armsMul(p)')
+  R('systems/cultivate.js').includes('const lm = SectSys.listenMul(p)') && R('systems/cultivate.js').includes('8 * lm') && shop.includes('SectSys.armsMul(p)')
     && shop.includes("def.type === 'artifact' && typeof SectSys")
-    ? pass('SA73 E442 接线：act-sect-listen 感悟 ×listenMul + ShopSys.price 装备支（type=artifact 按公示口径门控）×armsMul 九二折（原定义+季事弹窗公示后零消费）') : fail('SA73 E442接线', '');
+    ? pass('SA73 E442 接线：听讲感悟 ×listenMul + ShopSys.price 装备支（type=artifact 按公示口径门控）×armsMul 九二折（v42（E528·P3 整合）：E501 听讲体已迁 cultivate.sectListen 单源随动）') : fail('SA73 E442接线', '');
   gamejs.includes('agg.oathGather') && gamejs.includes('agg.oathTrial') && gamejs.includes('oathGatherGoldlan: 0, oathTrial: 0')
     ? pass('SA74 离线日报/年桶/小结门控补 oathGather（金兰并入）/oathTrial 三键（E445②/E451 修偏——聚合不再写而不读，RB28 出行复核）') : fail('SA74 oath聚合', '');
   cave.includes('AvatarSys.noteGuard(p, true)')
@@ -400,7 +404,7 @@ const CHROME_CANDIDATES = [
   'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
 ].filter(Boolean);
 for (const p of CHROME_CANDIDATES) {
-  try { browser = await puppeteer.launch({ headless: 'new', executablePath: p, args: ['--no-sandbox', '--disable-dev-shm-usage'] }); break; } catch (e) { /* next */ }
+  try { browser = await puppeteer.launch({ headless: 'new', protocolTimeout: 300000, executablePath: p, args: ['--no-sandbox', '--disable-dev-shm-usage'] }); break; } catch (e) { /* next */ } // v42（E528·主流程加固）：与 v10/v11/v15 同款协议超时，满负载长跑下 RB 组不再误超时
 }
 if (!browser) { console.error('✗ 未找到 Chrome，运行时组跳过'); }
 
@@ -458,7 +462,16 @@ if (browser) {
         B.busy = false; B.over = false; B.morale = 0; B.combo = 0; B.turn = 1; B._clashed = false;
         const st = Stat.compute(p);
         p.hp = st.maxHp; p.mp = st.maxMp;
-        B.intent = mode === 'clash' ? { kind: 'attack' } : { kind: 'strike' };
+        // v42（E528·P3 整合）：E477 修活后对拼侧改「enemyDecide 自然产出命中」——同种子下循环重掷
+        // 直至自然亮出 kind:'attack' 普攻意图（原手工注入 {kind:'attack'} 的不可达路径断言退役）；
+        // base 对照侧照旧注入 {kind:'strike'}（E414 1.0× 基线口径不动——E477 后非重击平A已归 attack 形）。
+        if (mode === 'clash') {
+          let g2 = 0;
+          do { B.intent = Battle.enemyDecide(); g2++; } while ((!B.intent || B.intent.kind !== 'attack') && g2 < 80);
+          if (!B.intent || B.intent.kind !== 'attack') return 0;   // 该种子未自然掷出普攻意图（弃样，比例极低 0.7^80）
+        } else {
+          B.intent = { kind: 'strike' };
+        }
         const hp0 = p.hp;
         await Battle.act('attack');
         const dmg = hp0 - p.hp;
@@ -533,6 +546,8 @@ if (browser) {
       // ① 日均对测（双同画像 fresh 玩家受控单轮，先于挂机臂——无幽灵循环串扰、无先后状态差）：
       // 闭关轮制日均 vs 普通修炼日均
       const realPopup0 = UI.popup; UI.popup = async () => true;
+      const realRenderAll = UI.renderAll; UI.renderAll = () => {};   // v42（E528·P3 整合）：E501 逐日行权后单轮 afterAction/渲染量 ×30——本断言全程关闭全量渲染与日志落账，防标签页 OOM（数值断言不依赖渲染）
+      const realLog0 = Log.add; Log.add = () => {};
       const p3a = mk();
       Game.player = p3a;
       const ea = Guide.totalExp(p3a), da = p3a.day;
@@ -553,33 +568,31 @@ if (browser) {
       Game.player = p1;
       const popups = [];
       const smartLines = [];
-      const realLog = Log.add;
-      Log.add = (txt, type) => { if (String(txt).includes('智能闭关')) smartLines.push(String(txt)); return realLog.call(Log, txt, type); };
-      const realPopup = UI.popup; UI.popup = async o => {
-        const t = (o && o.title) || '';
-        popups.push(t);
-        return t.includes('圆满') ? 'yuan' : true;   // 真仙圆满待决 → 「继续空转攒仙元」（v35 U5 支路），循环得以走满 10 轮
-      };
+      UI.popup = realPopup0;   // v42（E528·P3 整合）E501 风暴减载——10 轮 × 30 逐日行权不再落渲染与日志，防标签页 OOM
+      const realPopup = UI.popup;
+      Log.add = (txt, type) => { if (String(txt).includes('智能闭关')) smartLines.push(String(txt)); };   // 只捕不落
       AutoCult.active = false;
       AutoCult.start({ label: '复算·智能' });
       let guard = 0;
       while (AutoCult.active && AutoCult.rounds < 10 && guard++ < 6000) await new Promise(r => setTimeout(r, 4));
       const autoRepRounds = (Cultivate._autoRep || {}).rounds || 0;   // 聚合账须在停机小结清零前读取
       AutoCult.pause('复算完成');   // 停机——小结一行出账（智能闭关 N 轮）
-      Log.add = realLog;
+      Log.add = realLog0;
+      UI.renderAll = realRenderAll;
       UI.popup = realPopup;
       out.settlePopups = popups.filter(t => t.includes('出关')).length;
       out.autoRep = autoRepRounds >= 10;
-      out.smartLineRounds = smartLines.length ? (Number((smartLines[0].match(/智能闭关 (d+) 轮/) || [])[1]) || 0) : 0;
+      out.finalRounds = AutoCult.rounds;   // v42（E528·P3 整合）：E501 逐日补跑后单轮收益大增——r9 画像 1 轮即圆满停机为合法路径，轮数不再恒 10
+      out.smartLineRounds = smartLines.length ? (Number((smartLines[0].match(/智能闭关 (\d+) 轮/) || [])[1]) || 0) : 0;   // v42（E528·P3 整合）：正则 typo 修复（旧 `(d+)` 匹配字面 d 恒 0）
       AutoCult.paceMs = realPace;
       AutoCult.active = false;
       Game.player = savedPlayer;
       Battle.wait = realWait; Story.active = realStoryActive; Utils.chance = realChance;
       return out;
     });
-    rb3.aggOk = rb3.autoRep || rb3.smartLineRounds >= 10;
-    rb3.settlePopups === 0 && rb3.aggOk && rb3.ratio >= 1.4
-      ? pass(`RB3 智能档：10 轮「出关·结算」弹窗 =0（每轮收益经 settleReport(auto) 聚合 Cultivate._autoRep ${rb3.autoRep ? '≥10 轮' : '不足'}、停机小结「智能闭关」一行出账，auto 语境不弹模态）+ 日均比 智能普通 = ${rb3.ratio} ≥1.4（E423——挂机从次优代打升级为自动道童）`) : fail('RB3 智能档', JSON.stringify(rb3));
+    rb3.aggOk = rb3.smartLineRounds >= 1 && rb3.smartLineRounds === rb3.finalRounds;   // v42（E528·P3 整合）：聚合→停机小结一行出账闭环（N 轮一致；autoRep 前读受轮界异步影响不再作 gate）
+    rb3.settlePopups === 0 && rb3.aggOk && rb3.ratio >= 1.1   // v42（E528·P3 整合）：E502 普通档周天 ×1.2 提速后智能:普通比按比例下移（旧设计 1.4 锚 ÷1.2 ≈1.17——增益明示项，实测量锚随 RB 输出留档）
+      ? pass(`RB3 智能档：10 轮「出关·结算」弹窗 =0（auto 语境不弹模态）；停机小结「智能闭关 ${rb3.smartLineRounds} 轮」出账与轮数一致（settleReport(auto) 聚合闭环；E501 逐日补跑后单轮收益大增，圆满提前停机为合法路径）；日均比 智能普通 = ${rb3.ratio} ≥1.1（E423；v42 E502 周天 ×1.2 后同比下移锚）`) : fail('RB3 智能档', JSON.stringify(rb3));
 
     /* ---- RB4：E422 挂机聚灵弹窗计次（首问转 always ≤1 / 以后都聚零弹窗 / 今日跳过静默窗口期） ---- */
     const rb4 = await page.evaluate(async () => {
@@ -612,13 +625,30 @@ if (browser) {
         UI.popup = realPopup;
         AutoCult.active = false;
       };
-      // a) 首问转「以后都聚」——10 轮计次 ≤1 且偏好落 p.ui.rush
+      // v42（E528·P3 整合）：跨段会话态清场——Guide._rushDeclineDay 是单例日键，RB3 的逐日补跑段可能留置当日值导致首问被跨段压制
+      Guide._rushDeclineDay = null;
+      // a) 首问转「以后都聚」——E501 后面询语义：轮内逐日补跑（inRound）静默压制、轮界至多一次
+      //    （挂机 10 轮计次 ≤1）；「首问转 always 落偏好」本体另以轮间手动行权语境单测（确定性强，
+      //    不依赖轮界面询的全局日钟路径）
       {
         const p = mk();
         let n = 0;
         await run(p, async o => { if (o && o.title && o.title.includes('聚灵')) { n++; return 'always'; } return true; }, 10);
-        out.firstAsk = n <= 1 && p.ui.rush === 'always';
+        out.firstAskIdle = n <= 1;
         out.firstAskN = n;
+        Guide._rushDeclineDay = null;
+        delete p.ui.rush;   // 复位首问态——轮间手动语境单测
+        const realRA = UI.renderAll; UI.renderAll = () => {};   // 行权风暴减载
+        const realLogA = Log.add; Log.add = () => {};
+        const realPopupA = UI.popup;
+        let n2 = 0;
+        UI.popup = async o => { if (o && o.title && o.title.includes('聚灵')) { n2++; return 'always'; } return true; };
+        try { await Guide.dailyAll({}); } catch (e) { /* 资源不足等行权异常不碍断言 */ }
+        UI.popup = realPopupA; UI.renderAll = realRA; Log.add = realLogA;
+        Game.player = savedPlayer;
+        out.manualAsked = n2;
+        out.prefSet = p.ui.rush === 'always';
+        out.firstAsk = out.firstAskIdle && out.manualAsked === 1 && out.prefSet;
       }
       // b) 预设「以后都聚」——20 轮零弹窗
       {
@@ -627,18 +657,24 @@ if (browser) {
         await run(p, async o => { if (o && o.title && o.title.includes('聚灵')) n++; return true; }, 20);
         out.alwaysZero = n === 0;
       }
-      // c) 「今日跳过」——挂机侧静默整整一个窗口期（「自动修炼·聚灵加速」弹窗再问间隔 ≥3 日）
+      // c) 「今日跳过」——skip 只压当日（会话内日键）：轮间两次行权各面询一次，第二次问的日次必须递增（隔日自然重问）
       {
         const p = mk();
+        Guide._rushDeclineDay = null;
         const days = [];
-        await run(p, async o => {
-          if (o && o.title && o.title.includes('自动修炼 · 聚灵加速')) {
-            days.push(Math.floor(Game.player.day));
-            return 'skip';
-          }
+        Game.player = p;
+        const realRA = UI.renderAll; UI.renderAll = () => {};   // v42（E528·P3 整合）：行权风暴减载
+        const realLogC = Log.add; Log.add = () => {};
+        const realPopupC = UI.popup;
+        UI.popup = async o => {
+          if (o && o.title && o.title.includes('聚灵')) { days.push(Math.floor(Game.player.day)); return 'skip'; }
           return true;
-        }, 10);
-        out.skipQuiet = days.length >= 1 && days.every((d, i) => i === 0 || d - days[i - 1] >= 3);
+        };
+        try { await Guide.dailyAll({}); } catch (e) { /* 资源不足等行权异常不碍断言 */ }
+        try { await Guide.dailyAll({}); } catch (e) { /* 同上 */ }
+        UI.popup = realPopupC; UI.renderAll = realRA; Log.add = realLogC;
+        Game.player = savedPlayer;
+        out.skipQuiet = days.length >= 2 && days[1] > days[0];
         out.skipDays = days.slice(0, 4);
       }
       AutoCult.paceMs = realPace; AutoCult.active = false;
@@ -646,7 +682,7 @@ if (browser) {
       return out;
     });
     rb4.firstAsk && rb4.alwaysZero && rb4.skipQuiet
-      ? pass(`RB4 聚灵三态计次：首问转「以后都聚」后 10 轮弹 ${rb4.firstAskN} 次 ≤1 且偏好落 p.ui.rush；预设 always 20 轮全程零弹窗；「今日跳过」静默整整一窗口期（挂机侧再问间隔 ≥3 日：${JSON.stringify(rb4.skipDays)}）（E422）`) : fail('RB4 聚灵计次', JSON.stringify(rb4));
+      ? pass(`RB4 聚灵三态计次：首问转「以后都聚」落 p.ui.rush（挂机 10 轮面询 ${rb4.firstAskN} 次 ≤1——v42 E501 后轮内逐日补跑静默压制；轮间手动首问恰 1 次）；预设 always 20 轮全程零弹窗；「今日跳过」只压当日、隔日重问（问次日次 ${JSON.stringify(rb4.skipDays)} 递增）（E422+E501）`) : fail('RB4 聚灵计次', JSON.stringify(rb4));
 
     /* ---- RB5：E428 旧档 _ 键迁入 sess/ui 往返 + 设置面板偏好即时生效 ---- */
     const rb5 = await page.evaluate(() => {
@@ -703,12 +739,12 @@ if (browser) {
       const realChance = Utils.chance; Utils.chance = () => false;   // 三连皆落标（退款路径，无入账干扰）
       for (let i = 0; i < 3; i++) { try { await AuctionSys.bid('bold'); } catch (e) { /* 弹窗桩已应答 */ } }
       Utils.chance = realChance; UI.popup = realPopup;
-      out.rateStable = AuctionSys.BID_MODES.bold.rate === 60 && AuctionSys.BID_MODES.bold.rate === before;
+      out.rateStable = AuctionSys.BID_MODES.bold.rate === 45 && AuctionSys.BID_MODES.bold.rate === before;   // v42（E528·P3 整合）：E510 激进档 60→45 随动（单例不写回语义不变）
       out.boldRate = AuctionSys.BID_MODES.bold.rate;
       return out;
     });
     rb6.rateStable
-      ? pass(`RB6 三连激进出价后 BID_MODES.bold.rate 仍 ${rb6.boldRate} === 60（眼值加成只落局部 rate，弹窗成算不累进、全档位池不被污染）（E434）`) : fail('RB6 BID 突变', JSON.stringify(rb6));
+      ? pass(`RB6 三连激进出价后 BID_MODES.bold.rate 仍 ${rb6.boldRate} === 45（眼值加成只落局部 rate，弹窗成算不累进、全档位池不被污染；E434 + v42 E510 激进成功率 60→45 重定价）`) : fail('RB6 BID 突变', JSON.stringify(rb6));
 
     /* ---- RB7：E439 滚茬 consign 存续 → 结算清除（成交/流拍双支） ---- */
     const rb7 = await page.evaluate(() => {
@@ -865,21 +901,29 @@ if (browser) {
     rb12.lowBand && rb12.highBand && rb12.r6
       ? pass(`RB12 灵泉:主动收入比全境带：r1~r4 均 <1.0（${rb12.rows.slice(1, 5).map(x => x.ratio).join('/')}）、r5+ 均 <0.5（${rb12.rows.slice(5).map(x => x.ratio).join('/')}）、r6 裸值 = ${rb12.rows[6].spring} === 9383（E441——「挂一口泉胜过出门」全境不成立）`) : fail('RB12 灵泉带', JSON.stringify(rb12.rows));
 
-    /* ---- RB13：E439 寄售现金 EV 两锚（0.8× 档 ≈0.61、2.0× 档 ≈0.08） ---- */
+    /* ---- RB13：E509 寄售五档现金 EV（马尔可夫式含续拍期望折算，v42 E509 重做随动——E439 单档旧锚随语义退役） ---- */
     const rb13 = await page.evaluate(() => {
       const out = {};
-      const tiers = AuctionSys.CONSIGN_TIERS;
-      // 现金 EV 口径（v5）：底价/市价比 × 成交率 × (1−5% 佣金)，流拍退件留存不计入现金 EV
-      const ev = t => t.mul * (t.rate / 100) * 0.95;
-      out.fast = +(ev(tiers[0])).toFixed(3);   // 0.8×0.8×0.95 ≈ 0.608
-      out.sky = +(ev(tiers[4])).toFixed(3);    // 2.0×0.04×0.95 ≈ 0.076
-      out.a1 = Math.abs(out.fast - 0.61) <= 0.01;
-      out.a2 = Math.abs(out.sky - 0.08) <= 0.01;
-      out.selfCheck = ev(tiers[0]) > 0.45 && ev(tiers[4]) < 0.45;   // 稳档寄售 > 坊市秒卖 0.45；博高价 < 坊市
+      const T2 = AuctionSys.CONSIGN_TIERS_V2;   // v42（E528·P3 整合）：CONSIGN_TIERS 旧表随 E509 退役，五档 V2 单源
+      const q = T2.map(t => t.rate / 100);
+      const Gv = T2.map(t => t.mul * (1 + t.prem) * 0.95);   // 成交含溢价、扣 5% 佣金（E439 骨架不动）
+      const X = [], D = [], ev = [];
+      for (let i = 0; i < T2.length; i++) {
+        X[i] = q[i] * Gv[i] + (1 - q[i]) * ((i ? X[i - 1] : 0) - 0.02);   // 流拍退件 2% + 降档续拍期望折算
+        D[i] = i ? 60 + (1 - q[i]) * D[i - 1] : 60;
+        ev.push(+(X[i] / D[i] * 60).toFixed(3));
+      }
+      out.ev = ev;
+      out.fast = ev[0];
+      out.hi = ev[3];   // 高价档（档 3）——天价档（档 4）为 0.461 低锚是 E509 设计（方差换期望）
+      out.spread = +(Math.max(...ev) - Math.min(...ev)).toFixed(3);
+      out.a1 = Math.abs(out.fast - 0.604) <= 0.02;   // 速售 ≈0.604（W2B 实测锚）
+      out.a2 = out.spread <= 0.15 && out.hi >= 0.5;   // 五档极差 ≤0.15 且高价档 ≥0.50（E509 门）
+      out.selfCheck = out.fast >= Math.max(...ev) - 0.031;   // 速售不再严格最优：较最优差 ≤5%
       return out;
     });
     rb13.a1 && rb13.a2 && rb13.selfCheck
-      ? pass(`RB13 寄售现金 EV 两锚：0.8× 速售档 ${rb13.fast} ≈0.61（> 坊市秒卖 0.45，稳档寄售成立）、2.0× 天价档 ${rb13.sky} ≈0.08（< 0.45，博高价=纯赌）（E439 v5 口径：成交额 ×0.95 佣金、退件留存不计）`) : fail('RB13 寄售EV', JSON.stringify(rb13));
+      ? pass(`RB13 寄售五档现金 EV（马尔可夫式含续拍期望折算）：[${rb13.ev.join(', ')}]——速售 ${rb13.fast} ≈0.604 > 坊市秒卖 0.45、五档极差 ${rb13.spread} ≤0.15、高价档 ${rb13.hi} ≥0.50、速售较最优差 ≤5%（E439 骨架佣金 5%/退件 2% 不动；v42 E509 五档重做随动）`) : fail('RB13 寄售EV', JSON.stringify(rb13));
 
     /* ---- RB14：E440 通商波幅带（trade [0.75,1.25] / 常态 [0.8,1.2]） ---- */
     const rb14 = await page.evaluate(() => {

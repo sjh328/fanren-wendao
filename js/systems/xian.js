@@ -127,17 +127,147 @@ const XianSys = {
   /** 晋层后/仙劫后检查大罗圆满 */
   daozuCheck(p) {
     if (!this.isDaozu(p) || p.flags.daozu) return;
+    // v42（E520）：证道祖门槛——大罗圆满还须一方小世界历经三纪（开辟→三纪全链通后方可证道）；
+    // 仙元自此降为加速货币（可投资小世界提前纪年）。t0~t3 晋层零变化，门槛只挂道祖一档。
+    if (this.bestEra(p) < 3) {
+      Log.add('大罗圆满，万道在望——然<b>道祖之境</b>须以一方亲手开辟的小世界为证：此界历经三纪，方见真章。', 'warn');
+      UI.toast('证道祖需一方小世界达三纪——修炼页「小世界」可开辟（仙元可投资加速纪年）');
+      return;
+    }
     p.flags.daozu = true;
     // v38（E284）：删除无效果死行 `p.counters.xianyuan = (p.counters.xianyuan || 0);`
     if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.grantMarks) ReincarnationSys.grantMarks(1, 'dao_zu');
     if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.showLifeReport) ReincarnationSys.showLifeReport(p, '证道祖');   // v38（E319）：道祖小结
-    Log.add(`<b>道祖之境</b>——大罗圆满，万道归一。人间修士穷尽想象的尽头，也不过是你此刻的起点。（轮回印记 +1）`, 'realm');
+    Log.add(`<b>道祖之境</b>——大罗圆满，万道归一。亲手开辟的小世界已历三纪，草木山石皆沾道音。人间修士穷尽想象的尽头，也不过是你此刻的起点。（轮回印记 +1）`, 'realm');
     // v36（E230）：证道祖之境配白金色 t3 档全屏异象（4.6s 上行长尾）+ 终局专属音色——最高里程碑
     // 的演出密度自此不低于普通突破；演出非阻塞（setTimeout 摘除），announce aria-live 读屏可达
     UI.realmShow('道 祖 之 境 · 万 道 归 一', '#e8e0f0', 9);
     Ambience.sfx('daoZu');
     UI.announce('✦ 道 祖 之 境 ✦', 'gold');
     Story.chron('证道祖之境');
+  },
+
+  /* ========== v42（E520）：开辟小世界 · 周目传承（旗舰）==========
+   * 大罗圆满后可耗仙元+灵石（挂 sinkCurve）开辟一方程序生成的小世界（地貌/灵脉/生灵三轴，
+   * WORLD_BIOMES 定偏向）；每 30 游戏日一「纪」，产出感悟/仙元/灵石随纪年成长（价值锚 ≈2~4 日
+   * 主动收入/纪，复算式与锚值在案）；仙元可投资加速纪年（仙元自此有了溢流之外的第二去处）；
+   * 证道祖须一方小世界历三纪；产出写入 ReincarnationSys.legacy.subworlds，下一周目开局继承
+   * 「一方小天地」词条。存档：p.xianjie.worlds（E507 迁移默认 []），零新顶层。 */
+  ERA_DAYS: 30,
+  /** 三纪产出复算锚（verify/price-audit 同式）：纪值 = 125×stoneEco（建模日均，与 balance-sim dayIn 同式）
+   *  × 1.2 × (1+era×0.15)；分成：灵石 60% / 仙元与感悟折算 40%。bias 偏向：石/元/悟三系。 */
+  worlds(p) { return (p.xianjie && Array.isArray(p.xianjie.worlds)) ? p.xianjie.worlds : []; },
+  bestEra(p) { return this.worlds(p).reduce((m, w) => Math.max(m, w.era || 0), 0); },
+  canOpen(p) { return this.unlocked(p) && this.cur(p) >= 4 && this.layer(p) >= 3; },   // 大罗圆满方开辟
+  openCost(p) { return { stones: Math.round(2000 * GameData.sinkCurve(p.realmIdx || 9) / 2.2), yuan: 30000 }; },
+  eraBias(w) {
+    const B = GameData.WORLD_BIOMES;
+    const stone = w.vein === 'lingmai' || w.life === 'yaoshou' || w.land === 'shanhe';
+    const yuan = w.vein === 'xuanyun' || w.life === 'shiren';
+    const ins = w.vein === 'daoyun' || w.life === 'lingzhi';
+    return { stone: stone ? 1.35 : 1, yuan: yuan ? 1.6 : 1, ins: ins ? 1.8 : 1 };
+  },
+  worldName(w) {
+    const B = GameData.WORLD_BIOMES;
+    const land = (B.land.find(x => x.id === w.land) || {}).name || '无名之地';
+    return `${land} · ${w.name || '小世界'}`;
+  },
+  eraYield(p, w, era) {
+    const dayIn = 125 * GameData.stoneEco(p.realmIdx || 9);
+    const value = dayIn * 1.2 * (1 + era * 0.15);
+    const bias = this.eraBias(w);
+    const stones = Math.round(value * 0.6 * bias.stone);
+    const yuan = Math.round((1500 + era * 300) * bias.yuan);
+    const insight = Math.min(100, Math.round((10 + era * 3) * bias.ins));
+    return { stones, yuan, insight };
+  },
+  /** 纪年推进（Game.dailySettle 挂钩，auto=离线回放静默）：每满 ERA_DAYS 日进一纪，产出入账并写 legacy */
+  subworldTick(p, auto = false) {
+    const ws = this.worlds(p);
+    if (!ws.length || p.dead) return;
+    const today = Math.floor(p.day || 0);
+    for (const w of ws) {
+      let guard = 0;
+      // v42 修瑕：纪年基点用 ?? 判空——开局第 0 日开辟时 lastTickDay/createdDay 合法为 0，
+      // 原旧式 `||` 把 0 当缺失回落 today，条件恒假、纪年永不推进（W1C sfx 同类病灶）
+      while (today - (w.lastTickDay ?? w.createdDay ?? today) >= this.ERA_DAYS && guard++ < 12) {
+        w.lastTickDay = (w.lastTickDay ?? w.createdDay ?? today) + this.ERA_DAYS;
+        w.era = (w.era || 0) + 1;
+        const y = this.eraYield(p, w, w.era);
+        Bag.addStones(y.stones);
+        p.counters.xianyuan = (p.counters.xianyuan || 0) + y.yuan;
+        Cultivate.addInsight(p, y.insight);
+        const line = `${this.worldName(w)}历第 ${w.era} 纪——灵石 +${Utils.fmtNum(y.stones)}、仙元 +${Utils.fmtNum(y.yuan)}、感悟 +${y.insight}。`;
+        if (auto) { const agg = Game._offlineAgg = Game._offlineAgg || {}; agg.subworld = (agg.subworld || 0) + 1; Log.add(`【小世界】${line}`, 'info'); }
+        else Log.add(`【小世界】${line}`, 'gain');
+      }
+    }
+    // 周目传承：产出纪年写入全局 legacy（转世继承通道既有）
+    if (typeof ReincarnationSys !== 'undefined' && ReincarnationSys.writeLegacy) {
+      const legacy = ReincarnationSys.readLegacy();
+      const snap = JSON.stringify(ws.map(w => ({ name: this.worldName(w), era: w.era || 0 })));
+      if ((legacy.subworldSnap || '') !== snap) {
+        legacy.subworldSnap = snap;
+        legacy.subworlds = ws.map(w => ({ name: this.worldName(w), era: w.era || 0 }));
+        ReincarnationSys.writeLegacy(legacy);
+      }
+    }
+  },
+  /** 开辟 / 投资（契约签名 openSubworld(p, invest)）——invest=null 走开辟流；invest=world 序号走投资流 */
+  async openSubworld(p, invest = null) {
+    if (!this.canOpen(p)) { UI.toast('大罗圆满后方可开辟小世界'); return; }
+    if (invest == null) {
+      if (this.worlds(p).length >= 3) { UI.toast('三界已开辟——道祖之境，三界足矣'); return; }
+      const cost = this.openCost(p);
+      const B = GameData.WORLD_BIOMES;
+      const pickAxis = (key, label) => ({
+        key, label, type: 'radio',
+        options: B[key].map(o => ({ value: o.id, label: `${o.name}——${o.desc}` })),
+      });
+      const form = await UI.form({
+        title: '开辟小世界',
+        html: `以大罗之力为胎、仙元为引，辟一方属于你的世界。三轴定其性：<br>
+          <span class="tip-line">· 需仙元 ${Utils.fmtNum(cost.yuan)}、灵石 ${Utils.fmtNum(cost.stones)}（开辟之后每 ${this.ERA_DAYS} 日自历一纪，产出随纪年成长；仙元可投资加速纪年）。</span>`,
+        fields: [pickAxis('land', '地貌'), pickAxis('vein', '灵脉'), pickAxis('life', '生灵')],
+        confirm: '开 辟',
+      });
+      if (!form) return;
+      if (this.worlds(p).length >= 3) { UI.toast('三界已开辟'); return; }
+      if ((this.yuan(p)) < cost.yuan) { UI.toast(`仙元不足（需 ${Utils.fmtNum(cost.yuan)}）`); return; }
+      if (!Bag.spendStones(cost.stones)) { UI.toast('灵石不足'); return; }
+      p.counters.xianyuan -= cost.yuan;
+      const w = {
+        land: form.land, vein: form.vein, life: form.life,
+        name: (GameData.WORLD_BIOMES.vein.find(x => x.id === form.vein) || {}).name || '小世界',
+        era: 0, createdDay: Math.floor(p.day || 0), lastTickDay: Math.floor(p.day || 0),
+      };
+      p.xianjie.worlds = p.xianjie.worlds || [];
+      p.xianjie.worlds.push(w);
+      UI.realmShow('开 天 辟 地 · 一方世界自掌中生', '#cfe3f5', 5);
+      Ambience.sfx('daoZu');
+      UI.announce('✦ 开辟小世界 ✦', 'gold');
+      Log.add(`你以大罗之力<b>开辟小世界</b>——【${this.worldName(w)}】自虚空中成型！三轴既定，每 ${this.ERA_DAYS} 日自历一纪，此界所出自归你的道场。`, 'realm');
+      Story.chron(`开辟小世界「${this.worldName(w)}」`);
+      Game.afterAction();
+      return;
+    }
+    // 投资流：仙元加速纪年（每投资一次，纪年时钟提前 10 日）
+    const w = this.worlds(p)[invest];
+    if (!w) return;
+    const ahead = Math.floor(p.day || 0) - (w.lastTickDay ?? w.createdDay ?? Math.floor(p.day || 0));
+    const costYuan = Math.round(5000 * (1 + (w.era || 0) * 0.5));
+    const ok = await UI.popup({
+      title: `仙元灌顶 · ${this.worldName(w)}`,
+      html: `以仙元灌入世界胎膜，纪年时钟提前：<br>· 每次 <b>提前 10 日</b>（今已历 ${Math.max(0, ahead)}/${this.ERA_DAYS} 日，纪年 ${w.era || 0}）。<br>· 需仙元 <span class="hl">${Utils.fmtNum(costYuan)}</span>（随纪年水涨）。`,
+      options: [{ text: '灌 顶', value: true, primary: true }, { text: '作罢', value: false }],
+    });
+    if (!ok) return;
+    if (this.yuan(p) < costYuan) { UI.toast(`仙元不足（需 ${Utils.fmtNum(costYuan)}）`); return; }
+    p.counters.xianyuan -= costYuan;
+    w.lastTickDay = (w.lastTickDay ?? w.createdDay ?? Math.floor(p.day || 0)) - 10;
+    Log.add(`仙元如江河灌入【${this.worldName(w)}】——界中日月奔涌，纪年时钟提前了十日。`, 'gain');
+    this.subworldTick(p, false);   // 灌顶可能直接催熟一纪
+    Game.afterAction();
   },
   /** 仙界访客（dailySettle 钩子，日一次；(p, auto) 离线静默入账） */
   dailyCheck(p, auto = false) {

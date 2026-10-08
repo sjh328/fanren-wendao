@@ -870,11 +870,111 @@ const QuestSys = {
       </div>`).join('')}` : '';
     const groupBlock = (title, list, cls = '') => list.length
       ? `<div class="shop-section-title ${cls}">${title}</div>${list.map(sideCard).join('')}` : '';
-    return `${railHtml}${mainHtml}${lateBonusHtml}<div class="shop-section-title">◈ 奇遇录 · 支线</div>`
+    // v42（E492）：已了结组套 details.fold（复用 Game.foldState 折叠记忆机制，同「今日修行」先例）——
+    // 默认收起只留一行摘要，展开可见全量结案文案；结案史不再把问道页无限拉长
+    const doneFold = groups.done.length
+      ? `<details class="fold quest-done-fold" data-fold="quest-done" ${Game.foldState['quest-done'] ? 'open' : ''}>
+          <summary>◈ 已了结（${groups.done.length}）· 点开阅结案全文</summary>${groups.done.map(sideCard).join('')}</details>`
+      : '';
+    // v42（E493）：本季将临卡——未来 91 日可预期事件一览（纯读算零新字段，推算源见 seasonQueue 注）
+    const sq = this.seasonQueue(p).filter(r => r.inDays <= 91);
+    const sqHtml = `
+    <div class="card" id="season-queue">
+      <div class="card-title">✦ 本季将临 <span class="tag">未来 91 日</span></div>
+      <div class="card-desc">季内可预期的日程一览——节庆、季议、大比、誓约试炼与黑市开市，皆按各系统日节拍推算；已错过的标红章。</div>
+      ${sq.length ? sq.map(r => `
+        <div class="sq-row ${r.missed ? 'missed' : ''}">
+          <span class="sq-day">${r.missed ? '已错过' : (r.inDays <= 0 ? '今日' : `${r.inDays} 日后`)}</span>
+          <span class="sq-name">${r.name}</span>
+          <span class="sq-note">${r.note}</span>
+        </div>`).join('') : '<div class="tip-line">· 未来 91 日无既定日程——修行正当时。</div>'}
+    </div>`;
+    return `${railHtml}${mainHtml}${sqHtml}${lateBonusHtml}<div class="shop-section-title">◈ 奇遇录 · 支线</div>`
       + groupBlock(`可结案（${groups.claimable.length}）· 领赏即了结`, groups.claimable)
       + groupBlock(`进行中（${groups.active.length}）`, groups.active)
-      + groupBlock(`已了结（${groups.done.length}）`, groups.done)
+      + doneFold
       + groupBlock(`未启（${groups.locked.length}）· 随境界与前置解锁`, groups.locked);
+  },
+
+  /** v42（E493）：本季将临表——未来 91 日可预期事件推算（纯读算零新字段）。
+   *  事件源（各系统日节拍常量单源推算，本表不另设节奏）：
+   *   · 节庆 GameData.FESTIVALS（年内日序，f.day 为 1-based）；
+   *   · 黑市开市窗口 day%30<3（与 BlackSys.isOpen 同式，black.js:9，含「开市中余 N 日」实时态）；
+   *   · 宗门大比 SectSys.TOURNEY_EVERY 年一届、开赛 30 日窗口（sect.js tourneyCheck 口径）；
+   *   · 长老季议：按季（seasonOf 0~3，一季 90 日，与 SectSys.councilKey / OathSys.trialKey 同口径）；
+   *   · 誓约试炼：持誓者（不杀/止戈/独行）每季一试（oath.js trialCheck，trial 键 id#年-季）。
+   *  行结构 { day 绝对游戏日, inDays 相对今日, name, note, missed 已错过红章 }，按日升序。 */
+  seasonQueue(p) {
+    const day = Math.floor(p.day || 0);
+    const year = Math.floor(day / 365);
+    const doy = day % 365;
+    const WIN = 91;
+    const rows = [];
+    const add = (absDay, name, note, missed) => rows.push({ day: absDay, inDays: absDay - day, name, note, missed: !!missed });
+    const SEASON_STARTS = [0, 90, 180, 270];
+    const SEASON_NAMES = ['春', '夏', '秋', '冬'];
+    const seasonOf = d => { const m = Math.floor(d / 30); return m <= 2 ? 0 : m <= 5 ? 1 : m <= 8 ? 2 : 3; };
+    const curSeason = seasonOf(doy);
+    // 1 节庆（本年已过且近 91 日内 → 错过红章；未来 91 日内 → 预告；跨年顺延一轮）
+    for (const f of (GameData.FESTIVALS || [])) {
+      let abs = year * 365 + (f.day - 1);
+      if (abs < day) {
+        if (day - abs <= WIN) add(abs, f.name, '今年此日已过——明年再会', true);
+        abs += 365;
+      }
+      if (abs - day <= WIN) add(abs, f.name, f.desc, false);
+    }
+    // 2 黑市开市窗口（每 30 日开 3 日；整窗已过的不列——30 日一轮，错过无感）
+    {
+      const curStart = day - (day % 30);
+      for (let s = curStart; s <= day + WIN; s += 30) {
+        if (s + 2 < day) continue;
+        const inWin = day >= s && day <= s + 2;
+        add(s, '暗巷黑市开市', inWin ? `开市中 · 余 ${3 - (day % 30)} 日（贵六成，货奇）` : '开市三日 · 独家奇货与稀罕料源', false);
+      }
+    }
+    // 3 宗门大比（须入宗）：TOURNEY_EVERY 年一届、开赛 30 日窗口
+    if (p.sect && typeof SectSys !== 'undefined' && SectSys.TOURNEY_EVERY) {
+      const TE = SectSys.TOURNEY_EVERY;
+      const yAbs = year + 1;   // 与 WorldSys.year 同口径（floor(day/365)+1）
+      if (yAbs % TE === 0) {
+        const yStart = year * 365;
+        if (day < yStart + 30) {
+          const open = !!p.sect.tourney;
+          add(yStart, '宗门大比', open ? '本届进行中——三轮车轮战，三连胜夺魁首' : '本届开赛——登台比武（30 日不战则待下届）', false);
+        } else if ((p.sect.lastTourney || 0) < yAbs && day - yStart <= WIN) {
+          add(yStart, '宗门大比', '本届赛程已过、未曾登台', true);
+        }
+      }
+      const qy = yAbs % TE === 0 ? yAbs + TE : yAbs + (TE - yAbs % TE);
+      add((qy - 1) * 365, '宗门大比', `每 ${TE} 年一届 · 三轮车轮战`, false);
+    }
+    // 4 长老季议：季首可投；本季未议（长老）常驻提示，下季首日预告
+    if (p.sect && typeof SectSys !== 'undefined' && SectSys.rank) {
+      const rk = SectSys.rank(p);
+      const isElder = !!rk && rk.id === 'elder';
+      const voted = p.sect.council && p.sect.council.key === `${year}-${curSeason}`;
+      if (isElder && !voted) add(year * 365 + SEASON_STARTS[curSeason], '长老季议', '本季未议——一票定一季（整军 / 通商 / 勤修）', false);
+      const nxtSeason = curSeason < 3 ? curSeason + 1 : 0;
+      const nxtStart = curSeason < 3 ? year * 365 + SEASON_STARTS[curSeason + 1] : (year + 1) * 365;
+      if (nxtStart - day <= WIN) add(nxtStart, '长老季议', `${SEASON_NAMES[nxtSeason]}季开启${isElder ? '——长老一票定一季' : '（长老投票，观其倾向）'}`, false);
+    }
+    // 5 誓约试炼（持誓者每季一试：不杀/止戈/独行——本季未触发即「将临」，已试看下季）
+    if (p.oaths && typeof OathSys !== 'undefined' && OathSys.active) {
+      const oathNames = { kill: '不杀之誓', still: '止戈之誓', solo: '独行之道' };
+      for (const id of ['kill', 'still', 'solo']) {
+        if (!OathSys.active(p, id)) continue;
+        const fired = p.oaths.trial && p.oaths.trial[`${id}#${year}-${curSeason}`];
+        if (!fired) add(day, `誓约试炼 · ${oathNames[id]}`, '本季将临——守誓得报，破誓偿价', false);
+        else {
+          const nxtSeason = curSeason < 3 ? curSeason + 1 : 0;
+          const nxtStart = curSeason < 3 ? year * 365 + SEASON_STARTS[curSeason + 1] : (year + 1) * 365;
+          if (nxtStart - day <= WIN) add(nxtStart, `誓约试炼 · ${oathNames[id]}`, '下季再临', false);
+        }
+      }
+    }
+    rows.sort((a, b) => a.day - b.day);
+    return rows;
   },
 
   /** v20 问道录 · 百科词条（LORE 词条化，随剧情推进解锁）
@@ -927,9 +1027,13 @@ const QuestSys = {
     c9_end: { redeem: '渡宗主残魂往生', execute: '一剑斩尽，恩怨两清', walk: '转身不问，随劫火而灭' },
     c10_end: { road: '问道问的是「路该怎么走」', self: '问道问的是「我该是谁」', walkon: '不问了，往前走便是答案' },
   },
-  /** v19 问道录 2.0：剧情回顾 / 人物志 / 大事年表 / 抉择树（四页签） */
-  openArchive(tab = 'story') {
+  /** v19 问道录 2.0：剧情回顾 / 人物志 / 大事年表 / 抉择树（四页签）
+   *  v42（E492）：五页签记忆——无参调用回落上次所在页签；显式切页即记账
+   *  （p.ui.archiveTab 子键复用，零新顶层；重复打开问道录不再回落默认「剧情回顾」） */
+  openArchive(tab) {
     const p = Game.player;
+    if (!tab) tab = (p && p.ui && p.ui.archiveTab) || 'story';
+    else { p.ui = p.ui || {}; p.ui.archiveTab = tab; }
     const tabs = [['story', '📜 剧情回顾'], ['figures', '👤 人物志'], ['chron', '🗓 大事年表'], ['choices', '⚖ 抉择树'], ['lore', '📖 百科']];
     const tabHtml = `<div class="action-row" style="margin:0 0 8px">${tabs.map(([k, label]) =>
       `<button class="btn btn-sm ${k === tab ? 'btn-primary' : ''}" data-action="quest-archive-tab" data-tab="${k}">${label}</button>`).join('')}</div>`;

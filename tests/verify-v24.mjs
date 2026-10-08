@@ -123,7 +123,7 @@ console.log('===== SA 源码静态组 =====');
   has('E308 intentCounter 克制表（蓄力/杀招/重击/自愈/强化 + lenient 中性；v40 attack 对拼 pin）', /intentCounter\(intent\)/.test(battle) && /kind === 'charge'/.test(battle) && /kind === 'strike'/.test(battle) && /lenient: true/.test(battle) && /lenient: false/.test(battle) && /pin: true/.test(battle));
   has('E308 满层破绽毕现（vuln 40 ×3 回合 + 必会心 2 发；v40 E379 复权）', /B\._sureCrit = 2;/.test(battle) && /rounds: 3 \}\);/.test(battle));
   has('E308 必会心三伤害口消费（takeSureCrit 单源；v40 E379）', (battle.match(/this\.takeSureCrit\(\) \|\| Utils\.chance/g) || []).length >= 3);
-  has('E308 战意爆发 ≥90/每场两次/2.4×−60 必会心 +3 真元 + 会伤封顶（v40 E378 复权）', /burstUsed \|\| 0\) >= 2/.test(battle) && /myAtk\(st\) \* 2\.4/.test(battle) && /Math\.max\(0, \(B\.morale \|\| 0\) - 60\)/.test(battle) && /CRIT_DMG_CAP\)/.test(battle));
+  has('E308 战意爆发 每场两次/沸点余量插值必会心 +3 真元 + 会伤封顶（v40 E378 复权；v42 E478 沸点改造：BURST_MIN 门槛、BURST_MUL_BASE+PER 线性插值、耗尽全部战意）', /burstUsed \|\| 0\) >= 2/.test(battle) && /C\.BURST_MUL_BASE \+ \(preMorale - C\.BURST_MIN\) \* C\.BURST_MUL_PER/.test(battle) && /B\.morale = 0;/.test(battle) && /CRIT_DMG_CAP\)/.test(battle));   // v42（E528·P3 整合）：E478 爆发插值式随动（旧「2.4×−60 定耗」形态退役）
 
   /* ---- E309 仙庭 ---- */
   has('E309 九品 PINS 门槛表', (xian.match(/PINS: \[0, 300/) || []).length === 1);
@@ -176,7 +176,8 @@ console.log('===== SA 源码静态组 =====');
   has('E323 秒胜复用 victory 单源 + 豁免名单', /instantOk && myPow \/ Math\.max\(1, foePow\) >= 2\.8/.test(battle) && /await this\.victory\(\);\s*\n\s*return;/.test(battle));
   has('E323 三态偏好（on/explore-off/off）+ ctx.explore 判据', /autoWin === 'on' \|\| \(autoWin === 'explore-off' && !ctx\.explore\)/.test(battle) && /explore: true/.test(explore));
   has('E324 塔连战三停（塔守/血 35%/赌约不递）', /前方是塔守之层/.test(tower) && /气血不足三成五/.test(tower) && /!\(\(this\.state\(p\) \|\| \{\}\)\.auto\) && run && run\.floor < 90/.test(tower));
-  has('E325 行权扩容（调息/悟道/听讲/问剑/切磋）', /p\._restDay !== today/.test(guide) && /wuDaoCost\(p\)/.test(guide) && /act-sect-listen'\]\(\{\}, null\)/.test(guide) && /RankSys\.challengeAhead\(\); return/.test(guide));
+  // v42（E528·P3 整合）：E501 听讲提为 Cultivate.sectListen 单源（game.js 只留一行一动作）
+  has('E325 行权扩容（调息/悟道/听讲/问剑/切磋）', /p\._restDay !== today/.test(guide) && /wuDaoCost\(p\)/.test(guide) && /'act-sect-listen': \(\) => Cultivate.sectListen\(\)/.test(game) && /RankSys\.challengeAhead\(\); return/.test(guide));
   has('E326 静修自动冲关 + AutoPilot 记忆', /静修境（金丹前）圆满自动冲关|realmIdx \+ 1 < GameData\.TRIB_START/.test(R('core/autocult.js')) && /autoCfg\(\)\.auto = B\.auto/.test(game));
 
   /* ---- E337~E345 特点化 ---- */

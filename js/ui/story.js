@@ -244,15 +244,16 @@ const Story = {
     if (this.cur) this.render();
   },
   /** v29：自动播放——每 2.4s 自动翻页，遇抉择/战斗/章末自停。
-   *  v34（E8）：间隔按当页字数自适应——打字机每帧 3 字，千字长页原文未打完即被翻走（自动播放
-   *  反而毁掉逐字演出）；2400+字数×12ms 封顶 8s，短页节奏不变。 */
+   *  v34（E8）：间隔按当页字数自适应——千字长页原文未打完即被翻走（自动播放反而毁掉逐字演出）。
+   *  v42（E497）：补偿式与打字机新实耗对齐——≈150ms/字 + 标点停顿均摊 ≈10%（165ms/字），
+   *  2400ms 短页下限、9s 封顶；40 字页补偿 6600ms vs 实耗 6000~6740ms，偏差 ≤±20%。 */
   toggleAuto() {
     if (this._auto) { this.stopAuto(); this.render(); return; }
     const interval = () => {
       const c = this.cur;
       const sc = c && c.scenes[c.idx];
       const len = sc ? ((sc.who ? sc.who.length : 0) + (sc.text || sc.say || sc.note || '')).length : 0;
-      return Math.min(8000, 2400 + len * 12);
+      return Math.min(9000, Math.max(2400, len * 165));
     };
     const tick = () => {
       const c = this.cur;
@@ -398,7 +399,10 @@ const Story = {
       if (twEls.length) this.typewrite(twEls);
     }
   },
-  /** v21：逐字显现——点击剧情区或翻页即刻补全；偏好存于 amb 设置（typewriter:false 关） */
+  /** v21：逐字显现——点击剧情区或翻页即刻补全；偏好存于 amb 设置（typewriter:false 关）
+   *  v42（E497）：打字机呼吸感——旧「每帧 3 字 ≈180 字/秒」逐字演出形同虚设，改为每字 150ms
+   *  （≈6.7 字/秒，40 字台词 ≥6s），逗号/顿号/分号停 80ms、句末（。！？…）停 240ms、破折号停
+   *  120ms；amb-tw 开关与点击补全链保持，自动化环境（webdriver）仍直全显 */
   _twList: null,   // [{ node, full }] 打字中的文本节点表
   _twTimer: 0,
   _twDone: true,
@@ -417,25 +421,33 @@ const Story = {
     this._twList = list;
     this._twDone = false;
     list.forEach(x => { x.node.nodeValue = ''; });
-    let i = 0, ci = 0;
-    const CH_PER_TICK = 3;   // 每帧 3 字：千字长文亦十秒内完
+    let i = 0, ci = 0, wait = 0;
+    const CH_MS = 150;   // 每字 150ms；标点停顿另计（v42（E497））
     const step = () => {
       if (this._twDone) return;
-      for (let k = 0; k < CH_PER_TICK && i < list.length; k++) {
+      if (i < list.length) {
         ci++;
-        if (ci > list[i].full.length) { i++; ci = 0; continue; }
-        list[i].node.nodeValue = list[i].full.slice(0, ci);
+        if (ci > list[i].full.length) { i++; ci = 0; }
+        else {
+          const ch = list[i].full.charAt(ci - 1);
+          list[i].node.nodeValue = list[i].full.slice(0, ci);
+          if ('，、；：'.indexOf(ch) >= 0) wait = 80;                       // 逗类停顿
+          else if ('。！？…'.indexOf(ch) >= 0) wait = 240;                  // 句末停顿
+          else if (ch === '—') wait = 120;                                  // 破折号（—— 逢字各停一次）
+        }
       }
-      if (i < list.length) this._twTimer = requestAnimationFrame(step);
-      else this._twDone = true;
+      if (i >= list.length) { this._twDone = true; return; }
+      const delay = CH_MS + wait;
+      wait = 0;
+      this._twTimer = setTimeout(step, delay);
     };
-    this._twTimer = requestAnimationFrame(step);
+    step();   // 首字即出（60ms 采样窗内已有产出，verify-v10 V6 行为兼容）
   },
   /** v21：立即补全当前页文字（翻页 / 点击剧情区时调用）；返回是否确有补全动作 */
   twComplete() {
     if (this._twDone) return false;
     this._twDone = true;
-    if (this._twTimer) cancelAnimationFrame(this._twTimer);
+    if (this._twTimer) { clearTimeout(this._twTimer); this._twTimer = 0; }   // v42（E497）：rAF→setTimeout 随打字机改造同步
     (this._twList || []).forEach(x => { x.node.nodeValue = x.full; });
     this._twList = null;
     return true;

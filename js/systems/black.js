@@ -1,13 +1,17 @@
 
 /* ======================================================================
- * §11.9 v13 黑市 BlackSys（每月开市三日：暗巷奇货 + 还价）
- * 开市规则：游戏日内 day % 30 < 3；货物按日哈希确定性生成。
+ * §11.9 v13 黑市 BlackSys（每月开市五日：暗巷奇货 + 还价）
+ * 开市规则：游戏日内 day % 30 < 5（v42（E512）：3→5 放宽——独家货补料不再月首三日等廿七日，
+ * 窗口覆盖率 1/10→1/6）；货物按日哈希确定性生成。
  * v33（E79）：头注原写「高价收购」，实无此功能（出售走坊市）——注释清理防误导。
  * v40（E387）：巷角赌袋摊（陷阱货）整体删除——与拍卖古匣重复且全面劣于，动作与按钮同批拆除。
  * ====================================================================== */
 const BlackSys = {
-  isOpen(p) { return Math.floor(p.day || 0) % 30 < 3; },
-  daysLeft(p) { return 3 - Math.floor(p.day % 30); },
+  /** v42（E518）：黑市售价基准单源——1.6→1.65（E518①：m_huolin 黑市利润薄一项达标即清零，
+   *  全池微调与 price-audit 带宽复算同步；price-audit 购料环/手作环两路消费本常量） */
+  MARKUP: 1.65,
+  isOpen(p) { return Math.floor(p.day || 0) % 30 < 5; },
+  daysLeft(p) { return 5 - Math.floor(p.day % 30); },
   POOL: [
     { id: 'm_qianghua', w: 24 }, { id: 'm_neidan', w: 14 }, { id: 'pill_xingshen', w: 8 },
     { id: 'pill_poxiao', w: 8 }, { id: 'm_xingchen', w: 8 }, { id: 'm_huolin', w: 12 },
@@ -47,12 +51,13 @@ const BlackSys = {
     }
     return out;
   },
-  /** 黑市售价：基准 × 1.6 × 境界经济（材料类随行情）。
+  /** 黑市售价：基准 × MARKUP × 境界经济（材料类随行情）。
    *  v20 修瑕：定价 0 的稀有物（套装件/秘境功法等）按品阶折算基准价，杜绝 800 灵石捡漏地级套装。
    *  v28 联动：声望亦及于暗巷——侠名在外，蒙面人也给面子（吃 RepSys.priceMul ±15%）。
    *  v40（E371）：还价触怒的涨价落盘消费——当日涨价（播报数值即显示成交价）。
    *  v41（E437）：涨价升为 ×1.3，键位迁 p.sess.haggleMul/haggleFailDay（E428 迁移后的唯一键位，
-   *  严禁复活旧版顶层还价键（field-audit 门禁盯防））；且触怒当日商贾拂袖而去、一律拒卖（buyAsync 顶闸）。 */
+   *  严禁复活旧版顶层还价键（field-audit 门禁盯防））；且触怒当日商贾拂袖而去、一律拒卖（buyAsync 顶闸）。
+   *  v42（E518）：基准 1.6→MARKUP 1.65（m_huolin「黑市利润薄」压线报警清零）。 */
   price(p, id) {
     const def = GameData.ITEMS[id];
     let base = def.price || 0;
@@ -64,7 +69,7 @@ const BlackSys = {
     const sess = p.sess || {};
     const mul = (sess.haggleFailDay === today && sess.haggleMul) ? sess.haggleMul : 1;
     if (sess.haggleMul != null && sess.haggleFailDay !== today) sess.haggleMul = null;   // 次日清除（惰性）
-    return Math.max(1, Math.round(base * 1.6 * repMul * mul));
+    return Math.max(1, Math.round(base * this.MARKUP * repMul * mul));
   },
   buy(id) {
     const p = Game.player;
@@ -90,9 +95,15 @@ const BlackSys = {
     // v39（E353）：首弹主按钮改「买 下（直购）」——直购自此一击成交；还价成功亦直接成交
     //（原还价后还有一道最终确认弹窗，删除），收据统一走 Log
     // v41（E437）：直购给正当溢价——爽快成交声望 +1（还价省两成五、但有触怒 ×1.3 加价加拒卖之险）
+    // v42（E512）：还价文案分支——独家货（SHOP 无同款）示「暗巷独有，别无分号」；
+    // 在售货才示溢价（实算比价，坊市价随折扣/行情浮动，不再硬写「高六成」）
+    const shopRow = (typeof GameData.SHOP === 'undefined') ? null : GameData.SHOP.find(r2 => r2.item === id);
+    const priceNote = shopRow
+      ? `（坊市价高${Math.max(1, Math.round((cost / Math.max(1, ShopSys.price(id)) - 1) * 10))}成）`
+      : '（暗巷独有，别无分号）';
     const first = await UI.popup({
       title: '黑市 · 暗巷交易',
-      html: `「识货的道友——」蒙面商贾掀开布角：<br><b>${def.name}</b><br>${def.desc}<br>索价 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石（坊市价高六成）。<br><span class="tip-line">· 亦可试着还价——成算视悟性与福缘而定，触怒了商人可是要涨价的；爽快直购，商贾必念你的好（声望 +1）。</span>`,
+      html: `「识货的道友——」蒙面商贾掀开布角：<br><b>${def.name}</b><br>${def.desc}<br>索价 <span class="hl">${Utils.fmtNum(cost)}</span> 下品灵石${priceNote}。<br><span class="tip-line">· 亦可试着还价——成算视悟性与福缘而定，触怒了商人可是要涨价的；爽快直购，商贾必念你的好（声望 +1）。<br>· ${Bag.wealthText()}。</span>`,   // v42（E518）：大额消费家资折合行
       options: [
         { text: '买 下（直购）', value: 'buy', primary: true },
         { text: '讨价还价', value: 'haggle' },
@@ -156,7 +167,7 @@ const BlackSys = {
   /** 销赃一件（act-black-sell） */
   sell(id) {
     const p = Game.player;
-    if (!this.isOpen(p)) { UI.toast('暗巷闭市——月首三日再来'); return; }
+    if (!this.isOpen(p)) { UI.toast('暗巷闭市——月首五日再来'); return; }
     if (!this.alleySellable(id)) { UI.toast('此物来路太正，暗巷不收——请走坊市'); return; }
     if (Bag.count(id) < 1) return;
     const def = GameData.ITEMS[id];

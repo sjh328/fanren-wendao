@@ -388,8 +388,8 @@ try {
     ? pass('AC3 卷章 chip「10 章」/ CN9 十 / 章助缘直达天塔') : fail('AC3 收录接线', JSON.stringify({ cn10: ac.cn10, chip: ac.chip, goC10: ac.goC10 }));
   (ac.beyondPct)
     ? pass('AC4 残玉终响：beyondGate 全属性 +3% 生效') : fail('AC4 残玉终响', JSON.stringify(ac.beyondPct));
-  (ac.s21 && ac.achvN === 62 && ac.twDefs)
-    ? pass('AC5 支线 s21 / 成就 62 项（塔四档+终章+v31 扩容六项）') : fail('AC5 收录计数', JSON.stringify({ s21: ac.s21, achvN: ac.achvN, twDefs: ac.twDefs }));
+  (ac.s21 && ac.achvN === 76 && ac.twDefs)
+    ? pass('AC5 支线 s21 / 成就 76 项（62 常规+10 隐藏 + v42 鼎新四项——E499 积分梯度与 P3 跨系统钩子随动，DEFS.length 活读）') : fail('AC5 收录计数', JSON.stringify({ s21: ac.s21, achvN: ac.achvN, twDefs: ac.twDefs }));
 
   /* ================= 汇总 ================= */
   const fails = results.filter(r => r[0] === 'FAIL');

@@ -49,8 +49,10 @@ const PlayerFactory = {
       sect: null,
       counters: { battles: 0, wins: 0, explores: 0, killsElite: 0, defeats: 0, spars: 0, bossKills: 0,
         mapExplores: {}, dilemmas: 0, befriends: 0, crafts: 0, craftsOk: 0, pills: 0, learns: 0, gupianGot: 0, maxDepth: 0 },
-      flags: { tutorialDone: false, ascended: false, sectDeclined: false },   // v37（E237）：散修红点单键（拒宗后熄灭）
-      xianjie: { idx: 0, layer: 0 },   // v31 仙界四阶：未入仙籍（白日飞升后开启）
+      flags: { tutorialDone: false, ascended: false, sectDeclined: false,   // v37（E237）：散修红点单键（拒宗后熄灭）
+        homecoming: 0, insight: null, sweepDay: 0, unlockedTips: {} },   // v42（E507）：E503 归乡包/E505 境内顿悟/E522 扫荡日/E488 手册分节——四子键入模板（迁移步同建双保险）
+      combat: { pouch: [null, null, null] },   // v42（E507/E524）：战斗锦囊三槽容器（唯一新顶层存档键）
+      xianjie: { idx: 0, layer: 0, worlds: [] },   // v31 仙界四阶：未入仙籍（白日飞升后开启）；v42（E507/E520）：小世界容器
       dead: false,
       /* —— 增量扩展字段（v3 §23-26）：世界 / NPC / 秘境 / 转世 —— */
       world: WorldSys.freshWorld(),
@@ -119,6 +121,7 @@ const PlayerFactory = {
     //  0:v3 世界/NPC/秘境/转世 ｜ 1:v11 剧情 ｜ 2:v13 强化/洞府/灵兽/悬赏 ｜ 3:v15 剧情记录 ｜ 4:v16 道境经验
     //  5:v18 装备实例化 ｜ 6:v18.1 残玉追认 ｜ 7:v19 旗标/年表/个人线/NPC记忆 ｜ 8:v19-3 拍卖/宗门令 ｜ 9:v19-2 心魔/本命/建筑
     //  10:v20 养成纵深 ｜ 11:v37 感悟FIFO ｜ 12:v37 结交/差事改制 ｜ 13:v37 周目重校 ｜ 14:v38 新系统状态 ｜ 15:v41 会话键/偏好拆家/溢流清洗
+    //  16:v42 容器七键（combat / xianjie.worlds / dungeon.relics / flags 四子键——E507，消费方 E488/E503/E505/E520/E521/E522/E524）
     const MIGRATE_STEPS = [
 
       // v3: 世界 / NPC / 秘境 / 转世
@@ -384,6 +387,24 @@ const PlayerFactory = {
         for (const lk of ['_' + 'pref', '_auto' + 'Rush', '_auto' + 'Rush' + 'SkipDay', '_sla' + 'yUsed', 'warSp' + 'irit', 'version']) delete out[lk];
         out.expOverflow = Math.max(0, Math.floor(Number(out.expOverflow)) || 0);   // v41（E428）：溢流脏值=0
       },
+      // v42（E507）：存档契约扩容——①p.combat 战斗锦囊容器（唯一新顶层键，E524 消费）；②p.xianjie.worlds
+      // 小世界（E520）；③p.dungeon.relics 秘境遗物（E521，出秘境清空）；④p.flags 四子键（homecoming/E503、
+      // insight/E505、sweepDay/E522、unlockedTips/E488——fresh 模板合并已补默认，此处显式建账双保险；
+      // 各守卫的读取兼作 field-audit 读点，防「写而不读死键」误红）。p.flags._oldFriend 保留（E523 消费后 delete）。
+      // 迁移幂等：v42 档二载起点即跳过本步，worlds 保留由上方 v31 结构自愈块的 worlds 保留行承接。
+      (out) => {
+        if (!out.combat || typeof out.combat !== 'object') out.combat = { pouch: [null, null, null] };
+        if (!Array.isArray(out.combat.pouch)) out.combat.pouch = [null, null, null];
+        if (out.xianjie && typeof out.xianjie === 'object' && !Array.isArray(out.xianjie.worlds)) out.xianjie.worlds = [];
+        if (out.dungeon && typeof out.dungeon === 'object' && !Array.isArray(out.dungeon.relics)) {
+          out.dungeon = Object.assign(out.dungeon, { relics: [] });   // v42（E507/E521·P3 修）：relics: [] 消散容器对象字面量建账（出秘境置 null，与 DungeonSys.enter 初始化同构）
+        }
+        out.flags = out.flags || {};
+        if (out.flags.homecoming === undefined) out.flags.homecoming = 0;
+        if (out.flags.insight === undefined) out.flags.insight = null;
+        if (out.flags.sweepDay === undefined) out.flags.sweepDay = 0;
+        if (!out.flags.unlockedTips || typeof out.flags.unlockedTips !== 'object') out.flags.unlockedTips = {};
+      },
     ];
     // 基础：fresh 模板 + 展开合并
     const fresh = this.create(p.name || '无名散修', p.attrs || { gen: 5, comp: 5, luck: 5, body: 5 });
@@ -450,10 +471,17 @@ const PlayerFactory = {
           idx: Utils.clamp(Math.floor(Number(xjSrc.idx)) || 0, 0, GameData.XIAN_TIERS.length),
           layer: Utils.clamp(Math.floor(Number(xjSrc.layer)) || 0, 0, 3),
         };
+        // v42（E507）：小世界容器随结构自愈保留——本块原样丢弃未知子字段，v42 档（迁移起点已跳过
+        // E507 步）二载若不在此保留 worlds 即凭空丢失（幂等性缺口）
+        if (Array.isArray(xjSrc.worlds)) out.xianjie.worlds = xjSrc.worlds;
         if (out.xianjie.idx === 0) out.xianjie.layer = 0;
         // v32 修瑕（E36）：未飞升而残留仙籍的脏档重置——否则 layersTotal 照加属性（防御纵深已在
-        // XianSys.layersTotal 加 unlocked 校验，此处再清数据防 UI 侧漏）
-        if (out.xianjie.idx > 0 && !(out.flags && out.flags.ascended)) out.xianjie = { idx: 0, layer: 0 };
+        // XianSys.layersTotal 加 unlocked 校验，此处再清数据防 UI 侧漏）；v42（E507）：重置携带 worlds
+        if (out.xianjie.idx > 0 && !(out.flags && out.flags.ascended)) {
+          const worldsKeep = Array.isArray(out.xianjie.worlds) ? out.xianjie.worlds : [];
+          out.xianjie = { idx: 0, layer: 0 };
+          if (worldsKeep.length) out.xianjie.worlds = worldsKeep;
+        }
         out._xianVisitDay = Number(out._xianVisitDay) || 0;
       }
     // 逐级运行迁移步骤

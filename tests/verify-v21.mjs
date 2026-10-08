@@ -163,7 +163,13 @@ console.log('===== SA 源码静态组 =====');
   battle.includes('if (!B.ctx.firstStrike && !B.ctx.ambush) this.planIntent();')
     ? pass('SA27 续波重掷意图（E170）') : fail('SA27 续波意图', '');
   battle.includes('if (p.hp <= 0) { await this.afterEnemyPhase(st); return; }')
-    ? pass('SA28 魔棘反伤致死不再对尸体结算（E171）') : fail('SA28 反伤致死', '');
+  battle.includes('if (p.hp <= 0) { await this.finishEnemyPhase(st); return; }')   // v42（E528·P3 整合）：E476 revive-aware 收尾单源随动（语义不变：反伤致死不再对尸体结算）
+  battle.includes('if (p.hp <= 0) { await this.finishEnemyPhase(st); return; }')   // v42（E528·P3 整合）：E476 revive-aware 收尾单源随动（语义不变：反伤致死不再对尸体结算）
+  battle.includes('if (p.hp <= 0) { await this.finishEnemyPhase(st); return; }')   // v42（E528·P3 整合）：E476 revive-aware 收尾单源随动（语义不变：反伤致死不再对尸体结算）
+  battle.includes('if (p.hp <= 0) { await this.finishEnemyPhase(st); return; }')   // v42（E528·P3 整合）：E476 revive-aware 收尾单源随动（语义不变：反伤致死不再对尸体结算）
+  battle.includes('if (p.hp <= 0) { await this.finishEnemyPhase(st); return; }')   // v42（E528·P3 整合）：E476 revive-aware 收尾单源随动（语义不变：反伤致死不再对尸体结算）
+  battle.includes('if (p.hp <= 0) { await this.finishEnemyPhase(st); return; }')   // v42（E528·P3 整合）：E476 revive-aware 收尾单源随动（语义不变：反伤致死不再对尸体结算）
+    ? pass('SA28 魔棘反伤致死不再对尸体结算（E171；v42 E476 收尾单源化）') : fail('SA28 反伤致死', '');
   battle.includes('GameData.BALANCE.COMBAT.ENEMY_CRIT_MULT;') && battle.includes('GameData.BALANCE.SPECIES_COUNTER.bonus;')
     ? pass('SA29 敌方暴击/克制幅度死常量接线（E173）') : fail('SA29 死常量', '');
 
@@ -175,8 +181,14 @@ console.log('===== SA 源码静态组 =====');
   // v40（E387）：赌袋功能整体删除——胜率钳顶锚随功能退役
   !black.includes('Math.min(75, 25 + luck * 4)') && !black.includes('buyMystery') ? pass('SA33 赌袋随 E387 删除（胜率锚一并退役）') : fail('SA33 赌袋', '');
   // v40（E387）：赌袋采样点标记随路退役，改验 E388 第十二路标记
-  priceaudit.includes('[三档效率散布超限]') && priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
-    && priceaudit.includes('auctionGradeProblems') && priceaudit.includes('auctionSpreadProblems') ? pass('SA34 price-audit 门禁扩容（U6；v40 第十二路三档期望成本在链）') : fail('SA34 门禁扩容', '');
+  priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
+  priceaudit.includes('[激进档个性失效]') && priceaudit.includes('[寄售 EV 极差超限]') && priceaudit.includes('consignProblems') && priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
+  priceaudit.includes('[激进档个性失效]') && priceaudit.includes('[寄售 EV 极差超限]') && priceaudit.includes('consignProblems') && priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
+  priceaudit.includes('[激进档个性失效]') && priceaudit.includes('[寄售 EV 极差超限]') && priceaudit.includes('consignProblems') && priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
+  priceaudit.includes('[激进档个性失效]') && priceaudit.includes('[寄售 EV 极差超限]') && priceaudit.includes('consignProblems') && priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
+  priceaudit.includes('[激进档个性失效]') && priceaudit.includes('[寄售 EV 极差超限]') && priceaudit.includes('consignProblems') && priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
+  priceaudit.includes('[激进档个性失效]') && priceaudit.includes('[寄售 EV 极差超限]') && priceaudit.includes('consignProblems') && priceaudit.includes('sectProblems') && priceaudit.includes('drawProblems')
+    && priceaudit.includes('auctionGradeProblems') && priceaudit.includes('auctionSpreadProblems') ? pass('SA34 price-audit 门禁扩容（U6；v42（E528·P3 整合）：E509/E510 第十二路重写——EV 极差与激进 45% 门标记随动）') : fail('SA34 门禁扩容', '');
 
   /* ---- E 升级包 ---- */
   npc.includes('socialEco(p, s) { return GameData.stoneEco(Math.min(p.realmIdx || 0, s.realmIdx || 0)); }')
@@ -267,7 +279,13 @@ console.log('===== SA 源码静态组 =====');
   releasemjs.includes('.staging-v') && releasemjs.includes('fs.renameSync(staging, relDir);')
     ? pass('SA72 release staging 原子快照（E195）') : fail('SA72 release', '');
   !gamejs.includes('_offlineReplay') && gamejs.includes('if (!p.dead) {   // v35（E196）：原 `p.realmIdx >= 0 &&` 恒真死条件删除')
-    ? pass('SA73 死旗标/恒真条件清扫（E196）') : fail('SA73 死代码', '');
+  !/\bp\._offlineReplay\b/.test(gamejs) && gamejs.includes('if (!p.dead) {   // v35（E196）：原 `p.realmIdx >= 0 &&` 恒真死条件删除')
+  !/\bp\._offlineReplay\b/.test(gamejs) && gamejs.includes('if (!p.dead) {   // v35（E196）：原 `p.realmIdx >= 0 &&` 恒真死条件删除')
+  !/\bp\._offlineReplay\b/.test(gamejs) && gamejs.includes('if (!p.dead) {   // v35（E196）：原 `p.realmIdx >= 0 &&` 恒真死条件删除')
+  !/\bp\._offlineReplay\b/.test(gamejs) && gamejs.includes('if (!p.dead) {   // v35（E196）：原 `p.realmIdx >= 0 &&` 恒真死条件删除')
+  !/\bp\._offlineReplay\b/.test(gamejs) && gamejs.includes('if (!p.dead) {   // v35（E196）：原 `p.realmIdx >= 0 &&` 恒真死条件删除')
+  !/\bp\._offlineReplay\b/.test(gamejs) && gamejs.includes('if (!p.dead) {   // v35（E196）：原 `p.realmIdx >= 0 &&` 恒真死条件删除')
+    ? pass('SA73 死旗标/恒真条件清扫（E196；v42（E528·P3 整合）：E505 新增 Game._offlineReplaying 为活体语境旗标——词界断言不误伤）') : fail('SA73 死代码', '');
   checkactions.includes('tests|docs|scripts|') && checkactions.includes("[a-zA-Z$][\\w$.]*\\s*\\?\\s*''")
     ? pass('SA74 check-actions 盲区收口（E166）') : fail('SA74 门禁盲区', '');
   ui.includes("SectSys.claimLeft(p)") ? pass('SA75 差事指引/余量入差事卡（E129/E161）') : fail('SA75 差事卡', '');

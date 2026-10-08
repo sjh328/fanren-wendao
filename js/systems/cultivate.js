@@ -14,6 +14,9 @@ const Cultivate = {
     if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) g *= 1.2;   // v20 天下大事·灵潮
     if (p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < (typeof CaveSys !== 'undefined' && CaveSys.RUSH_WINDOW ? CaveSys.RUSH_WINDOW() : 3)) g *= 1.5;   // v36（E218）：聚灵 3 游戏日窗口；v38（E314）：洞天灵潮 4 日
     g *= 1 + 0.03 * ((typeof CaveSys !== 'undefined' && CaveSys.flagPower) ? CaveSys.flagPower(p, 'b_juling') : 0);   // v38（E305）：聚灵旗 +3%/面（地载万物/阵法传习加成）
+    // v42（E505）：境内顿悟·凝神——本境修为 +6%（insightBonusOf 单源；凌厉/圆融两档经同单源供属性侧消费）
+    const insFx = this.insightBonusOf(p);
+    if (insFx.cultPct) g *= 1 + insFx.cultPct / 100;
     return g;
   },
   /** v20 闭关效率：隆冬蛰伏 +10% */
@@ -42,6 +45,8 @@ const Cultivate = {
       }
       const st = Stat.compute(p);
       p.hp = st.maxHp; p.mp = st.maxMp;
+      // v42（E505）：境内顿悟——进层三选一轻事件（本境有效，改境失效）；挂机/离线静默语境自动取凝神
+      this.promptInsight(p, silent);
     }
     if (p.layer === 3) {
       const need = GameData.layerNeedT(p, p.realmIdx, 3);
@@ -198,9 +203,91 @@ const Cultivate = {
     Game.afterAction();
     return 'done';
   },
+  /** v42（E502）：行功路线表——手动修炼三选一（周天/存想/龟息），表落消费方同址；
+   *  挂机/离线/一键行权固定走周天不弹选。周天收益 = 旧 normal ×1.2（mult 单源，node 复算锚）。
+   *  存想感悟走 FIFO 再生池（addInsight regen=true，喂悟道经济）；龟息丹毒 −15。 */
+  /** v42（E505）：境内顿悟事件表——进层三选一轻事件，增益仅本境有效（改境即失效）。
+   *  表落消费方同址（仓内先例：auction.js CONSIGN_TIERS / sect.js TOURNEY_EVERY 系统自有表）；
+   *  凝神档（修为 +6%）由本文件 baseGain/baseGainBreakdown 直接消费，凌厉/圆融两档经
+   *  insightBonusOf() 单源供属性侧取用。 */
+  INSIGHT_EVENTS: [
+    { id: 'lingli', name: '凌厉', fx: { atkPct: 6 }, desc: '攻 +6%' },
+    { id: 'yuanrong', name: '圆融', fx: { defPct: 6 }, desc: '防 +6%' },
+    { id: 'ningshen', name: '凝神', fx: { cultPct: 6 }, desc: '修为 +6%' },
+  ],
+  /** v42（E505）：境内顿悟单源读取——p.flags.insight = { realm, pick }，realm 与当前境不符即失效归零 */
+  insightBonusOf(p) {
+    const zero = { atkPct: 0, defPct: 0, cultPct: 0 };
+    const ins = p && p.flags && p.flags.insight;
+    if (!ins || ins.realm !== p.realmIdx) return zero;
+    const ev = this.INSIGHT_EVENTS.find(e => e.id === ins.pick);
+    return ev ? { atkPct: ev.fx.atkPct || 0, defPct: ev.fx.defPct || 0, cultPct: ev.fx.cultPct || 0 } : zero;
+  },
+  /** v42（E505）：境内顿悟三选一（addExp 进层触发）——手动弹三选；静默语境（挂机/离线/E2E）
+   *  自动取凝神（修为档）不弹窗。增益落 p.flags.insight，本境有效。 */
+  async promptInsight(p, silent = false) {
+    p.flags = p.flags || {};
+    const autoCtx = silent || (typeof AutoCult !== 'undefined' && AutoCult.active)
+      || (typeof Game !== 'undefined' && Game._offlineReplaying)
+      || (typeof navigator !== 'undefined' && navigator.webdriver);
+    if (autoCtx) {
+      p.flags.insight = { realm: p.realmIdx, pick: 'ningshen' };
+      Log.add('【境内顿悟】进层之际识海澄明，你顺势凝神——本境内修为 +6%。', 'gain');
+      return;
+    }
+    const pick = await UI.popup({
+      title: '✦ 境 内 顿 悟 ✦',
+      html: '水到渠成的一瞬，识海中有三道气机盘旋——择其一领悟，增益<b>仅本境有效</b>（晋入新境后自行消散）。',
+      options: [
+        ...this.INSIGHT_EVENTS.map(ev => ({ text: `${ev.name} · ${ev.desc}`, value: ev.id, primary: ev.id === 'ningshen' })),
+        { text: '先放着不取', value: null },
+      ],
+    });
+    if (!pick) return;
+    const ev = this.INSIGHT_EVENTS.find(e => e.id === pick);
+    p.flags.insight = { realm: p.realmIdx, pick };
+    Log.add(`【境内顿悟】你择【<b>${ev.name}</b>】而悟——${ev.desc}（本境内有效）。`, 'gain');
+  },
+
+  /** v42（E502）：行功路线表——手动修炼三选一（周天/存想/龟息），表落消费方同址；
+   *  挂机/离线/一键行权固定走周天不弹选。周天收益 = 旧 normal ×1.2（mult 单源，node 复算锚）。
+   *  存想感悟走 FIFO 再生池（addInsight regen=true，喂悟道经济）；龟息丹毒 −15。 */
+  MEDIT_ROUTES: {
+    zhoutian: { name: '周天', mult: 1.2, tag: '修为 ×1.2', desc: '导气一周天，尽灌丹田——修为最盛的一条路（挂机与离线固定走此路）。' },
+    cunxiang: { name: '存想', insight: [3, 6], tag: '感悟 +3~6（再生池）', desc: '存想识海，凝神生慧——纯再生感悟入池，悟道纯度足额。' },
+    guixi: { name: '龟息', detox: 15, tag: '丹毒 −15', desc: '龟息绵绵，以气化毒——丹毒侵蚀之际最宜此路。' },
+  },
   normal(opts = {}) {
     const p = Game.player;
-    let gain = Math.round(this.baseGain(p) * this.gainMult());
+    if (!p || p.dead) return;
+    // v42（E502）：手动修炼弹「行功路线」三选一（med-route 动作按钮，处理器 Cultivate.medRoute 落本文件，
+    // 键登记行随 E 就近写入 Game.actions）；opts.manual 为假（挂机/离线/一键行权）固定周天不弹选
+    if (opts.manual && !opts.route) {
+      return UI.popup({
+        title: '行功 · 择一路线',
+        html: '<div class="tip-line">吐纳行功，路线各异——这一场走哪一条？</div>'
+          + Object.keys(this.MEDIT_ROUTES).map(id => {
+            const r = this.MEDIT_ROUTES[id];
+            return `<button class="btn" style="display:block;width:100%;margin-top:6px;text-align:left" data-action="med-route" data-route="${id}"><b>${r.name}</b> · ${r.tag}<br><span class="tip-line" style="color:var(--text-dim)">${r.desc}</span></button>`;
+          }).join(''),
+        options: [{ text: '再想想', value: null }],
+      }).catch(() => {});
+    }
+    this.meditate(p, opts.route || 'zhoutian', opts);
+  },
+  /** v42（E502）：med-route 动作处理器——行功路线弹窗按钮（处理器落所属包文件，键登记入 Game.actions） */
+  medRoute(d) {
+    UI.closePopup();
+    const p = Game.player;
+    const route = d && d.route;
+    if (!p || p.dead || !this.MEDIT_ROUTES[route]) return;
+    this.meditate(p, route, { manual: true });
+  },
+  /** v42（E502）：行功单源（契约十一新签名 Cultivate.meditate(p, route)，route ∈ zhoutian/cunxiang/guixi）——
+   *  原 normal() 主体迁移至此，按路线施加差异：周天 ×1.2、存想 +再生感悟、龟息 −丹毒；灵机/亲修偶得/时耗三路同式 */
+  meditate(p, route, opts = {}) {
+    const rDef = this.MEDIT_ROUTES[route] || this.MEDIT_ROUTES.zhoutian;
+    let gain = Math.round(this.baseGain(p) * this.gainMult() * (rDef.mult || 1));
     let evNote = '';
     // v8 灵机事件（v19 扩池）：基础四类 + 六道职业特化 + 境界异象，按身份动态构建（8% 触发）
     // v40（E396）：抽成闭口函数以便「亲修偶得」复用同一 roll（AutoCult/离线/一键行权不传 manual）
@@ -273,6 +360,19 @@ const Cultivate = {
       lingjiRoll();
       Log.add('【亲修】亲手行功，气息绵长偶有顿悟之机——你再凝神行了一周天。', 'gain');
     }
+    // v42（E502）：路线差异结算——存想感悟入 FIFO 再生池（regen=true，静默链不触发悟道弹窗）、
+    // 龟息化解丹毒；两路修为均按基础产出 ×1.0（×1.2 仅周天独享）
+    let routeNote = '';
+    if (rDef.insight) {
+      const ins = Utils.rand(rDef.insight[0], rDef.insight[1]);
+      this.addInsight(p, ins, true);
+      routeNote = `（存想 · 突破感悟 +${ins}）`;
+    } else if (rDef.detox) {
+      p.poison = Math.max(0, p.poison - rDef.detox);
+      routeNote = `（龟息 · 丹毒 -${rDef.detox}）`;
+    } else if (rDef.mult && rDef.mult !== 1) {
+      routeNote = `（周天 · 修为 ×${rDef.mult}）`;
+    }
     this.addExp(p, gain);
     UI.float(`修为 +${Utils.fmtNum(gain)}${evNote ? ' ' + evNote.replace(/[（）]/g, ' ') : ''}`);   // v21 行动浮字
     Time.add(3);
@@ -280,10 +380,13 @@ const Cultivate = {
     if (p.dao === 'array') DaoSys.gain(p, 1);   // v16 阵道：聚灵
     if (p.dao === 'demonic') DaoSys.gain(p, 2);   // v16 魔性：化功
     p.hp = Math.min(Stat.compute(p).maxHp, Math.round(p.hp + Stat.compute(p).maxHp * 0.08));
-    Log.add(`${Utils.pick(GameData.FLAVOR.cultivate)}（修为 <b>+${Utils.fmtNum(gain)}</b>）${evNote}`, 'info');
+    Log.add(`${Utils.pick(GameData.FLAVOR.cultivate)}（修为 <b>+${Utils.fmtNum(gain)}</b>）${evNote}${routeNote}`, 'info');
     Game.afterAction();
   },
-  rest() {
+  /** v42（E501）：opts.noTime——挂机闭关轮逐日补跑语境（rideAlong）随行免时耗：闭关中的调息
+   *  本就是修行的一部分，不再额外折一日（否则 30 日轮被拖成 60~90 日、轮内 daily 次数腰斩，
+   *  E393 挂机/离线拉平随之破带）；手动「一键行权/调息」不传参维持原一日时耗。 */
+  rest(opts = {}) {
     const p = Game.player;
     const st = Stat.compute(p);
     p.hp = Math.min(st.maxHp, p.hp + Math.round(st.maxHp * 0.5));
@@ -292,7 +395,7 @@ const Cultivate = {
     // v26 修瑕：原条件 realmIdx>=0 恒真，「胎息」形同虚设——练气 5 点、其余境界 3 点
     const detox = p.realmIdx === 0 ? 5 : 3;
     if (detox) p.poison = Math.max(0, p.poison - detox);
-    Time.add(1);
+    if (!opts.noTime) Time.add(1);
     p._restDay = Math.floor(p.day || 0);   // v38（E325）：行权扩容判据（今日已调息）
     if (p.dead) return;
     if (p.dao === 'body') DaoSys.gain(p, 10);   // v16 体魄：吐纳炼体
@@ -303,6 +406,24 @@ const Cultivate = {
     // v37（E264）：调息感悟是全游戏唯一的「再生感悟」源（regen=true）——悟道纯度 ρ 的分母来源
     this.addInsight(p, 2, true);
     Log.add(`你寻一处灵气充裕之地打坐调息，气血灵力恢复大半${detox ? `，气机流转间化解了 ${detox} 点丹毒` : ''}，凝神之际偶有所悟（突破感悟 +2）。`, 'gain');
+    Game.afterAction();
+  },
+  /** v42（E501）：宗门听讲单源——原内联于 Game.actions['act-sect-listen']（一行一动作契约），提为
+   *  系统自有方法以便一键行权/挂机补跑同源调用；opts.noTime 同 rest（闭关轮逐日听讲随行免时耗）。 */
+  sectListen(opts = {}) {
+    const p = Game.player;
+    if (!p.sect) return;
+    const today = Math.floor(p.day || 0);
+    if (p.listenDay === today) { if (!opts.silent) UI.toast('今日已听讲，明日再来'); return; }
+    if (p.sect.contrib < 300) { if (!opts.silent) UI.toast('贡献点不足'); return; }
+    p.sect.contrib -= 300;
+    p.listenDay = today;
+    const before = p.insight || 0;
+    const lm = SectSys.listenMul(p);   // v41（E442）接线：勤修季讲道加开——听讲感悟 ×2
+    this.addInsight(p, 8 * lm);
+    Log.add(`你随长老听讲经义一日${before >= 100 ? '，感悟圆融，余韵化作修为。' : `，顿悟处不少。（突破感悟 +${8 * lm}${lm > 1 ? ' · 勤修季讲道加开，所得倍之' : ''}）`}`, 'gain');
+    if (!opts.noTime) Time.add(1);
+    if (p.dead) return;
     Game.afterAction();
   },
   /** v39（E352）：闭关成本翻倍 30→60×stoneEco（0.24→0.48 日建模收入）——闭关日均 ≈1.6× 与
@@ -432,7 +553,15 @@ const Cultivate = {
       const yb = rep.years[yearOf(p.day)] = rep.years[yearOf(p.day)] || { rounds: 0, exp: 0, advanced: 0, yuan: 0 };
       yb.rounds++; yb.exp += gain; yb.yuan += yuanGain;
       p.poison = Math.max(0, p.poison - 12);
-      Time.add(30);
+      // v42（E501）：闭关轮按日拆步（照抄 game.js computeOfflineProgress 的逐日回放结构：Time.add(1)
+      // + 逐日补结）——挂机智能档在行时逐日补跑静默行权（AutoCult.runDailySilent 单源，rideAlong
+      // 语境下调息/听讲随行免时耗）：灵草熟即收、求签/悬赏/调息/听讲恢复每日频率、悟道再生不再断粮；
+      // 轮长保持恰 30 日、轮日均不变。非挂机闭关同构逐日推进（该段逐日 Time.add(1) 照常触发时间钩子）。
+      for (let d = 0; d < 30; d++) {
+        Time.add(1);
+        if (p.dead || Game.player !== p) break;
+        if (typeof AutoCult !== 'undefined' && AutoCult.active) await AutoCult.runDailySilent(p, { inRound: true });
+      }
       if (p.dead || Game.player !== p) { this._looping = false; return; }
       Game.afterAction();
       // 圆满冲关（与单轮闭关同款逻辑）：天劫博弈中胜出即境界跃升
@@ -478,6 +607,7 @@ const Cultivate = {
     if (typeof WorldSys !== 'undefined' && WorldSys.lingchaoActive && WorldSys.lingchaoActive(p)) rows.push({ k: '天下大事·灵潮', mul: 1.2 });
     if (p.rushDay != null && Math.floor(p.day || 0) - p.rushDay < (typeof CaveSys !== 'undefined' && CaveSys.RUSH_WINDOW ? CaveSys.RUSH_WINDOW() : 3)) rows.push({ k: '聚灵加速', mul: 1.5 });
     if (typeof CaveSys !== 'undefined' && CaveSys.flagPower) { const fp = CaveSys.flagPower(p, 'b_juling'); if (fp) rows.push({ k: '聚灵旗', mul: 1 + 0.03 * fp }); }
+    { const insFx = this.insightBonusOf(p); if (insFx.cultPct) rows.push({ k: '境内顿悟·凝神', mul: 1 + insFx.cultPct / 100 }); }   // v42（E505）：与 baseGain 同式，拆解行加总恒等
     return rows;
   },
   baseGainRaw(p) {

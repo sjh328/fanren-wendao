@@ -446,6 +446,10 @@ const WorldSys = {
           Log.add(`你以「明悟本心」作答，考官抚须而笑——然所授之法你皆已修习，遂折为程仪灵石 ${Utils.fmtNum(stones2)}。`, 'gain');
         }
         }
+      } else if (ans == null) {
+        // v42（E516）：ESC/遮罩早退——原 ans=null 落 else 分支照发程仪 30×eco（Time.add(5) 已先扣）；
+        // 现空值早退零收益零灵石（节庆/大事旗标已置的照旧保持状态，只是不给收益）
+        Log.add('你在人群边缘看了一场热闹，悄然离场——考官的目光扫过来时，你已不在原地。', 'info');
       } else {
         const stones3 = Math.round(30 * GameData.stoneEco(p.realmIdx));
         Bag.addStones(stones3);

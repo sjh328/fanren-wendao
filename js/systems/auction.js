@@ -27,10 +27,12 @@ const AuctionSys = {
   ],
   PERIOD: 60,
   /** v40（E388）：三档出价参数单源——稳健 ×1.3/85%（原 ×1.15/95% 无脑最优，重定为争夺）、
-   *  激进 ×0.9/60%、天价 ×1.6/100%；bid() 与 price-audit 第十二路同源消费 */
+   *  天价 ×1.6/100%；v42（E510）：激进 60%→45%——每成功件成本 0.9/0.45=2.0×base，与稳健
+   *  1.3/0.85≈1.53×base 拉开 30%+（price-audit 第十二路随 E510 改门：两档每成功件成本差 ≥30%，
+   *  旧「效率散布 ≤15%」门随 E510 语义退役）；bid() 与 price-audit 第十二路同源消费 */
   BID_MODES: {
     steady: { mul: 1.3, rate: 85, label: '稳健出价' },
-    bold: { mul: 0.9, rate: 60, label: '激进出价' },
+    bold: { mul: 0.9, rate: 45, label: '激进出价' },
     dump: { mul: 1.6, rate: 100, label: '天价收购' },
   },
   /** v20 神秘拍品：一成几率拍的是未鉴定之物（低价购入，鉴定为按境界分层的物品） */
@@ -64,6 +66,11 @@ const AuctionSys = {
     const ev = pool.reduce((s, x) => s + (6 - Math.min(5, x.grade)) * 2 * valOf(x), 0) / wsum;
     return Math.max(200, Math.round(ev * 0.95));
   },
+  /** v42（E519）：溢阶定价单源——底价随境界但限三境溢阶（原 3.8^clamp(...) 三处内联复制收口，
+   *  usablePool 过滤/reroll 重掷/ensure 滚茬三调用点同调；price-audit 第十二路保持同源） */
+  overflowMul(p, gate) {
+    return Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
+  },
   /** v39（E353）：可竞拍池单源（state 掷品与「换一批」共用）——境界门槛/功法双闸/过气价过滤三闸 */
   usablePool(p) {
     return this.LOT_POOL.filter(x => {
@@ -75,7 +82,7 @@ const AuctionSys = {
       //（125×stoneEco，与 balance-sim 同式）者不入池：r3 时 m_danfang 预估 ≈22 万 > 17.1 万被滤出。
       // 池空回落 LOT_POOL 原行为（不因过滤断拍）
       const gate = Math.min(8, x.minRealm || 0);
-      const est = x.base * Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
+      const est = x.base * this.overflowMul(p, gate);   // v42（E519）：单源收口
       if (est > 25 * 125 * GameData.stoneEco(p.realmIdx || 0)) return false;
       return true;
     });
@@ -91,7 +98,7 @@ const AuctionSys = {
     const cost = Math.round(20 * GameData.stoneEco(p.realmIdx || 0));
     const ok = await UI.popup({
       title: '拍卖行 · 换一批',
-      html: `花 <span class="hl">${Utils.fmtNum(cost)}</span> 灵石请拍卖行把这件拍品撤下、换上新的（拍期不变，每期一次）。`,
+      html: `花 <span class="hl">${Utils.fmtNum(cost)}</span> 灵石请拍卖行把这件拍品撤下、换上新的（拍期不变，每期一次）。<br><span class="tip-line">· ${Bag.wealthText()}。</span>`,   // v42（E518）：大额消费家资折合行
       options: [{ text: '换 一 批', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;
@@ -103,7 +110,7 @@ const AuctionSys = {
     const pool2 = usable.length ? usable : this.LOT_POOL;
     const lot2 = pool2[Utils.hashStr('auction@' + day + '#' + a.seq) % pool2.length];
     const gate = Math.min(8, lot2.minRealm || 0);
-    const mul = Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
+    const mul = this.overflowMul(p, gate);   // v42（E519）：单源收口
     a.item = lot2.item;
     a.views = 1;   // 换品即归一（与 v33 E77 语义一致）
     a.base = Math.round(lot2.base * mul);
@@ -134,8 +141,15 @@ const AuctionSys = {
     const prev = p.auction;
     const seq = (prev && prev.seq) || 0;
     const mystery = Utils.chance(10);
+    // v42（E509）：滚茬透传扩 consigns/slots——寄售柜台数据随整体重赋值蒸发即 RB7 同款病灶
+    //（V2 寄售在途物每 60 日凭空消失）；旧字段 consign 透传照旧（E439 口径）
+    const rollCarry = {
+      consign: (prev && prev.consign) || null,
+      consigns: (prev && Array.isArray(prev.consigns)) ? prev.consigns : [null, null, null],
+      slots: (prev && prev.slots != null) ? prev.slots : 1,
+    };
     if (mystery) {
-      p.auction = { item: 'mystery', seq, base: this.mysteryBase(p), until: day + this.PERIOD, consign: (prev && prev.consign) || null };
+      p.auction = { item: 'mystery', seq, base: this.mysteryBase(p), until: day + this.PERIOD, ...rollCarry };
     } else {
       // v34（D1）：已修习/道途不合的功法不再掷出——坊市买功法有判重与 canLearnGongfa 双闸，
       // 拍卖行此前两闸全绕（已修习者重复拍下=白烧钱无提示）
@@ -145,7 +159,7 @@ const AuctionSys = {
       const lot2 = pool2[Utils.hashStr('auction@' + day + '#' + seq) % pool2.length];
       const gate = Math.min(8, lot2.minRealm || 0);
       // v30 复核：底价随境界但限三境溢阶——原 3.8^min(8,r) 全幅膨胀，r6+ 拍品性价比远逊坊市，无人竞拍
-      const mul = Math.pow(3.8, Utils.clamp(Math.min(8, p.realmIdx || 0) - gate, 0, 3));
+      const mul = this.overflowMul(p, gate);   // v42（E519）：单源收口
       // v32（E5）影子竞价·热度：拍品每被流拍/围观一轮，底价随关注热度上浮（封顶三成）——
       // 「每个人都盯着的那件」不会便宜。
       // v33（E77）修瑕：热度原是永久棘轮——views 只增不随拍品重置（约十期后一切拍品永久 +30%），
@@ -154,7 +168,8 @@ const AuctionSys = {
       const views = sameLot ? ((prev.views || 0) + 1) : 1;
       const hot = 1 + Math.min(0.3, (views - 1) * 0.03);
       // v41（E439）：滚茬整体重赋值处显式透传 consign——寄售物不在本期拍品语义内，漏传即每 60 日蒸发
-      p.auction = { item: lot2.item, seq, views, base: Math.round(lot2.base * mul * hot), until: day + this.PERIOD, consign: (prev && prev.consign) || null };
+      // v42（E509）：透传扩 consigns/slots（rollCarry，见上）
+      p.auction = { item: lot2.item, seq, views, base: Math.round(lot2.base * mul * hot), until: day + this.PERIOD, ...rollCarry };
     }
     return p.auction;
   },
@@ -195,7 +210,8 @@ const AuctionSys = {
       title: `竞拍 · ${def.name}`,
       html: `${def.desc}<br>底价 <span class="hl">${Utils.fmtNum(a.base)}</span> 灵石。<br>
         【${opts.label}】出价 <b>${Utils.fmtNum(price)}</b> 灵石，成算约 <b>${rate}%</b>${rate < 100 ? '；落标则灵石原路退回' : ''}。<br>
-        本期第 ${(a.seq || 0) + 1} 件拍品，拍期还剩 ${a.until - Math.floor(p.day)} 日。`,
+        本期第 ${(a.seq || 0) + 1} 件拍品，拍期还剩 ${a.until - Math.floor(p.day)} 日。<br>
+        <span class="tip-line">· ${Bag.wealthText()}。</span>`,   // v42（E518）：大额消费家资折合行
       options: [{ text: '落 槌', value: true, primary: true }, { text: '再看看', value: false }],
     });
     if (!ok) return;
@@ -229,10 +245,13 @@ const AuctionSys = {
     } else {
       // v27 修瑕：退款走原额入账（不吃灵石获取加成）——此前退款被加成放大，落标反而净赚
       Bag.addStonesRaw(price);
-      // v32（E5）影子竞价·截胡：v40（E388）稳健/激进出价失利后均两成五几率有神秘修士抬价——底价上浮一成
-      if ((mode === 'bold' || mode === 'steady') && Utils.chance(25)) {
+      // v32（E5）影子竞价·截胡：稳健失利两成五几率有神秘修士抬价——底价上浮一成；
+      // v42（E510）：激进档落标必触发截胡公示（低成算档的确定性代价，公示口径与抬价一致）
+      if (mode === 'bold' || (mode === 'steady' && Utils.chance(25))) {
         p.auction.base = Math.round(a.base * 1.1);
-        Log.add('竞价失利——人群中另有神秘修士志在必得，底价被抬上一成！', 'warn');
+        Log.add(mode === 'bold'
+          ? '激进出价失利——人群中另有神秘修士志在必得，当场抬价截胡，底价被抬上一成！'
+          : '竞价失利——人群中另有神秘修士志在必得，底价被抬上一成！', 'warn');
       } else {
         Log.add(`竞价失利——有人以更高价截胡。灵石已原路退回。`, 'warn');
       }
@@ -243,90 +262,161 @@ const AuctionSys = {
   },
 
   /* ---------- v41（E439）：委托寄售——玩家侧卖出通道（新系统①，核心 sink） ----------
-   * grade≥3 之物单件寄售，自定底价（市价 0.8~2.0× 五档），六十日一期暗标；
-   * 成交率按底价/市价比单调递减，成交扣五厘佣金、流拍退件收二厘手续费——天然后期 sink。
-   * 寄售状态落 p.auction.consign 子字段（零新顶层）；到期结算与滚茬同点（ensure 写侧单点）。
-   * 现金 EV 锚（v5 口径：底价比 × 成交率 × 0.95，流拍退件留存不计）：0.8× 档 ≈0.61×市价
-   * （>坊市秒卖 0.45，稳档寄售成立）、2.0× 档 ≈0.08×市价（<0.45，博高价=纯赌）。 */
+   * grade≥3 之物单件寄售，自定底价五档，六十日一期暗标；成交扣五厘佣金、流拍退件收二厘手续费。
+   * v42（E509）：五档重做 CONSIGN_TIERS_V2——高价档加成交溢价 prem（成交额 ×(1+prem)，模拟多人
+   * 抬价，随档位递增）+ 流拍自动降一档续拍（60 日不另收费，速售档流拍仍退件）；E439 骨架
+   * （佣金 5%/流拍退件费 2%/滚茬透传）不动。柜台 1→3 格：第 2/3 格花灵石永久开启（p.auction.slots，
+   * 格价挂 sinkCurve）；旧档单格 consign 迁入 consigns[0] 且标 tierV:1 按 E439 旧规则结算。
+   * 现金 EV 口径（price-audit E509 路，按「含续拍期望折算的每 60 日均收」马尔可夫式复算）：
+   * EV ≈ [0.60, 0.59, 0.55, 0.52, 0.46]×市价——极差 0.14 ≤0.15、高价档 0.52 ≥0.50、
+   * 速售不再严格最优（与最优档差 0% ≤5%）；速售单档 EV ≈0.60 > 坊市秒卖 0.45（稳档寄售成立）。 */
   CONSIGN_PERIOD: 60,
-  /** 底价五档：倍率与成交率同表单源（price-audit 寄售路/verify 现金 EV 锚同源消费） */
-  CONSIGN_TIERS: [
-    { mul: 0.8,  rate: 80, name: '速售' },
-    { mul: 1.0,  rate: 45, name: '平价' },
-    { mul: 1.25, rate: 25, name: '增价' },
-    { mul: 1.5,  rate: 12, name: '高价' },
-    { mul: 2.0,  rate: 4,  name: '天价' },
+  /** v42（E509）：底价五档 V2——mul 倍率/rate 成交率/prem 成交溢价同表单源
+   * （price-audit E509 路/verify 现金 EV 锚同源消费；tierV:2 结算语义的唯一定义处） */
+  CONSIGN_TIERS_V2: [
+    { mul: 0.8,  rate: 80, prem: 0,    name: '速售' },
+    { mul: 1.0,  rate: 60, prem: 0.05, name: '平价' },
+    { mul: 1.25, rate: 40, prem: 0.12, name: '增价' },
+    { mul: 1.5,  rate: 28, prem: 0.20, name: '高价' },
+    { mul: 2.0,  rate: 15, prem: 0.30, name: '天价' },
   ],
+  /** v42（E509）：柜台格价（第 2/3 格永久开启价，挂 sinkCurve——与洗练/灵田营造同族口径） */
+  slotPrice(p, idx) { return Math.round((idx === 1 ? 1500 : 4000) * GameData.sinkCurve(p.realmIdx || 0) / 2.2); },
+  /** v42（E509）：已开格数（p.auction.slots 缺省=1，老档零迁移） */
+  openSlots(p) { return Utils.clamp((p.auction && p.auction.slots) || 1, 1, 3); },
+  /** v42（E509）：旧档迁移——单格 consign → consigns[0]（标 tierV:1 按 E439 旧规则结算），幂等 */
+  migrateConsign(p) {
+    const a = p.auction;
+    if (!a) return;
+    if (a.consign && !Array.isArray(a.consigns)) {
+      a.consigns = [Object.assign({ tierV: 1 }, a.consign), null, null];
+      a.consign = null;
+      Log.add('拍卖行寄售柜台扩建完工——你在途的寄售之物已移入新柜台（按旧约结算）。', 'info');
+    }
+    if (!Array.isArray(a.consigns)) a.consigns = [null, null, null];
+    if (a.slots == null) a.slots = 1;
+  },
   /** 寄售资格：grade≥3 方可入暗标 */
   consignable(id) {
     const def = GameData.ITEMS[id];
     return !!def && (def.grade || 0) >= 3;
   },
-  /** 寄售估值单源（与古匣 valOf 同族）：面值 → 0 价按品阶兜底 → ecoPrice 随境界行情 */
+  /** 寄售估值单源（与古匣 valOf 同族）：面值 → 0 价按品阶兜底 → ecoPrice 随境界行情
+   *  v42（E508）：0 价兜底改 GRADE_FALLBACK×0.1——原全值兜底与坊市卖价（GF×0.1×0.45）双标 16.9 倍
+   * （grade5 物两渠道差 16.9 倍，约 47 种 0 价物卖坊市亏 94%）；统一后寄售速售 EV/坊市卖价 ≈1.35（门 [1.2,1.5]） */
   consignValue(p, id) {
     const def = GameData.ITEMS[id];
     if (!def) return 0;
     let v = def.price || 0;
-    if (!v) v = GameData.GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500;
+    if (!v) v = Math.round((GameData.GRADE_FALLBACK[Utils.clamp(def.grade || 0, 0, 5)] || 500) * 0.1);
     if (def.ecoPrice) v = Math.round(v * GameData.stoneEco(p.realmIdx || 0));
     return v;
   },
-  /** 寄售一件（act-consign）：选底价档 → 入库封存，六十日后开标 */
+  /** 寄售一件（act-consign）：选底价档 → 入库封存，六十日后开标；柜台满格时可就地花灵石永启下一格 */
   async consign(id) {
     const p = Game.player;
     if (!this.consignable(id)) { UI.toast('品阶未至三品之物，拍卖行不收寄'); return; }
-    if (p.auction && p.auction.consign) { UI.toast('拍卖行寄售只留一格——先候结清或取回再寄'); return; }
+    this.migrateConsign(p);
     if (Bag.count(id) < 1) { UI.toast('囊中已无此物'); return; }
     const def = GameData.ITEMS[id];
     const val = this.consignValue(p, id);
-    const tiers = this.CONSIGN_TIERS.map((t, i) => ({
-      text: `【${t.name}】底价 ${Utils.fmtNum(Math.round(val * t.mul))} 灵石（成交约 ${t.rate}%）`,
-      value: i, primary: i === 1,
+    const tiers = this.CONSIGN_TIERS_V2.map((t, i) => ({
+      text: `【${t.name}】底价 ${Utils.fmtNum(Math.round(val * t.mul))} 灵石（成交约 ${t.rate}%${t.prem ? `，成交多有溢价 ×${(1 + t.prem).toFixed(2)}` : ''}）`,
+      value: i, primary: i === 0,
     }));
     tiers.push({ text: '作罢', value: -1 });
+    const firstFree = p.auction.consigns.findIndex(x => !x);
+    let unlockCost = 0;
+    if (firstFree < 0) {
+      const opened = this.openSlots(p);
+      if (opened >= 3) { UI.toast('三格柜台皆满——先候结清或取回再寄'); return; }
+      unlockCost = this.slotPrice(p, opened);   // opened=1 → 开第 2 格；2 → 第 3 格
+      tiers.unshift({ text: `永启${opened === 1 ? '二' : '三'}号柜台（${Utils.fmtNum(unlockCost)} 灵石，永久）并寄售`, value: -2, primary: true });
+    }
     const pick = await UI.popup({
       title: `委托寄售 · ${def.name}`,
-      html: `${def.desc || ''}<br>拍卖行收三品以上之物代为暗标——六十日一期，成交扣五厘佣金；流拍退件收二厘手续费。<br>自定底价（此物市价约 <span class="hl">${Utils.fmtNum(val)}</span> 灵石）：`,
+      html: `${def.desc || ''}<br>拍卖行收三品以上之物代为暗标——六十日一期，成交扣五厘佣金；流拍退件收二厘手续费（高价档流拍自动降一档续拍，不另收费）。<br>自定底价（此物市价约 <span class="hl">${Utils.fmtNum(val)}</span> 灵石）：`,
       options: tiers,
     });
     if (pick == null || pick < 0) return;
     if (Bag.count(id) < 1) { UI.toast('囊中已无此物'); return; }
+    let slot = firstFree;
+    if (slot < 0 || p.auction.consigns[slot]) slot = p.auction.consigns.findIndex(x => !x);   // 等待期内格位变化兜底
+    if (slot < 0) { UI.toast('三格柜台皆满——先候结清或取回再寄'); return; }
+    if (pick === -2) {
+      if (!Bag.spendStones(unlockCost)) { UI.toast('灵石不足，柜台未能开启'); return; }
+      p.auction.slots = this.openSlots(p) + 1;
+      slot = p.auction.slots - 1;
+      Log.add(`拍卖行第${p.auction.slots === 2 ? '二' : '三'}号柜台永启——此后寄售多一路去处（花费 ${Utils.fmtNum(unlockCost)} 灵石）。`, 'system');
+    }
     Bag.removeItem(id, 1);
-    const t = this.CONSIGN_TIERS[pick];
+    const t = this.CONSIGN_TIERS_V2[pick];
     const day = Math.floor(p.day || 0);
     p.auction = p.auction || { until: -1, consign: null };
-    p.auction.consign = { item: id, base: Math.round(val * t.mul), rate: t.rate, tier: t.name, until: day + this.CONSIGN_PERIOD };
-    Log.add(`你将【<b>${def.name}</b>】托付拍卖行暗标寄售——底价 ${Utils.fmtNum(p.auction.consign.base)} 灵石（${t.name}档），${this.CONSIGN_PERIOD} 日后开标。`, 'info');
+    this.migrateConsign(p);
+    p.auction.consigns[slot] = { tierV: 2, item: id, base: Math.round(val * t.mul), rate: t.rate, prem: t.prem, tier: t.name, tierIdx: pick, until: day + this.CONSIGN_PERIOD };
+    Log.add(`你将【<b>${def.name}</b>】托付拍卖行暗标寄售——底价 ${Utils.fmtNum(p.auction.consigns[slot].base)} 灵石（${t.name}档），${this.CONSIGN_PERIOD} 日后开标。`, 'info');
     Game.afterAction();
   },
-  /** 取回（act-consign-claim）：开标前提前撤拍，原物退包、分文不取 */
-  claimConsign() {
+  /** 取回（act-consign-claim）：开标前提前撤拍，原物退包、分文不取。
+   *  v42（E509→W2C 契约移交，W2B deferred 明示项）：slot 参选格取回（null=最先在格者，兼容旧单格入口） */
+  claimConsign(slot = null) {
     const p = Game.player;
-    const c = p.auction && p.auction.consign;
-    if (!c) { UI.toast('拍卖行并无你寄售之物'); return; }
-    p.auction.consign = null;
+    this.migrateConsign(p);
+    const list = p.auction.consigns || [];
+    let idx = (slot != null && Number.isInteger(slot) && list[slot]) ? slot : -1;
+    if (idx < 0) idx = list.findIndex(x => !!x);
+    if (idx < 0) { UI.toast('拍卖行并无你寄售之物'); return; }
+    const c = p.auction.consigns[idx];
+    p.auction.consigns[idx] = null;
     const def = GameData.ITEMS[c.item] || { name: c.item };
     Bag.addItem(c.item, 1);
     Log.add(`你撤回了寄售中的【${def.name}】——拍卖行分文不取，原物退包。`, 'info');
     Game.afterAction();
   },
-  /** 寄售到期结算（ensure 写侧单点调用）：成交收五厘佣金入账、流拍退件收二厘手续费，结算即清 consign。
-   *  async 环境无涉（纯入账），离线回放经 Time.add 钩子逐日自然到期。 */
+  /** 寄售到期结算（ensure 写侧单点调用）：成交收五厘佣金入账、流拍退件收二厘手续费，结算即清格。
+   *  v42（E509）：tierV:2 记录成交吃 prem 溢价；流拍自动降一档续拍（60 日不另收费，费用/费率随新档），
+   *  速售档流拍退件；tierV:1（旧档迁移）按 E439 旧规则结算（无溢价无续拍）。旧字段 consign 直挂的
+   *  裸档（未经 migrate，如审计直调）保留旧分支兜底。离线回放经 Time.add 钩子逐日自然到期。 */
   settleConsign(p, day) {
-    const c = p.auction && p.auction.consign;
-    if (!c || day < c.until) return;
-    p.auction.consign = null;
-    const def = GameData.ITEMS[c.item] || { name: c.item };
-    if (Utils.chance(c.rate)) {
-      const proceeds = Math.round(c.base * 0.95);   // 成交扣五厘佣金（原额入账，不吃获取加成）
-      Bag.addStonesRaw(proceeds);
-      Log.add(`【寄售】暗标落幕——你寄售的【<b>${def.name}</b>】被人以底价 ${Utils.fmtNum(c.base)} 灵石（${c.tier}档）成交，扣五厘佣金入账 <b>${Utils.fmtNum(proceeds)}</b>。`, 'gain');
-    } else {
-      const fee = Math.round(c.base * 0.02);   // 流拍退件收二厘手续费（尽力扣款，对齐罚款口径）
-      if (fee > 0) Bag.spendStonesMax(fee);
-      Bag.addItem(c.item, 1);
-      Log.add(`【寄售】暗标落幕——【<b>${def.name}</b>】无人出价，退件回包（流拍手续费 ${Utils.fmtNum(fee)} 灵石）。`, 'warn');
+    // 旧字段兜底（未经迁移的直挂记录按 E439 旧规则结清，随后清字段）
+    const legacy = p.auction && p.auction.consign;
+    if (legacy && day >= legacy.until) {
+      p.auction.consign = null;
+      this._resolveConsign(p, Object.assign({ tierV: 1 }, legacy), 0, day, true);
     }
+    if (!p.auction || !Array.isArray(p.auction.consigns)) return;
+    this.migrateConsign(p);
+    for (let i = 0; i < p.auction.consigns.length; i++) {
+      const c = p.auction.consigns[i];
+      if (!c || day < c.until) continue;
+      p.auction.consigns[i] = null;
+      this._resolveConsign(p, c, i, day, false);
+    }
+  },
+  /** v42（E509）：单件寄售结算支（自 settleConsign 拆出）——legacyClear 仅为旧字段直挂兜底路径置真 */
+  _resolveConsign(p, c, slot, day, legacyClear) {
+    const def = GameData.ITEMS[c.item] || { name: c.item };
+    const isV2 = c.tierV === 2;
+    if (Utils.chance(c.rate)) {
+      const sale = Math.round(c.base * (1 + (isV2 ? (c.prem || 0) : 0)));
+      const proceeds = Math.round(sale * 0.95);   // 成交扣五厘佣金（V2 另吃成交溢价）
+      Bag.addStonesRaw(proceeds);
+      Log.add(`【寄售】暗标落幕——你寄售的【<b>${def.name}</b>】被人以 ${Utils.fmtNum(sale)} 灵石（${c.tier}档${isV2 && c.prem ? '，多人抬价' : ''}）成交，扣五厘佣金入账 <b>${Utils.fmtNum(proceeds)}</b>。`, 'gain');
+      return;
+    }
+    const fee = Math.round(c.base * 0.02);   // 流拍退件收二厘手续费（尽力扣款，对齐罚款口径）
+    if (fee > 0) Bag.spendStonesMax(fee);
+    // v42（E509）：V2 高档流拍自动降一档续拍（60 日不另收费）——速售档与旧档照旧退件
+    if (isV2 && (c.tierIdx || 0) > 0) {
+      const nt = this.CONSIGN_TIERS_V2[c.tierIdx - 1];
+      p.auction.consigns[slot] = { tierV: 2, item: c.item, base: c.base, rate: nt.rate, prem: nt.prem, tier: nt.name, tierIdx: c.tierIdx - 1, until: day + this.CONSIGN_PERIOD };
+      Log.add(`【寄售】暗标落幕——【<b>${def.name}</b>】无人出价（流拍手续费 ${Utils.fmtNum(fee)} 灵石），拍卖行作主降为${nt.name}档续拍一期，不另收费。`, 'warn');
+      return;
+    }
+    if (!legacyClear && p.auction && Array.isArray(p.auction.consigns)) p.auction.consigns[slot] = null;
+    Bag.addItem(c.item, 1);
+    Log.add(`【寄售】暗标落幕——【<b>${def.name}</b>】无人出价，退件回包（流拍手续费 ${Utils.fmtNum(fee)} 灵石）。`, 'warn');
   },
 };
 
@@ -348,7 +438,7 @@ const DonateSys = {
     const stones = this.priceOf(p, t);   // v29：封顶 5→8，大后期仍是消孽出口
     const ok = await UI.popup({
       title: `布施 · ${t.name}`,
-      html: `散财于世间疾苦——声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。<br>需灵石 <span class="hl">${Utils.fmtNum(stones)}</span>。`,
+      html: `散财于世间疾苦——声望 +${t.rep}，气运 +${t.fortune}，孽障 ${t.karma}。<br>需灵石 <span class="hl">${Utils.fmtNum(stones)}</span>。<br><span class="tip-line">· ${Bag.wealthText()}。</span>`,   // v42（E518）：大额消费家资折合行
       options: [{ text: '行 善', value: true, primary: true }, { text: '作罢', value: false }],
     });
     if (!ok) return;

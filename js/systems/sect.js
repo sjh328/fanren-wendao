@@ -609,7 +609,12 @@ const SectSys = {
         Log.add('下一轮对手已定，且去台下调息片刻。', 'info');
       }
     } else {
-      Log.add('大比止步于此——虽未登顶，已胜诸场的彩头尽入囊中。来届再战。', 'warn');
+      // v42（E514）：败者安慰彩头——原只打「彩头尽入囊中」零实发（公示与实发脱节）；
+      // 现按 T.wins×60×eco 实发灵石（折半口径）+ 天骄功勋 +1；魁首路径（win 分支）不动
+      const stones = Math.round(T.wins * 60 * GameData.stoneEco(p.realmIdx));
+      if (stones > 0) Bag.addStones(stones);
+      p.rankHonor = (p.rankHonor || 0) + 1;
+      Log.add(`大比止步于此——已胜诸场的彩头折半入囊（灵石 ${Utils.fmtNum(stones)}、天骄功勋 +1）。来届再战。`, 'warn');
       Story.chron(`宗门大比 · ${T.wins} 胜止步`);
       p.sect.tourney = null;
     }

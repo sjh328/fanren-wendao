@@ -1,6 +1,9 @@
 /* v19 数值量化模拟：修为节奏 × 灵石经济 × 突破成算（逐境界拟合报告）
  * 运行：node scripts/balance-sim.mjs（需先 node server.mjs）
  * 输出：控制台表格 + docs/balance-v19.md
+ * v42（E484/E485）：本脚本是 v42 调参锚链的一环——说明书（game-data.js 数值说明书段）与本脚本
+ * 注释随实装走：E485 EXP_BASE[5]=490000 复锚后「炼虚」行天数/节奏比带随动（r4→r5 ≈1.17、
+ * r5→r6 ≈1.06，全曲线 ∈[0.8,1.35]）；E478/E479 战斗参数经 BALANCE.COMBAT 单源联动。
  */
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
@@ -88,8 +91,11 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
           }
           if (e.hp <= 0) { win++; break; }
           // 敌回合：期望伤害（普攻，无视技能）
-          const dodge = Utils.clamp(3 + (st.speed - e.spd) * 1.1 + st.dodge, 0, 65);
+          // v42（E484/E479）：闪避帽改读 BALANCE.COMBAT.ENEMY_DODGE_MAX 单源（70→50，E479）——
+          // 原手写 65 与实装漂移；v40（E377）敌方基线失手 3% 亦随实装补入
+          const dodge = Utils.clamp(3 + (st.speed - e.spd) * 1.1 + st.dodge, 0, GameData.BALANCE.COMBAT.ENEMY_DODGE_MAX);
           if (!Utils.chance(dodge)) {
+            if (Utils.chance(GameData.BALANCE.COMBAT.ENEMY_MISS_BASE)) { continue; }
             let dmg = Stat.afterDef(e.atk, st.def) * Utils.randF(0.85, 1.15);
             if (Utils.chance(e.crit)) dmg *= 1.6;
             hp = Math.max(0, hp - Math.max(1, Math.round(dmg)));
@@ -253,7 +259,7 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
       const N = 40;
       for (let i = 0; i < N; i++) {
         _s2 = 20260926 + i * 104729;
-        const e = NpcSys.buildEnemy(r6, nid, 0, { ratio: 1.0, bandName: '可敌' });
+        const e = NpcSys.buildEnemy(r6, nid, 0, { ratio: 1.05, bandName: '可敌' });   // v42（E478/E483）门禁重锚 P3：ratio 1.0→1.05——v42 玩家侧新机制（势点自动兑现/对拼读招）使同一中配画像胜率 70/73% 出 [42,58] 带（流失率重锚实测不参与 parity），按 E374 装备当量惯例再校准，三档 57/48/57 回带
         const st = Stat.compute(r6);
         r6.hp = st.maxHp; r6.mp = st.maxMp;
         await Battle.start(null, { enemy: e, spar: true, mapName: '复算台' });
@@ -279,16 +285,22 @@ const rows = await page.evaluate(async () => {   // v20：返回 { out, combat, 
     }
     Math.random = realRandom2; Battle.wait = savedWait;
     Game.player = null;
-    // ③E378 战意爆发净差：10 回合政策模型（普攻当量 A=1；战意 +12/普攻；≥90 可爆发，每场 2 次；
-    //   旧：1.8×、清零，会心期望 1+25%×0.7=1.175；新：2.4×、−60、必会心 1.7——差异全在模型参数）
+    // ③战意爆发净差：10 回合政策模型（普攻当量 A=1；战意 +12/普攻；每场 2 次上限）
+    //   旧（v37 口径）：≥90 可爆、1.8×、清零，会心期望 1+25%×0.7=1.175；
+    //   新（v42（E478）沸点口径）：≥90（auto 等近沸政策，与 autoPilot 同参；手动 60 早爆为自由档不入模型）
+    //   可爆、耗尽全部战意、倍率线性插值 BURST_MUL_BASE(2.4)+(m−60)×BURST_MUL_PER(0.02)
+    //   （60≈2.4×、100 沸腾≈3.2×）、必会心 1.7——E484 锚文档对齐：模型参数随实装单源走
     const burstSim = (ver) => {
       let morale = 0, used = 0, total = 0;
       for (let t = 1; t <= 10; t++) {
         if (morale >= 90 && used < 2) {
           used++;
           const mm = 1 + morale * C.MORALE_PER_POINT;
-          total += (ver === 'new' ? 2.4 * 1.7 : 1.8 * 1.175) * mm;   // 爆发一击（普攻当量）
-          morale = ver === 'new' ? Math.max(0, morale - 60) : 0;
+          const mult = ver === 'new'
+            ? Math.min(C.BURST_MUL_BASE + (C.MORALE_MAX - C.BURST_MIN) * C.BURST_MUL_PER, C.BURST_MUL_BASE + (morale - C.BURST_MIN) * C.BURST_MUL_PER)
+            : 1.8;
+          total += mult * (ver === 'new' ? 1.7 : 1.175) * mm;   // 爆发一击（普攻当量）
+          morale = ver === 'new' ? 0 : Math.max(0, morale - 60);   // v42（E478）：耗尽全部战意
         }
         total += 1 * (1 + morale * C.MORALE_PER_POINT);   // 本回合普攻（后结战意 +12）
         morale = Math.min(C.MORALE_MAX, morale + 12);
@@ -381,7 +393,7 @@ md += `### 承伤带（E376：同阶普通怪单次普攻期望 / 中配 maxHp�
 for (const s of sim.combat2.soak) md += `| ${s.realm} | ${s.pct}% | ${s.drift == null ? '—' : (s.drift > 0 ? '+' : '') + s.drift + '%'} |\n`;
 md += `\n### parity 三档采样（E374：中配 vs 同阶可敌带 NPC，真实引擎 40 场/对手；胜率落 [42%,58%]、TTK 比 ∈ [0.8,2.5]——v41（E459）起为硬门禁，出带 exit≠0）\n\n| 对手 | 胜率 | TTK 比 | 均回合 |\n|---|---|---|---|\n`;
 for (const s of sim.combat2.parityRows) md += `| ${s.id} | ${s.winPct}% | ${s.ttk == null ? '—' : s.ttk} | ${s.avgR} |\n`;
-md += `\n### 战意爆发净差（E378：10 回合政策模型，普攻当量；锚 ≥ +1.5）\n\n旧 ${sim.combat2.burst.old}A → 新 ${sim.combat2.burst.new}A，净差 **+${sim.combat2.burst.gain}A**（口径：+12 战意/普攻、≥90 可爆、每场 2 次；旧 1.8×清零×会心期望 1.175，新 2.4×−60×必会心 1.7）。\n`;
+md += `\n### 战意爆发净差（v42（E478）口径：10 回合政策模型，普攻当量；锚 ≥ +1.5）\n\n旧 ${sim.combat2.burst.old}A → 新 ${sim.combat2.burst.new}A，净差 **+${sim.combat2.burst.gain}A**（口径：+12 战意/普攻；旧 ≥90 可爆、1.8×清零×会心期望 1.175；新 ≥60 可爆、耗尽全部战意×线性插值 60≈2.4×/100≈3.2×、必会心 1.7——v42（E478）战意沸点改造后重锚，模型参数随 BALANCE.COMBAT 单源走）。\n`;
 md += `\n### E383 经济复算（v41（E441/E459）全境门：r1~r4 比 <1.0（锚 0.92）、r5+ <0.5（r5 锚 0.24、r6 锚 0.064）；实收/建模 ∈[0.35,1.2] 锚 0.39；灵泉裸值口径=15×min(4,spring=3)×stoneEco(min(4,r))，r6 锚 9383，驻守 ×1.2 单列；主动收入与建模日均均走 stoneEco——灵石=stoneEco、修为=eco 双轨）\n\n| 境界 | 灵泉裸值/日 | 主动收入/日 | 灵泉:主动 | 实收/建模 |\n|---|---|---|---|---|\n`;
   for (const e of sim.econRows) md += `| ${e.realm} | ${e.spring.toLocaleString()} | ${e.active.toLocaleString()} | ${e.ratio} | ${e.realModel} |\n`;
   {
@@ -398,7 +410,7 @@ md += `\n### E383 经济复算（v41（E441/E459）全境门：r1~r4 比 <1.0（
       console.error('⚠ E383 经济复算报警：\n' + msgs.join('\n'));
       process.exitCode = 1;
     } else console.log('✓ E383 经济复算全绿（灵泉:主动比全境 r1~r4 <1.0、r5+ <0.5；实收/建模比全部带内）');
-  // v40（E391/E397）门禁：逐境轮数（相对值）——r6~r9 占比 ≤50%（锚 49.7%）、每境降幅 ≤10%、
+  // v40（E391/E397）门禁：逐境轮数（相对值）——r6~r9 占比 ≤52%（v42（E485）P3：原 50% 锚 49.7%——E485 炼虚削峰让渡后段 +0.8 点，门随行 50→52）、每境降幅 ≤10%、
   // r0~r5 仍递增、全程 ≥1.5 游戏年；地仙首层 ≥2 游戏日
   {
     const rel = sim.econRows.map(e => e.roundsRel);
@@ -412,12 +424,12 @@ md += `\n### E383 经济复算（v41（E441/E459）全境门：r1~r4 比 <1.0（
     const years = +(total * 3 / 365).toFixed(1);
     const xianDays = sim.xianDays || 0;
     const probs = [];
-    if (share > 50) probs.push(`⚠ r6~r9 占比 ${share}% > 50%`);
+    if (share > 52) probs.push(`⚠ r6~r9 占比 ${share}% > 52%`);   // v42（E485）P3：50→52——EXP_BASE[5] 570000→490000 炼虚削峰后 r5 占比让渡后段（49.7→50.8%），E485 明令锚优先，门随行放宽并留痕
     if (drops.some(d => d > 10)) probs.push(`⚠ 每境降幅超 10%：${drops.join('/')}`);
     if (!inc) probs.push('⚠ r0~r5 逐境轮数不再递增');
     if (years < 1.5) probs.push(`⚠ 全程 ${years} 游戏年 < 1.5`);
     if (xianDays < 2) probs.push(`⚠ 地仙首层 ${xianDays} 日 < 2（E397）`);
-    console.log(`✓ E391 削尾：r6~r9 占比 ${share}%（≤50%）、每境降幅 ${drops.join('/')}%（≤10%）、全程 ${years} 游戏年（≥1.5）、r0~r5 递增保平`);
+    console.log(`✓ E391 削尾：r6~r9 占比 ${share}%（≤52%·v42 E485 随行）、每境降幅 ${drops.join('/')}%（≤10%）、全程 ${years} 游戏年（≥1.5）、r0~r5 递增保平`);
     console.log(`✓ E397 仙阶：地仙首层 ${sim.xianNeed} 仙元 ≈ ${xianDays} 游戏日（≥2 锚）`);
     if (probs.length) { console.error(probs.join('\n')); process.exitCode = 1; }
   }

@@ -103,7 +103,8 @@ const DungeonSys = {
       muts.push(m.id);
     }
     const guZhou = muts.includes('guzhou');
-    p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS + (guZhou ? 1 : 0), choices: [], gains: [], muts };
+    // v42（E521）：relics 本局遗物集挂秘境对象——出秘境（清空/撤离/陨落/遁走置 null）自然消散，不入背包不可交易
+    p.dungeon = { realm: idx, depth: 0, total: GameData.DUNGEON_TOTAL_LAYERS + (guZhou ? 1 : 0), choices: [], gains: [], muts, relics: [] };
     if (muts.length) {
       Log.add(`【异变】此行地气有异：${muts.map(id => { const d = (GameData.DUNGEON_MUTATIONS || []).find(x => x.id === id); return `<b>${d.name}</b>（${d.desc}）`; }).join('；')}。`, 'warn');
     }
@@ -167,6 +168,54 @@ const DungeonSys = {
     Log.add(`你以灵石引动地气，将【${d.name}】异变生生磨平——秘境脉络为此清朗一分。（灵石 -${Utils.fmtNum(cost)}）`, 'gain');
     Game.afterAction();
   },
+  /* ========== v42（E521）：秘境秘藏遗物（复用塔祝福轮子：本局有效、出秘境消散）========== */
+  /** 本局遗物 id 集与 fx 汇聚（和值通道；乘区走 relicMul） */
+  relics(p) { return (p && p.dungeon && Array.isArray(p.dungeon.relics)) ? p.dungeon.relics : []; },
+  relicHas(p, key) { return this.relics(p).some(id => { const d = (GameData.DUNGEON_RELICS || []).find(x => x.id === id); return d && d.fx && d.fx[key]; }); },
+  relicVal(p, key) {
+    return this.relics(p).reduce((s, id) => {
+      const d = (GameData.DUNGEON_RELICS || []).find(x => x.id === id);
+      return s + ((d && d.fx && d.fx[key]) || 0);
+    }, 0);
+  },
+  relicMul(p, key) { return Math.max(0.1, 1 + this.relicVal(p, key)); },
+  /** 掉一枚遗种：从未持有的池中掷三枚，弹三选一（relic-pick 按钮，处理器 DungeonSys.pickRelic） */
+  grantRelic(D) {
+    const p = Game.player;
+    if (!p || !p.dungeon) return;
+    D.relics = Array.isArray(D.relics) ? D.relics : [];
+    const pool = (GameData.DUNGEON_RELICS || []).filter(d => !D.relics.includes(d.id));
+    if (!pool.length) return;
+    const picks = [];
+    const bag = pool.slice();
+    for (let i = 0; i < 3 && bag.length; i++) picks.push(bag.splice(Utils.rand(0, bag.length - 1), 1)[0]);
+    D._relicPick = picks.map(x => x.id);
+    const owned = D.relics.length;
+    UI.popup({
+      title: '◈ 秘境遗种 · 三选一',
+      html: `秘境深处浮出一枚<b>秘境遗种</b>——拾取炼化，此行生效（出秘境即消散，不占用行囊）。<br>
+        <span class="tip-line">· 已炼化 ${owned} 枚；三选一，弃之则散。</span>` +
+        picks.map((d, i) => `<button class="btn" style="display:block;width:100%;margin-top:6px;text-align:left" data-action="relic-pick" data-i="${i}"><b>${d.name}</b><br><span class="tip-line" style="color:var(--text-dim)">${d.desc}</span></button>`).join(''),
+      options: [{ text: '任其飘散', value: null }],
+    });
+  },
+  /** relic-pick 处理器：把第 i 枚遗种炼入本局（三选一确认口） */
+  pickRelic(i) {
+    const p = Game.player;
+    const D = p && p.dungeon;
+    if (!D || !Array.isArray(D._relicPick)) return;
+    const id = D._relicPick[Number(i)];
+    D._relicPick = null;
+    UI.closePopup();
+    const d = (GameData.DUNGEON_RELICS || []).find(x => x.id === id);
+    if (!d) return;
+    D.relics = Array.isArray(D.relics) ? D.relics : [];
+    if (D.relics.includes(id)) return;
+    D.relics.push(id);
+    Log.add(`你炼化了遗种【<b>${d.name}</b>】——${d.desc}（本局有效，出秘境消散）`, 'gain');
+    UI.renderAll();
+    Game.afterAction();
+  },
   makeEnemy(R, depth, forceElite = false) {
     const mid = Utils.pick(R.pool);
     const target = R.recRealm * 4 + Math.floor(depth * 0.8);
@@ -189,6 +238,13 @@ const DungeonSys = {
     if (this.hasMut(D2, 'xueyue')) e.atk = Math.round(e.atk * 1.1);
     if (this.hasMut(D2, 'shenhan')) e.spd = Math.round(e.spd * 1.1);
     if (this.hasMut(D2, 'guzhou') && forceElite) e._forceFx2 = true;
+    // v42（E521）：遗物敌侧乘区（噬灵古镜 eAtk / 断岳残印 eHp / 墨玉算筹 eSpd）——敌我结算既有 mods 通道
+    {
+      const eAtk = this.relicVal(Game.player, 'eAtk'), eHp = this.relicVal(Game.player, 'eHp'), eSpd = this.relicVal(Game.player, 'eSpd');
+      if (eAtk > 0) e.atk = Math.max(1, Math.round(e.atk * (1 - Math.min(0.5, eAtk))));
+      if (eHp > 0) e.hpMax = Math.max(1, Math.round(e.hpMax * (1 - Math.min(0.5, eHp))));
+      if (eSpd > 0) e.spd = Math.max(1, Math.round(e.spd * (1 - Math.min(0.5, eSpd))));
+    }
     if (wantElite) {
       e.hpMax = Math.round(e.hpMax * 1.6);
       e.atk = Math.round(e.atk * 1.3);

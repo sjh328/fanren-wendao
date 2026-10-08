@@ -95,6 +95,7 @@ const AutoCult = {
     this._expFellBack = false;   // v35（U5）：exp 目标飞升后转仙元的一次性标记
     this._rushTriedDay = -1;   // v41（E422）：聚灵首问重臂
     this._smartHold = false;   // v41（E423）：智能档滞回状态重臂
+    this._resumeAfterBreak = false;   // v42（E504）：挂机续跑旗重臂（新目标开启即弃旧续跑意向）
     if (typeof Cultivate !== 'undefined') Cultivate._autoRep = null;   // v41（E423）：智能闭关聚合账重臂
     this.startExp = Guide.totalExp(p);
     this.startYuan = p.counters.xianyuan || 0;   // v35（U5）：圆满态小结改报仙元增量
@@ -163,9 +164,11 @@ const AutoCult = {
         if (!this.active) return;
       }
       // ③ 日界内嵌一次静默行权（求签/照料/悬赏/听讲等，与离线流同待遇；小账按偏好静默）
+      // v42（E501）：改走 runDailySilent 单源——闭关轮内由 secludeLoop 逐日拆步补跑同源（见 cultivate.js），
+      // 本处仅作轮界外的兜底日界补跑
       if (this._dailyDay !== Math.floor(p.day || 0)) {
         this._dailyDay = Math.floor(p.day || 0);
-        try { if (!p.dead && !Battle.active && typeof Guide !== 'undefined' && Guide.dailyAll) await Guide.dailyAll({ silent: true }); } catch (e) {}
+        try { if (!p.dead && !Battle.active) await AutoCult.runDailySilent(p); } catch (e) {}
         if (!this.active) return;
       }
       // v41（E423）：挂机方式 p.ui.engine（智能/普通，默认智能）——智能档在灵石存量 ≥ 3 轮闭关开销
@@ -211,11 +214,14 @@ const AutoCult = {
           continue;
         }
         // v38（E326）：金丹起仍亲手渡劫；真仙圆满给出「转攒仙元/停机」双钮，减少来回翻页
+        // v42（E504）：挂机续跑——停机弹窗加「冲关后自动继续当前目标」勾选（会话态不落盘）；
+        // 渡劫/仙劫结算完毕由 Game.afterAction 调 resume() 自动接续原目标
         const pickEnd = await UI.popup({
           title: '自动修炼 · 圆满待决',
-          html: p2.realmIdx < 9
+          html: (p2.realmIdx < 9
             ? '修为已至圆满——金丹引劫，须亲手冲击瓶颈。'
-            : '真仙圆满——仙门已开，飞升须亲手叩之。',
+            : '真仙圆满——仙门已开，飞升须亲手叩之。')
+            + '<label class="opt-line"><input type="checkbox" id="auto-resume"> 冲关后自动继续当前目标</label>',
           options: [
             { text: '停机，由我亲手冲关', value: 'stop', primary: true },
             ...(p2.realmIdx >= 9 ? [{ text: '不飞升了——继续空转攒仙元', value: 'yuan' }] : []),
@@ -225,6 +231,13 @@ const AutoCult = {
           this.target = { kind: 'xian', need: (p2.counters.xianyuan || 0) + 1, label: '转攒仙元' };
           Log.add('自动修炼转为持续炼化仙元——仙途不辍，随时可停。', 'system');
           continue;
+        }
+        // v42（E504）：勾选续跑——照常停机结算，冲关结算完毕后 resume() 自动接续
+        const resumeCb = document.getElementById('auto-resume');
+        if (resumeCb && resumeCb.checked) {
+          this._resumeAfterBreak = true;
+          this.pause(p2.realmIdx < 9 ? '修为已至圆满——冲关后自动接续原目标' : '真仙圆满——飞升后自动接续原目标');
+          return;
         }
         this.pause(p2.realmIdx < 9 ? '修为已至圆满——请亲手冲击瓶颈' : '真仙圆满——仙门已开，请亲手飞升');
         return;
@@ -238,6 +251,38 @@ const AutoCult = {
       Log.add('自动修炼忽遇一丝紊乱，自行为你停了下来——修为与存档均无碍。', 'warn');
       this.finish('异常自愈');
     }
+  },
+  /** v42（E501）：静默逐日行权单源（契约十一新签名 AutoCult.runDailySilent(p)）——挂机语境的
+   *  Guide.dailyAll({silent:true}) 收口：闭关轮内由 secludeLoop 逐日拆步调用（inRound），轮界由
+   *  run() 的日界块兜底调用。inRound 语境：①压制两类「花钱/化感悟」当面首问（聚灵 ask / 悟道 ask，
+   *  轮界由 run() 的聚灵块与 dailyAll 的当日首问承接，偏好不受影响）；②dailyAll 带 rideAlong——
+   *  调息/听讲随行免时耗，否则 30 日轮被自带日耗拖长、轮内 daily 次数腰斩。
+   *  手动「一键行权」走 Guide.dailyAll 原路，当面首问与一日时耗语义不变。 */
+  async runDailySilent(p, opts = {}) {
+    if (!p || p.dead || typeof Guide === 'undefined' || !Guide.dailyAll) return;
+    const today = Math.floor(p.day || 0);
+    const holdRush = !!opts.inRound && Guide.prefMode(p, 'rush') === 'ask';
+    const holdWudao = !!opts.inRound && Guide.prefMode(p, 'wudao') === 'ask';
+    const heldRush = Guide._rushDeclineDay, heldWudao = Guide._wudaoAskedDay;
+    if (holdRush) Guide._rushDeclineDay = today;     // 轮内不重复面询聚灵（当日压制，调用后还原）
+    if (holdWudao) Guide._wudaoAskedDay = today;     // 轮内不重复面询悟道（同上）
+    try { await Guide.dailyAll({ silent: true, rideAlong: !!opts.inRound }); }
+    finally { if (holdRush) Guide._rushDeclineDay = heldRush; if (holdWudao) Guide._wudaoAskedDay = heldWudao; }
+  },
+  /** v42（E504）：挂机续跑——冲关/仙劫结算完毕自动接续原目标（Game.afterAction 结尾调用）。
+   *  _resumeAfterBreak 为会话态不落盘；血线检查：气血不足三成（仙劫败北恰压到三成线）不误续，
+   *  挂起待调息回血后的行动收尾自然重试；战斗/天劫/剧情/弹窗未清同样不抢跑。 */
+  resume() {
+    if (!this._resumeAfterBreak || this.active) return;
+    const p = Game.player;
+    if (!p || p.dead) { this._resumeAfterBreak = false; return; }
+    if (Battle.active || Tribulation.state || Story.active() || UI._popupResolve) return;
+    if (!this.target) { this._resumeAfterBreak = false; return; }
+    const st = Stat.compute(p);
+    if (p.hp <= Math.round(st.maxHp * 0.3)) return;   // 血线检查——重伤不续（与仙劫败北的 hp=round(maxHp×30%) 取整对称，恰好压线不续）
+    this._resumeAfterBreak = false;
+    Log.add('【自动修炼】冲关已毕，气机平复——自动接续原目标。', 'system');
+    this.start(this.target);
   },
   reached(p) {
     const t = this.target;

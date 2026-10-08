@@ -468,11 +468,11 @@ try {
   /* ================= Q2 黑市 ================= */
   const q2 = await page.evaluate(() => {
     const p = Game.player;
-    p.day = 30;      // 30 % 30 == 0 < 3 → 开市
+    p.day = 30;      // v42（E528·P3 整合）：E512 窗口放宽 %30<5——月首五日开市（旧 <3 随动）
     const open = BlackSys.isOpen(p);
     const g1 = BlackSys.goods(p).join(',');
     const g2 = BlackSys.goods(p).join(',');   // 确定性
-    p.day = 33;      // 闭市
+    p.day = 35;      // 闭市（35 % 30 == 5 ≥ 5——E512 后窗口五日，33/34 已入市）
     const closed = !BlackSys.isOpen(p);
     p.day = 30;
     const price = BlackSys.price(p, 'm_neidan');
@@ -521,6 +521,11 @@ try {
     await Battle.start('m_shikui', { mapName: '测试' });   // 高防石傀：测试期间不会被打死
     const B = Battle.active;
     B.busy = false; B.over = false;
+    // v42（E528）旧套件修订：习性模板随机干扰封除——敌方首回合可偷/清玩家新鲜增益
+    //（狡诈 tpl 两成几率「偷梁换柱」夺 atkup，battle.js enemyTurn；坚韧/铁壁两成五「运功逼毒」清 slow；
+    // v42（E481）狡诈入二阶段后更每回合必偷）。批跑实测曾磨红本断言（{"atkup":0,"slow":30}）——
+    // 服丹/祭符本身功见效断言（atkup≥30 / slow≥30）不变，仅置空敌 tpl 使本段确定性收口。
+    B.enemy.tpl = null; B.enemy.tplName = null;
     Battle.setSpeed(3);
     const zzz = (ms) => new Promise(r => setTimeout(r, ms));
     Battle.act('item', 'pill_kuangbao');

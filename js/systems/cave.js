@@ -332,7 +332,9 @@ const CaveSys = {
     const hisR = (s.realmIdx || 0) * 4 + (s.layer || 0);
     const yudi = this.flagPower(p, 'b_yudi');
     // v39（E356）：御敌旗三连阵图——守御胜算 +10%
-    const odds = Utils.clamp(Math.round(52 + yudi * 8 + (this.hasPattern(p, 'b_yudi') ? 10 : 0) + (guardOn ? 8 : 0) + (myR - hisR) * 6), 15, 92);
+    // v42（E517）：驻守走挡袭不复入胜算——化身驻守分支已于上方提前结算（必挡一袭即 return），
+    // 原 (guardOn ? 8 : 0) 在此恒为 0（guardOn 为假）的死项，删除（胜算值删除前后一致）
+    const odds = Utils.clamp(Math.round(52 + yudi * 8 + (this.hasPattern(p, 'b_yudi') ? 10 : 0) + (myR - hisR) * 6), 15, 92);
     if (Utils.chance(odds)) {
       const stones = Math.round(40 * GameData.stoneEco(Math.min(6, p.realmIdx)));
       Bag.addStones(stones);
